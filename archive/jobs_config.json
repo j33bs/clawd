@@ -1,0 +1,73 @@
+{
+  "job_scheduler": {
+    "constitutional_compliance": true,
+    "storage_path": "/Users/heathyeager/clawd/jobs/",
+    "default_status": ["pending", "constitutional_review", "running", "success", "failed", "approved", "rejected", "constitutional_violation"],
+    "status_transitions": {
+      "allowed": [
+        {"from": "pending", "to": "constitutional_review"},
+        {"from": "constitutional_review", "to": "running"},
+        {"from": "pending", "to": "running"}, 
+        {"from": "running", "to": "success"},
+        {"from": "running", "to": "failed"},
+        {"from": "running", "to": "approved"},
+        {"from": "approved", "to": "success"},
+        {"from": "approved", "to": "rejected"},
+        {"from": "constitutional_review", "to": "constitutional_violation"},
+        {"from": "running", "to": "constitutional_violation"}
+      ]
+    },
+    "resource_allocation": {
+      "constitutional_compliance": true,
+      "cpu_priority": {
+        "constitutional_review": 15,
+        "low": 1,
+        "medium": 5,
+        "high": 10
+      },
+      "memory_limits": {
+        "constitutional_review_job": "10MB",
+        "light_job": "50MB",
+        "moderate_job": "200MB",
+        "heavy_job": "500MB",
+        "critical_job": "1GB"
+      },
+      "execution_timeouts": {
+        "constitutional_review_job": 5000,
+        "light_job": 30000,
+        "moderate_job": 120000,
+        "heavy_job": 300000,
+        "critical_job": 600000
+      }
+    },
+    "retry_mechanism": {
+      "constitutional_compliance_check": true,
+      "max_attempts": 2,
+      "backoff_strategy": "exponential",
+      "delay_base_ms": 1000,
+      "jitter_enabled": true,
+      "constitutional_violation_abort": true
+    },
+    "monitoring": {
+      "constitutional_compliance_metrics": true,
+      "metrics_collection": true,
+      "performance_logging": true,
+      "error_alerts": true,
+      "constitutional_violation_alerts": true,
+      "resource_usage_tracking": true
+    },
+    "security": {
+      "access_control": true,
+      "artifact_validation": true,
+      "input_sanitization": true,
+      "permission_scoping": true,
+      "constitutional_input_filtering": true
+    },
+    "constitutional_enforcement": {
+      "enabled": true,
+      "override_authority": true,
+      "violation_detection": true,
+      "automatic_correction": true
+    }
+  }
+}

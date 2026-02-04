@@ -1,0 +1,6 @@
+Tue Feb  3 20:53:32 AEST 2026: INVALID PDF - An_Interpersonal_Neurobiology_.pdf skipped (no PDF header)
+Tue Feb  3 20:53:52 AEST 2026: INVALID PDF - An_Interpersonal_Neurobiology_.pdf skipped (no PDF header)
+Tue Feb  3 20:58:01 AEST 2026: INVALID PDF - An_Interpersonal_Neurobiology_.pdf (no PDF header)
+Tue Feb  3 20:58:17 AEST 2026: INVALID PDF - An_Interpersonal_Neurobiology_.pdf (no PDF header)
+Tue Feb  3 20:58:55 AEST 2026: INVALID PDF - An_Interpersonal_Neurobiology_.pdf (no PDF header)
+Tue Feb  3 21:02:09 AEST 2026: INGESTED - An_Interpersonal_Neurobiology_.pdf (SHA256: 8bf8f1d4ecdd79a7e0bb2b421936c660b90bfabfd33301d42e66f8781070870f, Size: 8892874 bytes, Source: /Users/heathyeager/Desktop/pdfs_inbox)

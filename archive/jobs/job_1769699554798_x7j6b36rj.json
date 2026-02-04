@@ -1,0 +1,22 @@
+{
+  "id": "job_1769699554798_x7j6b36rj",
+  "status": "success",
+  "type": "test",
+  "inputs": {
+    "test": true
+  },
+  "description": "Test job",
+  "outputs": {
+    "result": "test passed"
+  },
+  "artifacts": [],
+  "created_at": "2026-01-29T15:12:34.798Z",
+  "completed_at": "2026-01-29T15:12:34.799Z",
+  "logs": [
+    {
+      "timestamp": "2026-01-29T15:12:34.799Z",
+      "level": "INFO",
+      "message": "Test log entry"
+    }
+  ]
+}

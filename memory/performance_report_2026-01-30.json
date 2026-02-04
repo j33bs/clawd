@@ -1,0 +1,62 @@
+{
+  "timestamp": "2026-01-30T01:29:58.741Z",
+  "systemInfo": {
+    "platform": "darwin",
+    "arch": "arm64",
+    "totalMemory": 8589934592,
+    "freeMemory": 73580544,
+    "uptime": 8030,
+    "loadAverage": [
+      3.57470703125,
+      8.08251953125,
+      9.67041015625
+    ],
+    "cpuCount": 8,
+    "hostname": "Heaths-MBP"
+  },
+  "memoryStats": {
+    "totalFiles": 10,
+    "markdownFiles": 3,
+    "jsonFiles": 7,
+    "totalSize": 52370,
+    "recentActivity": 10,
+    "directory": "/Users/heathyeager/clawd/memory"
+  },
+  "jobStats": {
+    "totalJobFiles": 2,
+    "pendingJobs": 0,
+    "runningJobs": 0,
+    "completedJobs": 0,
+    "failedJobs": 0,
+    "jobsDirectory": "/Users/heathyeager/clawd/jobs"
+  },
+  "cognitiveRoutingStats": {
+    "tiersConfigured": 4,
+    "intentsTracked": 16,
+    "contextCompactionEnabled": 1000,
+    "epistemicTaggingEnabled": "observation",
+    "performanceLogging": true
+  },
+  "therapeuticFrameworkStats": {
+    "frameworkDocs": 3,
+    "implementationGuide": true,
+    "trackingSystem": true
+  },
+  "performanceMetrics": {
+    "monitorUptimeMs": 7,
+    "recentReportsGenerated": 1,
+    "avgReportSize": 1330,
+    "lastReport": "performance_report_2026-01-30.json"
+  },
+  "healthIndicators": {
+    "memorySystem": true,
+    "jobSystem": true,
+    "cognitiveRouting": true,
+    "selfImprovement": true,
+    "therapeuticTracking": true,
+    "taskScheduler": true,
+    "systemInitialized": false,
+    "overallHealthPercentage": 86,
+    "status": "good"
+  }
+}

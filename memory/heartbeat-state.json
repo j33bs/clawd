@@ -1,0 +1,12 @@
+{
+  "lastChecks": {
+    "memoryReview": 1738207800,
+    "memoryCuration": 1738207800,
+    "MEMORY_md_update": 1738207800
+  },
+  "maintenanceSchedule": {
+    "daily": ["reviewRecentLogs"],
+    "weekly": ["curateLongTermMemory"],
+    "monthly": ["auditMemoryFiles"]
+  }
+}

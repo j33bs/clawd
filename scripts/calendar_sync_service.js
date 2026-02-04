@@ -1,0 +1,225 @@
+// calendar_sync_service.js
+// Service to integrate Apple Calendar with the existing calendar service
+
+const AppleCalendarIntegration = require('./apple_calendar_integration.js');
+const CalendarService = require('./calendar_service.js');
+const fs = require('fs').promises;
+
+class CalendarSyncService {
+  constructor(config = {}) {
+    this.config = {
+      appleCalendar: {
+        username: config.appleUsername,
+        password: config.applePassword,
+        serverUrl: config.appleServerUrl || 'https://caldav.icloud.com'
+      },
+      localCalendarFile: config.localCalendarFile || './calendar_data.json',
+      syncInterval: config.syncInterval || 30 * 60 * 1000, // 30 minutes in ms
+      ...config
+    };
+    
+    this.appleCalendar = new AppleCalendarIntegration({
+      username: this.config.appleCalendar.username,
+      password: this.config.appleCalendar.password,
+      serverUrl: this.config.appleCalendar.serverUrl,
+      calendarFile: this.config.localCalendarFile
+    });
+    
+    this.calendarService = new CalendarService({
+      calendarFile: this.config.localCalendarFile
+    });
+    
+    this.syncIntervalId = null;
+  }
+
+  // Initialize the service
+  async initialize() {
+    try {
+      // Test Apple Calendar connection
+      console.log('Testing Apple Calendar connection...');
+      const connectionTest = await this.appleCalendar.testConnection();
+      
+      if (!connectionTest.connected) {
+        throw new Error(`Apple Calendar connection failed: ${connectionTest.error}`);
+      }
+      
+      console.log(`Connected to Apple Calendar. Access to ${connectionTest.calendarCount} calendars.`);
+      
+      // Perform initial sync
+      console.log('Performing initial sync...');
+      await this.syncCalendar();
+      
+      console.log('Calendar sync service initialized successfully.');
+      return true;
+    } catch (error) {
+      console.error('Error initializing calendar sync service:', error);
+      throw error;
+    }
+  }
+
+  // Sync calendar data from Apple to local storage
+  async syncCalendar() {
+    try {
+      console.log('Starting calendar sync...');
+      
+      const syncResult = await this.appleCalendar.syncToLocalStorage();
+      
+      console.log(`Sync completed. ${syncResult.eventsSynced} events synced.`);
+      
+      return syncResult;
+    } catch (error) {
+      console.error('Error during calendar sync:', error);
+      throw error;
+    }
+  }
+
+  // Start automatic sync at configured intervals
+  startAutoSync() {
+    if (this.syncIntervalId) {
+      clearInterval(this.syncIntervalId);
+    }
+
+    this.syncIntervalId = setInterval(async () => {
+      try {
+        await this.syncCalendar();
+      } catch (error) {
+        console.error('Auto-sync failed:', error);
+      }
+    }, this.config.syncInterval);
+
+    console.log(`Auto-sync started. Interval: ${this.config.syncInterval / 60000} minutes.`);
+  }
+
+  // Stop automatic sync
+  stopAutoSync() {
+    if (this.syncIntervalId) {
+      clearInterval(this.syncIntervalId);
+      this.syncIntervalId = null;
+      console.log('Auto-sync stopped.');
+    }
+  }
+
+  // Get availability summary using the synced data
+  async getAvailabilitySummary(dateRange = null) {
+    try {
+      // First ensure we have current data
+      await this.syncCalendar();
+      
+      // Then get the summary from the local service
+      return await this.calendarService.getAvailabilitySummary(dateRange);
+    } catch (error) {
+      console.error('Error getting availability summary:', error);
+      throw error;
+    }
+  }
+
+  // Get events for a specific date
+  async getEventsForDate(dateString) {
+    try {
+      // Ensure we have current data
+      await this.syncCalendar();
+      
+      // Get events from the local service
+      return await this.calendarService.getEventsForDate(dateString);
+    } catch (error) {
+      console.error('Error getting events for date:', error);
+      throw error;
+    }
+  }
+
+  // Get raw Apple Calendar events for date range
+  async getRawAppleEvents(startDate, endDate) {
+    try {
+      return await this.appleCalendar.getEvents(startDate, endDate);
+    } catch (error) {
+      console.error('Error getting raw Apple Calendar events:', error);
+      throw error;
+    }
+  }
+
+  // Manual sync and summary in one call
+  async syncAndSummarize(dateRange = 7) {
+    try {
+      // Sync first
+      await this.syncCalendar();
+      
+      // Then get summary
+      const summary = await this.getAvailabilitySummary(dateRange);
+      
+      return summary;
+    } catch (error) {
+      console.error('Error in sync and summarize:', error);
+      throw error;
+    }
+  }
+
+  // Get the current sync status
+  getSyncStatus() {
+    return {
+      lastSync: this.getLastSyncTime(),
+      autoSyncEnabled: !!this.syncIntervalId,
+      syncInterval: this.config.syncInterval,
+      nextSyncIn: this.getNextSyncTime()
+    };
+  }
+
+  // Get last sync time from the calendar data file
+  async getLastSyncTime() {
+    try {
+      const data = await fs.readFile(this.config.localCalendarFile, 'utf8');
+      const calendarData = JSON.parse(data);
+      return calendarData.lastSync || null;
+    } catch (error) {
+      console.error('Error getting last sync time:', error);
+      return null;
+    }
+  }
+
+  // Get time until next sync
+  getNextSyncTime() {
+    if (!this.syncIntervalId) {
+      return null;
+    }
+    return this.config.syncInterval;
+  }
+
+  // Close the service and clean up
+  async close() {
+    this.stopAutoSync();
+    console.log('Calendar sync service closed.');
+  }
+}
+
+// If this file is run directly, initialize and start the service
+if (require.main === module) {
+  // Example usage:
+  // This would normally be configured with actual credentials
+  const config = {
+    appleUsername: process.env.APPLE_CALENDAR_USERNAME, 
+    applePassword: process.env.APPLE_CALENDAR_APP_PASSWORD,
+    localCalendarFile: './calendar_data.json',
+    syncInterval: 30 * 60 * 1000 // 30 minutes
+  };
+
+  if (!config.appleUsername || !config.applePassword) {
+    console.log("Environment variables APPLE_CALENDAR_USERNAME and APPLE_CALENDAR_APP_PASSWORD are required.");
+    console.log("Please set these before running the service:");
+    console.log("export APPLE_CALENDAR_USERNAME='your_apple_id@icloud.com'");
+    console.log("export APPLE_CALENDAR_APP_PASSWORD='your_app_specific_password'");
+    process.exit(1);
+  }
+
+  const service = new CalendarSyncService(config);
+  
+  service.initialize()
+    .then(() => {
+      service.startAutoSync();
+      console.log("Calendar sync service is running...");
+    })
+    .catch(error => {
+      console.error("Failed to start calendar sync service:", error);
+      process.exit(1);
+    });
+}
+
+module.exports = CalendarSyncService;

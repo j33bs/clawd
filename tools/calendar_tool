@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+BRIDGE="$HOME/clawd/tools/calendar_bridge.sh"
+
+cmd="${1:-}"; shift || true
+
+case "$cmd" in
+  list)
+    # list YYYY-MM-DD YYYY-MM-DD [CalendarName]
+    exec "$BRIDGE" list "$@"
+    ;;
+  create)
+    # create "Title" "YYYY-MM-DD HH:MM" "YYYY-MM-DD HH:MM" "CalendarName" "Location" "Notes"
+    exec "$BRIDGE" create "$@"
+    ;;
+  move)
+    # move "<EventID>" "YYYY-MM-DD HH:MM" "YYYY-MM-DD HH:MM"
+    exec "$BRIDGE" move "$@"
+    ;;
+  delete)
+    # delete "<EventID>"
+    exec "$BRIDGE" delete "$@"
+    ;;
+  *)
+    echo "Usage: calendar_tool {list|create|move|delete} ..."
+    exit 2
+    ;;
+esac

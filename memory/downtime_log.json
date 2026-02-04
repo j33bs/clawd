@@ -1,0 +1,332 @@
+{
+  "downtimeSessions": [
+    {
+      "id": "downtime_1769699846467_h16je",
+      "start": "2026-01-29T15:17:26.464Z",
+      "end": "2026-01-29T15:17:26.467Z",
+      "duration": 0.003,
+      "tasksProcessed": [
+        {
+          "type": "self_improvement_research",
+          "status": "completed",
+          "results": {
+            "timestamp": "2026-01-29T15:17:26.465Z",
+            "categories": {
+              "productivity": [
+                {
+                  "title": "New productivity technique: Time-blocking 2.0",
+                  "summary": "Advanced time-blocking with energy matching",
+                  "url": "https://example.com/time-blocking-2.0",
+                  "relevance": 0.9
+                },
+                {
+                  "title": "Digital minimalism trends 2025",
+                  "summary": "Reducing digital clutter for better focus",
+                  "url": "https://example.com/digital-minimalism-2025",
+                  "relevance": 0.85
+                }
+              ],
+              "communication": [
+                {
+                  "title": "Active listening techniques",
+                  "summary": "Science-backed methods to improve listening skills",
+                  "url": "https://example.com/active-listening",
+                  "relevance": 0.92
+                },
+                {
+                  "title": "Non-violent communication updates",
+                  "summary": "Modern adaptations of NVC principles",
+                  "url": "https://example.com/nvc-updates",
+                  "relevance": 0.88
+                }
+              ],
+              "learning": [
+                {
+                  "title": "Spaced repetition algorithms",
+                  "summary": "New research on optimal learning intervals",
+                  "url": "https://example.com/spaced-repetition",
+                  "relevance": 0.91
+                },
+                {
+                  "title": "Metacognition techniques",
+                  "summary": "Learning how to learn effectively",
+                  "url": "https://example.com/metacognition",
+                  "relevance": 0.87
+                }
+              ],
+              "health": [
+                {
+                  "title": "Biohacking sleep optimization",
+                  "summary": "Latest research on circadian rhythms",
+                  "url": "https://example.com/sleep-biohacking",
+                  "relevance": 0.94
+                },
+                {
+                  "title": "Micro-workouts effectiveness",
+                  "summary": "Benefits of short, frequent exercise sessions",
+                  "url": "https://example.com/micro-workouts",
+                  "relevance": 0.86
+                }
+              ],
+              "creativity": [
+                {
+                  "title": "Creative constraints methodology",
+                  "summary": "How limitations boost creative output",
+                  "url": "https://example.com/creative-constraints",
+                  "relevance": 0.89
+                },
+                {
+                  "title": "Cross-pollination techniques",
+                  "summary": "Mixing disciplines for innovation",
+                  "url": "https://example.com/cross-pollination",
+                  "relevance": 0.84
+                }
+              ],
+              "relationships": [
+                {
+                  "title": "Digital relationship maintenance",
+                  "summary": "Staying connected in the digital age",
+                  "url": "https://example.com/digital-relationships",
+                  "relevance": 0.93
+                },
+                {
+                  "title": "Boundary setting 2.0",
+                  "summary": "Modern approaches to healthy boundaries",
+                  "url": "https://example.com/boundary-setting",
+                  "relevance": 0.9
+                }
+              ]
+            }
+          }
+        },
+        {
+          "type": "memory_maintenance",
+          "status": "completed",
+          "results": {
+            "memoryCleanup": {
+              "completed": [
+                "Removed temporary cache files",
+                "Consolidated recent logs",
+                "Optimized memory file structure"
+              ],
+              "status": "success"
+            },
+            "memoryConsolidation": {
+              "completed": [
+                "Identified recurring themes in recent entries",
+                "Created summary of key insights",
+                "Linked related memory entries"
+              ],
+              "status": "success"
+            },
+            "memoryAnalysis": {
+              "completed": [
+                "Detected patterns in productivity approaches",
+                "Identified effective learning methods",
+                "Recognized successful habit formation techniques"
+              ],
+              "status": "success"
+            }
+          }
+        },
+        {
+          "type": "system_optimization",
+          "status": "completed",
+          "results": {
+            "performanceAnalysis": {
+              "completed": [
+                "Reviewed response time patterns",
+                "Analyzed task completion rates",
+                "Evaluated resource utilization"
+              ],
+              "status": "success"
+            },
+            "efficiencyImprovements": {
+              "completed": [
+                "Optimize common task workflows",
+                "Improve response time for frequent queries",
+                "Streamline repetitive processes"
+              ],
+              "status": "success"
+            },
+            "resourceOptimization": {
+              "completed": [
+                "Optimized memory usage patterns",
+                "Streamlined file access operations",
+                "Improved caching mechanisms"
+              ],
+              "status": "success"
+            }
+          }
+        }
+      ],
+      "timestamp": "2026-01-29T15:17:26.467Z"
+    }
+  ],
+  "lastDowntime": "2026-01-29T15:17:26.467Z",
+  "totalDowntime": 0.003,
+  "processedTasks": [
+    {
+      "task": {
+        "type": "self_improvement_research",
+        "status": "completed",
+        "results": {
+          "timestamp": "2026-01-29T15:17:26.465Z",
+          "categories": {
+            "productivity": [
+              {
+                "title": "New productivity technique: Time-blocking 2.0",
+                "summary": "Advanced time-blocking with energy matching",
+                "url": "https://example.com/time-blocking-2.0",
+                "relevance": 0.9
+              },
+              {
+                "title": "Digital minimalism trends 2025",
+                "summary": "Reducing digital clutter for better focus",
+                "url": "https://example.com/digital-minimalism-2025",
+                "relevance": 0.85
+              }
+            ],
+            "communication": [
+              {
+                "title": "Active listening techniques",
+                "summary": "Science-backed methods to improve listening skills",
+                "url": "https://example.com/active-listening",
+                "relevance": 0.92
+              },
+              {
+                "title": "Non-violent communication updates",
+                "summary": "Modern adaptations of NVC principles",
+                "url": "https://example.com/nvc-updates",
+                "relevance": 0.88
+              }
+            ],
+            "learning": [
+              {
+                "title": "Spaced repetition algorithms",
+                "summary": "New research on optimal learning intervals",
+                "url": "https://example.com/spaced-repetition",
+                "relevance": 0.91
+              },
+              {
+                "title": "Metacognition techniques",
+                "summary": "Learning how to learn effectively",
+                "url": "https://example.com/metacognition",
+                "relevance": 0.87
+              }
+            ],
+            "health": [
+              {
+                "title": "Biohacking sleep optimization",
+                "summary": "Latest research on circadian rhythms",
+                "url": "https://example.com/sleep-biohacking",
+                "relevance": 0.94
+              },
+              {
+                "title": "Micro-workouts effectiveness",
+                "summary": "Benefits of short, frequent exercise sessions",
+                "url": "https://example.com/micro-workouts",
+                "relevance": 0.86
+              }
+            ],
+            "creativity": [
+              {
+                "title": "Creative constraints methodology",
+                "summary": "How limitations boost creative output",
+                "url": "https://example.com/creative-constraints",
+                "relevance": 0.89
+              },
+              {
+                "title": "Cross-pollination techniques",
+                "summary": "Mixing disciplines for innovation",
+                "url": "https://example.com/cross-pollination",
+                "relevance": 0.84
+              }
+            ],
+            "relationships": [
+              {
+                "title": "Digital relationship maintenance",
+                "summary": "Staying connected in the digital age",
+                "url": "https://example.com/digital-relationships",
+                "relevance": 0.93
+              },
+              {
+                "title": "Boundary setting 2.0",
+                "summary": "Modern approaches to healthy boundaries",
+                "url": "https://example.com/boundary-setting",
+                "relevance": 0.9
+              }
+            ]
+          }
+        }
+      },
+      "timestamp": "2026-01-29T15:17:26.467Z"
+    },
+    {
+      "task": {
+        "type": "memory_maintenance",
+        "status": "completed",
+        "results": {
+          "memoryCleanup": {
+            "completed": [
+              "Removed temporary cache files",
+              "Consolidated recent logs",
+              "Optimized memory file structure"
+            ],
+            "status": "success"
+          },
+          "memoryConsolidation": {
+            "completed": [
+              "Identified recurring themes in recent entries",
+              "Created summary of key insights",
+              "Linked related memory entries"
+            ],
+            "status": "success"
+          },
+          "memoryAnalysis": {
+            "completed": [
+              "Detected patterns in productivity approaches",
+              "Identified effective learning methods",
+              "Recognized successful habit formation techniques"
+            ],
+            "status": "success"
+          }
+        }
+      },
+      "timestamp": "2026-01-29T15:17:26.467Z"
+    },
+    {
+      "task": {
+        "type": "system_optimization",
+        "status": "completed",
+        "results": {
+          "performanceAnalysis": {
+            "completed": [
+              "Reviewed response time patterns",
+              "Analyzed task completion rates",
+              "Evaluated resource utilization"
+            ],
+            "status": "success"
+          },
+          "efficiencyImprovements": {
+            "completed": [
+              "Optimize common task workflows",
+              "Improve response time for frequent queries",
+              "Streamline repetitive processes"
+            ],
+            "status": "success"
+          },
+          "resourceOptimization": {
+            "completed": [
+              "Optimized memory usage patterns",
+              "Streamlined file access operations",
+              "Improved caching mechanisms"
+            ],
+            "status": "success"
+          }
+        }
+      },
+      "timestamp": "2026-01-29T15:17:26.467Z"
+    }
+  ]
+}

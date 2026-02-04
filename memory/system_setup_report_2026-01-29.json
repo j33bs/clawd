@@ -1,0 +1,26 @@
+{
+  "timestamp": "2026-01-29T23:22:22.421Z",
+  "workspace": "/Users/heathyeager/clawd",
+  "memoryDirectory": "/Users/heathyeager/clawd/memory",
+  "initializedSystems": [
+    "memory",
+    "jobs",
+    "cognitiveRouting",
+    "selfImprovement",
+    "therapeuticFramework",
+    "taskScheduler"
+  ],
+  "fileCounts": {
+    "memoryFiles": 3,
+    "totalMemoryFiles": 8,
+    "workspaceMarkdownFiles": 29
+  },
+  "systemStatus": {
+    "memory": true,
+    "jobs": true,
+    "cognitiveRouting": true,
+    "selfImprovement": true,
+    "therapeuticFramework": true,
+    "taskScheduler": true
+  }
+}

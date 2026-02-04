@@ -1,0 +1,23 @@
+[
+  {
+    "id": "memory_maintenance",
+    "schedule": "0 2 * * *",
+    "description": "Perform daily memory maintenance tasks",
+    "command": "cd /Users/heathyeager/clawd && ./memory_daily_review.sh",
+    "enabled": true
+  },
+  {
+    "id": "self_improvement_research",
+    "schedule": "30 10 * * 1",
+    "description": "Run self-improvement research during downtime",
+    "command": "cd /Users/heathyeager/clawd && ./self_improvement_research.sh",
+    "enabled": true
+  },
+  {
+    "id": "therapeutic_review",
+    "schedule": "0 9 * * 0",
+    "description": "Review and update therapeutic frameworks",
+    "command": "cd /Users/heathyeager/clawd && node review_therapeutic_updates.js",
+    "enabled": false
+  }
+]

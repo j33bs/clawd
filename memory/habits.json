@@ -1,0 +1,119 @@
+{
+  "habits": [
+    {
+      "id": "habit_1769701546885_otdnr",
+      "name": "Personal Time-Blocking",
+      "description": "Implement time-blocking in my personal work to increase focus and completion of tasks, especially music production",
+      "atomicPrinciples": {
+        "marginalGains": 0.01,
+        "habitStack": "after I sit down at my workspace, I will spend 2 minutes reviewing my time-blocked schedule",
+        "implementationIntentions": [
+          "when I feel scattered or unfocused, I will return to my time-blocked schedule",
+          "before starting a creative session with my MPC, I will block time for that specific creative work",
+          "after completing a client session, I will block transition time before moving to the next activity"
+        ],
+        "identityConnection": "I am the type of person who structures my time intentionally, which helps me complete creative projects and serve clients effectively"
+      },
+      "cue": "when I sit down at my workspace",
+      "craving": "to have clarity and direction for my work session",
+      "response": "review and confirm my time-blocked schedule for the next 90 minutes",
+      "reward": "feeling organized and focused about what to work on",
+      "frequency": "daily",
+      "duration": "ongoing",
+      "startDate": "2026-01-29T15:45:46.885Z",
+      "status": "planning",
+      "strategy": "habitStacking",
+      "tinyVersion": "spend 2 minutes reviewing my schedule",
+      "measurement": "binary",
+      "environmentChanges": [
+        "have digital calendar visible at workspace",
+        "set up notification-free zones during focused work",
+        "designate specific areas for different types of work"
+      ],
+      "commitmentDevice": null,
+      "cbpIntegration": {
+        "playfulElements": [
+          "Use colorful calendar blocks like building blocks",
+          "Turn schedule conflicts into \"puzzle solving\" challenges",
+          "Celebrate time-block completions with small rewards",
+          "Make transitions between blocks into \"scene changes\""
+        ],
+        "cognitiveRestructuring": [
+          "Time-blocking gives me freedom by reducing decision fatigue",
+          "Scheduling time for creative work increases rather than restricts creativity",
+          "Time boundaries protect my energy for important work",
+          "Structured time allows for more spontaneous creative moments"
+        ],
+        "behavioralExperiments": [
+          "Test: Blocking time for creative work increases rather than decreases creative output",
+          "Experiment: See if having scheduled breaks increases overall productivity",
+          "Try: Blocking time for the same activity at different times of day to see which works better",
+          "Test: How much time blocking is too much vs. too little"
+        ],
+        "gamification": [
+          "Level up time-blocking skills by increasing complexity gradually",
+          "Unlock new time-blocking techniques as I master basics",
+          "Achievement badges for consistent time-blocking",
+          "Quest system for integrating time-blocking with different activities"
+        ],
+        "creativeExpression": [
+          "Draw or sketch my weekly schedule",
+          "Use colors and visual elements to represent different activities",
+          "Create a visual timeline of my day",
+          "Design custom icons for different types of activities"
+        ],
+        "emotionalProcessing": [
+          "Connect time-blocking to feeling more in control of my life",
+          "Link structured time to reduced anxiety about forgotten tasks",
+          "Associate time-blocking with increased creative output",
+          "Connect scheduling to feeling more spacious in my days"
+        ]
+      },
+      "cognitivePsychIntegration": {
+        "metacognitiveAwareness": [
+          "Monitor my awareness of time throughout the day",
+          "Reflect on how well my time-blocking aligns with my energy levels",
+          "Evaluate effectiveness of different time-blocking approaches",
+          "Notice when I deviate from time-blocks and why"
+        ],
+        "cognitiveLoadManagement": [
+          "Keep time-blocking simple to reduce decision fatigue",
+          "Use visual aids to reduce memory load",
+          "Batch similar activities to reduce switching costs",
+          "Limit the number of time-blocks to prevent overload"
+        ],
+        "attentionBiasModification": [
+          "Direct attention to scheduled activities",
+          "Notice when mind wanders from planned tasks",
+          "Reorient attention to time-blocked priorities",
+          "Use cues to redirect attention when distracted"
+        ],
+        "cognitiveFlexibility": [
+          "Adapt time-blocks when circumstances change",
+          "Switch between different time-blocking approaches",
+          "Modify schedule when it's not working",
+          "Maintain structure while allowing flexibility"
+        ],
+        "schemaModification": [
+          "Challenge belief that structure restricts creativity",
+          "Reframe time-blocking as freedom from decision fatigue",
+          "Modify belief that I can multitask effectively",
+          "Update beliefs about how much time tasks take"
+        ],
+        "executiveFunctionSupport": [
+          "Use planning skills to organize time-blocks",
+          "Implement self-monitoring of schedule adherence",
+          "Apply inhibitory control to resist distractions",
+          "Use working memory to hold time-blocking intentions"
+        ]
+      }
+    }
+  ],
+  "habitStreaks": {},
+  "habitHistory": {},
+  "settings": {
+    "defaultIdentityFocus": "Who is the person I want to become?",
+    "habitStackingEnabled": true,
+    "habitScaling": "tinyHabitsFirst"
+  }
+}

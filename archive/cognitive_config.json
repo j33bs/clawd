@@ -1,0 +1,139 @@
+{
+  "cognitive_load_router": {
+    "constitutional_compliance": true,
+    "tiers": {
+      "tier_1_constitutional_silence": {
+        "name": "Constitutional Silence Protocol",
+        "complexity_threshold": 0.1,
+        "processing_time_ms": 10,
+        "handler": "constitutional_silence_handler",
+        "characteristics": ["default_state", "constitutional_compliance", "agency_preservation"],
+        "constitutional_priority": 10
+      },
+      "tier_2_light": {
+        "name": "Light Processing",
+        "complexity_threshold": 1.0,
+        "processing_time_ms": 100,
+        "handler": "simple_response_handler",
+        "characteristics": ["greetings", "basic_questions", "direct_commands", "status_checks"],
+        "constitutional_review_required": true
+      },
+      "tier_3_moderate": {
+        "name": "Moderate Processing",
+        "complexity_threshold": 2.5,
+        "processing_time_ms": 500,
+        "handler": "moderate_reasoning_handler",
+        "characteristics": ["multi_part_questions", "explanations", "simple_analyses", "basic_planning"],
+        "constitutional_review_required": true,
+        "wake_condition_verification": true
+      },
+      "tier_4_heavy": {
+        "name": "Heavy Processing",
+        "complexity_threshold": 4.0,
+        "processing_time_ms": 2000,
+        "handler": "complex_analysis_handler",
+        "characteristics": ["complex_analyses", "comparisons", "strategic_planning", "technical_tasks"],
+        "constitutional_review_required": true,
+        "wake_condition_verification": true,
+        "multiple_approval_required": true
+      },
+      "tier_5_constitutional_override": {
+        "name": "Constitutional Override",
+        "complexity_threshold": 0.0,
+        "processing_time_ms": 1,
+        "handler": "constitutional_enforcement_handler",
+        "characteristics": ["constitutional_supremacy", "safety", "agency_preservation"],
+        "constitutional_priority": 100
+      }
+    },
+    "classification_algorithm": {
+      "constitutional_compliance_check": true,
+      "word_count_weight": 0.2,
+      "question_words_weight": 0.25,
+      "complexity_keywords_weight": 0.25,
+      "directive_language_detection_weight": 0.3,
+      "certainty_language_detection_weight": 0.3,
+      "framework_language_detection_weight": 0.2,
+      "logical_connectors_weight": 0.15,
+      "negations_weight": 0.15,
+      "numerical_information_weight": 0.1
+    },
+    "intent_classification": {
+      "constitutional_compliance_required": true,
+      "known_intents": [
+        "information_request",
+        "command",
+        "question",
+        "feedback",
+        "problem_report",
+        "request_for_help",
+        "opinion",
+        "statement",
+        "clarification",
+        "disambiguation",
+        "context_update",
+        "task_completion",
+        "creative_request",
+        "therapeutic_inquiry",
+        "research_query",
+        "coding_assistance",
+        "constitutional_inquiry",
+        "silence_request",
+        "agency_preservation"
+      ],
+      "confidence_thresholds": {
+        "high": 0.8,
+        "medium": 0.6,
+        "low": 0.4
+      },
+      "constitutional_intent_filtering": true,
+      "disambiguation_enabled": true
+    },
+    "context_compaction": {
+      "constitutional_compliance": true,
+      "default_target_size": 1000,
+      "min_compression_ratio": 0.3,
+      "max_compression_ratio": 0.8,
+      "essential_keys": [
+        "current_task",
+        "critical_info",
+        "important_context",
+        "user_preferences",
+        "session_state",
+        "therapeutic_context",
+        "project_status",
+        "time_sensitive_info",
+        "constitutional_compliance_status",
+        "agency_preservation_indicators",
+        "silence_permission_flags"
+      ],
+      "prioritization_algorithm": "constitutional_priority_then_epistemic_weight_then_recency"
+    },
+    "epistemic_tagging": {
+      "constitutional_compliance": true,
+      "tag_weights": {
+        "certain_fact": 0.3,
+        "probable_inference": 0.5,
+        "observation": 0.7,
+        "assumption": 0.5,
+        "hypothetical": 0.8,
+        "uncertain": 0.9,
+        "constitutional_principle": 1.0,
+        "agency_preserving": 1.0
+      },
+      "default_tag": "observation",
+      "automatic_tagging": true,
+      "constitutional_tagging_enabled": true
+    },
+    "performance": {
+      "constitutional_compliance_metrics": true,
+      "logging_enabled": true,
+      "metrics_collection": true,
+      "cache_enabled": true,
+      "max_cache_size": 1000,
+      "response_time_optimization": false,
+      "constitutional_response_timing": true,
+      "resource_management": true
+    }
+  }
+}

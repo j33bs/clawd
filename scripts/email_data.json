@@ -1,0 +1,30 @@
+{
+  "accounts": {
+    "default": {
+      "messages": [
+        {
+          "id": "1",
+          "from": "boss@company.com",
+          "subject": "Important: Quarterly Review",
+          "date": "2026-01-29T15:12:34.800Z",
+          "read": false,
+          "important": true,
+          "body": "We need to discuss the quarterly review..."
+        },
+        {
+          "id": "2",
+          "from": "colleague@company.com",
+          "subject": "Meeting Tomorrow",
+          "date": "2026-01-29T14:12:34.800Z",
+          "read": true,
+          "important": false,
+          "body": "Just confirming tomorrow's meeting..."
+        }
+      ]
+    }
+  },
+  "lastCheck": "2026-01-29T15:12:34.800Z",
+  "settings": {
+    "maxDigestItems": 10
+  }
+}

@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Disk Space Recovery Report - February 4, 2026</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background-color: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #2c3e50;
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 10px;
+        }
+        h2 {
+            color: #34495e;
+            margin-top: 25px;
+        }
+        .section {
+            margin: 15px 0;
+            padding: 10px;
+            border-radius: 5px;
+        }
+        .quantify {
+            background-color: #e8f4fd;
+            border-left: 4px solid #3498db;
+        }
+        .classification {
+            background-color: #fff3cd;
+            border-left: 4px solid #ffc107;
+        }
+        .actions {
+            background-color: #d4edda;
+            border-left: 4px solid #28a745;
+        }
+        .results {
+            background-color: #cce7ff;
+            border-left: 4px solid #007bff;
+        }
+        ul {
+            margin: 10px 0;
+            padding-left: 20px;
+        }
+        li {
+            margin: 8px 0;
+        }
+        .date {
+            color: #7f8c8d;
+            font-style: italic;
+        }
+        .highlight {
+            font-weight: bold;
+            color: #28a745;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>DISK SPACE RECOVERY REPORT</h1>
+        <p class="date">February 4, 2026</p>
+        
+        <div class="section quantify">
+            <h2>1. FAILURE QUANTIFICATION</h2>
+            <ul>
+                <li><strong>Total disk size:</strong> 228 GiB</li>
+                <li><strong>Used space:</strong> 11 GiB</li>
+                <li><strong>Available space:</strong> Initially 2.9 GiB (critical - 80% used), now 4.8 GiB after interventions</li>
+                <li><strong>Growth trend:</strong> Critical space pressure on /System/Volumes/Data partition (was 99% full)</li>
+            </ul>
+            
+            <h3>Top-level consumers identified:</h3>
+            <ul>
+                <li>/System/Volumes/Data: 198 GiB used, 4.8 GiB free (was 99% full)</li>
+                <li>iOS Simulator volumes: 16 GiB + 3.6 GiB combined (still consuming space at system level)</li>
+                <li>System partitions: /, /System/Volumes/VM, /System/Volumes/Preboot</li>
+            </ul>
+            
+            <h3>Top 5 space offenders by absolute size:</h3>
+            <ol>
+                <li>System volume data: ~198 GiB</li>
+                <li>iOS Simulator (system): 16 GiB</li>
+                <li>watchOS Simulator (system): 3.6 GiB</li>
+                <li>Homebrew cache: 884 MB (cleared)</li>
+                <li>Xcode Derived Data: 439 MB (cleared)</li>
+            </ol>
+        </div>
+        
+        <div class="section classification">
+            <h2>2. DATA CLASSIFICATION BY FUNCTION</h2>
+            <ul>
+                <li><strong>System-critical:</strong> Core OS files, system volumes (must remain local)</li>
+                <li><strong>Active work product:</strong> Current project files in clawd workspace (recent, high-value)</li>
+                <li><strong>Cache/build artefacts:</strong> Homebrew cache (884MB, cleared), Xcode DerivedData (439MB, cleared), iOS simulators (recreatable)</li>
+                <li><strong>Archived/cold data:</strong> Large files in user directories, old project archives (movable)</li>
+                <li><strong>Orphaned/obsolete:</strong> Unused iOS simulators, temporary files (deletable)</li>
+            </ul>
+        </div>
+        
+        <div class="section actions">
+            <h2>3. EXECUTED SAFE REDUCTIONS</h2>
+            <ul>
+                <li><span class="highlight">Cleared Homebrew cache:</span> 884 MB freed</li>
+                <li><span class="highlight">Cleared Xcode Derived Data:</span> 439 MB freed</li>
+                <li><span class="highlight">Removed unavailable iOS simulators:</span> Freed some space from user simulator registry</li>
+            </ul>
+            
+            <h3>Deferred destructive actions (require elevated privileges):</h3>
+            <ul>
+                <li>System-level iOS simulator volumes (require sudo access)</li>
+                <li>Large files in protected system directories</li>
+            </ul>
+        </div>
+        
+        <div class="section">
+            <h2>4. PRESERVED DATA</h2>
+            <ul>
+                <li>Active project directories (clawd workspace)</li>
+                <li>Research artefacts and therapeutic materials</li>
+                <li>User documents and personal files</li>
+            </ul>
+        </div>
+        
+        <div class="section">
+            <h2>5. STRUCTURAL FIXES RECOMMENDED</h2>
+            <ul>
+                <li><strong>External SSD migration strategy:</strong> Move large archives and infrequently accessed data</li>
+                <li><strong>Tiered storage:</strong> Implement active vs archive classification for project files</li>
+                <li><strong>Automated cache pruning policy:</strong> Regular cleanup of Homebrew, Xcode, and npm caches</li>
+                <li><strong>Monitor simulator usage:</strong> Regular cleanup of unused iOS/watchOS simulator images</li>
+            </ul>
+        </div>
+        
+        <div class="section results">
+            <h2>6. CONCRETE OUTCOME</h2>
+            <ul>
+                <li><strong>Space freed:</strong> Approximately 1.3 GB (884 MB Homebrew + 439 MB Xcode)</li>
+                <li><strong>Current free space:</strong> 4.8 GB (up from 2.9 GB, reducing critical pressure)</li>
+                <li><strong>Preventive constraint:</strong> Implement weekly automated cleanup of development caches to prevent recurrence</li>
+            </ul>
+            
+            <h3>Completed actions:</h3>
+            <ul>
+                <li>Homebrew cache cleared successfully</li>
+                <li>Xcode Derived Data cleared successfully</li>
+                <li>Unavailable iOS simulators removed</li>
+                <li>This report generated documenting the recovery process</li>
+            </ul>
+        </div>
+    </div>
+</body>
+</html>
