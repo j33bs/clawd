@@ -1,0 +1,33 @@
+{
+  "multiAgentFallback": {
+    "enabled": true,
+    "primaryProvider": "anthropic",
+    "fallbackProvider": "qwen-portal/coder-model",
+    "creditThreshold": 0.1,
+    "checkInterval": 60000,
+    "monitoringEnabled": true,
+    "notifications": {
+      "enabled": true,
+      "criticalOnly": true
+    },
+    "logging": {
+      "enabled": true,
+      "logLevel": "info",
+      "retentionDays": 7
+    }
+  },
+  "providerSettings": {
+    "anthropic": {
+      "checkEndpoint": "/api/usage",
+      "balanceField": "balance"
+    },
+    "openai": {
+      "checkEndpoint": "/dashboard/billing/credit_grants",
+      "balanceField": "total_available"
+    },
+    "qwen": {
+      "local": true,
+      "alwaysAvailable": true
+    }
+  }
+}

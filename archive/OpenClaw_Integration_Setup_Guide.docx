@@ -1,0 +1,190 @@
+# OpenClaw Integration Setup Guide
+
+## Table of Contents
+1. [Overview](#overview)
+2. [Calendar Integration Setup](#calendar-integration-setup)
+3. [Mail Integration Setup](#mail-integration-setup)
+4. [Unified Integration Manager](#unified-integration-manager)
+5. [Environment Variables](#environment-variables)
+6. [Troubleshooting](#troubleshooting)
+
+## Overview
+
+This document provides comprehensive instructions for setting up both calendar and mail integrations with your OpenClaw system. The integrations will allow you to synchronize your calendar events and emails, providing availability tracking and unified management of your schedule and communications.
+
+## Calendar Integration Setup
+
+### Prerequisites
+- Calendar service account (Apple Calendar, Google Calendar, etc.)
+- App-specific password for your calendar service
+
+### Setup Steps
+1. Navigate to your calendar provider's security settings
+2. Generate an app-specific password for "OpenClaw"
+3. Note your calendar email address
+
+### For Apple Calendar:
+- Go to appleid.apple.com
+- Sign in with your Apple ID
+- Go to Security > Generate Passwords
+- Create a new app-specific password for 'OpenClaw'
+
+### For Google Calendar:
+- Go to myaccount.google.com
+- Navigate to Security > App passwords
+- Generate a new app password for 'OpenClaw'
+
+### Configuration
+- Calendar syncs every 30 minutes
+- Data stored locally in `./calendar_data.json`
+- Uses CalDAV protocol for synchronization
+
+## Mail Integration Setup
+
+### Prerequisites
+- Email account (Gmail, Outlook, Apple Mail, Yahoo, etc.)
+- App-specific password for your email service
+
+### Setup Steps
+1. Navigate to your email provider's security settings
+2. Generate an app-specific password for "OpenClaw"
+3. Note your email address
+
+### For Different Providers:
+- **Gmail**: Use app-specific password or enable 'Less secure app access'
+- **Outlook/Hotmail**: Use app-specific password
+- **Apple iCloud**: Use app-specific password
+- **Yahoo**: Use app-specific password
+
+### Server Settings by Provider:
+- **Gmail**: imap.gmail.com:993 (SSL)
+- **Outlook**: outlook.office365.com:993 (SSL)
+- **Apple iCloud**: imap.mail.me.com:993 (SSL)
+- **Yahoo**: imap.mail.yahoo.com:993 (SSL)
+
+### Configuration
+- Mail syncs every 5 minutes
+- Data stored locally in `./mailbox_data.json`
+- Supports IMAP protocol
+
+## Unified Integration Manager
+
+### Features
+- Coordinated calendar and mail synchronization
+- Combined availability and email summaries
+- Unified search across both services
+- Coordinated scheduling with email notifications
+
+### Benefits
+- See your availability based on calendar events
+- Track unread emails and mailbox status
+- Get combined recommendations for time management
+- Add calendar events with email notifications
+- Search across both calendar and mail simultaneously
+
+## Environment Variables
+
+### Required Variables
+```bash
+# For Calendar Integration
+export CALENDAR_USERNAME='your_calendar_email@domain.com'
+export CALENDAR_PASSWORD='your_app_specific_password'
+
+# For Mail Integration
+export MAIL_USERNAME='your_mail_email@domain.com'
+export MAIL_PASSWORD='your_app_specific_password'
+```
+
+### Optional Variables
+```bash
+# Specify mail server if not using standard provider
+export MAIL_SERVER='your_imap_server.com'
+```
+
+## Initialization Code
+
+### Basic Setup
+```javascript
+const IntegrationManager = require('./scripts/integration_manager.js');
+
+async function initializeIntegrations() {
+  const manager = new IntegrationManager();
+  
+  await manager.initialize({
+    // Include only the services you want to enable
+    calendar: {
+      username: process.env.CALENDAR_USERNAME,
+      password: process.env.CALENDAR_PASSWORD
+    },
+    mail: {
+      email: process.env.MAIL_USERNAME,
+      password: process.env.MAIL_PASSWORD
+    }
+  });
+  
+  // Start auto-sync for both services
+  manager.startAutoSync();
+  
+  // Get combined summary
+  const summary = await manager.getCombinedSummary(7);
+  console.log('Your integrated summary:', summary.context);
+  
+  return manager;
+}
+
+initializeIntegrations().catch(console.error);
+```
+
+### Example Usage
+```javascript
+// Get combined availability and email status
+const summary = await manager.getCombinedSummary(7);
+console.log(`You have ${summary.context.availability} and ${summary.context.unreadEmails}`);
+
+// Add a calendar event with email notification
+await manager.addCalendarEventWithNotification(
+  {
+    title: "Team Meeting",
+    start: new Date(Date.now() + 24 * 60 * 60 * 1000), // Tomorrow
+    duration: 1, // 1 hour
+    location: "Conference Room",
+    description: "Weekly team sync meeting"
+  },
+  {
+    sendEmail: true,
+    recipients: ["team@company.com"]
+  }
+);
+
+// Search across both calendar and mail
+const results = await manager.unifiedSearch("project deadline");
+console.log(`Found ${results.combined.length} results`);
+```
+
+## Troubleshooting
+
+### Common Issues
+1. **Authentication Errors**: Verify your app-specific passwords are correct
+2. **Connection Issues**: Check your internet connection and firewall settings
+3. **Sync Problems**: Ensure your calendar/email providers support CalDAV/IMAP
+
+### Security Notes
+- Always use app-specific passwords when possible
+- All data is stored locally in your workspace
+- Credentials are accessed only through environment variables
+
+### Support Commands
+- Check system status: `node -e "const mgr = require('./scripts/integration_manager.js'); mgr.testAllConnections();"`
+- View configuration: `cat ./config/calendar_config.json` and `cat ./config/mail_config.json`
+
+## Next Steps
+
+1. Set your environment variables with your credentials
+2. Run the initialization code above
+3. Start using your integrated calendar and mail services!
+4. Monitor the logs in `./logs/` for sync status
+
+---
+
+*Document Version: 1.0*
+*Last Updated: February 2026*

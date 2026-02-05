@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OpenClaw Integration Setup Guide</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            color: #333;
+        }
+        h1 {
+            color: #2c3e50;
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 10px;
+        }
+        h2 {
+            color: #34495e;
+            margin-top: 30px;
+        }
+        h3 {
+            color: #5d6d7e;
+        }
+        code {
+            background-color: #f4f4f4;
+            padding: 2px 4px;
+            border-radius: 3px;
+            font-family: monospace;
+        }
+        pre {
+            background-color: #f4f4f4;
+            padding: 10px;
+            border-radius: 5px;
+            overflow-x: auto;
+        }
+        ul, ol {
+            padding-left: 20px;
+        }
+        li {
+            margin-bottom: 8px;
+        }
+        .note {
+            background-color: #e8f4fd;
+            border-left: 4px solid #3498db;
+            padding: 10px;
+            margin: 15px 0;
+        }
+        .warning {
+            background-color: #fdf2e9;
+            border-left: 4px solid #e74c3c;
+            padding: 10px;
+            margin: 15px 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>OpenClaw Integration Setup Guide</h1>
+    
+    <div class="note">
+        <strong>Note:</strong> This guide contains all the instructions you need to set up calendar and mail integrations with your OpenClaw system.
+    </div>
+
+    <h2>Table of Contents</h2>
+    <ol>
+        <li><a href="#overview">Overview</a></li>
+        <li><a href="#calendar-setup">Calendar Integration Setup</a></li>
+        <li><a href="#mail-setup">Mail Integration Setup</a></li>
+        <li><a href="#unified-manager">Unified Integration Manager</a></li>
+        <li><a href="#env-vars">Environment Variables</a></li>
+        <li><a href="#troubleshooting">Troubleshooting</a></li>
+    </ol>
+
+    <h2 id="overview">Overview</h2>
+    <p>This document provides comprehensive instructions for setting up both calendar and mail integrations with your OpenClaw system. The integrations will allow you to synchronize your calendar events and emails, providing availability tracking and unified management of your schedule and communications.</p>
+
+    <h2 id="calendar-setup">Calendar Integration Setup</h2>
+    
+    <h3>Prerequisites</h3>
+    <ul>
+        <li>Calendar service account (Apple Calendar, Google Calendar, etc.)</li>
+        <li>App-specific password for your calendar service</li>
+    </ul>
+
+    <h3>Setup Steps</h3>
+    <ol>
+        <li>Navigate to your calendar provider's security settings</li>
+        <li>Generate an app-specific password for "OpenClaw"</li>
+        <li>Note your calendar email address</li>
+    </ol>
+
+    <h3>For Apple Calendar:</h3>
+    <ul>
+        <li>Go to <a href="https://appleid.apple.com" target="_blank">appleid.apple.com</a></li>
+        <li>Sign in with your Apple ID</li>
+        <li>Go to Security &gt; Generate Passwords</li>
+        <li>Create a new app-specific password for 'OpenClaw'</li>
+    </ul>
+
+    <h3>For Google Calendar:</h3>
+    <ul>
+        <li>Go to <a href="https://myaccount.google.com" target="_blank">myaccount.google.com</a></li>
+        <li>Navigate to Security &gt; App passwords</li>
+        <li>Generate a new app password for 'OpenClaw'</li>
+    </ul>
+
+    <h3>Configuration</h3>
+    <ul>
+        <li>Calendar syncs every 30 minutes</li>
+        <li>Data stored locally in <code>./calendar_data.json</code></li>
+        <li>Uses CalDAV protocol for synchronization</li>
+    </ul>
+
+    <h2 id="mail-setup">Mail Integration Setup</h2>
+    
+    <h3>Prerequisites</h3>
+    <ul>
+        <li>Email account (Gmail, Outlook, Apple Mail, Yahoo, etc.)</li>
+        <li>App-specific password for your email service</li>
+    </ul>
+
+    <h3>Setup Steps</h3>
+    <ol>
+        <li>Navigate to your email provider's security settings</li>
+        <li>Generate an app-specific password for "OpenClaw"</li>
+        <li>Note your email address</li>
+    </ol>
+
+    <h3>For Different Providers:</h3>
+    <ul>
+        <li><strong>Gmail</strong>: Use app-specific password or enable 'Less secure app access'</li>
+        <li><strong>Outlook/Hotmail</strong>: Use app-specific password</li>
+        <li><strong>Apple iCloud</strong>: Use app-specific password</li>
+        <li><strong>Yahoo</strong>: Use app-specific password</li>
+    </ul>
+
+    <h3>Server Settings by Provider:</h3>
+    <ul>
+        <li><strong>Gmail</strong>: imap.gmail.com:993 (SSL)</li>
+        <li><strong>Outlook</strong>: outlook.office365.com:993 (SSL)</li>
+        <li><strong>Apple iCloud</strong>: imap.mail.me.com:993 (SSL)</li>
+        <li><strong>Yahoo</strong>: imap.mail.yahoo.com:993 (SSL)</li>
+    </ul>
+
+    <h3>Configuration</h3>
+    <ul>
+        <li>Mail syncs every 5 minutes</li>
+        <li>Data stored locally in <code>./mailbox_data.json</code></li>
+        <li>Supports IMAP protocol</li>
+    </ul>
+
+    <h2 id="unified-manager">Unified Integration Manager</h2>
+    
+    <h3>Features</h3>
+    <ul>
+        <li>Coordinated calendar and mail synchronization</li>
+        <li>Combined availability and email summaries</li>
+        <li>Unified search across both services</li>
+        <li>Coordinated scheduling with email notifications</li>
+    </ul>
+
+    <h3>Benefits</h3>
+    <ul>
+        <li>See your availability based on calendar events</li>
+        <li>Track unread emails and mailbox status</li>
+        <li>Get combined recommendations for time management</li>
+        <li>Add calendar events with email notifications</li>
+        <li>Search across both calendar and mail simultaneously</li>
+    </ul>
+
+    <h2 id="env-vars">Environment Variables</h2>
+    
+    <h3>Required Variables</h3>
+    <pre><code># Set your OpenClaw credentials (used for both calendar and mail)
+export OCUSER='your_email@domain.com'
+export OCPASS='your_app_specific_password'</code></pre>
+
+    <h3>Optional Variables</h3>
+    <pre><code># Specify mail server if not using standard provider
+export MAIL_SERVER='your_imap_server.com'</code></pre>
+
+    <h2>Initialization Code</h2>
+    
+    <h3>Basic Setup</h3>
+    <pre><code>const IntegrationManager = require('./scripts/integration_manager.js');
+const CredentialLoader = require('./scripts/credential_loader.js');
+
+async function initializeIntegrations() {
+  const manager = new IntegrationManager();
+  
+  await manager.initialize({
+    // Include only the services you want to enable
+    calendar: {
+      username: process.env.OCUSER,
+      password: process.env.OCPASS
+    },
+    mail: {
+      email: process.env.OCUSER,
+      password: process.env.OCPASS
+    }
+  });
+  
+  // Start auto-sync for both services
+  manager.startAutoSync();
+  
+  // Get combined summary
+  const summary = await manager.getCombinedSummary(7);
+  console.log('Your integrated summary:', summary.context);
+  
+  return manager;
+}
+
+initializeIntegrations().catch(console.error);</code></pre>
+
+    <h3>Example Usage</h3>
+    <pre><code>// Get combined availability and email status
+const summary = await manager.getCombinedSummary(7);
+console.log(`You have ${summary.context.availability} and ${summary.context.unreadEmails}`);
+
+// Add a calendar event with email notification
+await manager.addCalendarEventWithNotification(
+  {
+    title: "Team Meeting",
+    start: new Date(Date.now() + 24 * 60 * 60 * 1000), // Tomorrow
+    duration: 1, // 1 hour
+    location: "Conference Room",
+    description: "Weekly team sync meeting"
+  },
+  {
+    sendEmail: true,
+    recipients: ["team@company.com"]
+  }
+);
+
+// Search across both calendar and mail
+const results = await manager.unifiedSearch("project deadline");
+console.log(`Found ${results.combined.length} results`);</code></pre>
+
+    <h2 id="troubleshooting">Troubleshooting</h2>
+    
+    <h3>Common Issues</h3>
+    <ol>
+        <li><strong>Authentication Errors</strong>: Verify your app-specific passwords are correct</li>
+        <li><strong>Connection Issues</strong>: Check your internet connection and firewall settings</li>
+        <li><strong>Sync Problems</strong>: Ensure your calendar/email providers support CalDAV/IMAP</li>
+    </ol>
+
+    <h3>Security Notes</h3>
+    <ul>
+        <li>Always use app-specific passwords when possible</li>
+        <li>All data is stored locally in your workspace</li>
+        <li>Credentials are accessed only through environment variables</li>
+    </ul>
+
+    <h3>Support Commands</h3>
+    <ul>
+        <li>Check system status: <code>node -e "const mgr = require('./scripts/integration_manager.js'); mgr.testAllConnections();"</code></li>
+        <li>View configuration: <code>cat ./config/calendar_config.json</code> and <code>cat ./config/mail_config.json</code></li>
+    </ul>
+
+    <h2>Next Steps</h2>
+    <ol>
+        <li>Set your environment variables with your credentials</li>
+        <li>Run the initialization code above</li>
+        <li>Start using your integrated calendar and mail services!</li>
+        <li>Monitor the logs in <code>./logs/</code> for sync status</li>
+    </ol>
+
+    <div class="note">
+        <strong>Pro Tip:</strong> You can run this HTML file by opening it directly in your web browser. All the code examples are ready to copy and paste.
+    </div>
+
+    <hr>
+    <p><em>Document Version: 1.0<br>
+    Last Updated: February 2026</em></p>
+</body>
+</html>

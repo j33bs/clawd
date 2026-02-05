@@ -1,0 +1,9 @@
+[
+  {
+    "type": "fallback_activation",
+    "timestamp": "2026-02-04T20:01:10.839Z",
+    "reason": "credit_threshold_reached",
+    "currentProvider": "qwen-portal/coder-model",
+    "message": "API credits exhausted for primary provider. Switched to qwen-portal/coder-model fallback."
+  }
+]

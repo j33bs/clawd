@@ -1,0 +1,9 @@
+[
+  {
+    "timestamp": "2026-02-04T20:01:10.835Z",
+    "fromProvider": "anthropic",
+    "toProvider": "qwen-portal/coder-model",
+    "reason": "credit_threshold_reached",
+    "isFallbackActive": true
+  }
+]

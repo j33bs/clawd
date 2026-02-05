@@ -15,13 +15,19 @@ Things like:
 
 ## Examples
 
-```markdown
-### Cameras
-- living-room → Main area, 180° wide angle
-- front-door → Entrance, motion-triggered
+### Therapeutic Practice Tools
+- ipnb-resources → IPNB research papers and resources
+- act-workshop-materials → ACT therapy workshop materials
+- emotional-regulation-tools → Techniques and exercises
 
-### SSH
-- home-server → 192.168.1.100, user: admin
+### Music Production Setup
+- mpc-studio → Main production platform
+- modular-rack → Eurorack modular synthesizer
+- digitakt → Track sequencing
+- logic-pro → DAW software
+
+### Calendar Integration
+- apple-calendar → Primary calendar via CalDAV
 
 ### TTS
 - Preferred voice: "Nova" (warm, slightly British)
@@ -32,7 +38,11 @@ Things like:
 - Long-term: MEMORY.md
 - Maintenance: memory/maintenance.md
 - Heartbeat tracking: memory/heartbeat-state.json
-```
+
+### Research Areas
+- levins-lab → Michael Levin's bioelectric field research
+- heartmath-institute → Coherence techniques
+- breathwork-practices → Breathing methodologies
 
 ## Why Separate?
 
