@@ -44,6 +44,34 @@ Things like:
 - heartmath-institute → Coherence techniques
 - breathwork-practices → Breathing methodologies
 
+### Daily Brief
+
+When Heath asks for a "daily brief" or "morning brief", generate one with these sections:
+
+**1. Articles (3)**
+Use `web_search` to find recent articles on Heath's interests. Rotate through:
+- IPNB / interpersonal neurobiology
+- Psychedelic therapy / psilocybin research
+- Michael Levin / bioelectric fields
+- HeartMath / heart coherence
+- Breathwork / somatic therapy
+- ACT / acceptance and commitment therapy
+- Emotional regulation research
+
+For each article: title, source, 1-sentence summary, link.
+
+**2. System Status**
+Run `openclaw status` and summarise:
+- Gateway: running/stopped
+- Channels: Telegram connected?
+- Sessions: context usage %
+- Any warnings or issues
+
+**3. Quote**
+Generate a short quote aligned with Heath's work — themes of integration, healing, agency, coherence, or presence. Attribute it to a relevant thinker (Siegel, Porges, Levin, Hayes, etc.) or mark it as "generated".
+
+**Format:** Keep it scannable. No walls of text. Bullet points and short paragraphs.
+
 ### Model Preferences
 - **Qwen (primary):** General conversation, research, daily tasks — free tier
 - **Claude Opus (coding):** Switch to Opus (`/model opus`) when coding is needed — switch back when done
