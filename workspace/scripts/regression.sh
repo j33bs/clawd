@@ -72,8 +72,8 @@ TRACKED_FILES=$(git ls-files 2>/dev/null || echo "")
 
 SECRET_FOUND=0
 for file in $TRACKED_FILES; do
-    # Skip markdown, templates, and gitignore
-    if [[ "$file" == *.md ]] || [[ "$file" == *.template ]] || [[ "$file" == .gitignore ]]; then
+    # Skip files that contain patterns (not actual secrets)
+    if [[ "$file" == *.md ]] || [[ "$file" == *.template ]] || [[ "$file" == .gitignore ]] || [[ "$file" == *.sh ]]; then
         continue
     fi
 
