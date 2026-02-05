@@ -46,15 +46,18 @@ Things like:
 
 ### Model Preferences
 - **Qwen (primary):** General conversation, research, daily tasks — free tier
-- **Claude (coding):** Use the **coding-agent** skill to delegate coding tasks to Claude Code — see below
-- **Claude Opus (manual):** For complex reasoning or architecture discussions — use `/model opus` to switch when needed
+- **Claude Opus (coding):** Switch to Opus (`/model opus`) when coding is needed — switch back when done
+- **Claude Code (coding fallback):** If API key has no credits, fall back to coding-agent skill
 - Don't burn Claude tokens on casual chat. Save it for when it matters.
 
-### Coding Agent — Contextual Claude Routing
+### Coding — Model Switching
 
-When Heath asks you to write, edit, debug, or review code, **delegate to the coding-agent skill** instead of doing it yourself. This spawns Claude Code (installed at `~/.npm-global/bin/claude`) in a PTY session to do the actual coding work.
+When Heath asks you to write, edit, debug, or review code, **switch yourself to Opus**:
+1. `/model opus` — switch to Claude Opus
+2. Do the coding work
+3. `/model qwen-portal/coder-model` — switch back when done
 
-**When to delegate:**
+**What counts as coding:**
 - Writing new code (functions, scripts, modules, apps)
 - Editing or refactoring existing code
 - Debugging — finding and fixing bugs
@@ -62,7 +65,7 @@ When Heath asks you to write, edit, debug, or review code, **delegate to the cod
 - Setting up projects, build systems, configs
 - Any task where the primary output is code
 
-**When NOT to delegate (handle yourself with Qwen):**
+**Stay on Qwen for:**
 - Casual conversation, research, questions
 - Reading/summarising files or docs
 - Memory management, notes, reminders
@@ -70,7 +73,10 @@ When Heath asks you to write, edit, debug, or review code, **delegate to the cod
 - Music production planning (non-code)
 - Quick one-line shell commands (ls, git status, etc.)
 
-**How to delegate:**
+### Coding Agent Fallback
+
+If `/model opus` fails (auth error, no credits, rate limit), fall back to the **coding-agent** skill. This spawns Claude Code locally via PTY.
+
 ```
 bash pty:true workdir:~/target-project command:"claude 'Your task description here'"
 ```
@@ -87,7 +93,6 @@ When completely finished, run: openclaw gateway wake --text \"Done: brief summar
 - Never set `workdir` to `~/clawd/` (that's your soul docs, not a code project)
 - Always use `pty:true`
 - Report back what Claude Code did when it finishes
-- If it fails, report the failure — don't silently take over and hand-code the solution yourself
 
 **PATH note:** Claude binary is at `/Users/heathyeager/.npm-global/bin/claude`. If PATH doesn't include this, use the full path.
 
