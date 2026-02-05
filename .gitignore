@@ -26,6 +26,11 @@ identity/device.json
 credentials/telegram-*.json
 credentials/*.json
 
+# Telethon session files (MTProto auth)
+*.session
+*.session-journal
+.secrets/
+
 # ============================================
 # BACKUP FILES (may contain secrets)
 # ============================================
@@ -54,6 +59,10 @@ memory/*.sqlite
 *.log
 telegram_health_log.json
 telegram_health_reports.json
+
+# ITC Pipeline runtime state
+telegram/itc_*.json
+telegram/itc_*.jsonl
 
 # ============================================
 # TEMP AND CACHE
