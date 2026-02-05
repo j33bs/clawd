@@ -32,9 +32,33 @@ Track all security-relevant events for the OpenClaw system.
 
 ## Pending Items
 
-- [ ] Historical backup files with exposed secrets require secure deletion
-- [ ] Secrets migration from plaintext config to secrets.env
-- [ ] Token rotation after migration complete
+- [x] Secrets migration from plaintext config to secrets.env - COMPLETED 2026-02-05
+- [ ] Historical backup files with exposed secrets require secure deletion:
+  - `openclaw.json.bak` - contains gateway token
+  - `openclaw.json.bak_20260204_231447` - contains gateway token
+  - `workspace.bak_20260204_230710/` - may contain sensitive data
+  - `workspace.bak_20260204_231007/` - may contain sensitive data
+  - `workspace/.git.bak/` - workspace git history backup
+  - `openclaw.json.pre-multimodel-backup` - pre-migration backup (contains token)
+- [ ] Secure delete backups after 7-day validation period
+
+---
+
+## Incident Log
+
+### 2026-02-05 - Backup Files with Secrets Identified
+
+**Severity**: Medium (files on disk, not in VCS)
+**Status**: Documented, pending scheduled cleanup
+
+Backup files containing plaintext gateway token identified during history scan:
+- These files ARE excluded from git by .gitignore
+- They remain on local filesystem only
+- No secrets were committed to git history (verified)
+
+**Recommended Action**: Secure deletion after 7-day validation period to ensure system operates correctly with new secrets.env configuration.
+
+**Note**: Token was NOT rotated per user request - values were moved to secure storage, not changed.
 
 ---
 
