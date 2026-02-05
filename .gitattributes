@@ -1,0 +1,44 @@
+# OpenClaw .gitattributes
+# EOL normalization and drift prevention
+# Generated: 2026-02-05
+
+# Normalize line endings for text files
+* text=auto eol=lf
+
+# Explicit text files
+*.md text eol=lf
+*.sh text eol=lf
+*.ps1 text eol=crlf
+*.cmd text eol=crlf
+*.bat text eol=crlf
+*.json text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.js text eol=lf
+*.ts text eol=lf
+*.py text eol=lf
+*.txt text eol=lf
+*.css text eol=lf
+*.html text eol=lf
+
+# Configuration files
+.gitignore text eol=lf
+.gitattributes text eol=lf
+.editorconfig text eol=lf
+
+# Binary files - no normalization
+*.sqlite binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.zip binary
+*.tar binary
+*.gz binary
+*.7z binary
+
+# Diff settings for better readability
+*.md diff=markdown
+*.json diff=json

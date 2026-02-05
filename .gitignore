@@ -1,0 +1,85 @@
+# OpenClaw Security-First .gitignore
+# Generated: 2026-02-05
+# Category: B (Security)
+
+# ============================================
+# SECRETS AND CREDENTIALS (CRITICAL)
+# ============================================
+secrets.env
+secrets.json
+*.key
+*.pem
+.env
+*.env.local
+*.env.*.local
+
+# OAuth and auth tokens
+auth-profiles.json
+device-auth.json
+paired.json
+pending.json
+
+# Identity files with private-key files
+identity/device.json
+
+# Telegram credentials
+credentials/telegram-*.json
+credentials/*.json
+
+# ============================================
+# BACKUP FILES (may contain secrets)
+# ============================================
+*.bak
+*.bak_*
+workspace.bak_*/
+openclaw.json.bak*
+*.git.bak/
+
+# ============================================
+# SESSION DATA (ephemeral)
+# ============================================
+agents/*/sessions/*.jsonl
+sessions.json
+
+# Daily memory logs (ephemeral - local only)
+workspace/memory/*.md
+
+# ============================================
+# RUNTIME STATE (ephemeral)
+# ============================================
+*.sqlite
+memory/*.sqlite
+
+# Logs that may contain sensitive data
+*.log
+telegram_health_log.json
+telegram_health_reports.json
+
+# ============================================
+# TEMP AND CACHE
+# ============================================
+tmp/
+cache/
+node_modules/
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# ============================================
+# OS AND IDE FILES
+# ============================================
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+nul
+
+# ============================================
+# CLAUDE CODE SETTINGS (may contain paths)
+# ============================================
+.claude/settings.local.json
+.claude/plans/
