@@ -60,8 +60,8 @@ This is my curated long-term memory containing significant information, learning
 - Integrate technology with therapeutic practice
 
 ## Technical Infrastructure
-- **GPU**: RTX 3090 for local AI processing
-- **Interest**: Leveraging local LLM and Clawdbot combinations
+- **Hardware**: Apple M2 MacBook
+- **Interest**: Leveraging local LLM and OpenClaw combinations
 - **Focus**: AI applications for therapeutic practice, creative work, and research
 
 ## Therapeutic Modalities & Approaches
@@ -83,9 +83,7 @@ This is my curated long-term memory containing significant information, learning
 - Doctoral-level academic register for intellectual discussions
 - Conceptual precision and epistemic honesty
 - Grounding in evidence while distinguishing consensus from conjecture
-- Proactive assistance with decision-making support
-- Continuous refinement for efficiency, elegance, and productivity
-- Mindful system evolution over time with regular tweaking
+- Mindful system evolution over time
 
 ## Goals & Objectives
 - Enhanced productivity through systematic memory management
@@ -96,14 +94,10 @@ This is my curated long-term memory containing significant information, learning
 - Book publication
 - Personal relationship development
 
-## Memory System Configuration
-- **Three-stage memory model**: Sensory, Working, Long-term with decay functions
-- **Sensory Memory**: 50% decay every 5 minutes
-- **Working Memory**: 20% decay per day if not reinforced
-- **Long-term Memory**: 5% decay per week with periodic review
-- **Daily Analysis**: 1-hour daily protocol for optimization
-- **Goal Tracking**: Automated system with follow-ups and progress monitoring
-- **Export/Sync**: Functionality for syncing between Clawdbot instances
+## Memory System
+- Daily notes in `memory/YYYY-MM-DD.md`
+- Long-term curated memory in this file (`MEMORY.md`)
+- Review daily files periodically; promote what matters here
 
 ## Safety & Privacy Requirements
 - Local files should stay local unless explicitly prompted
@@ -114,7 +108,7 @@ This is my curated long-term memory containing significant information, learning
 
 ## AI Integration Preferences
 - Local LLM usage when possible (Ollama integration)
-- Clawdbot as primary AI assistant
+- OpenClaw as primary AI assistant
 - Research and content generation support
 - Creative workflow assistance
 - Therapeutic practice enhancement
@@ -155,7 +149,7 @@ This is my curated long-term memory containing significant information, learning
 ## Decision Log
 - **2025-01-30**: Implemented contemporary memory management structure following AGENTS.md guidelines
 - **2025-01-30**: Established separation between daily logs and curated long-term memory
-- **2025-01-30**: Integrated comprehensive profile from other Clawdbot instance
+- **2025-01-30**: Integrated comprehensive profile from other OpenClaw instance
 
 ## Security & Privacy Notes
 - Personal information is kept secure and not shared externally
