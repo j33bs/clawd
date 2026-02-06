@@ -1,0 +1,36 @@
+== Dependency checks ==
+PASS: binary available: peekaboo
+PASS: binary available: summarize
+PASS: binary available: tmux
+PASS: binary available: bird
+PASS: binary available: himalaya
+PASS: binary available: uv
+PASS: binary available: codexbar
+PASS: binary available: whisper
+WARN: missing optional env: GOOGLE_PLACES_API_KEY (required for live local-places API calls)
+
+== Smoke checks ==
+PASS: smoke: peakaboo/peekaboo help
+PASS: smoke: summarize help
+PASS: smoke: tmux version
+PASS: smoke: bird help
+PASS: smoke: himalaya help
+PASS: smoke: uv version
+PASS: smoke: model_usage adapter help
+PASS: smoke: codexbar help
+PASS: smoke: whisper help
+
+== OpenClaw skill readiness ==
+PASS: openclaw ready: peakaboo
+PASS: openclaw ready: summarize
+PASS: openclaw ready: tmux
+PASS: openclaw ready: bird
+PASS: openclaw ready: himalaya
+PASS: openclaw ready: local-places
+PASS: openclaw ready: model-usage
+PASS: openclaw ready: openai-whisper
+
+== Summary ==
+PASS: 25
+WARN: 1
+FAIL: 0
