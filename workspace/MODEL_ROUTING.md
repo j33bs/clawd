@@ -31,16 +31,23 @@ This document defines the contextual model selection rules for OpenClaw.
 - 128K context window
 - Fast response times
 
-### ELEVATED: Claude 3 Opus (Anthropic)
+### ELEVATED: claude-code agent (Anthropic Claude 3 Opus)
 
-**Route to Claude when:**
+**Delegate to `claude-code` agent when:**
 - Coding tasks (any complexity)
+- Governance work (constitutional changes, admission gates, regression)
+- Memory curation and systemic evolution
 - Complex reasoning required
 - Multi-step planning
 - Security-sensitive code review
-- Constitutional/governance work
 - Architecture decisions
 - Debugging complex issues
+
+**Delegation pattern:**
+- `main` (Dessy/Qwen) receives all Telegram messages by default
+- When a task matches the above, `main` delegates to `claude-code` via subagent spawn
+- `claude-code` does the heavy work, then leaves simple follow-up instructions for `main`/Qwen to execute
+- Simple messages, lookups, and routine tasks stay on `main` — never escalate unnecessarily
 
 **Characteristics:**
 - Paid API (cost per token)
@@ -92,25 +99,39 @@ Content routes to LOCAL only when **explicitly marked**:
 
 ```
 ┌─────────────────────────────────────────┐
-│ Is content explicitly marked            │
-│ #confidential or in confidential path?  │
+│ Telegram message arrives → main (Dessy) │
 └───────────────┬─────────────────────────┘
+                │
+┌───────────────┴──────────────────────────┐
+│ Is content explicitly marked             │
+│ #confidential or in confidential path?   │
+└───────────────┬──────────────────────────┘
                 │
         ┌───────┴───────┐
         │ YES           │ NO
         ▼               ▼
-   ┌─────────┐   ┌─────────────────────────┐
-   │  LOCAL  │   │ Is it coding, complex   │
-   │ (Ollama)│   │ reasoning, or security? │
-   └─────────┘   └───────────┬─────────────┘
-                             │
-                     ┌───────┴───────┐
-                     │ YES           │ NO
-                     ▼               ▼
-                ┌─────────┐    ┌──────────┐
-                │ CLAUDE  │    │  QWEN    │
-                │  OPUS   │    │ (Portal) │
-                └─────────┘    └──────────┘
+   ┌─────────┐   ┌───────────────────────────────┐
+   │  LOCAL  │   │ Is it coding, governance,     │
+   │ (Ollama)│   │ memory/evolution, complex      │
+   └─────────┘   │ reasoning, or security?        │
+                  └───────────────┬───────────────┘
+                                  │
+                          ┌───────┴───────┐
+                          │ YES           │ NO
+                          ▼               ▼
+                   ┌────────────┐   ┌──────────┐
+                   │ Delegate → │   │  Stay on │
+                   │ claude-code│   │  main    │
+                   │ (Opus)     │   │  (Qwen)  │
+                   └──────┬─────┘   └──────────┘
+                          │
+                          ▼
+                   ┌────────────┐
+                   │ Returns    │
+                   │ simple     │
+                   │ follow-ups │
+                   │ for Qwen   │
+                   └────────────┘
 ```
 
 ---

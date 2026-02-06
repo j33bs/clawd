@@ -39,7 +39,7 @@ check_warn() {
 # ============================================
 # 1. CONSTITUTIONAL INVARIANTS
 # ============================================
-echo "[1/7] Checking constitutional invariants..."
+echo "[1/8] Checking constitutional invariants..."
 
 if [ -f "workspace/CONSTITUTION.md" ]; then
     if grep -q "Article III: Safety Boundaries" workspace/CONSTITUTION.md; then
@@ -54,7 +54,7 @@ fi
 # ============================================
 # 2. GOVERNANCE SUBSTRATE
 # ============================================
-echo "[2/7] Verifying governance substrate..."
+echo "[2/8] Verifying governance substrate..."
 
 if [ -f "workspace/governance/GOVERNANCE_LOG.md" ]; then
     check_pass
@@ -65,7 +65,7 @@ fi
 # ============================================
 # 3. SECRET SCAN (tracked files)
 # ============================================
-echo "[3/7] Scanning for secrets in tracked files..."
+echo "[3/8] Scanning for secrets in tracked files..."
 
 # Get list of tracked files
 TRACKED_FILES=$(git ls-files 2>/dev/null || echo "")
@@ -95,7 +95,7 @@ fi
 # ============================================
 # 4. FORBIDDEN FILES CHECK
 # ============================================
-echo "[4/7] Checking for forbidden files..."
+echo "[4/8] Checking for forbidden files..."
 
 FORBIDDEN_FOUND=0
 FORBIDDEN_PATTERNS="secrets.env device.json paired.json auth-profiles.json device-auth.json"
@@ -116,7 +116,7 @@ fi
 # ============================================
 # 5. HOOKS INSTALLED
 # ============================================
-echo "[5/7] Verifying git hooks..."
+echo "[5/8] Verifying git hooks..."
 
 HOOKS_OK=1
 if [ ! -x ".git/hooks/pre-commit" ]; then
@@ -162,7 +162,7 @@ fi
 echo "[7/8] Checking optional provider env gating..."
 
 if [ -f "openclaw.json" ]; then
-    python3 - <<'PY'
+    python - <<'PY'
 import json
 import sys
 

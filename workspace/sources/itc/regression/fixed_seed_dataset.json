@@ -1,0 +1,98 @@
+{
+  "regression_dataset": {
+    "primary_items": [
+      {
+        "id": "primary_001",
+        "content": "Macro analysis of current market conditions and upcoming catalysts. The current environment is characterized by unprecedented monetary policy effects.",
+        "source": "Ben Cowen YouTube Channel - Video Transcript",
+        "expected_classification": "PRIMARY",
+        "expected_weight": 1.0
+      },
+      {
+        "id": "primary_002", 
+        "content": "Weekly market regime assessment and risk indicators. We continue to observe signs of regime transition with volatility clustering patterns.",
+        "source": "Ben Cowen Official Blog - Market Commentary",
+        "expected_classification": "PRIMARY",
+        "expected_weight": 1.0
+      },
+      {
+        "id": "primary_003",
+        "content": "Brief commentary on inflation signals and policy implications. Recent data suggests the Fed may be behind the curve on inflation dynamics.",
+        "source": "Ben Cowen Twitter/X - Economic Outlook",
+        "expected_classification": "PRIMARY",
+        "expected_weight": 1.0
+      },
+      {
+        "id": "primary_004",
+        "content": "Long-term market outlook and strategic positioning advice. Investors should prepare for increased volatility in the coming quarters.",
+        "source": "Ben Cowen Newsletter - Weekly Summary",
+        "expected_classification": "PRIMARY",
+        "expected_weight": 1.0
+      }
+    ],
+    "official_items": [
+      {
+        "id": "official_001",
+        "content": "Updated methodology for the Volatility Regime Indicator. The VRI has been adjusted to incorporate intraday volatility patterns.",
+        "source": "ITC Platform - Indicator Update",
+        "expected_classification": "OFFICIAL",
+        "expected_weight": 0.7
+      },
+      {
+        "id": "official_002",
+        "content": "New section added to explain the correlation matrix calculations. The documentation now includes detailed cross-asset correlation coefficients.",
+        "source": "ITC Platform - Documentation Update",
+        "expected_classification": "OFFICIAL",
+        "expected_weight": 0.7
+      },
+      {
+        "id": "official_003",
+        "content": "Release notes for the new ITC platform features. Users should expect improved performance and additional analytics tools.",
+        "source": "ITC Platform - Release Notes",
+        "expected_classification": "OFFICIAL",
+        "expected_weight": 0.7
+      },
+      {
+        "id": "official_004",
+        "content": "Methodology update for the Market Regime Indicator. The new version incorporates 21-day rolling correlations.",
+        "source": "ITC Platform - Methodology Update",
+        "expected_classification": "OFFICIAL",
+        "expected_weight": 0.7
+      }
+    ],
+    "community_items": [
+      {
+        "id": "community_001",
+        "content": "User feedback on the new volatility regime indicator settings. Feedback suggests the new 15-day smoothing is reducing false signals.",
+        "source": "ITC Community Forum - Indicator Feedback",
+        "expected_classification": "COMMUNITY",
+        "expected_weight": 0.2,
+        "timestamp": "2026-02-04T10:00:00Z"
+      },
+      {
+        "id": "community_002",
+        "content": "Members sharing observations about sector rotation patterns. Several members report seeing unusual rotation patterns.",
+        "source": "ITC Community Forum - Strategy Discussion",
+        "expected_classification": "COMMUNITY",
+        "expected_weight": 0.2,
+        "timestamp": "2026-02-04T09:30:00Z"
+      },
+      {
+        "id": "community_003",
+        "content": "Discussion about recent economic data releases and their impact. Members are debating whether the latest employment data changes the outlook.",
+        "source": "ITC Community Forum - News Discussion",
+        "expected_classification": "COMMUNITY",
+        "expected_weight": 0.2,
+        "timestamp": "2026-02-04T09:00:00Z"
+      },
+      {
+        "id": "community_004",
+        "content": "Member observation about divergence between price action and indicator signals. Some members have noted that current price movement appears ahead of indicators.",
+        "source": "ITC Community Forum - Technical Analysis Thread",
+        "expected_classification": "COMMUNITY",
+        "expected_weight": 0.2,
+        "timestamp": "2026-02-04T08:30:00Z"
+      }
+    ]
+  }
+}

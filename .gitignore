@@ -48,6 +48,7 @@ sessions.json
 
 # Daily memory logs (ephemeral - local only)
 workspace/memory/*.md
+workspace/memory/heartbeat-state.json
 
 # ============================================
 # RUNTIME STATE (ephemeral)
@@ -61,8 +62,8 @@ telegram_health_log.json
 telegram_health_reports.json
 
 # ITC Pipeline runtime state
-telegram/itc_*.json
-telegram/itc_*.jsonl
+/telegram/itc_*.json
+/telegram/itc_*.jsonl
 
 # ============================================
 # TEMP AND CACHE
@@ -86,6 +87,35 @@ Thumbs.db
 *.swo
 *~
 nul
+
+# ============================================
+# OPENCLAW RUNTIME DIRECTORIES (managed by gateway)
+# Anchored to repo root (/) so workspace/ subdirs are not caught
+# ============================================
+/agents/
+/canvas/
+/cron/
+/gateway.cmd
+/itc/
+/market/
+/pdf/
+/pipelines/
+/scripts/
+/sim/
+/telegram/
+/update-check.json
+
+# ============================================
+# ONE-OFF DIAGNOSTIC SCRIPTS (workspace)
+# ============================================
+workspace/system_check_telegram.js
+workspace/telegram_health_check.js
+workspace/test_tg_connectivity.js
+workspace/tg_monitor.ps1
+workspace/tg_monitor.sh
+workspace/TELEGRAM_MONITORING_FIX.md
+workspace/TELEGRAM_MONITORING_SETUP.md
+workspace/operator_transfer_brief.md
 
 # ============================================
 # CLAUDE CODE SETTINGS (may contain paths)
