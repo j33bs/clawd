@@ -6,31 +6,9 @@
  */
 
 const path = require('path');
-const fs = require('fs').promises;
+const { appendJsonArray } = require('./guarded_fs');
 const { callModel } = require('../core/model_call');
 const { BACKENDS } = require('../core/model_constants');
-
-function resolveWorkspacePath(relativePath) {
-  return path.resolve(__dirname, '..', relativePath);
-}
-
-async function readJsonFile(filePath) {
-  try {
-    const data = await fs.readFile(filePath, 'utf8');
-    return JSON.parse(data);
-  } catch (error) {
-    return null;
-  }
-}
-
-async function writeJsonFile(filePath, value) {
-  const data = JSON.stringify(value, null, 2);
-  await fs.writeFile(filePath, data);
-}
-
-async function ensureDir(dirPath) {
-  await fs.mkdir(dirPath, { recursive: true });
-}
 
 class MultiAgentFallback {
   constructor(config = {}) {
@@ -197,32 +175,13 @@ class MultiAgentFallback {
       isFallbackActive: this.isFallbackActive
     };
 
-    // Append to a fallback log file
-    const logPath = resolveWorkspacePath(path.join('logs', 'fallback_events.json'));
-    if (!logPath) {
-      console.error('Error logging fallback event: log path could not be resolved');
-      return;
-    }
-    const logDir = path.dirname(logPath);
-    
     try {
-      await ensureDir(logDir);
-      
-      let logData = await readJsonFile(logPath);
-      if (!Array.isArray(logData)) {
-        logData = [];
-      }
-      
-      logData.push(logEntry);
-      
-      // Keep only the last 100 events to prevent log bloat
-      if (logData.length > 100) {
-        logData = logData.slice(-100);
-      }
-      
-      await writeJsonFile(logPath, logData);
+      await appendJsonArray(path.join('logs', 'fallback_events.json'), logEntry, {
+        maxEntries: 100
+      });
     } catch (error) {
-      console.error('Error logging fallback event:', error);
+      const message = error && error.message ? error.message : String(error);
+      console.warn(`[multi-agent-fallback] fallback log append failed: ${message}`);
     }
   }
 
@@ -271,31 +230,13 @@ class MultiAgentFallback {
    * Log notifications
    */
   async logNotification(notification) {
-    const logPath = resolveWorkspacePath(path.join('logs', 'notifications.json'));
-    if (!logPath) {
-      console.error('Error logging notification: log path could not be resolved');
-      return;
-    }
-    const logDir = path.dirname(logPath);
-    
     try {
-      await ensureDir(logDir);
-      
-      let logData = await readJsonFile(logPath);
-      if (!Array.isArray(logData)) {
-        logData = [];
-      }
-      
-      logData.push(notification);
-      
-      // Keep only the last 50 events to prevent log bloat
-      if (logData.length > 50) {
-        logData = logData.slice(-50);
-      }
-      
-      await writeJsonFile(logPath, logData);
+      await appendJsonArray(path.join('logs', 'notifications.json'), notification, {
+        maxEntries: 50
+      });
     } catch (error) {
-      console.error('Error logging notification:', error);
+      const message = error && error.message ? error.message : String(error);
+      console.warn(`[multi-agent-fallback] notification log append failed: ${message}`);
     }
   }
 

@@ -54,7 +54,19 @@ Oath cooldown is applied on `AUTH`, `RATE_LIMIT`, `QUOTA`, `CONTEXT`, or timeout
 
 ## Governance Events
 
-Uses `scripts/guarded_fs.js` append-json pattern:
+Canonical logging primitive: `scripts/guarded_fs.js` -> `appendJsonArray(relativePath, entry, options)`.
+
+Behavior:
+- creates log directory recursively before writes
+- appends into JSON array logs (`fallback_events.json`, `notifications.json`)
+- uses lock file + temp-file rename for safer concurrent append semantics
+- logging errors are warning-only and do not fail model routing
+
+Used by:
+- `core/governance_logger.js`
+- `scripts/multi_agent_fallback.js`
+
+Targets:
 - `logs/fallback_events.json`
   - `ROUTE_SELECT`, `BACKEND_ERROR`, `COOLDOWN_SET`, `COOLDOWN_CLEAR`
 - `logs/notifications.json`
@@ -63,12 +75,6 @@ Uses `scripts/guarded_fs.js` append-json pattern:
 ## Verification
 
 Run:
-
-```bash
-npm run verify:model-routing
-```
-
-or:
 
 ```bash
 node scripts/verify_model_routing.js
