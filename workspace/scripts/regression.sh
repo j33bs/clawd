@@ -138,7 +138,7 @@ fi
 # ============================================
 # 6. DOCUMENTATION COMPLETENESS
 # ============================================
-echo "[6/7] Checking documentation completeness..."
+echo "[6/8] Checking documentation completeness..."
 
 DOCS_OK=1
 REQUIRED_DOCS="CONSTITUTION SOUL IDENTITY AGENTS USER BOUNDARIES"
@@ -157,9 +157,55 @@ else
 fi
 
 # ============================================
-# 7. BRANCH PROTECTION (local check)
+# 7. OPTIONAL PROVIDER ENV GATING
 # ============================================
-echo "[7/7] Checking branch state..."
+echo "[7/8] Checking optional provider env gating..."
+
+if [ -f "openclaw.json" ]; then
+    python3 - <<'PY'
+import json
+import sys
+
+def has_env(value):
+    if isinstance(value, str):
+        return "${" in value
+    if isinstance(value, dict):
+        return any(has_env(v) for v in value.values())
+    if isinstance(value, list):
+        return any(has_env(v) for v in value)
+    return False
+
+with open("openclaw.json", "r", encoding="utf-8") as handle:
+    data = json.load(handle)
+
+providers = data.get("models", {}).get("providers", {})
+
+for name in ("anthropic", "ollama"):
+    provider = providers.get(name)
+    if not isinstance(provider, dict):
+        print(f"missing:{name}")
+        sys.exit(2)
+    if has_env(provider):
+        enabled = provider.get("enabled")
+        if enabled not in ("auto", False):
+            print(f"enabled:{name}:{enabled}")
+            sys.exit(3)
+
+print("ok")
+PY
+    if [ $? -eq 0 ]; then
+        check_pass
+    else
+        check_fail "Optional providers with env vars must be enabled=auto or disabled"
+    fi
+else
+    check_fail "openclaw.json not found for provider gating check"
+fi
+
+# ============================================
+# 8. BRANCH PROTECTION (local check)
+# ============================================
+echo "[8/8] Checking branch state..."
 
 CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
 
