@@ -72,6 +72,22 @@ Targets:
 - `logs/notifications.json`
   - user-facing routing notices only
 
+## Guardrail: Staged Allowlist
+
+Run `node scripts/check_staged_allowlist.js` (or `npm run -s staged:allowlist`) before routing/governance commits.
+
+It enforces an allowlist when:
+- staged files include `core/**`, `scripts/init_fallback_system.js`, or `scripts/multi_agent_fallback.js`
+- or commit message contains `[ROUTER]` or `[GOV]`
+
+If non-allowlisted staged files are present, it fails with offending paths to prevent accidental pre-staged leakage.
+
+Override intentionally with:
+- `ALLOW_EXTRA_FILES=1 git commit ...`
+
+Optional hook template:
+- `scripts/hooks/pre-commit` (not auto-installed)
+
 ## Verification
 
 Run:

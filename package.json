@@ -1,10 +1,14 @@
 {
   "scripts": {
-    "test:guarded-fs": "node tests/guarded_fs.test.js"
+    "test:guarded-fs": "node tests/guarded_fs.test.js",
+    "staged:allowlist": "node scripts/check_staged_allowlist.js"
   },
   "dependencies": {
+    "axios": "^1.13.4",
+    "cheerio": "^1.2.0",
     "luxon": "^3.7.2",
     "mailparser": "^3.9.3",
+    "puppeteer": "^24.36.1",
     "tsdav": "^2.1.6"
   }
 }
