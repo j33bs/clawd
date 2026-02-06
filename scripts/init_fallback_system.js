@@ -6,6 +6,8 @@
 
 const MultiAgentFallback = require('./multi_agent_fallback.js');
 const { readJsonFile, resolveWorkspacePath } = require('./guarded_fs');
+const { createModelRuntime } = require('../core/model_runtime');
+const { callModel } = require('../core/model_call');
 
 async function initializeFallbackSystem() {
   console.log("🔄 Initializing Multi-Agent Fallback System");
@@ -34,9 +36,14 @@ async function initializeFallbackSystem() {
       };
     }
     
+    // Initialize canonical model-call runtime for router/provider selection.
+    const modelRuntime = createModelRuntime();
+    global.__OPENCLAW_MODEL_RUNTIME = modelRuntime;
+    global.__OPENCLAW_CALL_MODEL = callModel;
+
     if (!config.multiAgentFallback.enabled) {
       console.log("❌ Multi-agent fallback system is disabled in configuration");
-      return;
+      return null;
     }
     
     // Create the fallback system
@@ -106,4 +113,4 @@ if (require.main === module) {
     });
 }
 
-module.exports = { initializeFallbackSystem };
+module.exports = { initializeFallbackSystem, callModel };

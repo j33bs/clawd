@@ -12,6 +12,8 @@ const {
   readJsonFile,
   writeJsonFile
 } = require('./guarded_fs');
+const { callModel } = require('../core/model_call');
+const { BACKENDS } = require('../core/model_constants');
 
 class MultiAgentFallback {
   constructor(config = {}) {
@@ -348,23 +350,52 @@ class MultiAgentFallback {
    * Make a request using the appropriate provider
    */
   async makeRequest(prompt, options = {}) {
-    // In a real implementation, this would route to the appropriate provider API
-    // For now, we'll just return info about which provider would be used
-    
-    const requestInfo = {
-      provider: this.currentProvider,
-      timestamp: new Date().toISOString(),
-      promptLength: prompt.length,
-      isFallbackActive: this.isFallbackActive
-    };
-    
-    if (this.isFallbackActive) {
-      this.usageStats.fallbackRequests++;
-    } else {
-      this.usageStats.primaryRequests++;
+    const metadata = options.metadata && typeof options.metadata === 'object' ? { ...options.metadata } : {};
+    if (options.simulation && typeof options.simulation === 'object') {
+      metadata.simulation = options.simulation;
     }
-    
-    return requestInfo;
+
+    const messages =
+      Array.isArray(options.messages) && options.messages.length > 0
+        ? options.messages
+        : [{ role: 'user', content: typeof prompt === 'string' ? prompt : String(prompt || '') }];
+
+    const result = await callModel({
+      taskId: options.taskId || `fallback_${Date.now()}`,
+      messages,
+      taskClass: options.taskClass || options.task_class,
+      requiresClaude: Boolean(
+        options.requiresClaude === true ||
+          options.requires_claude === true ||
+          metadata.requires_claude === true
+      ),
+      allowNetwork: options.allowNetwork !== false && options.allow_network !== false,
+      preferredBackend: options.preferredBackend || options.preferred_backend,
+      metadata
+    });
+
+    this.isFallbackActive = result.backend === BACKENDS.LOCAL_QWEN;
+    this.currentProvider = this.isFallbackActive
+      ? this.config.fallbackProvider
+      : result.backend === BACKENDS.OATH_CLAUDE
+      ? 'oath'
+      : 'anthropic';
+
+    if (this.isFallbackActive) {
+      this.usageStats.fallbackRequests += 1;
+    } else {
+      this.usageStats.primaryRequests += 1;
+    }
+
+    return {
+      provider: result.backend,
+      timestamp: new Date().toISOString(),
+      promptLength: typeof prompt === 'string' ? prompt.length : JSON.stringify(messages).length,
+      isFallbackActive: this.isFallbackActive,
+      response: result.response,
+      usage: result.usage,
+      events: result.events
+    };
   }
 }
 
