@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://openclaw.local/schemas/notification_event.schema.json",
+  "title": "NotificationEvent",
+  "type": "object",
+  "required": ["type", "timestamp", "message"],
+  "properties": {
+    "type": {
+      "type": "string",
+      "enum": ["routing_notice", "fallback_activation", "primary_restoration", "warning"]
+    },
+    "timestamp": { "type": "string", "format": "date-time" },
+    "message": { "type": "string", "minLength": 1 },
+    "task_id": { "type": "string" },
+    "task_class": { "type": "string", "enum": ["BASIC", "NON_BASIC"] },
+    "from_backend": {
+      "type": "string",
+      "enum": ["OATH_CLAUDE", "ANTHROPIC_CLAUDE_API", "LOCAL_QWEN", "UNKNOWN"]
+    },
+    "to_backend": {
+      "type": "string",
+      "enum": ["OATH_CLAUDE", "ANTHROPIC_CLAUDE_API", "LOCAL_QWEN", "UNKNOWN"]
+    },
+    "trigger_code": {
+      "type": "string",
+      "enum": ["AUTH", "RATE_LIMIT", "QUOTA", "TIMEOUT", "CONTEXT", "NETWORK", "UNKNOWN", "NONE"]
+    },
+    "network_used": { "type": "boolean" },
+    "metadata": { "type": "object", "additionalProperties": true }
+  },
+  "additionalProperties": false
+}

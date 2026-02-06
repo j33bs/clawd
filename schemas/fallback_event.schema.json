@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://openclaw.local/schemas/fallback_event.schema.json",
+  "title": "FallbackEvent",
+  "type": "object",
+  "required": [
+    "event_type",
+    "task_id",
+    "task_class",
+    "from_backend",
+    "to_backend",
+    "trigger_code",
+    "network_used",
+    "timestamp",
+    "rationale"
+  ],
+  "properties": {
+    "event_type": {
+      "type": "string",
+      "enum": ["ROUTE_SELECT", "BACKEND_ERROR", "COOLDOWN_SET", "COOLDOWN_CLEAR"]
+    },
+    "task_id": { "type": "string", "minLength": 1 },
+    "task_class": { "type": "string", "enum": ["BASIC", "NON_BASIC"] },
+    "from_backend": {
+      "type": "string",
+      "enum": ["OATH_CLAUDE", "ANTHROPIC_CLAUDE_API", "LOCAL_QWEN", "UNKNOWN"]
+    },
+    "to_backend": {
+      "type": "string",
+      "enum": ["OATH_CLAUDE", "ANTHROPIC_CLAUDE_API", "LOCAL_QWEN", "UNKNOWN"]
+    },
+    "trigger_code": {
+      "type": "string",
+      "enum": ["AUTH", "RATE_LIMIT", "QUOTA", "TIMEOUT", "CONTEXT", "NETWORK", "UNKNOWN", "NONE"]
+    },
+    "provider_error_code": { "type": ["string", "null"] },
+    "network_used": { "type": "boolean" },
+    "timestamp": { "type": "string", "format": "date-time" },
+    "rationale": { "type": "string", "minLength": 1 },
+    "metadata": { "type": "object", "additionalProperties": true }
+  },
+  "additionalProperties": false
+}
