@@ -6,14 +6,31 @@
  */
 
 const path = require('path');
-const {
-  resolveWorkspacePath,
-  ensureDirSync,
-  readJsonFile,
-  writeJsonFile
-} = require('./guarded_fs');
+const fs = require('fs').promises;
 const { callModel } = require('../core/model_call');
 const { BACKENDS } = require('../core/model_constants');
+
+function resolveWorkspacePath(relativePath) {
+  return path.resolve(__dirname, '..', relativePath);
+}
+
+async function readJsonFile(filePath) {
+  try {
+    const data = await fs.readFile(filePath, 'utf8');
+    return JSON.parse(data);
+  } catch (error) {
+    return null;
+  }
+}
+
+async function writeJsonFile(filePath, value) {
+  const data = JSON.stringify(value, null, 2);
+  await fs.writeFile(filePath, data);
+}
+
+async function ensureDir(dirPath) {
+  await fs.mkdir(dirPath, { recursive: true });
+}
 
 class MultiAgentFallback {
   constructor(config = {}) {
@@ -189,7 +206,7 @@ class MultiAgentFallback {
     const logDir = path.dirname(logPath);
     
     try {
-      ensureDirSync(logDir);
+      await ensureDir(logDir);
       
       let logData = await readJsonFile(logPath);
       if (!Array.isArray(logData)) {
@@ -262,7 +279,7 @@ class MultiAgentFallback {
     const logDir = path.dirname(logPath);
     
     try {
-      ensureDirSync(logDir);
+      await ensureDir(logDir);
       
       let logData = await readJsonFile(logPath);
       if (!Array.isArray(logData)) {

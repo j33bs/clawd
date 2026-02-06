@@ -5,9 +5,19 @@
  */
 
 const MultiAgentFallback = require('./multi_agent_fallback.js');
-const { readJsonFile, resolveWorkspacePath } = require('./guarded_fs');
+const fs = require('fs').promises;
+const path = require('path');
 const { createModelRuntime } = require('../core/model_runtime');
 const { callModel } = require('../core/model_call');
+
+function resolveWorkspacePath(relativePath) {
+  return path.resolve(__dirname, '..', relativePath);
+}
+
+async function readJsonFile(filePath) {
+  const data = await fs.readFile(filePath, 'utf8');
+  return JSON.parse(data);
+}
 
 async function initializeFallbackSystem() {
   console.log("🔄 Initializing Multi-Agent Fallback System");

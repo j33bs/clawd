@@ -6,7 +6,8 @@
  */
 
 const MailIntegration = require('./mail_integration.js');
-const { readJsonFile, resolveWorkspacePath } = require('./guarded_fs');
+const fs = require('fs').promises;
+const path = require('path');
 
 async function setupMailIntegration() {
   console.log("📧 OpenClaw Mail Integration Setup");
@@ -15,13 +16,8 @@ async function setupMailIntegration() {
   // Load configuration
   let config = {};
   try {
-    const configPath = resolveWorkspacePath('config/mail_config.json');
-    const configData = configPath ? await readJsonFile(configPath) : null;
-    if (configData) {
-      config = configData;
-    } else {
-      throw new Error('Config not found');
-    }
+    const configData = await fs.readFile('./config/mail_config.json', 'utf8');
+    config = JSON.parse(configData);
   } catch (error) {
     console.log("⚠️  Configuration file not found, using defaults");
     config.mailIntegration = {
@@ -95,43 +91,43 @@ async function setupMailIntegration() {
   console.log("\n🔄 Alternatively, you can use this helper function:");
   
   console.log(`
-    // In your application:
-    const MailIntegration = require('./mail_integration.js');
+// In your application:
+const MailIntegration = require('./mail_integration.js');
 
-    async function initializeMail() {
-      const mail = new MailIntegration({
-        mailboxFile: '${config.mailIntegration.mailboxFile}',
-        syncInterval: ${config.mailIntegration.syncInterval},
-        maxMessages: ${config.mailIntegration.maxMessages},
-        retentionDays: ${config.mailIntegration.retentionDays}
-      });
-      
-      try {
-        await mail.initialize({
-          email: process.env.MAIL_USERNAME,  // Your email address
-          password: process.env.MAIL_PASSWORD   // Your app-specific password
-        });
-        
-        // Start automatic synchronization
-        mail.startAutoSync();
-        
-        // Test the connection
-        const testResult = await mail.testConnection();
-        console.log('Mail connection test:', testResult.connected ? '✅ Success' : '❌ Failed');
-        
-        // Get mailbox summary
-        const summary = await mail.getMailboxSummary();
-        console.log('Mailbox summary: ${config.mailIntegration.maxMessages} max messages, ' + summary.summary.unreadCount + ' unread');
-        
-        return mail;
-      } catch (error) {
-        console.error('Mail initialization failed:', error.message);
-        throw error;
-      }
-    }
+async function initializeMail() {
+  const mail = new MailIntegration({
+    mailboxFile: '${config.mailIntegration.mailboxFile}',
+    syncInterval: ${config.mailIntegration.syncInterval},
+    maxMessages: ${config.mailIntegration.maxMessages},
+    retentionDays: ${config.mailIntegration.retentionDays}
+  });
+  
+  try {
+    await mail.initialize({
+      email: process.env.MAIL_USERNAME,  // Your email address
+      password: process.env.MAIL_PASSWORD   // Your app-specific password
+    });
+    
+    // Start automatic synchronization
+    mail.startAutoSync();
+    
+    // Test the connection
+    const testResult = await mail.testConnection();
+    console.log('Mail connection test:', testResult.connected ? '✅ Success' : '❌ Failed');
+    
+    // Get mailbox summary
+    const summary = await mail.getMailboxSummary();
+    console.log('Mailbox summary: ${config.mailIntegration.maxMessages} max messages, ' + summary.summary.unreadCount + ' unread');
+    
+    return mail;
+  } catch (error) {
+    console.error('Mail initialization failed:', error.message);
+    throw error;
+  }
+}
 
-    // Call the function
-    initializeMail().catch(console.error);
+// Call the function
+initializeMail().catch(console.error);
   `);
   
   console.log("\n📋 Once configured, the mail integration will:");

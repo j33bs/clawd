@@ -6,7 +6,8 @@
  */
 
 const CalendarIntegration = require('./calendar_integration.js');
-const { readJsonFile, resolveWorkspacePath } = require('./guarded_fs');
+const fs = require('fs').promises;
+const path = require('path');
 
 async function setupCalendarIntegration() {
   console.log("📅 OpenClaw Calendar Integration Setup");
@@ -15,13 +16,8 @@ async function setupCalendarIntegration() {
   // Load configuration
   let config = {};
   try {
-    const configPath = resolveWorkspacePath('config/calendar_config.json');
-    const configData = configPath ? await readJsonFile(configPath) : null;
-    if (configData) {
-      config = configData;
-    } else {
-      throw new Error('Config not found');
-    }
+    const configData = await fs.readFile('./config/calendar_config.json', 'utf8');
+    config = JSON.parse(configData);
   } catch (error) {
     console.log("⚠️  Configuration file not found, using defaults");
     config.calendarIntegration = {
@@ -86,42 +82,42 @@ async function setupCalendarIntegration() {
   console.log("\n🔄 Alternatively, you can use this helper function:");
   
   console.log(`
-    // In your application:
-    const CalendarIntegration = require('./calendar_integration.js');
+// In your application:
+const CalendarIntegration = require('./calendar_integration.js');
 
-    async function initializeCalendar() {
-      const calendar = new CalendarIntegration({
-        calendarFile: '${config.calendarIntegration.calendarFile}',
-        serverUrl: '${config.calendarIntegration.serverUrl}',
-        syncInterval: ${config.calendarIntegration.syncInterval}
-      });
-      
-      try {
-        await calendar.initialize({
-          username: process.env.CALENDAR_USERNAME,  // Your calendar email
-          password: process.env.CALENDAR_PASSWORD   // Your app-specific password
-        });
-        
-        // Start automatic synchronization
-        calendar.startAutoSync();
-        
-        // Test the connection
-        const testResult = await calendar.testConnection();
-        console.log('Calendar connection test:', testResult.connected ? '✅ Success' : '❌ Failed');
-        
-        // Get availability summary
-        const summary = await calendar.getAvailabilitySummary(7);
-        console.log('Availability for next 7 days:', summary.summary.availabilityPercentage + '% free');
-        
-        return calendar;
-      } catch (error) {
-        console.error('Calendar initialization failed:', error.message);
-        throw error;
-      }
-    }
+async function initializeCalendar() {
+  const calendar = new CalendarIntegration({
+    calendarFile: '${config.calendarIntegration.calendarFile}',
+    serverUrl: '${config.calendarIntegration.serverUrl}',
+    syncInterval: ${config.calendarIntegration.syncInterval}
+  });
+  
+  try {
+    await calendar.initialize({
+      username: process.env.CALENDAR_USERNAME,  // Your calendar email
+      password: process.env.CALENDAR_PASSWORD   // Your app-specific password
+    });
+    
+    // Start automatic synchronization
+    calendar.startAutoSync();
+    
+    // Test the connection
+    const testResult = await calendar.testConnection();
+    console.log('Calendar connection test:', testResult.connected ? '✅ Success' : '❌ Failed');
+    
+    // Get availability summary
+    const summary = await calendar.getAvailabilitySummary(7);
+    console.log('Availability for next 7 days:', summary.summary.availabilityPercentage + '% free');
+    
+    return calendar;
+  } catch (error) {
+    console.error('Calendar initialization failed:', error.message);
+    throw error;
+  }
+}
 
-    // Call the function
-    initializeCalendar().catch(console.error);
+// Call the function
+initializeCalendar().catch(console.error);
   `);
   
   console.log("\n📋 Once configured, the calendar integration will:");

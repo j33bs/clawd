@@ -1,14 +1,8 @@
 #!/usr/bin/env node
 
 // Script to generate daily research brief with 3 options
+const fs = require('fs');
 const path = require('path');
-const {
-    resolveWorkspacePath,
-    ensureDirSync,
-    existsSync,
-    readFileSync,
-    writeFileSync
-} = require('./guarded_fs');
 
 // Function to get today's date in YYYY-MM-DD format
 function getToday() {
@@ -80,29 +74,27 @@ researchOptions.forEach((option, index) => {
 briefContent += "Please select which topic you'd like to dive deeper into today.\n";
 
 // Write to today's memory file
-const memoryFilePath = resolveWorkspacePath(path.join('memory', `${today}.md`));
-const dailyBriefPath = resolveWorkspacePath(path.join('scripts', `daily_brief_${today}.md`));
+const memoryFilePath = path.join(__dirname, 'memory', `${today}.md`);
+const dailyBriefPath = path.join(__dirname, `daily_brief_${today}.md`);
 
 try {
-    if (!memoryFilePath || !dailyBriefPath) {
-        throw new Error('Workspace paths could not be resolved for daily brief');
-    }
-
     // Ensure memory directory exists
     const memoryDir = path.dirname(memoryFilePath);
-    ensureDirSync(memoryDir);
+    if (!fs.existsSync(memoryDir)) {
+        fs.mkdirSync(memoryDir, { recursive: true });
+    }
     
     // Write to daily brief file
-    writeFileSync(dailyBriefPath, briefContent);
+    fs.writeFileSync(dailyBriefPath, briefContent);
     
     // Append to today's memory file if it exists, otherwise create it
-    if (existsSync(memoryFilePath)) {
-        const existingContent = readFileSync(memoryFilePath, { encoding: 'utf8' }) || '';
+    if (fs.existsSync(memoryFilePath)) {
+        const existingContent = fs.readFileSync(memoryFilePath, 'utf8');
         if (!existingContent.includes("Morning Research Brief")) {
-            writeFileSync(memoryFilePath, `${existingContent}\n\n${briefContent}`);
+            fs.appendFileSync(memoryFilePath, `\n\n${briefContent}`);
         }
     } else {
-        writeFileSync(memoryFilePath, `# Memory - ${today}\n\n${briefContent}`);
+        fs.writeFileSync(memoryFilePath, `# Memory - ${today}\n\n${briefContent}`);
     }
     
     console.log(`Daily brief generated for ${today} at ${dailyBriefPath}`);

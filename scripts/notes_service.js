@@ -1,29 +1,13 @@
 // notes_service.js
 // Append-only notes capture and retrieval service
 
+const fs = require('fs');
 const path = require('path');
-const {
-  resolveWorkspacePathOrFallback,
-  ensureDirSync,
-  existsSync,
-  writeFileSync,
-  readFileSync,
-  readdirSync,
-  statSync
-} = require('./guarded_fs');
 
 class NotesService {
   constructor(config = {}) {
-    const notesDir = resolveWorkspacePathOrFallback(
-      config.notesDirectory || 'notes',
-      'notes'
-    );
-    if (!notesDir.resolvedPath) {
-      throw new Error('Notes directory could not be resolved within workspace');
-    }
-
     this.config = {
-      notesDirectory: notesDir.resolvedPath,
+      notesDirectory: config.notesDirectory || './notes',
       defaultCategory: config.defaultCategory || 'general',
       ...config
     };
@@ -34,8 +18,8 @@ class NotesService {
 
   // Initialize notes store
   initNotesStore() {
-    if (!existsSync(this.config.notesDirectory)) {
-      ensureDirSync(this.config.notesDirectory);
+    if (!fs.existsSync(this.config.notesDirectory)) {
+      fs.mkdirSync(this.config.notesDirectory, { recursive: true });
     }
   }
 
@@ -53,13 +37,13 @@ class NotesService {
       
       // Create category directory if it doesn't exist
       const categoryDir = path.join(this.config.notesDirectory, note.category);
-      if (!existsSync(categoryDir)) {
-        ensureDirSync(categoryDir);
+      if (!fs.existsSync(categoryDir)) {
+        fs.mkdirSync(categoryDir, { recursive: true });
       }
       
       // Write note to file
       const notePath = path.join(categoryDir, `${note.id}.json`);
-      writeFileSync(notePath, JSON.stringify(note, null, 2));
+      fs.writeFileSync(notePath, JSON.stringify(note, null, 2));
       
       return note;
     } catch (error) {
@@ -71,21 +55,18 @@ class NotesService {
   async retrieveByCategory(category) {
     try {
       const categoryDir = path.join(this.config.notesDirectory, category);
-      if (!existsSync(categoryDir)) {
+      if (!fs.existsSync(categoryDir)) {
         return [];
       }
       
-      const files = readdirSync(categoryDir);
+      const files = fs.readdirSync(categoryDir);
       const notes = [];
       
       for (const file of files) {
         if (file.endsWith('.json')) {
           const notePath = path.join(categoryDir, file);
-          const noteContent = readFileSync(notePath, { encoding: 'utf8' });
-          if (noteContent) {
-            const noteData = JSON.parse(noteContent);
-            notes.push(noteData);
-          }
+          const noteData = JSON.parse(fs.readFileSync(notePath, 'utf8'));
+          notes.push(noteData);
         }
       }
       
@@ -106,10 +87,9 @@ class NotesService {
         allNotes = await this.retrieveByCategory(category);
       } else {
         // Search across all categories
-        const categories = readdirSync(this.config.notesDirectory).filter(item => {
-          const stat = statSync(path.join(this.config.notesDirectory, item));
-          return stat ? stat.isDirectory() : false;
-        });
+        const categories = fs.readdirSync(this.config.notesDirectory).filter(item => 
+          fs.statSync(path.join(this.config.notesDirectory, item)).isDirectory()
+        );
         
         for (const cat of categories) {
           const categoryNotes = await this.retrieveByCategory(cat);
@@ -145,10 +125,9 @@ class NotesService {
   // Get all available categories
   async getCategories() {
     try {
-      return readdirSync(this.config.notesDirectory).filter(item => {
-        const stat = statSync(path.join(this.config.notesDirectory, item));
-        return stat ? stat.isDirectory() : false;
-      });
+      return fs.readdirSync(this.config.notesDirectory).filter(item => 
+        fs.statSync(path.join(this.config.notesDirectory, item)).isDirectory()
+      );
     } catch (error) {
       throw new Error(`Failed to get categories: ${error.message}`);
     }
@@ -187,12 +166,11 @@ class NotesService {
   async getNoteById(id, category) {
     try {
       const notePath = path.join(this.config.notesDirectory, category, `${id}.json`);
-      if (!existsSync(notePath)) {
+      if (!fs.existsSync(notePath)) {
         return null;
       }
       
-      const noteContent = readFileSync(notePath, { encoding: 'utf8' });
-      return noteContent ? JSON.parse(noteContent) : null;
+      return JSON.parse(fs.readFileSync(notePath, 'utf8'));
     } catch (error) {
       throw new Error(`Failed to get note by ID: ${error.message}`);
     }

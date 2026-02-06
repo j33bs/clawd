@@ -5,26 +5,14 @@
  * Handles authentication, mail synchronization, and message processing
  */
 
+const fs = require('fs').promises;
+const path = require('path');
 const { simpleParser } = require('mailparser');
-const {
-  resolveWorkspacePathOrFallback,
-  existsSync,
-  readJsonFile,
-  writeJsonFile
-} = require('./guarded_fs');
 
 class MailIntegration {
   constructor(options = {}) {
-    const mailboxPath = resolveWorkspacePathOrFallback(
-      options.mailboxFile || 'mailbox_data.json',
-      'mailbox_data.json'
-    );
-    if (!mailboxPath.resolvedPath) {
-      throw new Error('Mailbox data file could not be resolved within workspace');
-    }
-
     this.options = {
-      mailboxFile: mailboxPath.resolvedPath,
+      mailboxFile: options.mailboxFile || './mailbox_data.json',
       syncInterval: options.syncInterval || 300000, // 5 minutes
       maxMessages: options.maxMessages || 100,
       retentionDays: options.retentionDays || 30,
@@ -65,7 +53,9 @@ class MailIntegration {
    * Ensure local mailbox data file exists
    */
   async ensureLocalMailboxFile() {
-    if (!existsSync(this.options.mailboxFile)) {
+    try {
+      await fs.access(this.options.mailboxFile);
+    } catch (error) {
       // File doesn't exist, create with default structure
       const defaultData = {
         messages: [],
@@ -83,7 +73,7 @@ class MailIntegration {
         }
       };
       
-      await writeJsonFile(this.options.mailboxFile, defaultData);
+      await fs.writeFile(this.options.mailboxFile, JSON.stringify(defaultData, null, 2));
       console.log(`📧 Created new mailbox data file: ${this.options.mailboxFile}`);
     }
   }
@@ -151,7 +141,7 @@ class MailIntegration {
       mailboxData.lastSync = new Date().toISOString();
 
       // Write back to the file
-      await writeJsonFile(this.options.mailboxFile, mailboxData);
+      await fs.writeFile(this.options.mailboxFile, JSON.stringify(mailboxData, null, 2));
 
       console.log(`✅ Synced ${uniqueNewMessages.length} new messages to local storage.`);
       
@@ -172,11 +162,8 @@ class MailIntegration {
    */
   async readMailboxData() {
     try {
-      const data = await readJsonFile(this.options.mailboxFile);
-      if (!data) {
-        throw new Error('Mailbox data file not found');
-      }
-      return data;
+      const data = await fs.readFile(this.options.mailboxFile, 'utf8');
+      return JSON.parse(data);
     } catch (error) {
       throw new Error(`Error reading mailbox data: ${error.message}`);
     }
@@ -264,7 +251,7 @@ class MailIntegration {
       mailboxData.unreadCount = mailboxData.messages.filter(msg => !msg.flags.includes('\\Seen')).length;
       
       // Write back to file
-      await writeJsonFile(this.options.mailboxFile, mailboxData);
+      await fs.writeFile(this.options.mailboxFile, JSON.stringify(mailboxData, null, 2));
       
       console.log(`✅ Marked ${messageIds.length} messages as ${read ? 'read' : 'unread'}`);
       
@@ -312,7 +299,7 @@ class MailIntegration {
       mailboxData.messages = mailboxData.messages.slice(0, this.options.maxMessages);
       
       // Write back to file
-      await writeJsonFile(this.options.mailboxFile, mailboxData);
+      await fs.writeFile(this.options.mailboxFile, JSON.stringify(mailboxData, null, 2));
       
       console.log(`✅ Sent email to ${Array.isArray(to) ? to.join(', ') : to}: ${subject}`);
       

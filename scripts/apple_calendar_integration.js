@@ -2,24 +2,13 @@
 // Apple Calendar (CalDAV) integration for the calendar service
 
 const { createAccount, DAV } = require('tsdav'); // CalDAV library
-const {
-  resolveWorkspacePathOrFallback,
-  readJsonFile,
-  writeJsonFile
-} = require('./guarded_fs');
+const fs = require('fs').promises;
+const path = require('path');
 
 class AppleCalendarIntegration {
   constructor(config = {}) {
-    const calendarPath = resolveWorkspacePathOrFallback(
-      config.calendarFile || 'calendar_data.json',
-      'calendar_data.json'
-    );
-    if (!calendarPath.resolvedPath) {
-      throw new Error('Calendar data file could not be resolved within workspace');
-    }
-
     this.config = {
-      calendarFile: calendarPath.resolvedPath,
+      calendarFile: config.calendarFile || './calendar_data.json',
       username: config.username, // iCloud email address
       password: config.password, // App-specific password
       serverUrl: config.serverUrl || 'https://caldav.icloud.com',
@@ -200,9 +189,12 @@ class AppleCalendarIntegration {
 
       // Update the local calendar data file
       const calendarDataPath = this.config.calendarFile;
-      let localData = await readJsonFile(calendarDataPath);
+      let localData = {};
 
-      if (!localData) {
+      try {
+        const fileContent = await fs.readFile(calendarDataPath, 'utf8');
+        localData = JSON.parse(fileContent);
+      } catch (error) {
         // If file doesn't exist, create with default structure
         localData = {
           events: [],
@@ -218,7 +210,7 @@ class AppleCalendarIntegration {
       localData.lastSync = new Date().toISOString();
 
       // Write back to the file
-      await writeJsonFile(calendarDataPath, localData);
+      await fs.writeFile(calendarDataPath, JSON.stringify(localData, null, 2));
 
       console.log(`Synced ${appleEvents.length} events from Apple Calendar to local storage.`);
       
