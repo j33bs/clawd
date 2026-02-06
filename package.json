@@ -1,4 +1,7 @@
 {
+  "scripts": {
+    "test:guarded-fs": "node tests/guarded_fs.test.js"
+  },
   "dependencies": {
     "luxon": "^3.7.2",
     "mailparser": "^3.9.3",
