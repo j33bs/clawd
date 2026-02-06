@@ -2,3 +2,4 @@
 set -euo pipefail
 
 npm run -s staged:allowlist
+npm run -s gate:admission
