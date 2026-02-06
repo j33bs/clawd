@@ -6,25 +6,13 @@
  */
 
 const { createAccount, DAV } = require('tsdav');
-const {
-  resolveWorkspacePathOrFallback,
-  existsSync,
-  readJsonFile,
-  writeJsonFile
-} = require('./guarded_fs');
+const fs = require('fs').promises;
+const path = require('path');
 
 class CalendarIntegration {
   constructor(options = {}) {
-    const calendarPath = resolveWorkspacePathOrFallback(
-      options.calendarFile || 'calendar_data.json',
-      'calendar_data.json'
-    );
-    if (!calendarPath.resolvedPath) {
-      throw new Error('Calendar data file could not be resolved within workspace');
-    }
-
     this.options = {
-      calendarFile: calendarPath.resolvedPath,
+      calendarFile: options.calendarFile || './calendar_data.json',
       serverUrl: options.serverUrl || 'https://caldav.icloud.com',
       syncInterval: options.syncInterval || 30 * 60 * 1000, // 30 minutes
       ...options
@@ -79,7 +67,9 @@ class CalendarIntegration {
    * Ensure local calendar data file exists
    */
   async ensureLocalCalendarFile() {
-    if (!existsSync(this.options.calendarFile)) {
+    try {
+      await fs.access(this.options.calendarFile);
+    } catch (error) {
       // File doesn't exist, create with default structure
       const defaultData = {
         events: [],
@@ -89,7 +79,7 @@ class CalendarIntegration {
         }
       };
       
-      await writeJsonFile(this.options.calendarFile, defaultData);
+      await fs.writeFile(this.options.calendarFile, JSON.stringify(defaultData, null, 2));
       console.log(`📁 Created new calendar data file: ${this.options.calendarFile}`);
     }
   }
@@ -255,11 +245,15 @@ class CalendarIntegration {
 
       // Update the local calendar data file
       const calendarDataPath = this.options.calendarFile;
-      const localData = await readJsonFile(calendarDataPath);
+      let localData = {};
 
-      if (!localData) {
-        console.error('Error reading calendar data file: file not found');
-        throw new Error('Calendar data file missing');
+      try {
+        const fileContent = await fs.readFile(calendarDataPath, 'utf8');
+        localData = JSON.parse(fileContent);
+      } catch (error) {
+        // If file doesn't exist, it should have been created by ensureLocalCalendarFile
+        console.error('Error reading calendar data file:', error);
+        throw error;
       }
 
       // Replace local events with calendar events
@@ -267,7 +261,7 @@ class CalendarIntegration {
       localData.lastSync = new Date().toISOString();
 
       // Write back to the file
-      await writeJsonFile(calendarDataPath, localData);
+      await fs.writeFile(calendarDataPath, JSON.stringify(localData, null, 2));
 
       console.log(`✅ Synced ${calendarEvents.length} events from calendar to local storage.`);
       
@@ -299,8 +293,10 @@ class CalendarIntegration {
       await this.syncToLocalStorage();
 
       // Read the local calendar data
-      const parsedData = await readJsonFile(this.options.calendarFile);
-      const events = parsedData ? parsedData.events : [];
+      const calendarData = await fs.readFile(this.options.calendarFile, 'utf8');
+      const parsedData = JSON.parse(calendarData);
+      
+      const events = parsedData.events;
       
       // Calculate availability summary
       const totalDays = dateRange;
@@ -530,8 +526,9 @@ END:VCALENDAR`;
    */
   async getLastSyncTime() {
     try {
-      const calendarData = await readJsonFile(this.options.calendarFile);
-      return calendarData ? calendarData.lastSync || null : null;
+      const data = await fs.readFile(this.options.calendarFile, 'utf8');
+      const calendarData = JSON.parse(data);
+      return calendarData.lastSync || null;
     } catch (error) {
       return null;
     }

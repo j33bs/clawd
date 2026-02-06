@@ -1,26 +1,13 @@
 // calendar_service.js
 // Read-only calendar availability summary service
 
+const fs = require('fs');
 const path = require('path');
-const {
-  resolveWorkspacePathOrFallback,
-  existsSync,
-  readJsonFileSync,
-  writeJsonFileSync
-} = require('./guarded_fs');
 
 class CalendarService {
   constructor(config = {}) {
-    const calendarPath = resolveWorkspacePathOrFallback(
-      config.calendarFile || 'calendar_data.json',
-      'calendar_data.json'
-    );
-    if (!calendarPath.resolvedPath) {
-      throw new Error('Calendar data file could not be resolved within workspace');
-    }
-
     this.config = {
-      calendarFile: calendarPath.resolvedPath,
+      calendarFile: config.calendarFile || './calendar_data.json',
       defaultRange: config.defaultRange || 7, // days ahead
       ...config
     };
@@ -31,7 +18,7 @@ class CalendarService {
 
   // Initialize calendar data store
   initCalendarStore() {
-    if (!existsSync(this.config.calendarFile)) {
+    if (!fs.existsSync(this.config.calendarFile)) {
       const initialData = {
         events: [],
         lastSync: null,
@@ -39,7 +26,7 @@ class CalendarService {
           defaultViewRange: this.config.defaultRange
         }
       };
-      writeJsonFileSync(this.config.calendarFile, initialData);
+      fs.writeFileSync(this.config.calendarFile, JSON.stringify(initialData, null, 2));
     }
   }
 
@@ -47,7 +34,7 @@ class CalendarService {
   async getAvailabilitySummary(dateRange = null) {
     try {
       // Load calendar data
-      const calendarData = readJsonFileSync(this.config.calendarFile) || { events: [] };
+      const calendarData = JSON.parse(fs.readFileSync(this.config.calendarFile, 'utf8'));
       
       // Determine date range
       const range = dateRange || this.config.defaultRange;
@@ -161,7 +148,7 @@ class CalendarService {
 
   // Get events for a specific date
   async getEventsForDate(dateString) {
-    const calendarData = readJsonFileSync(this.config.calendarFile) || { events: [] };
+    const calendarData = JSON.parse(fs.readFileSync(this.config.calendarFile, 'utf8'));
     const targetDate = new Date(dateString);
     
     const eventsForDate = calendarData.events.filter(event => {
@@ -182,11 +169,11 @@ class CalendarService {
 
   // Mock sync method (in real implementation, this would connect to actual calendar)
   async mockSync(events) {
-    const calendarData = readJsonFileSync(this.config.calendarFile) || { events: [] };
+    const calendarData = JSON.parse(fs.readFileSync(this.config.calendarFile, 'utf8'));
     calendarData.events = events || [];
     calendarData.lastSync = new Date().toISOString();
     
-    writeJsonFileSync(this.config.calendarFile, calendarData);
+    fs.writeFileSync(this.config.calendarFile, JSON.stringify(calendarData, null, 2));
   }
 
   // Validate calendar credentials (placeholder for real auth)

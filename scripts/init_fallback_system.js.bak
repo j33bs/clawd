@@ -5,7 +5,8 @@
  */
 
 const MultiAgentFallback = require('./multi_agent_fallback.js');
-const { readJsonFile, resolveWorkspacePath } = require('./guarded_fs');
+const fs = require('fs').promises;
+const path = require('path');
 
 async function initializeFallbackSystem() {
   console.log("🔄 Initializing Multi-Agent Fallback System");
@@ -15,13 +16,9 @@ async function initializeFallbackSystem() {
     // Load configuration
     let config = {};
     try {
-      const configPath = resolveWorkspacePath('config/agent_fallback.json');
-      const configData = configPath ? await readJsonFile(configPath) : null;
-      if (configData) {
-        config = configData;
-      } else {
-        throw new Error('Config not found');
-      }
+      const configPath = './config/agent_fallback.json';
+      const configData = await fs.readFile(configPath, 'utf8');
+      config = JSON.parse(configData);
     } catch (error) {
       console.log("⚠️  Configuration file not found, using defaults");
       config.multiAgentFallback = {

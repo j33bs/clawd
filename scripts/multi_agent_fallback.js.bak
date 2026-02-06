@@ -5,13 +5,8 @@
  * Monitors API usage and automatically falls back to local Qwen model when needed.
  */
 
+const fs = require('fs').promises;
 const path = require('path');
-const {
-  resolveWorkspacePath,
-  ensureDirSync,
-  readJsonFile,
-  writeJsonFile
-} = require('./guarded_fs');
 
 class MultiAgentFallback {
   constructor(config = {}) {
@@ -179,18 +174,18 @@ class MultiAgentFallback {
     };
 
     // Append to a fallback log file
-    const logPath = resolveWorkspacePath(path.join('logs', 'fallback_events.json'));
-    if (!logPath) {
-      console.error('Error logging fallback event: log path could not be resolved');
-      return;
-    }
+    const logPath = './logs/fallback_events.json';
     const logDir = path.dirname(logPath);
     
     try {
-      ensureDirSync(logDir);
+      await fs.mkdir(logDir, { recursive: true });
       
-      let logData = await readJsonFile(logPath);
-      if (!Array.isArray(logData)) {
+      let logData = [];
+      try {
+        const existingLog = await fs.readFile(logPath, 'utf8');
+        logData = JSON.parse(existingLog);
+      } catch (error) {
+        // File doesn't exist yet, start with empty array
         logData = [];
       }
       
@@ -201,7 +196,7 @@ class MultiAgentFallback {
         logData = logData.slice(-100);
       }
       
-      await writeJsonFile(logPath, logData);
+      await fs.writeFile(logPath, JSON.stringify(logData, null, 2));
     } catch (error) {
       console.error('Error logging fallback event:', error);
     }
@@ -252,18 +247,18 @@ class MultiAgentFallback {
    * Log notifications
    */
   async logNotification(notification) {
-    const logPath = resolveWorkspacePath(path.join('logs', 'notifications.json'));
-    if (!logPath) {
-      console.error('Error logging notification: log path could not be resolved');
-      return;
-    }
+    const logPath = './logs/notifications.json';
     const logDir = path.dirname(logPath);
     
     try {
-      ensureDirSync(logDir);
+      await fs.mkdir(logDir, { recursive: true });
       
-      let logData = await readJsonFile(logPath);
-      if (!Array.isArray(logData)) {
+      let logData = [];
+      try {
+        const existingLog = await fs.readFile(logPath, 'utf8');
+        logData = JSON.parse(existingLog);
+      } catch (error) {
+        // File doesn't exist yet, start with empty array
         logData = [];
       }
       
@@ -274,7 +269,7 @@ class MultiAgentFallback {
         logData = logData.slice(-50);
       }
       
-      await writeJsonFile(logPath, logData);
+      await fs.writeFile(logPath, JSON.stringify(logData, null, 2));
     } catch (error) {
       console.error('Error logging notification:', error);
     }

@@ -3,25 +3,17 @@
 
 const AppleCalendarIntegration = require('./apple_calendar_integration.js');
 const CalendarService = require('./calendar_service.js');
-const { resolveWorkspacePathOrFallback, readJsonFile } = require('./guarded_fs');
+const fs = require('fs').promises;
 
 class CalendarSyncService {
   constructor(config = {}) {
-    const calendarPath = resolveWorkspacePathOrFallback(
-      config.localCalendarFile || 'calendar_data.json',
-      'calendar_data.json'
-    );
-    if (!calendarPath.resolvedPath) {
-      throw new Error('Calendar data file could not be resolved within workspace');
-    }
-
     this.config = {
       appleCalendar: {
         username: config.appleUsername,
         password: config.applePassword,
         serverUrl: config.appleServerUrl || 'https://caldav.icloud.com'
       },
-      localCalendarFile: calendarPath.resolvedPath,
+      localCalendarFile: config.localCalendarFile || './calendar_data.json',
       syncInterval: config.syncInterval || 30 * 60 * 1000, // 30 minutes in ms
       ...config
     };
@@ -174,8 +166,9 @@ class CalendarSyncService {
   // Get last sync time from the calendar data file
   async getLastSyncTime() {
     try {
-      const calendarData = await readJsonFile(this.config.localCalendarFile);
-      return calendarData ? calendarData.lastSync || null : null;
+      const data = await fs.readFile(this.config.localCalendarFile, 'utf8');
+      const calendarData = JSON.parse(data);
+      return calendarData.lastSync || null;
     } catch (error) {
       console.error('Error getting last sync time:', error);
       return null;

@@ -1,25 +1,13 @@
 // email_service.js
 // Read-only email daily digest and draft reply generator
 
-const {
-  resolveWorkspacePathOrFallback,
-  existsSync,
-  readJsonFileSync,
-  writeJsonFileSync
-} = require('./guarded_fs');
+const fs = require('fs');
+const path = require('path');
 
 class EmailService {
   constructor(config = {}) {
-    const emailDataPath = resolveWorkspacePathOrFallback(
-      config.emailDataFile || 'email_data.json',
-      'email_data.json'
-    );
-    if (!emailDataPath.resolvedPath) {
-      throw new Error('Email data file could not be resolved within workspace');
-    }
-
     this.config = {
-      emailDataFile: emailDataPath.resolvedPath,
+      emailDataFile: config.emailDataFile || './email_data.json',
       maxDigestItems: config.maxDigestItems || 10,
       defaultDateRange: config.defaultDateRange || 1, // days
       ...config
@@ -31,7 +19,7 @@ class EmailService {
 
   // Initialize email data store
   initEmailStore() {
-    if (!existsSync(this.config.emailDataFile)) {
+    if (!fs.existsSync(this.config.emailDataFile)) {
       const initialData = {
         accounts: {},
         lastCheck: null,
@@ -39,14 +27,14 @@ class EmailService {
           maxDigestItems: this.config.maxDigestItems
         }
       };
-      writeJsonFileSync(this.config.emailDataFile, initialData);
+      fs.writeFileSync(this.config.emailDataFile, JSON.stringify(initialData, null, 2));
     }
   }
 
   // Get daily email digest
   async getDailyDigest(accountId = 'default', daysBack = 1) {
     try {
-      const emailData = readJsonFileSync(this.config.emailDataFile) || { accounts: {} };
+      const emailData = JSON.parse(fs.readFileSync(this.config.emailDataFile, 'utf8'));
       const account = emailData.accounts[accountId] || { messages: [] };
       
       // Filter messages by date
@@ -100,7 +88,7 @@ class EmailService {
 
   // Generate draft reply
   async generateDraftReply(messageId, accountId = 'default', customPrompt = '') {
-    const emailData = readJsonFileSync(this.config.emailDataFile) || { accounts: {} };
+    const emailData = JSON.parse(fs.readFileSync(this.config.emailDataFile, 'utf8'));
     const account = emailData.accounts[accountId];
     
     if (!account) {
@@ -203,7 +191,7 @@ Heath`
 
   // Get unread messages
   async getUnreadMessages(accountId = 'default') {
-    const emailData = readJsonFileSync(this.config.emailDataFile) || { accounts: {} };
+    const emailData = JSON.parse(fs.readFileSync(this.config.emailDataFile, 'utf8'));
     const account = emailData.accounts[accountId] || { messages: [] };
     
     return account.messages.filter(msg => !msg.read);
@@ -211,7 +199,7 @@ Heath`
 
   // Mark message as read (without actually sending)
   async markAsRead(messageId, accountId = 'default') {
-    const emailData = readJsonFileSync(this.config.emailDataFile) || { accounts: {} };
+    const emailData = JSON.parse(fs.readFileSync(this.config.emailDataFile, 'utf8'));
     const account = emailData.accounts[accountId];
     
     if (!account) return false;
@@ -221,7 +209,7 @@ Heath`
       message.read = true;
       message.readAt = new Date().toISOString();
       
-      writeJsonFileSync(this.config.emailDataFile, emailData);
+      fs.writeFileSync(this.config.emailDataFile, JSON.stringify(emailData, null, 2));
       return true;
     }
     
@@ -230,7 +218,7 @@ Heath`
 
   // Mock sync method (in real implementation, this would connect to actual email)
   async mockSync(accountId, messages) {
-    const emailData = readJsonFileSync(this.config.emailDataFile) || { accounts: {} };
+    const emailData = JSON.parse(fs.readFileSync(this.config.emailDataFile, 'utf8'));
     
     if (!emailData.accounts[accountId]) {
       emailData.accounts[accountId] = { messages: [] };
@@ -239,7 +227,7 @@ Heath`
     emailData.accounts[accountId].messages = messages || [];
     emailData.lastCheck = new Date().toISOString();
     
-    writeJsonFileSync(this.config.emailDataFile, emailData);
+    fs.writeFileSync(this.config.emailDataFile, JSON.stringify(emailData, null, 2));
   }
 
   // Validate email credentials (placeholder for real auth)
