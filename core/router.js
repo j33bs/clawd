@@ -26,6 +26,13 @@ const NON_BASIC_HINTS = [
   'requires_claude'
 ];
 
+const PRIMARY_BACKENDS = [BACKENDS.OATH_CLAUDE, BACKENDS.ANTHROPIC_CLAUDE_API];
+const LOCAL_BACKENDS = [
+  BACKENDS.LOCAL_OLLAMA,
+  BACKENDS.LOCAL_OPENAI_COMPAT,
+  BACKENDS.LOCAL_QWEN
+];
+
 function normalizeTaskClass(value) {
   if (!value) {
     return null;
@@ -40,7 +47,24 @@ function normalizeTaskClass(value) {
   return null;
 }
 
+function flagEnabled(value) {
+  return String(value || '').trim() === '1';
+}
+
 class ModelRouter {
+  constructor(options = {}) {
+    this.primaryBackends = Array.isArray(options.primaryBackends) && options.primaryBackends.length > 0
+      ? [...options.primaryBackends]
+      : [...PRIMARY_BACKENDS];
+    this.localBackends = Array.isArray(options.localBackends) && options.localBackends.length > 0
+      ? [...options.localBackends]
+      : [...LOCAL_BACKENDS];
+    this.localFallbackEnabled =
+      typeof options.localFallbackEnabled === 'boolean'
+        ? options.localFallbackEnabled
+        : flagEnabled(process.env.OPENCLAW_LOCAL_FALLBACK);
+  }
+
   resolveTaskClass(taskClass, metadata = {}, messages = []) {
     const explicit =
       normalizeTaskClass(taskClass) ||
@@ -69,6 +93,14 @@ class ModelRouter {
     return TASK_CLASSES.BASIC;
   }
 
+  localCandidates() {
+    return this.localFallbackEnabled ? [...this.localBackends] : [];
+  }
+
+  isLocalBackend(backend) {
+    return this.localBackends.includes(backend);
+  }
+
   buildRoutePlan({
     taskClass,
     requiresClaude = false,
@@ -78,30 +110,31 @@ class ModelRouter {
     messages = []
   }) {
     const resolvedTaskClass = this.resolveTaskClass(taskClass, metadata, messages);
+    const localCandidates = this.localCandidates();
 
     let candidates;
     if (allowNetwork === false) {
-      candidates = [BACKENDS.LOCAL_QWEN];
-    } else if (resolvedTaskClass === TASK_CLASSES.BASIC && !requiresClaude) {
-      candidates = [BACKENDS.LOCAL_QWEN];
+      candidates = localCandidates;
     } else {
-      candidates = [BACKENDS.OATH_CLAUDE, BACKENDS.ANTHROPIC_CLAUDE_API, BACKENDS.LOCAL_QWEN];
+      candidates = [...this.primaryBackends, ...localCandidates];
     }
 
     const defaultPreferred =
-      resolvedTaskClass === TASK_CLASSES.BASIC && !requiresClaude
-        ? BACKENDS.LOCAL_QWEN
-        : BACKENDS.OATH_CLAUDE;
+      allowNetwork === false
+        ? localCandidates[0] || null
+        : this.primaryBackends[0] || null;
 
     const requestedPreferred = Object.values(BACKENDS).includes(preferredBackend)
       ? preferredBackend
       : null;
 
+    const canPreferLocal = allowNetwork === false;
+
     // Advisory only and policy-compatible.
     if (
       requestedPreferred &&
       candidates.includes(requestedPreferred) &&
-      !(resolvedTaskClass === TASK_CLASSES.BASIC && !requiresClaude && requestedPreferred !== BACKENDS.LOCAL_QWEN)
+      (canPreferLocal || !this.isLocalBackend(requestedPreferred))
     ) {
       candidates = [requestedPreferred, ...candidates.filter((c) => c !== requestedPreferred)];
     }
@@ -126,7 +159,7 @@ class ModelRouter {
   }
 
   networkUsedForBackend(backend) {
-    return backend !== BACKENDS.LOCAL_QWEN;
+    return !this.isLocalBackend(backend);
   }
 }
 

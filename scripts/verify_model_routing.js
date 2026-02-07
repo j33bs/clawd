@@ -3,6 +3,7 @@
 const { callModel } = require('../core/model_call');
 const { createModelRuntime } = require('../core/model_runtime');
 const { BACKENDS, TASK_CLASSES } = require('../core/model_constants');
+const ModelRouter = require('../core/router');
 
 function assertEqual(actual, expected, label) {
   if (actual !== expected) {
@@ -16,8 +17,11 @@ function hasRouteSelect(events, toBackend) {
   );
 }
 
-function hasNotification(events) {
-  return events.some((event) => event && event.type === 'routing_notice');
+function makeProvider(overrides = {}) {
+  return {
+    health: overrides.health || (async () => ({ ok: true })),
+    call: overrides.call || (async () => ({ text: 'ok', raw: {}, usage: null }))
+  };
 }
 
 async function runCase(name, fn) {
@@ -33,10 +37,14 @@ async function runCase(name, fn) {
 }
 
 function buildRuntime(options = {}) {
+  const router = new ModelRouter({
+    localFallbackEnabled: options.localFallbackEnabled || false
+  });
+
   return createModelRuntime({
     persistLogs: false,
-    oathInvokeFn: options.oathInvokeFn,
-    qwenInvokeFn: options.qwenInvokeFn
+    router,
+    providers: options.providers
   });
 }
 
@@ -44,10 +52,16 @@ async function main() {
   let passCount = 0;
   let failCount = 0;
 
-  const basicCase = await runCase('BASIC routes to LOCAL_QWEN by default', async () => {
+  const basicCase = await runCase('BASIC routes to OATH by default', async () => {
     global.__OPENCLAW_MODEL_RUNTIME = buildRuntime({
-      oathInvokeFn: async () => ({ text: 'oath', raw: {}, usage: null }),
-      qwenInvokeFn: async () => ({ text: 'qwen', raw: {}, usage: null })
+      providers: {
+        [BACKENDS.OATH_CLAUDE]: makeProvider({
+          call: async () => ({ text: 'oath', raw: {}, usage: null })
+        }),
+        [BACKENDS.ANTHROPIC_CLAUDE_API]: makeProvider({
+          call: async () => ({ text: 'anthropic', raw: {}, usage: null })
+        })
+      }
     });
 
     const result = await callModel({
@@ -57,7 +71,7 @@ async function main() {
       metadata: {}
     });
 
-    assertEqual(result.backend, BACKENDS.LOCAL_QWEN, 'backend');
+    assertEqual(result.backend, BACKENDS.OATH_CLAUDE, 'backend');
   });
 
   if (basicCase) {
@@ -68,8 +82,14 @@ async function main() {
 
   const healthyCase = await runCase('NON_BASIC uses OATH when healthy', async () => {
     global.__OPENCLAW_MODEL_RUNTIME = buildRuntime({
-      oathInvokeFn: async () => ({ text: 'oath-ok', raw: {}, usage: { totalTokens: 5 } }),
-      qwenInvokeFn: async () => ({ text: 'qwen-ok', raw: {}, usage: { totalTokens: 5 } })
+      providers: {
+        [BACKENDS.OATH_CLAUDE]: makeProvider({
+          call: async () => ({ text: 'oath-ok', raw: {}, usage: { totalTokens: 5 } })
+        }),
+        [BACKENDS.ANTHROPIC_CLAUDE_API]: makeProvider({
+          call: async () => ({ text: 'anthropic-ok', raw: {}, usage: { totalTokens: 5 } })
+        })
+      }
     });
 
     const result = await callModel({
@@ -90,25 +110,26 @@ async function main() {
 
   const oathFailureCase = await runCase('OATH AUTH failure falls back to ANTHROPIC', async () => {
     global.__OPENCLAW_MODEL_RUNTIME = buildRuntime({
-      oathInvokeFn: async () => {
-        const error = new Error('authentication_error');
-        error.status = 401;
-        error.code = 'authentication_error';
-        throw error;
-      },
-      qwenInvokeFn: async () => ({ text: 'qwen-ok', raw: {}, usage: { totalTokens: 5 } })
+      providers: {
+        [BACKENDS.OATH_CLAUDE]: makeProvider({
+          call: async () => {
+            const error = new Error('authentication_error');
+            error.status = 401;
+            error.code = 'authentication_error';
+            throw error;
+          }
+        }),
+        [BACKENDS.ANTHROPIC_CLAUDE_API]: makeProvider({
+          call: async () => ({ text: 'anthropic-ok', raw: {}, usage: { totalTokens: 5 } })
+        })
+      }
     });
 
     const result = await callModel({
       taskId: 'verify_oath_auth',
       messages: [{ role: 'user', content: 'complex debugging with invariants' }],
       taskClass: TASK_CLASSES.NON_BASIC,
-      metadata: {
-        anthropicApiKey: 'test-key',
-        simulation: {
-          anthropicSuccess: true
-        }
-      }
+      metadata: {}
     });
 
     assertEqual(result.backend, BACKENDS.ANTHROPIC_CLAUDE_API, 'backend');
@@ -127,25 +148,26 @@ async function main() {
     'OATH RATE_LIMIT failure falls back to ANTHROPIC',
     async () => {
       global.__OPENCLAW_MODEL_RUNTIME = buildRuntime({
-        oathInvokeFn: async () => {
-          const error = new Error('rate_limit');
-          error.status = 429;
-          error.code = 'rate_limit';
-          throw error;
-        },
-        qwenInvokeFn: async () => ({ text: 'qwen-ok', raw: {}, usage: { totalTokens: 5 } })
+        providers: {
+          [BACKENDS.OATH_CLAUDE]: makeProvider({
+            call: async () => {
+              const error = new Error('rate_limit');
+              error.status = 429;
+              error.code = 'rate_limit';
+              throw error;
+            }
+          }),
+          [BACKENDS.ANTHROPIC_CLAUDE_API]: makeProvider({
+            call: async () => ({ text: 'anthropic-ok', raw: {}, usage: { totalTokens: 5 } })
+          })
+        }
       });
 
       const result = await callModel({
         taskId: 'verify_oath_rate_limit',
         messages: [{ role: 'user', content: 'deep reasoning architecture task' }],
         taskClass: TASK_CLASSES.NON_BASIC,
-        metadata: {
-          anthropicApiKey: 'test-key',
-          simulation: {
-            anthropicSuccess: true
-          }
-        }
+        metadata: {}
       });
 
       assertEqual(result.backend, BACKENDS.ANTHROPIC_CLAUDE_API, 'backend');
@@ -159,29 +181,41 @@ async function main() {
   }
 
   const anthropicFailureCase = await runCase(
-    'Anthropic unavailable falls back to LOCAL_QWEN with notification',
+    'Anthropic missing key yields no backend',
     async () => {
-      delete process.env.ANTHROPIC_API_KEY;
       global.__OPENCLAW_MODEL_RUNTIME = buildRuntime({
-        oathInvokeFn: async () => {
-          const error = new Error('rate_limit');
-          error.status = 429;
-          error.code = 'rate_limit';
-          throw error;
-        },
-        qwenInvokeFn: async () => ({ text: 'qwen-ok', raw: {}, usage: { totalTokens: 5 } })
+        providers: {
+          [BACKENDS.OATH_CLAUDE]: makeProvider({
+            call: async () => {
+              const error = new Error('rate_limit');
+              error.status = 429;
+              error.code = 'rate_limit';
+              throw error;
+            }
+          }),
+          [BACKENDS.ANTHROPIC_CLAUDE_API]: makeProvider({
+            health: async () => ({ ok: false, reason: 'missing_api_key' })
+          })
+        }
       });
 
-      const result = await callModel({
-        taskId: 'verify_anthropic_missing_key',
-        messages: [{ role: 'user', content: 'multi-file invariant refactor' }],
-        taskClass: TASK_CLASSES.NON_BASIC,
-        metadata: {}
-      });
+      let didThrow = false;
+      try {
+        await callModel({
+          taskId: 'verify_anthropic_missing_key',
+          messages: [{ role: 'user', content: 'multi-file invariant refactor' }],
+          taskClass: TASK_CLASSES.NON_BASIC,
+          metadata: {}
+        });
+      } catch (error) {
+        didThrow = true;
+        if (!error || !error.code) {
+          throw new Error('expected error code for missing backend');
+        }
+      }
 
-      assertEqual(result.backend, BACKENDS.LOCAL_QWEN, 'backend');
-      if (!hasNotification(result.events)) {
-        throw new Error('expected routing_notice notification for LOCAL_QWEN fallback');
+      if (!didThrow) {
+        throw new Error('expected model call to throw for missing backend');
       }
     }
   );

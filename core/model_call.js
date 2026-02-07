@@ -1,6 +1,166 @@
 const { BACKENDS, ERROR_CODES } = require('./model_constants');
 const { normalizeProviderError } = require('./normalize_error');
 const { createModelRuntime } = require('./model_runtime');
+const {
+  MAX_LOCAL_PROMPT_CHARS,
+  buildContinuityMessages,
+  enforceBudget,
+  estimateMessagesChars
+} = require('./continuity_prompt');
+
+const LOCAL_INTENT_ALLOWLIST = new Set([
+  'route',
+  'classify',
+  'summarize',
+  'draft_short',
+  'status'
+]);
+const LOCAL_FALLBACK_TRIGGER_CODES = new Set([
+  ERROR_CODES.RATE_LIMIT,
+  ERROR_CODES.TIMEOUT,
+  ERROR_CODES.NETWORK
+]);
+const LOCAL_HEURISTIC_MAX_TOKENS = 256;
+const LOCAL_HEURISTIC_INPUT_LIMIT = 2000;
+
+function resolveIntent(metadata) {
+  if (!metadata || typeof metadata !== 'object') {
+    return null;
+  }
+  return (
+    metadata.intent ||
+    metadata.taskIntent ||
+    metadata.task_intent ||
+    metadata.intent_name ||
+    null
+  );
+}
+
+function resolveRequestedMaxTokens(metadata) {
+  if (!metadata || typeof metadata !== 'object') {
+    return null;
+  }
+  const value = metadata.maxTokens || metadata.max_tokens || null;
+  const numeric = Number(value);
+  return Number.isNaN(numeric) ? null : numeric;
+}
+
+function messageInputLength(messages = []) {
+  return messages.reduce((sum, message) => {
+    if (!message || typeof message.content !== 'string') {
+      return sum;
+    }
+    return sum + message.content.length;
+  }, 0);
+}
+
+function hasResearchFlags(metadata) {
+  if (!metadata || typeof metadata !== 'object') {
+    return false;
+  }
+  return Boolean(
+    metadata.research ||
+      metadata.requiresResearch ||
+      metadata.longContext ||
+      metadata.long_context ||
+      metadata.deepResearch
+  );
+}
+
+function allowLocalByHeuristic(metadata, messages) {
+  const requestedMaxTokens = resolveRequestedMaxTokens(metadata);
+  if (requestedMaxTokens && requestedMaxTokens > LOCAL_HEURISTIC_MAX_TOKENS) {
+    return false;
+  }
+  if (messageInputLength(messages) > LOCAL_HEURISTIC_INPUT_LIMIT) {
+    return false;
+  }
+  if (hasResearchFlags(metadata)) {
+    return false;
+  }
+  return true;
+}
+
+function allowLocalForIntent(metadata, messages) {
+  const intent = resolveIntent(metadata);
+  if (intent) {
+    return LOCAL_INTENT_ALLOWLIST.has(String(intent).toLowerCase());
+  }
+  return allowLocalByHeuristic(metadata, messages);
+}
+
+function allowLocalForTrigger(pendingTransition, allowNetwork) {
+  if (allowNetwork === false) {
+    return true;
+  }
+  if (!pendingTransition) {
+    return false;
+  }
+  if (pendingTransition.reason === 'cooldown') {
+    return true;
+  }
+  return LOCAL_FALLBACK_TRIGGER_CODES.has(pendingTransition.triggerCode);
+}
+
+function splitContinuityParts(messages = []) {
+  const systemParts = [];
+  const history = [];
+
+  messages.forEach((message) => {
+    if (!message || typeof message.content !== 'string') {
+      return;
+    }
+    const role = String(message.role || 'user').toLowerCase();
+    if (role === 'system') {
+      systemParts.push(message.content);
+      return;
+    }
+    if (role === 'assistant' || role === 'user') {
+      history.push({ role, content: message.content });
+    }
+  });
+
+  let instruction = null;
+  for (let i = history.length - 1; i >= 0; i -= 1) {
+    if (history[i].role === 'user') {
+      instruction = history[i].content;
+      history.splice(i, 1);
+      break;
+    }
+  }
+
+  return {
+    system: systemParts.join('\n\n').trim(),
+    instruction: instruction || '',
+    history
+  };
+}
+
+function continuityStateSummary(metadata, taskId) {
+  if (metadata && typeof metadata === 'object') {
+    const summary = metadata.stateSummary || metadata.state_summary || metadata.state;
+    if (summary) {
+      return String(summary);
+    }
+    const lane = metadata.lane || metadata.task_lane || metadata.session_lane;
+    if (lane) {
+      return `Task ${taskId} (lane=${lane})`;
+    }
+  }
+  return `Task ${taskId}`;
+}
+
+function continuityOverflowError(error) {
+  if (!error) {
+    return false;
+  }
+  const message = String(error.message || '').toLowerCase();
+  return (
+    message.includes('context overflow') ||
+    message.includes('prompt too large') ||
+    message.includes('context length')
+  );
+}
 
 function timestampIso() {
   return new Date().toISOString();
@@ -49,6 +209,8 @@ async function callModel({
   const cooldownManager = runtime.cooldownManager;
   const logger = runtime.logger;
   const events = [];
+  let budgetDiagnosticLogged = false;
+  let continuityOverflowLogged = false;
 
   const safeTaskId = taskId || generateTaskId();
   const safeMessages = Array.isArray(messages) ? messages : [];
@@ -75,6 +237,50 @@ async function callModel({
     if (logger && typeof logger.logNotification === 'function') {
       await logger.logNotification(entry);
     }
+  }
+
+  async function emitLocalFallbackBlocked({ backend, intent, reason, pendingTransition }) {
+    const fromBackend = pendingTransition ? pendingTransition.fromBackend : routePlan.preferredBackend;
+    const triggerCode = pendingTransition ? pendingTransition.triggerCode : ERROR_CODES.UNKNOWN;
+
+    await emitFallbackEvent({
+      event_type: 'BACKEND_ERROR',
+      task_id: safeTaskId,
+      task_class: routePlan.taskClass,
+      from_backend: fromBackend,
+      to_backend: backend,
+      trigger_code: triggerCode,
+      provider_error_code: 'local_fallback_disallowed',
+      network_used: router.networkUsedForBackend(backend),
+      timestamp: timestampIso(),
+      rationale: 'local_fallback_disallowed',
+      metadata: {
+        intent: intent || null,
+        reason
+      }
+    });
+
+    await emitNotification({
+      type: 'routing_notice',
+      timestamp: timestampIso(),
+      message: `Local fallback disallowed for intent=${intent || 'unknown'} (reason=${reason}).`,
+      task_id: safeTaskId,
+      task_class: routePlan.taskClass,
+      from_backend: fromBackend,
+      to_backend: backend,
+      trigger_code: triggerCode,
+      network_used: router.networkUsedForBackend(backend),
+      metadata: {
+        requires_claude: routePlan.requiresClaude,
+        intent: intent || null,
+        reason
+      }
+    });
+
+    const error = new Error(`Local fallback disallowed for intent=${intent || 'unknown'}`);
+    error.code = 'LOCAL_FALLBACK_DISALLOWED';
+    error.events = events;
+    throw error;
   }
 
   async function emitCooldownClears() {
@@ -190,6 +396,26 @@ async function callModel({
       continue;
     }
 
+    if (router.isLocalBackend(backend)) {
+      const intent = resolveIntent(safeMetadata);
+      if (!allowLocalForIntent(safeMetadata, safeMessages)) {
+        await emitLocalFallbackBlocked({
+          backend,
+          intent,
+          reason: 'intent_not_allowed',
+          pendingTransition
+        });
+      }
+      if (!allowLocalForTrigger(pendingTransition, routePlan.allowNetwork)) {
+        await emitLocalFallbackBlocked({
+          backend,
+          intent,
+          reason: 'trigger_not_allowed',
+          pendingTransition
+        });
+      }
+    }
+
     let health = { ok: true };
     if (typeof provider.health === 'function') {
       try {
@@ -245,21 +471,18 @@ async function callModel({
       await emitRouteSelection(fromBackend, selectedBackend, triggerCode, providerErrorCode, pendingReason);
     }
 
-    if (
-      selectedBackend === BACKENDS.LOCAL_QWEN &&
-      routePlan.preferredBackend !== BACKENDS.LOCAL_QWEN
-    ) {
+    if (router.isLocalBackend(selectedBackend) && !router.isLocalBackend(routePlan.preferredBackend)) {
       await emitNotification({
         type: 'routing_notice',
         timestamp: timestampIso(),
         message:
           routePlan.allowNetwork === false
-            ? 'Network-disabled mode forced LOCAL_QWEN routing.'
-            : 'Remote Claude backends unavailable; using LOCAL_QWEN fallback.',
+            ? `Network-disabled mode forced ${selectedBackend} routing.`
+            : `Remote providers unavailable; using ${selectedBackend} fallback.`,
         task_id: safeTaskId,
         task_class: routePlan.taskClass,
         from_backend: routePlan.preferredBackend,
-        to_backend: BACKENDS.LOCAL_QWEN,
+        to_backend: selectedBackend,
         trigger_code: triggerCode || ERROR_CODES.UNKNOWN,
         network_used: false,
         metadata: {
@@ -268,9 +491,80 @@ async function callModel({
       });
     }
 
+    let outboundMessages = safeMessages;
+    if (router.isLocalBackend(selectedBackend)) {
+      const parts = splitContinuityParts(safeMessages);
+      const stateSummary = continuityStateSummary(safeMetadata, safeTaskId);
+      const continuityMessages = buildContinuityMessages({
+        system: parts.system,
+        instruction: parts.instruction,
+        history: parts.history,
+        stateSummary,
+        tailTurnsMax: safeMetadata.tailTurnsMax || safeMetadata.tail_turns_max,
+        budgets: {
+          maxPromptChars: MAX_LOCAL_PROMPT_CHARS,
+          maxStateSummaryChars: safeMetadata.maxStateSummaryChars || safeMetadata.max_state_summary_chars
+        }
+      });
+
+      const originalChars = estimateMessagesChars(safeMessages);
+      const enforced = enforceBudget(continuityMessages, MAX_LOCAL_PROMPT_CHARS);
+      outboundMessages = Array.isArray(enforced.value) ? enforced.value : continuityMessages;
+      const finalChars = estimateMessagesChars(outboundMessages);
+      const dropped = Math.max(0, originalChars - finalChars);
+
+      if (!budgetDiagnosticLogged && (enforced.truncated || originalChars > finalChars)) {
+        budgetDiagnosticLogged = true;
+        await emitFallbackEvent({
+          event_type: 'CONTINUITY_BUDGET',
+          task_id: safeTaskId,
+          task_class: routePlan.taskClass,
+          from_backend: routePlan.preferredBackend,
+          to_backend: selectedBackend,
+          trigger_code: ERROR_CODES.NONE,
+          provider_error_code: null,
+          network_used: false,
+          timestamp: timestampIso(),
+          rationale: '[diagnostic] continuity_prompt budget applied',
+          metadata: {
+            originalChars,
+            finalChars,
+            dropped
+          }
+        });
+      }
+
+      if (finalChars > MAX_LOCAL_PROMPT_CHARS) {
+        if (!budgetDiagnosticLogged) {
+          budgetDiagnosticLogged = true;
+          await emitFallbackEvent({
+            event_type: 'CONTINUITY_BUDGET',
+            task_id: safeTaskId,
+            task_class: routePlan.taskClass,
+            from_backend: routePlan.preferredBackend,
+            to_backend: selectedBackend,
+            trigger_code: ERROR_CODES.NONE,
+            provider_error_code: 'budget_defensive_truncate',
+            network_used: false,
+            timestamp: timestampIso(),
+            rationale: '[diagnostic] continuity_prompt budget applied',
+            metadata: {
+              originalChars,
+              finalChars,
+              dropped
+            }
+          });
+        }
+        const finalEnforced = enforceBudget(outboundMessages, MAX_LOCAL_PROMPT_CHARS);
+        outboundMessages = Array.isArray(finalEnforced.value)
+          ? finalEnforced.value
+          : outboundMessages;
+      }
+    }
+
     try {
       const result = await provider.call({
-        messages: safeMessages,
+        messages: outboundMessages,
         metadata: safeMetadata,
         allowNetwork: routePlan.allowNetwork
       });
@@ -285,6 +579,32 @@ async function callModel({
         events
       };
     } catch (error) {
+      if (router.isLocalBackend(backend) && continuityOverflowError(error)) {
+        if (!continuityOverflowLogged) {
+          continuityOverflowLogged = true;
+          await emitFallbackEvent({
+            event_type: 'BACKEND_ERROR',
+            task_id: safeTaskId,
+            task_class: routePlan.taskClass,
+            from_backend: backend,
+            to_backend: backend,
+            trigger_code: ERROR_CODES.CONTEXT,
+            provider_error_code: 'continuity_overflow',
+            network_used: false,
+            timestamp: timestampIso(),
+            rationale: 'continuity_overflow',
+            metadata: {
+              provider: backend
+            }
+          });
+        }
+
+        const overflowError = new Error('Continuity overflow: prompt too large for local model');
+        overflowError.code = 'CONTINUITY_OVERFLOW';
+        overflowError.events = events;
+        throw overflowError;
+      }
+
       const normalized = normalizeProviderError(error, backend);
       lastError = error;
 

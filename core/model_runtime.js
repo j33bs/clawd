@@ -5,6 +5,15 @@ const GovernanceLogger = require('./governance_logger');
 const OathClaudeProvider = require('./providers/oath_claude_provider');
 const AnthropicClaudeApiProvider = require('./providers/anthropic_claude_api_provider');
 const LocalQwenProvider = require('./providers/local_qwen_provider');
+const LocalOllamaProvider = require('./providers/local_ollama_provider');
+const LocalOpenAiCompatProvider = require('./providers/local_openai_compat_provider');
+
+function isLocalFallbackEnabled(options) {
+  if (typeof options.localFallbackEnabled === 'boolean') {
+    return options.localFallbackEnabled;
+  }
+  return String(process.env.OPENCLAW_LOCAL_FALLBACK || '').trim() === '1';
+}
 
 function createModelRuntime(options = {}) {
   const cooldownManager =
@@ -21,23 +30,37 @@ function createModelRuntime(options = {}) {
       persist: options.persistLogs !== false
     });
 
-  const router = options.router || new ModelRouter();
+  const localFallbackEnabled = isLocalFallbackEnabled(options);
+  const router = options.router || new ModelRouter({ localFallbackEnabled });
 
   const providers =
     options.providers ||
-    {
-      [BACKENDS.OATH_CLAUDE]: new OathClaudeProvider({
-        cooldownManager,
-        invokeFn: options.oathInvokeFn
-      }),
-      [BACKENDS.ANTHROPIC_CLAUDE_API]: new AnthropicClaudeApiProvider({
-        cooldownManager,
-        ...options.anthropic
-      }),
-      [BACKENDS.LOCAL_QWEN]: new LocalQwenProvider({
-        invokeFn: options.qwenInvokeFn
-      })
-    };
+    (() => {
+      const map = {
+        [BACKENDS.OATH_CLAUDE]: new OathClaudeProvider({
+          cooldownManager,
+          invokeFn: options.oathInvokeFn
+        }),
+        [BACKENDS.ANTHROPIC_CLAUDE_API]: new AnthropicClaudeApiProvider({
+          cooldownManager,
+          ...options.anthropic
+        })
+      };
+
+      if (localFallbackEnabled) {
+        map[BACKENDS.LOCAL_OLLAMA] = new LocalOllamaProvider({
+          ...options.localOllama
+        });
+        map[BACKENDS.LOCAL_OPENAI_COMPAT] = new LocalOpenAiCompatProvider({
+          ...options.localOpenAiCompat
+        });
+        map[BACKENDS.LOCAL_QWEN] = new LocalQwenProvider({
+          invokeFn: options.qwenInvokeFn
+        });
+      }
+
+      return map;
+    })();
 
   return {
     router,
