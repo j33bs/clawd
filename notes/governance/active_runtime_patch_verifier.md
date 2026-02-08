@@ -28,3 +28,11 @@ This tests-only verifier checks that the active installed `openclaw` runtime loa
   2. Compute the new active loader SHA256 and add it to `notes/governance/active_runtime_loader_hash_allowlist.json` with date and notes.
   3. Commit the allowlist update and governance note together.
 - Hash allowlist updates are governance-significant and must be reviewed.
+
+## Operator quick-run
+- Command: `./scripts/verify_active_runtime_patch.sh`
+- PASS means both checks succeeded: marker presence and loader SHA allowlist match.
+- FAIL means use this decision tree:
+  1. Rerun marker test first (`node tests/verify_active_runtime_patch.test.cjs`).
+  2. If marker passes and this is an intentional upgrade, update `notes/governance/active_runtime_loader_hash_allowlist.json` with SHA/date/notes.
+  3. If marker fails, do **not** allowlist; investigate prompt-budget patch loss.
