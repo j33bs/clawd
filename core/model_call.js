@@ -23,6 +23,31 @@ const LOCAL_FALLBACK_TRIGGER_CODES = new Set([
 ]);
 const LOCAL_HEURISTIC_MAX_TOKENS = 256;
 const LOCAL_HEURISTIC_INPUT_LIMIT = 2000;
+const MAX_SYSTEM_PROMPT_CHARS = 12000;
+const MAX_HISTORY_CHARS = 8000;
+const MAX_TOTAL_INPUT_CHARS = 20000;
+const STRICT_MAX_SYSTEM_PROMPT_CHARS = 8000;
+const STRICT_MAX_HISTORY_CHARS = 4000;
+const CONTEXT_WINDOW_PRECHECK_RATIO = 0.9;
+const CONTROLLED_PROMPT_BLOCK_MESSAGE =
+  "Context trimmed to safe limits. Please send 'continue' to proceed.";
+const UNTRUSTED_CONTEXT_PATTERNS = [
+  /chain_trace\.jsonl/i,
+  /gateway\.log/i,
+  /all models failed/i,
+  /errorCode=/i,
+  /stack:/i
+];
+const CONTEXT_FIELD_MAP = {
+  project: {
+    source: ['projectContext', 'project_context', 'projectContextChars'],
+    include: ['projectContextIncluded', 'project_context_included']
+  },
+  nonProject: {
+    source: ['nonProjectContext', 'non_project_context', 'nonProjectContextChars'],
+    include: ['nonProjectContextIncluded', 'non_project_context_included']
+  }
+};
 
 function resolveIntent(metadata) {
   if (!metadata || typeof metadata !== 'object') {
@@ -166,99 +191,441 @@ function getMetadataField(metadata, keys = []) {
   return null;
 }
 
+function setMetadataField(metadata, keys = [], value) {
+  if (!metadata || typeof metadata !== 'object') {
+    return;
+  }
+  for (const key of keys) {
+    if (!key) {
+      continue;
+    }
+    metadata[key] = value;
+  }
+}
+
+function containsUntrustedContext(value) {
+  if (typeof value !== 'string') {
+    return false;
+  }
+  return UNTRUSTED_CONTEXT_PATTERNS.some((pattern) => pattern.test(value));
+}
+
+function normalizeMessageRole(role) {
+  const normalized = String(role || 'user').toLowerCase();
+  if (
+    normalized === 'system' ||
+    normalized === 'assistant' ||
+    normalized === 'user' ||
+    normalized === 'tool' ||
+    normalized === 'function' ||
+    normalized === 'scratch'
+  ) {
+    return normalized;
+  }
+  return 'user';
+}
+
+function computePromptParts(messages = []) {
+  const safeMessages = Array.isArray(messages) ? messages : [];
+  let systemPrompt = 0;
+  let history = 0;
+  let userPrompt = 0;
+  let historyCount = 0;
+  let latestUserIndex = -1;
+  const conversational = [];
+
+  safeMessages.forEach((message) => {
+    if (!message || typeof message.content !== 'string') {
+      return;
+    }
+    const role = normalizeMessageRole(message.role);
+    const contentLength = message.content.length;
+    if (role === 'system') {
+      systemPrompt += contentLength;
+      return;
+    }
+    conversational.push({ role, contentLength });
+    if (role === 'user') {
+      latestUserIndex = conversational.length - 1;
+    }
+  });
+
+  conversational.forEach((entry, index) => {
+    if (index === latestUserIndex) {
+      userPrompt += entry.contentLength;
+      return;
+    }
+    history += entry.contentLength;
+    historyCount += 1;
+  });
+
+  return {
+    systemPrompt,
+    userPrompt,
+    history,
+    historyCount
+  };
+}
+
+function truncateWithMarker(text, maxChars, label) {
+  const value = typeof text === 'string' ? text : '';
+  const cap = Number(maxChars);
+  if (!Number.isFinite(cap) || cap <= 0) {
+    return {
+      text: '',
+      truncated: value.length > 0
+    };
+  }
+  if (value.length <= cap) {
+    return { text: value, truncated: false };
+  }
+
+  const removedChars = value.length - cap;
+  const marker = `[TRUNCATED_${label}_HEAD:${removedChars} chars removed]\n`;
+  const markerOnly = marker.length >= cap;
+  const keepChars = markerOnly ? 0 : cap - marker.length;
+  const suffix = keepChars > 0 ? value.slice(value.length - keepChars) : '';
+  const truncatedText = markerOnly ? marker.slice(0, cap) : `${marker}${suffix}`;
+
+  return {
+    text: truncatedText,
+    truncated: true
+  };
+}
+
+function dropUntrustedMessages(messages = []) {
+  const dropped = [];
+  const sanitized = [];
+
+  for (const message of messages) {
+    if (!message || typeof message.content !== 'string') {
+      continue;
+    }
+    const role = normalizeMessageRole(message.role);
+    if (role !== 'user' && containsUntrustedContext(message.content)) {
+      dropped.push(role);
+      continue;
+    }
+    sanitized.push({
+      role,
+      content: message.content
+    });
+  }
+
+  return {
+    messages: sanitized,
+    dropped
+  };
+}
+
+function windowHistoryMessages(historyMessages = [], maxChars) {
+  const cap = Number(maxChars);
+  if (!Number.isFinite(cap) || cap <= 0) {
+    return {
+      messages: [],
+      truncated: historyMessages.length > 0
+    };
+  }
+
+  let remaining = cap;
+  let truncated = false;
+  const keptReverse = [];
+
+  for (let i = historyMessages.length - 1; i >= 0; i -= 1) {
+    const message = historyMessages[i];
+    if (!message || typeof message.content !== 'string') {
+      continue;
+    }
+    const length = message.content.length;
+
+    if (remaining <= 0) {
+      truncated = true;
+      continue;
+    }
+
+    if (length <= remaining) {
+      keptReverse.push({
+        role: message.role,
+        content: message.content
+      });
+      remaining -= length;
+      continue;
+    }
+
+    const truncatedMessage = truncateWithMarker(message.content, remaining, 'HISTORY');
+    if (truncatedMessage.text) {
+      keptReverse.push({
+        role: message.role,
+        content: truncatedMessage.text
+      });
+    }
+    remaining = 0;
+    truncated = true;
+  }
+
+  const messages = keptReverse.reverse();
+  if (messages.length < historyMessages.length) {
+    truncated = true;
+  }
+
+  return {
+    messages,
+    truncated
+  };
+}
+
+function buildBudgetedMessages(messages = [], caps = {}) {
+  const maxSystemChars = Number(caps.maxSystemChars ?? MAX_SYSTEM_PROMPT_CHARS);
+  const maxHistoryChars = Number(caps.maxHistoryChars ?? MAX_HISTORY_CHARS);
+  const safeMessages = Array.isArray(messages) ? messages : [];
+
+  const systemSegments = [];
+  const conversation = [];
+  let latestUserConversationIndex = -1;
+
+  safeMessages.forEach((message) => {
+    if (!message || typeof message.content !== 'string') {
+      return;
+    }
+    const role = normalizeMessageRole(message.role);
+    const content = message.content;
+    if (role === 'system') {
+      systemSegments.push(content);
+      return;
+    }
+    conversation.push({
+      role,
+      content
+    });
+    if (role === 'user') {
+      latestUserConversationIndex = conversation.length - 1;
+    }
+  });
+
+  const userMessage =
+    latestUserConversationIndex >= 0 ? conversation[latestUserConversationIndex] : null;
+  const historyMessages = conversation.filter((_, index) => index !== latestUserConversationIndex);
+  const windowedHistory = windowHistoryMessages(historyMessages, maxHistoryChars);
+  const cappedSystem = truncateWithMarker(systemSegments.join('\n\n').trim(), maxSystemChars, 'SYSTEM');
+
+  const assembled = [];
+  if (cappedSystem.text) {
+    assembled.push({
+      role: 'system',
+      content: cappedSystem.text
+    });
+  }
+  windowedHistory.messages.forEach((message) => {
+    assembled.push({
+      role: message.role,
+      content: message.content
+    });
+  });
+  if (userMessage && typeof userMessage.content === 'string') {
+    assembled.push({
+      role: 'user',
+      content: userMessage.content
+    });
+  }
+
+  return {
+    messages: assembled,
+    parts: computePromptParts(assembled),
+    totalChars: estimateMessagesChars(assembled),
+    metadata: {
+      historyDropped: windowedHistory.truncated,
+      systemTightened: cappedSystem.truncated
+    }
+  };
+}
+
+function stripUntrustedMetadata(metadata = {}) {
+  const next = metadata && typeof metadata === 'object' ? { ...metadata } : {};
+
+  const projectContextSource = sizeOfValue(getMetadataField(next, CONTEXT_FIELD_MAP.project.source));
+  const nonProjectContextSource = sizeOfValue(
+    getMetadataField(next, CONTEXT_FIELD_MAP.nonProject.source)
+  );
+  const projectIncludedRaw = getMetadataField(next, CONTEXT_FIELD_MAP.project.include);
+  const nonProjectIncludedRaw = getMetadataField(next, CONTEXT_FIELD_MAP.nonProject.include);
+
+  let projectContextIncluded =
+    typeof projectIncludedRaw === 'boolean' ? projectIncludedRaw : null;
+  let nonProjectContextIncluded =
+    typeof nonProjectIncludedRaw === 'boolean' ? nonProjectIncludedRaw : null;
+
+  const projectContextValue = getMetadataField(next, CONTEXT_FIELD_MAP.project.source);
+  const nonProjectContextValue = getMetadataField(next, CONTEXT_FIELD_MAP.nonProject.source);
+
+  if (containsUntrustedContext(projectContextValue)) {
+    setMetadataField(next, CONTEXT_FIELD_MAP.project.source, '');
+    projectContextIncluded = false;
+  }
+
+  if (containsUntrustedContext(nonProjectContextValue)) {
+    setMetadataField(next, CONTEXT_FIELD_MAP.nonProject.source, '');
+    nonProjectContextIncluded = false;
+  }
+
+  const dropFields = [
+    'untrustedContext',
+    'untrusted_context',
+    'trace',
+    'traceLog',
+    'trace_log',
+    'gatewayLog',
+    'gateway_log',
+    'chainTrace',
+    'chain_trace'
+  ];
+
+  dropFields.forEach((field) => {
+    if (Object.prototype.hasOwnProperty.call(next, field)) {
+      delete next[field];
+    }
+  });
+
+  if (projectContextIncluded === false) {
+    setMetadataField(next, CONTEXT_FIELD_MAP.project.include, false);
+  }
+  if (nonProjectContextIncluded === false) {
+    setMetadataField(next, CONTEXT_FIELD_MAP.nonProject.include, false);
+  }
+
+  return {
+    metadata: next,
+    auditContext: {
+      projectContextSource,
+      nonProjectContextSource,
+      projectContextIncluded,
+      nonProjectContextIncluded,
+      projectContextIncludedChars:
+        projectContextIncluded === false ? 0 : projectContextSource,
+      nonProjectContextIncludedChars:
+        nonProjectContextIncluded === false ? 0 : nonProjectContextSource
+    }
+  };
+}
+
+function resolveContextWindow(provider, metadata) {
+  const metadataWindow = Number(
+    getMetadataField(metadata, ['contextWindow', 'context_window', 'modelContextWindow'])
+  );
+  if (Number.isFinite(metadataWindow) && metadataWindow > 0) {
+    return metadataWindow;
+  }
+
+  const providerWindow = Number(provider && provider.contextWindow);
+  if (Number.isFinite(providerWindow) && providerWindow > 0) {
+    return providerWindow;
+  }
+
+  return null;
+}
+
+function enforcePromptBudget(messages = [], options = {}) {
+  const maxSystemChars = Number(options.maxSystemChars ?? MAX_SYSTEM_PROMPT_CHARS);
+  const maxHistoryChars = Number(options.maxHistoryChars ?? MAX_HISTORY_CHARS);
+  const maxTotalChars = Number(options.maxTotalChars ?? MAX_TOTAL_INPUT_CHARS);
+  const strictSystemChars = Number(
+    options.strictSystemChars ?? STRICT_MAX_SYSTEM_PROMPT_CHARS
+  );
+
+  let built = buildBudgetedMessages(messages, {
+    maxSystemChars,
+    maxHistoryChars
+  });
+  let historyDropped = built.metadata.historyDropped;
+  let systemTightened = built.metadata.systemTightened;
+
+  if (built.totalChars > maxTotalChars && built.parts.history > 0) {
+    const noHistory = buildBudgetedMessages(messages, {
+      maxSystemChars,
+      maxHistoryChars: 0
+    });
+    built = noHistory;
+    historyDropped = true;
+    systemTightened = systemTightened || noHistory.metadata.systemTightened;
+  }
+
+  if (built.totalChars > maxTotalChars) {
+    const strictSystemOnly = buildBudgetedMessages(messages, {
+      maxSystemChars: Math.min(maxSystemChars, strictSystemChars),
+      maxHistoryChars: 0
+    });
+    built = strictSystemOnly;
+    historyDropped = true;
+    systemTightened = true;
+  }
+
+  const violation =
+    built.parts.systemPrompt > maxSystemChars ||
+    built.parts.history > maxHistoryChars ||
+    built.totalChars > maxTotalChars;
+
+  return {
+    messages: built.messages,
+    parts: built.parts,
+    totalChars: built.totalChars,
+    violation,
+    historyDropped,
+    systemTightened,
+    caps: {
+      maxSystemChars,
+      maxHistoryChars,
+      maxTotalChars
+    }
+  };
+}
+
 function buildPromptAuditPayload({
   phase,
   backend,
   model,
   messages,
   metadata,
+  auditContext,
   attempt = null
 }) {
   const safeMessages = Array.isArray(messages) ? messages : [];
-  const parts = {
-    systemPrompt: 0,
-    userPrompt: 0,
-    history: 0,
-    historyCount: 0
+  const parts = computePromptParts(safeMessages);
+  const contextFromMetadata = {
+    projectContextSource: sizeOfValue(getMetadataField(metadata, CONTEXT_FIELD_MAP.project.source)),
+    nonProjectContextSource: sizeOfValue(
+      getMetadataField(metadata, CONTEXT_FIELD_MAP.nonProject.source)
+    ),
+    projectContextIncluded: getMetadataField(metadata, CONTEXT_FIELD_MAP.project.include),
+    nonProjectContextIncluded: getMetadataField(metadata, CONTEXT_FIELD_MAP.nonProject.include)
   };
-
-  const userMessageIndexes = [];
-  safeMessages.forEach((message) => {
-    if (!message || typeof message.content !== 'string') {
-      return;
-    }
-    const length = message.content.length;
-    const role = String(message.role || 'user').toLowerCase();
-
-    if (role === 'system') {
-      parts.systemPrompt += length;
-      return;
-    }
-
-    if (role === 'user') {
-      userMessageIndexes.push(parts.historyCount);
-      parts.history += length;
-      parts.historyCount += 1;
-      return;
-    }
-
-    parts.history += length;
-    if (role === 'assistant' || role === 'tool' || role === 'function' || role === 'scratch') {
-      parts.historyCount += 1;
-    }
-  });
-
-  if (userMessageIndexes.length > 0) {
-    const latestUserIndex = userMessageIndexes[userMessageIndexes.length - 1];
-    let runningIndex = -1;
-    safeMessages.forEach((message) => {
-      if (!message || typeof message.content !== 'string') {
-        return;
-      }
-      const role = String(message.role || 'user').toLowerCase();
-      if (
-        role !== 'assistant' &&
-        role !== 'user' &&
-        role !== 'tool' &&
-        role !== 'function' &&
-        role !== 'scratch'
-      ) {
-        return;
-      }
-      runningIndex += 1;
-      if (runningIndex === latestUserIndex && role === 'user') {
-        const length = message.content.length;
-        parts.userPrompt = length;
-        parts.history = Math.max(0, parts.history - length);
-      }
-    });
-  }
-
-  const projectContextSource = sizeOfValue(
-    getMetadataField(metadata, ['projectContext', 'project_context', 'projectContextChars'])
-  );
-  const nonProjectContextSource = sizeOfValue(
-    getMetadataField(metadata, [
-      'nonProjectContext',
-      'non_project_context',
-      'nonProjectContextChars'
-    ])
-  );
-  const projectIncludedRaw = getMetadataField(metadata, [
-    'projectContextIncluded',
-    'project_context_included'
-  ]);
-  const nonProjectIncludedRaw = getMetadataField(metadata, [
-    'nonProjectContextIncluded',
-    'non_project_context_included'
-  ]);
+  const context =
+    auditContext && typeof auditContext === 'object'
+      ? {
+          ...contextFromMetadata,
+          ...auditContext
+        }
+      : contextFromMetadata;
   const projectContextIncluded =
-    typeof projectIncludedRaw === 'boolean' ? projectIncludedRaw : null;
+    typeof context.projectContextIncluded === 'boolean'
+      ? context.projectContextIncluded
+      : null;
   const nonProjectContextIncluded =
-    typeof nonProjectIncludedRaw === 'boolean' ? nonProjectIncludedRaw : null;
-  const projectContextIncludedChars = projectContextIncluded === false ? 0 : projectContextSource;
+    typeof context.nonProjectContextIncluded === 'boolean'
+      ? context.nonProjectContextIncluded
+      : null;
+  const projectContextSource = Number(context.projectContextSource || 0);
+  const nonProjectContextSource = Number(context.nonProjectContextSource || 0);
+  const projectContextIncludedChars =
+    typeof context.projectContextIncludedChars === 'number'
+      ? context.projectContextIncludedChars
+      : projectContextIncluded === false
+        ? 0
+        : projectContextSource;
   const nonProjectContextIncludedChars =
-    nonProjectContextIncluded === false ? 0 : nonProjectContextSource;
+    typeof context.nonProjectContextIncludedChars === 'number'
+      ? context.nonProjectContextIncludedChars
+      : nonProjectContextIncluded === false
+        ? 0
+        : nonProjectContextSource;
   const approxChars = parts.systemPrompt + parts.userPrompt + parts.history;
 
   const hashInput = safeMessages
@@ -376,7 +743,7 @@ async function callModel({
 
   const safeTaskId = taskId || generateTaskId();
   const safeMessages = Array.isArray(messages) ? messages : [];
-  const safeMetadata = metadata && typeof metadata === 'object' ? metadata : {};
+  const safeMetadata = metadata && typeof metadata === 'object' ? { ...metadata } : {};
 
   const routePlan = router.buildRoutePlan({
     taskClass,
@@ -653,23 +1020,30 @@ async function callModel({
       });
     }
 
+    const metadataSanitized = stripUntrustedMetadata(safeMetadata);
+    let providerMetadata = metadataSanitized.metadata;
+    let auditContext = metadataSanitized.auditContext;
     let outboundMessages = safeMessages;
+    const droppedUntrusted = dropUntrustedMessages(outboundMessages);
+    outboundMessages = droppedUntrusted.messages;
+
     if (router.isLocalBackend(selectedBackend)) {
-      const parts = splitContinuityParts(safeMessages);
-      const stateSummary = continuityStateSummary(safeMetadata, safeTaskId);
+      const parts = splitContinuityParts(outboundMessages);
+      const stateSummary = continuityStateSummary(providerMetadata, safeTaskId);
       const continuityMessages = buildContinuityMessages({
         system: parts.system,
         instruction: parts.instruction,
         history: parts.history,
         stateSummary,
-        tailTurnsMax: safeMetadata.tailTurnsMax || safeMetadata.tail_turns_max,
+        tailTurnsMax: providerMetadata.tailTurnsMax || providerMetadata.tail_turns_max,
         budgets: {
           maxPromptChars: MAX_LOCAL_PROMPT_CHARS,
-          maxStateSummaryChars: safeMetadata.maxStateSummaryChars || safeMetadata.max_state_summary_chars
+          maxStateSummaryChars:
+            providerMetadata.maxStateSummaryChars || providerMetadata.max_state_summary_chars
         }
       });
 
-      const originalChars = estimateMessagesChars(safeMessages);
+      const originalChars = estimateMessagesChars(outboundMessages);
       const enforced = enforceBudget(continuityMessages, MAX_LOCAL_PROMPT_CHARS);
       outboundMessages = Array.isArray(enforced.value) ? enforced.value : continuityMessages;
       const finalChars = estimateMessagesChars(outboundMessages);
@@ -724,11 +1098,59 @@ async function callModel({
       }
     }
 
+    let budgetedPrompt = enforcePromptBudget(outboundMessages, {
+      maxSystemChars: MAX_SYSTEM_PROMPT_CHARS,
+      maxHistoryChars: MAX_HISTORY_CHARS,
+      maxTotalChars: MAX_TOTAL_INPUT_CHARS,
+      strictSystemChars: STRICT_MAX_SYSTEM_PROMPT_CHARS
+    });
+    outboundMessages = budgetedPrompt.messages;
+
+    const contextWindow = resolveContextWindow(provider, providerMetadata);
+    const preflightLimit =
+      contextWindow && contextWindow > 0
+        ? Math.floor(contextWindow * CONTEXT_WINDOW_PRECHECK_RATIO)
+        : null;
+    let strictPassApplied = false;
+
+    if (preflightLimit && budgetedPrompt.totalChars > preflightLimit) {
+      strictPassApplied = true;
+      budgetedPrompt = enforcePromptBudget(outboundMessages, {
+        maxSystemChars: STRICT_MAX_SYSTEM_PROMPT_CHARS,
+        maxHistoryChars: STRICT_MAX_HISTORY_CHARS,
+        maxTotalChars: Math.min(MAX_TOTAL_INPUT_CHARS, preflightLimit),
+        strictSystemChars: STRICT_MAX_SYSTEM_PROMPT_CHARS
+      });
+      outboundMessages = budgetedPrompt.messages;
+    }
+
+    const invariantViolation =
+      budgetedPrompt.parts.systemPrompt > MAX_SYSTEM_PROMPT_CHARS ||
+      budgetedPrompt.parts.history > MAX_HISTORY_CHARS ||
+      budgetedPrompt.totalChars > MAX_TOTAL_INPUT_CHARS;
+    const preflightViolation =
+      preflightLimit != null && budgetedPrompt.totalChars > preflightLimit;
+    const budgetBlocked =
+      budgetedPrompt.violation || invariantViolation || Boolean(preflightViolation);
+
+    if (droppedUntrusted.dropped.length > 0) {
+      providerMetadata = {
+        ...providerMetadata,
+        nonProjectContextIncluded: false,
+        non_project_context_included: false
+      };
+      auditContext = {
+        ...auditContext,
+        nonProjectContextIncluded: false,
+        nonProjectContextIncludedChars: 0
+      };
+    }
+
     try {
       const selectedModel =
-        safeMetadata.model ||
-        safeMetadata.modelId ||
-        safeMetadata.model_id ||
+        providerMetadata.model ||
+        providerMetadata.modelId ||
+        providerMetadata.model_id ||
         provider.defaultModel ||
         provider.model ||
         null;
@@ -738,7 +1160,8 @@ async function callModel({
           backend: selectedBackend,
           model: selectedModel,
           messages: outboundMessages,
-          metadata: safeMetadata,
+          metadata: providerMetadata,
+          auditContext,
           attempt: 'prepare'
         })
       );
@@ -749,14 +1172,66 @@ async function callModel({
           backend: selectedBackend,
           model: selectedModel,
           messages: outboundMessages,
-          metadata: safeMetadata,
+          metadata: providerMetadata,
+          auditContext,
           attempt: 'provider_call'
         })
       );
 
+      if (budgetBlocked) {
+        await emitFallbackEvent({
+          event_type: 'BACKEND_ERROR',
+          task_id: safeTaskId,
+          task_class: routePlan.taskClass,
+          from_backend: selectedBackend,
+          to_backend: selectedBackend,
+          trigger_code: ERROR_CODES.CONTEXT,
+          provider_error_code: 'prompt_budget_blocked',
+          network_used: router.networkUsedForBackend(selectedBackend),
+          timestamp: timestampIso(),
+          rationale: 'prompt_budget_blocked',
+          metadata: {
+            context_window: contextWindow || null,
+            preflight_limit: preflightLimit || null,
+            strict_pass_applied: strictPassApplied,
+            history_dropped: budgetedPrompt.historyDropped,
+            system_tightened: budgetedPrompt.systemTightened,
+            dropped_untrusted_roles: droppedUntrusted.dropped
+          }
+        });
+
+        appendPromptAuditSafe(
+          buildPromptAuditPayload({
+            phase: 'embedded_attempt',
+            backend: selectedBackend,
+            model: selectedModel,
+            messages: outboundMessages,
+            metadata: providerMetadata,
+            auditContext,
+            attempt: 'blocked'
+          })
+        );
+
+        return {
+          backend: selectedBackend,
+          response: {
+            text: CONTROLLED_PROMPT_BLOCK_MESSAGE,
+            raw: {
+              controlled: true,
+              reason: 'PROMPT_BUDGET_BLOCKED',
+              contextWindow: contextWindow || null,
+              preflightLimit: preflightLimit || null,
+              strictPassApplied
+            }
+          },
+          usage: null,
+          events
+        };
+      }
+
       const result = await provider.call({
         messages: outboundMessages,
-        metadata: safeMetadata,
+        metadata: providerMetadata,
         allowNetwork: routePlan.allowNetwork
       });
 
@@ -766,7 +1241,8 @@ async function callModel({
           backend: selectedBackend,
           model: selectedModel,
           messages: outboundMessages,
-          metadata: safeMetadata,
+          metadata: providerMetadata,
+          auditContext,
           attempt: 'success'
         })
       );
@@ -782,9 +1258,9 @@ async function callModel({
       };
     } catch (error) {
       const selectedModel =
-        safeMetadata.model ||
-        safeMetadata.modelId ||
-        safeMetadata.model_id ||
+        providerMetadata.model ||
+        providerMetadata.modelId ||
+        providerMetadata.model_id ||
         provider.defaultModel ||
         provider.model ||
         null;
@@ -794,7 +1270,8 @@ async function callModel({
           backend: selectedBackend || backend,
           model: selectedModel,
           messages: outboundMessages,
-          metadata: safeMetadata,
+          metadata: providerMetadata,
+          auditContext,
           attempt: 'error'
         })
       );

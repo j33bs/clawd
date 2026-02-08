@@ -4,18 +4,19 @@
 - Expand append-only prompt-size audit logging at the model invocation boundary (`core/model_call.js`) to emit phase-based records (`embedded_prompt_before`, `before_call`, `embedded_attempt`) with size-only metadata and stable hash.
 - Keep logging content-free (sizes, booleans, hashes only), with non-fatal logging failure handling.
 - Add synthetic model-call audit coverage in `tests/model_call_prompt_audit.test.js`.
-- Scope is instrumentation only; no routing/provider behavior change.
+- Enforce deterministic prompt budget caps and model-window preflight before provider calls, with a controlled no-provider block response when caps cannot be met.
 
 ## Evidence pack
 - `node tests/model_call_prompt_audit.test.js` passes.
 - `node tests/prompt_audit.test.js` passes.
 - `node tests/chain_budget.test.js` passes.
 - `node tests/chain_runner_smoke.test.js` passes.
-- Commit scope limited to model-call audit instrumentation and test coverage.
+- `node scripts/verify_model_routing.js` passes (5/5).
+- Commit scope limited to model-call audit instrumentation plus budget/preflight guardrails.
 
 ## Rollback plan
-- Revert this commit to remove prompt-audit instrumentation and test additions.
-- Confirm baseline by re-running `node tests/chain_budget.test.js` and `node tests/chain_runner_smoke.test.js`.
+- Revert the latest prompt-budget/preflight commit if guarded truncation causes regressions.
+- Confirm baseline by re-running `node scripts/verify_model_routing.js`, `node tests/chain_budget.test.js`, and `node tests/chain_runner_smoke.test.js`.
 
 ## Budget envelope
 - Runtime overhead limited to per-call character counting, hashing, and one JSONL append write.
