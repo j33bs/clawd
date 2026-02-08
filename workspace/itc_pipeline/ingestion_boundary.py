@@ -175,8 +175,7 @@ def ingest_message(
         dedupe_store = get_dedupe_store()
 
     # === GATE 1: Allowlist ===
-    if not is_chat_allowed(message.chat_id, message.chat_title):
-        # Already logged in is_chat_allowed at DEBUG level
+    if not is_chat_allowed(message.chat_id, message.chat_title, raise_on_fail=True):
         return False
 
     # === GATE 2: Dedupe ===

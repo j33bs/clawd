@@ -5,7 +5,6 @@ Fails fast with actionable guidance.
 """
 import json
 import os
-import re
 import sys
 from pathlib import Path
 
@@ -25,10 +24,10 @@ _cwd_root = _resolve_repo_root(Path.cwd())
 BASE_DIR = Path(_env_root) if _env_root else (_file_root or _cwd_root or Path("C:/Users/heath/.openclaw"))
 POLICY_FILE = BASE_DIR / "workspace" / "policy" / "llm_policy.json"
 OPENCLAW_FILE = BASE_DIR / "openclaw.json"
-ALLOW_FROM = BASE_DIR / "credentials" / "telegram-allowFrom.json"
 PAIRING = BASE_DIR / "credentials" / "telegram-pairing.json"
 
 sys.path.insert(0, str((BASE_DIR / "workspace" / "scripts").resolve()))
+sys.path.insert(0, str((BASE_DIR / "workspace").resolve()))
 
 try:
     import requests  # noqa: F401
@@ -40,6 +39,12 @@ try:
     from policy_router import PolicyRouter
 except Exception:
     PolicyRouter = None
+
+try:
+    from itc_pipeline.allowlist import resolve_allowlist, AllowlistConfigError
+except Exception:
+    resolve_allowlist = None
+    AllowlistConfigError = None
 
 
 def fail(msg, fixes, failures):
@@ -105,36 +110,47 @@ def check_telegram(failures, warnings):
     if not tg:
         return
 
-    allow = load_json(ALLOW_FROM)
-    allow_ids = []
-    if allow and isinstance(allow.get("allowFrom"), list):
-        allow_ids = [str(x) for x in allow.get("allowFrom", [])]
-
-    if not allow_ids:
+    if resolve_allowlist is None:
         fail(
-            "Telegram allowlist is empty",
+            "telegram_not_configured: Allowlist module unavailable",
+            ["Ensure workspace/itc_pipeline/allowlist.py exists and is importable"],
+            failures,
+        )
+        return
+
+    try:
+        allowlist, source, invalid = resolve_allowlist()
+    except AllowlistConfigError as exc:
+        fail(str(exc), ["Fix allowlist configuration and retry"], failures)
+        return
+
+    if invalid:
+        fail(
+            "telegram_not_configured: Invalid chat IDs in allowlist",
             [
-                "Populate credentials/telegram-allowFrom.json with numeric chat IDs",
+                "Replace usernames with numeric chat IDs",
                 "Run `python workspace/scripts/itc/telegram_list_dialogs.py` to discover IDs",
             ],
             failures,
         )
         return
 
-    bad_ids = [x for x in allow_ids if not re.fullmatch(r"-?\d+", x)]
-    if bad_ids:
+    if not allowlist:
         fail(
-            "Telegram allowlist contains non-numeric IDs",
+            "telegram_not_configured: No allowed Telegram chat IDs configured. "
+            "Set ALLOWED_CHAT_IDS or edit credentials/telegram-allowFrom.json. "
+            "Example: ALLOWED_CHAT_IDS=-1001234567890,-1009876543210",
             [
-                "Replace usernames with numeric chat IDs (e.g., -1001234567890)",
-                "Use telegram_list_dialogs.py to discover IDs",
+                "Set ALLOWED_CHAT_IDS env var",
+                "Or update credentials/telegram-allowFrom.json",
             ],
             failures,
         )
+        return
 
     if tg.get("dmPolicy") == "pairing":
         pairing = load_json(PAIRING) or {}
-        if not pairing.get("requests") and not allow_ids:
+        if not pairing.get("requests") and not allowlist:
             fail(
                 "Telegram pairing is required but no paired users exist",
                 [
@@ -144,6 +160,7 @@ def check_telegram(failures, warnings):
                 failures,
             )
 
+    print(f"Resolved Telegram allowlist ({source}): {sorted(allowlist)}")
     warn(
         "If you see 'chat not found', start a DM with the bot and ensure the numeric chat ID is allowlisted.",
         warnings,

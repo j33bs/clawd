@@ -49,9 +49,28 @@ ERROR_PATTERNS = [
         ],
     },
     {
+        "id": "telegram_not_configured",
+        "match": re.compile(r"telegram_not_configured|No allowed Telegram chat IDs configured", re.I),
+        "intent": "Telegram config",
+        "fixes": [
+            "Set ALLOWED_CHAT_IDS env var with numeric chat IDs",
+            "Or update credentials/telegram-allowFrom.json",
+            "Run workspace/scripts/itc/telegram_list_dialogs.py to discover IDs",
+        ],
+    },
+    {
+        "id": "telegram_chat_not_allowed",
+        "match": re.compile(r"telegram_chat_not_allowed|not in allowlist", re.I),
+        "intent": "Telegram allowlist",
+        "fixes": [
+            "Ensure target chat ID is in ALLOWED_CHAT_IDS",
+            "Use numeric chat IDs from `workspace/scripts/itc/telegram_list_dialogs.py`",
+        ],
+    },
+    {
         "id": "telegram_chat_not_found",
-        "match": re.compile(r"chat not found", re.I),
-        "intent": "Telegram send",
+        "match": re.compile(r"telegram_chat_not_found|chat not found", re.I),
+        "intent": "Telegram send/resolve",
         "fixes": [
             "Start bot in DM or add to target group/channel",
             "Use numeric chat IDs from `workspace/scripts/itc/telegram_list_dialogs.py`",
@@ -126,7 +145,7 @@ def scan_files(files, max_errors):
                 for line in f:
                     if len(findings) >= max_errors:
                         return findings
-                    if "errorMessage" not in line and "chat not found" not in line:
+                    if "errorMessage" not in line and "chat not found" not in line and "telegram_" not in line:
                         continue
                     try:
                         obj = json.loads(line)

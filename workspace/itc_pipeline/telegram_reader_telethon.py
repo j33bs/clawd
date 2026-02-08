@@ -45,7 +45,7 @@ from itc_pipeline.ingestion_boundary import (
     initialize_ingestion,
     get_dedupe_store
 )
-from itc_pipeline.allowlist import load_allowlist_from_env
+from itc_pipeline.allowlist import require_allowlist, AllowlistConfigError
 
 logger = logging.getLogger(__name__)
 
@@ -186,19 +186,16 @@ async def run_ingestion(dry_run: bool = False):
     initialize_ingestion()
 
     # Get allowlist for handler
-    allowlist = load_allowlist_from_env()
-
-    if not allowlist:
-        logger.error(
-            "ABORT: Allowlist is empty. No messages would be ingested. "
-            "Run telegram_list_dialogs.py first and set ALLOWED_CHAT_IDS."
-        )
+    try:
+        allowlist = require_allowlist()
+    except AllowlistConfigError as exc:
+        logger.error(str(exc))
         return
 
     logger.info(f"Starting Telethon ingestion (dry_run={dry_run})")
     logger.info(f"Session: {SESSION_PATH}")
 
-    @client.on(events.NewMessage())
+    @client.on(events.NewMessage(chats=list(allowlist)))
     async def handler(event):
         """Handle incoming messages."""
         if _shutdown_requested:
