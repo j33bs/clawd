@@ -26,3 +26,5 @@ __pycache__/
 .quarantine/
 
 .quarantine2/
+
+logs/
