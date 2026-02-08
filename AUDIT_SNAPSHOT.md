@@ -4,14 +4,14 @@ Updated after each audit completes. Compact record for quick comparison.
 
 | Signal | Value |
 |---|---|
-| **date** | 2026-02-06 |
-| **commit** | `fdaee04` (develop) |
-| **regression** | PASS (8/8) |
-| **verify** | PASS (all steps) |
-| **gateway** | healthy |
-| **telegram** | connected |
-| **cron_jobs** | 3 (2x telegram health, 1x daily regression) |
+| **date** | 2026-02-08 |
+| **commit** | `7614b02` (develop) |
+| **regression** | NOT RUN |
+| **verify** | NOT RUN |
+| **gateway** | unknown (not checked) |
+| **telegram** | degraded (chat not found errors observed) |
+| **cron_jobs** | 5 |
 | **agents** | 2 (main, claude-code) |
-| **governance_changed** | no (no new admissions since last commit) |
-| **secrets_in_tracked** | none detected |
-| **open_handoffs** | 0 |
+| **governance_changed** | unknown |
+| **secrets_in_tracked** | yes (Groq API key in tracked configs) |
+| **open_handoffs** | 8 |
