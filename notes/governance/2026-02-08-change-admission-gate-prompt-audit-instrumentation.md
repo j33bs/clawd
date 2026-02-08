@@ -32,3 +32,8 @@
 
 ## Post-mortem
 - If overflow persists after instrumentation, document observed size vectors and follow-on budget/routing fixes in a subsequent admitted change.
+
+## Runtime hotfix deprecation
+- Previously applied runtime bundle hotfixes in global installs were temporary forensic mitigation only.
+- Repository source is now canonical for prompt budget, preflight, and audit behavior.
+- Any remaining global `.bak.*` runtime artifacts are non-authoritative and must not be relied upon.
