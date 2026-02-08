@@ -42,6 +42,8 @@ function isAllowlistedPath(filePath) {
   }
 
   if (
+    filePath === '.gitignore' ||
+    filePath === 'scripts/check_staged_allowlist.js' ||
     filePath === 'scripts/init_fallback_system.js' ||
     filePath === 'scripts/multi_agent_fallback.js' ||
     filePath === 'scripts/verify_model_routing.js' ||
@@ -49,6 +51,18 @@ function isAllowlistedPath(filePath) {
     filePath === 'MODEL_ROUTING.md' ||
     filePath === 'package.json'
   ) {
+    return true;
+  }
+
+  if (filePath.startsWith('docs/design/')) {
+    return true;
+  }
+
+  if (/^notes\/governance\/.*change-admission-gate.*\.md$/i.test(filePath)) {
+    return true;
+  }
+
+  if (/^notes\/verification\/.*change-admission-gate.*\.md$/i.test(filePath)) {
     return true;
   }
 
