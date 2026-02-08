@@ -7,6 +7,7 @@ const {
   enforceBudget,
   estimateMessagesChars
 } = require('./continuity_prompt');
+const { appendAudit, hash: hashPromptAudit } = require('./prompt_audit');
 
 const LOCAL_INTENT_ALLOWLIST = new Set([
   'route',
@@ -133,6 +134,108 @@ function splitContinuityParts(messages = []) {
     system: systemParts.join('\n\n').trim(),
     instruction: instruction || '',
     history
+  };
+}
+
+function sizeOfValue(value) {
+  if (value == null) {
+    return 0;
+  }
+  if (typeof value === 'string') {
+    return value.length;
+  }
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    return String(value).length;
+  }
+  try {
+    return JSON.stringify(value).length;
+  } catch (error) {
+    return 0;
+  }
+}
+
+function getMetadataField(metadata, keys = []) {
+  if (!metadata || typeof metadata !== 'object') {
+    return null;
+  }
+  for (const key of keys) {
+    if (Object.prototype.hasOwnProperty.call(metadata, key)) {
+      return metadata[key];
+    }
+  }
+  return null;
+}
+
+function buildPromptAuditPayload({
+  backend,
+  model,
+  messages,
+  metadata
+}) {
+  const safeMessages = Array.isArray(messages) ? messages : [];
+  const parts = {
+    system: 0,
+    instruction: 0,
+    history: 0,
+    state: 0,
+    user: 0,
+    scratch: 0
+  };
+
+  const userMessageLengths = [];
+  safeMessages.forEach((message) => {
+    if (!message || typeof message.content !== 'string') {
+      return;
+    }
+    const length = message.content.length;
+    const role = String(message.role || 'user').toLowerCase();
+
+    if (role === 'system') {
+      parts.system += length;
+      return;
+    }
+
+    if (role === 'user') {
+      parts.user += length;
+      userMessageLengths.push(length);
+      return;
+    }
+
+    if (role === 'tool' || role === 'function' || role === 'scratch') {
+      parts.scratch += length;
+      return;
+    }
+
+    parts.history += length;
+  });
+
+  if (userMessageLengths.length > 0) {
+    parts.instruction = userMessageLengths[userMessageLengths.length - 1];
+    parts.history += Math.max(0, parts.user - parts.instruction);
+  }
+
+  const stateValue = getMetadataField(metadata, ['stateSummary', 'state_summary', 'state']);
+  parts.state = sizeOfValue(stateValue);
+
+  const scratchValue = getMetadataField(metadata, ['scratch', 'trace', 'traceLog', 'trace_log']);
+  parts.scratch += sizeOfValue(scratchValue);
+
+  const hashInput = safeMessages
+    .map((message) => {
+      if (!message || typeof message.content !== 'string') {
+        return '';
+      }
+      return `${String(message.role || 'user')}:${message.content}`;
+    })
+    .join('\n---\n');
+
+  return {
+    ts: Date.now(),
+    backend,
+    model: model || null,
+    approxChars: estimateMessagesChars(safeMessages),
+    parts,
+    hash: hashPromptAudit(hashInput)
   };
 }
 
@@ -563,6 +666,25 @@ async function callModel({
     }
 
     try {
+      const selectedModel =
+        safeMetadata.model ||
+        safeMetadata.modelId ||
+        safeMetadata.model_id ||
+        provider.defaultModel ||
+        provider.model ||
+        null;
+      try {
+        const auditEntry = buildPromptAuditPayload({
+          backend: selectedBackend,
+          model: selectedModel,
+          messages: outboundMessages,
+          metadata: safeMetadata
+        });
+        appendAudit(auditEntry);
+      } catch (auditError) {
+        console.warn(`[prompt_audit] ${auditError.message}`);
+      }
+
       const result = await provider.call({
         messages: outboundMessages,
         metadata: safeMetadata,
