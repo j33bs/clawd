@@ -75,6 +75,10 @@ __pycache__/
 *.pyc
 .venv/
 venv/
+.workspace_artifacts/
+
+# Intent failure reports (generated)
+workspace/handoffs/intent_failures_*.md
 
 # ============================================
 # OS AND IDE FILES
