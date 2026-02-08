@@ -528,6 +528,11 @@ def run(full=False, rules_only=False, max_llm=100, model=None):
     ollama_ok = False
     ollama_models = []
     policy_ollama = policy.get("providers", {}).get("ollama", {}).get("models", [])
+    ollama_limits_by_model = {
+        m.get("id"): int(m.get("maxInputChars", 500))
+        for m in policy_ollama
+        if m.get("id")
+    }
     local_short_model = next((m.get("id") for m in policy_ollama if m.get("tier") == "small"), OLLAMA_MODEL)
     local_long_model = next((m.get("id") for m in policy_ollama if m.get("tier") == "large"), OLLAMA_MODEL)
     routing = policy.get("routing", {}).get("itc_classify", {})
@@ -650,12 +655,17 @@ def run(full=False, rules_only=False, max_llm=100, model=None):
                             selected_model = local_short_model
                         else:
                             selected_model = local_long_model
+                    per_call_limits = dict(limits)
+                    per_call_limits["ollama"] = ollama_limits_by_model.get(
+                        selected_model,
+                        per_call_limits.get("ollama", 500),
+                    )
                     llm_tag, llm_backend = classify_llm(
                         text,
                         model=selected_model,
                         chain=chain,
                         available=available,
-                        limits=limits,
+                        limits=per_call_limits,
                     )
                     llm_calls += 1
                     calls_used += 1
