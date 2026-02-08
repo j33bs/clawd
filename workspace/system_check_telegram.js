@@ -22,6 +22,7 @@ function logStructuredWarning(reasonCode, detail) {
 
 async function execCommand(command, timeoutMs) {
     return new Promise((resolve) => {
+        const startMs = Date.now();
         exec(command, { timeout: timeoutMs }, (error, stdout, stderr) => {
             const result = {
                 command,
@@ -30,6 +31,7 @@ async function execCommand(command, timeoutMs) {
                 exitCode: 0,
                 signal: null,
                 timedOut: false,
+                elapsed_ms: Date.now() - startMs,
                 error: null
             };
             if (error) {
@@ -51,6 +53,7 @@ async function runOpenclawStatus() {
 
     logStructuredWarning('openclaw_status_unavailable', {
         command: deepResult.command,
+        elapsed_ms: deepResult.elapsed_ms,
         exit_code: deepResult.exitCode,
         signal: deepResult.signal,
         timed_out: deepResult.timedOut,
@@ -65,6 +68,7 @@ async function runOpenclawStatus() {
 
     logStructuredWarning('openclaw_status_unavailable', {
         command: shallowResult.command,
+        elapsed_ms: shallowResult.elapsed_ms,
         exit_code: shallowResult.exitCode,
         signal: shallowResult.signal,
         timed_out: shallowResult.timedOut,
