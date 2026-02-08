@@ -1,0 +1,64 @@
+{
+  "version": 1,
+  "defaults": {
+    "allowPaid": false,
+    "preferLocal": true
+  },
+  "budgets": {
+    "itc_classify": {
+      "dailyTokenBudget": 25000,
+      "dailyCallBudget": 200,
+      "maxCallsPerRun": 80
+    }
+  },
+  "providers": {
+    "groq": {
+      "enabled": true,
+      "paid": false,
+      "models": [
+        {
+          "id": "meta-llama/llama-4-scout-17b-16e-instruct",
+          "maxInputChars": 4000
+        }
+      ]
+    },
+    "qwen": {
+      "enabled": true,
+      "paid": false,
+      "models": [
+        {
+          "id": "coder-model",
+          "maxInputChars": 4000
+        }
+      ]
+    },
+    "ollama": {
+      "enabled": true,
+      "paid": false,
+      "models": [
+        {
+          "id": "qwen:latest",
+          "maxInputChars": 800,
+          "tier": "small"
+        },
+        {
+          "id": "qwen14b-tools-32k",
+          "maxInputChars": 4000,
+          "tier": "large"
+        }
+      ]
+    }
+  },
+  "routing": {
+    "itc_classify": {
+      "order": [
+        "groq",
+        "qwen",
+        "ollama"
+      ],
+      "preferLocalForShort": true,
+      "shortMessageChars": 240,
+      "fallbackToRules": true
+    }
+  }
+}

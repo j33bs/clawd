@@ -73,6 +73,36 @@ This document defines the contextual model selection rules for OpenClaw.
 
 ---
 
+## Token Budgeting & Policy Enforcement
+
+OpenClaw enforces LLM budgets for pipeline classifiers to reduce token burn and avoid rate-limit failures.
+
+**Policy file (canonical):**
+`workspace/policy/llm_policy.json`
+
+**Enforced by:**
+`scripts/itc_classify.py`
+
+**Runtime budget state (not tracked):**
+`itc/llm_budget.json`
+
+### What the policy controls
+- Provider enablement (paid vs free, local vs remote)
+- Routing order per task (e.g., `groq → qwen → ollama`)
+- Prefer-local for short messages (default: ≤240 chars)
+- Per-provider max input size (chars) to reduce token use
+- Daily token budget and call budget
+- Max LLM calls per run
+
+### Defaults (current)
+- `dailyTokenBudget`: 25,000 tokens
+- `dailyCallBudget`: 200 calls
+- `maxCallsPerRun`: 80 calls
+
+If the daily budget is exhausted, classifiers fall back to rules-only for the rest of the day.
+
+---
+
 ## Confidential Marking (Explicit Required)
 
 Content routes to LOCAL only when **explicitly marked**:
@@ -189,6 +219,7 @@ Models MAY run in parallel when:
 ```bash
 ANTHROPIC_API_KEY=sk-ant-...
 OLLAMA_HOST=http://localhost:11434
+GROQ_API_KEY=...
 ```
 
 ---

@@ -104,6 +104,17 @@ else
     check_fail "CONTRIBUTING.md missing"
 fi
 
+echo "[Step 8] Checking LLM policy..."
+if [ -x "workspace/scripts/verify_llm_policy.sh" ]; then
+    if ./workspace/scripts/verify_llm_policy.sh; then
+        check_pass
+    else
+        check_fail "LLM policy verification failed"
+    fi
+else
+    check_fail "verify_llm_policy.sh missing or not executable"
+fi
+
 # ============================================
 # SUMMARY
 # ============================================
