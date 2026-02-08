@@ -4,6 +4,8 @@
 - `./workspace/scripts/verify_preflight.sh`
 - `python3 workspace/scripts/verify_allowlist.py`
 - `./workspace/scripts/intent_failure_report.sh`
+- `./workspace/scripts/verify_intent_failure_scan.sh`
+- `./workspace/scripts/verify_token_burn_tools.sh`
 - `node workspace/system_check_telegram.js`
 
 ## Windows PowerShell Wrappers

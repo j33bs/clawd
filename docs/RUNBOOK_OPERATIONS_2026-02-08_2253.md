@@ -37,6 +37,19 @@
   - `Timeout Waste` highlights timeout-related waste.
   - `Missing Usage` should remain `0` for accounting health.
 
+## Daily Snapshot + Drift Alarm (Manual)
+- Create baseline snapshot:
+  - `python3 workspace/scripts/report_token_burn.py --out tmp/token_burn_baseline.md --stdout`
+- Create current snapshot (optionally windowed):
+  - `python3 workspace/scripts/report_token_burn.py --since "<ISO-UTC>" --out tmp/token_burn_current.md --stdout`
+- Compare drift:
+  - `python3 workspace/scripts/compare_token_burn.py tmp/token_burn_baseline.md tmp/token_burn_current.md --stdout`
+- Optional gate thresholds:
+  - `python3 workspace/scripts/compare_token_burn.py tmp/token_burn_baseline.md tmp/token_burn_current.md --thresholds '{"max_failure_rate_pp":1.0}' --stdout`
+- Drift alarm interpretation:
+  - Non-zero exit means drift threshold exceeded.
+  - Inspect “Top Waste Sources” for provider/model regressions first.
+
 ## What To Do When Checks Fail
 - Preflight fails:
   - Resolve missing env/runtime prerequisites shown in output.
