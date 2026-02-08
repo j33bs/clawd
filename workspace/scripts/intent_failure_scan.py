@@ -6,6 +6,7 @@ import argparse
 import json
 import re
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 
 ERROR_PATTERNS = [
@@ -136,11 +137,48 @@ def load_recent_session_files(max_files: int):
     files.sort(key=lambda p: p.stat().st_mtime, reverse=True)
     return files[:max_files]
 
+def _parse_since(value: str):
+    if not value:
+        return None
+    text = value.strip()
+    if not text:
+        return None
+    try:
+        num = float(text)
+        if num > 1e12:
+            return int(num)
+        return int(num * 1000)
+    except Exception:
+        pass
+    try:
+        if text.endswith("Z"):
+            text = text.replace("Z", "+00:00")
+        dt = datetime.fromisoformat(text)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return int(dt.timestamp() * 1000)
+    except Exception:
+        return None
 
-def scan_files(files, max_errors):
+
+def _event_timestamp(obj):
+    ts = obj.get("timestamp") or obj.get("ts")
+    if ts is None:
+        return None
+    if isinstance(ts, (int, float)):
+        if ts > 1e12:
+            return int(ts)
+        return int(ts * 1000)
+    if isinstance(ts, str):
+        return _parse_since(ts)
+    return None
+
+
+def scan_files(files, max_errors, since_ms=None):
     findings = []
     for path in files:
         try:
+            file_mtime_ms = int(path.stat().st_mtime * 1000)
             with open(path, "r", encoding="utf-8") as f:
                 for line in f:
                     if len(findings) >= max_errors:
@@ -151,6 +189,13 @@ def scan_files(files, max_errors):
                         obj = json.loads(line)
                     except Exception:
                         obj = {}
+                    if since_ms is not None:
+                        event_ts = _event_timestamp(obj)
+                        if event_ts is None:
+                            if file_mtime_ms < since_ms:
+                                continue
+                        elif event_ts < since_ms:
+                            continue
                     err = obj.get("errorMessage")
                     if not err and "chat not found" in line:
                         err = line.strip()
@@ -194,9 +239,11 @@ def scan_router_events(path: Path):
     return {"total": total, "by_reason": counts}
 
 
-def format_report(findings):
+def format_report(findings, since=None):
     date = time.strftime("%Y-%m-%d", time.localtime())
     lines = [f"# Intent Failure Report {date}", "", "## Summary"]
+    if since:
+        lines.append(f"- since: {since}")
     lines.append(f"- total_errors: {len(findings)}")
     categories = {}
     for f in findings:
@@ -255,11 +302,13 @@ def main():
     parser.add_argument("--max-errors", type=int, default=50, help="Max errors to report")
     parser.add_argument("--out", type=str, default=None, help="Write report to file")
     parser.add_argument("--stdout", action="store_true", help="Print report to stdout")
+    parser.add_argument("--since", type=str, default=None, help="Only include events at/after this time (ISO or epoch)")
     args = parser.parse_args()
 
     files = load_recent_session_files(args.max_files)
-    findings = scan_files(files, args.max_errors)
-    report = format_report(findings)
+    since_ms = _parse_since(args.since) if args.since else None
+    findings = scan_files(files, args.max_errors, since_ms=since_ms)
+    report = format_report(findings, since=args.since)
 
     if args.stdout or not args.out:
         print(report)
