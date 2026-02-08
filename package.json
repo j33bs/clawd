@@ -3,7 +3,8 @@
     "test:guarded-fs": "node tests/guarded_fs.test.js",
     "staged:allowlist": "node scripts/check_staged_allowlist.js",
     "gate:admission": "node scripts/check_change_admission_gate.js",
-    "verify:local-fallback": "node scripts/verify_local_fallback.js"
+    "verify:local-fallback": "node scripts/verify_local_fallback.js",
+    "test:staged-allowlist": "node tests/staged_allowlist.test.js"
   },
   "dependencies": {
     "axios": "^1.13.4",
