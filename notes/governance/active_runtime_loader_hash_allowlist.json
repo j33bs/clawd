@@ -1,0 +1,11 @@
+{
+  "description": "Allowlisted SHA256 hashes for active installed OpenClaw loader bundle (dist/loader-*.js) known to include prompt-budget patch.",
+  "activeLoaderBasename": "loader-BAZoAqqR.js",
+  "allow": [
+    {
+      "sha256": "04cbfcade62a9d3ec6822f048ff27965ea9a8485d5a0b4fdc2717f38d3104b0b",
+      "recordedAt": "2026-02-08",
+      "notes": "Prompt-budget patch present; marker verifier PASS; system/history/total caps enforced."
+    }
+  ]
+}

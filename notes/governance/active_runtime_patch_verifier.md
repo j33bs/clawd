@@ -20,3 +20,11 @@ This tests-only verifier checks that the active installed `openclaw` runtime loa
 - Read-only verification against installed runtime bytes.
 - No edits to runtime bundles or `~/.npm-global`.
 - No package script changes; manual runbook invocation.
+
+## Hash allowlist gate
+- Run `node tests/verify_active_runtime_patch_hash.test.cjs` to confirm the active loader SHA256 is allowlisted.
+- Governed update workflow for intentional upgrades:
+  1. Run `node tests/verify_active_runtime_patch.test.cjs` and confirm PASS.
+  2. Compute the new active loader SHA256 and add it to `notes/governance/active_runtime_loader_hash_allowlist.json` with date and notes.
+  3. Commit the allowlist update and governance note together.
+- Hash allowlist updates are governance-significant and must be reviewed.
