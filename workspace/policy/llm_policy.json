@@ -1,40 +1,66 @@
 {
-  "version": 1,
+  "version": 2,
   "defaults": {
     "allowPaid": false,
-    "preferLocal": true
+    "preferLocal": true,
+    "maxTokensPerRequest": 1024,
+    "circuitBreaker": {
+      "failureThreshold": 3,
+      "cooldownSec": 900,
+      "windowSec": 600,
+      "failOn": [
+        "request_http_429",
+        "request_http_5xx",
+        "request_timeout",
+        "request_conn_error"
+      ]
+    }
   },
   "budgets": {
-    "itc_classify": {
-      "dailyTokenBudget": 25000,
-      "dailyCallBudget": 200,
-      "maxCallsPerRun": 80
+    "intents": {
+      "itc_classify": {
+        "dailyTokenBudget": 25000,
+        "dailyCallBudget": 200,
+        "maxCallsPerRun": 80
+      },
+      "coding": {
+        "dailyTokenBudget": 50000,
+        "dailyCallBudget": 200,
+        "maxCallsPerRun": 50
+      },
+      "governance": {
+        "dailyTokenBudget": 20000,
+        "dailyCallBudget": 100,
+        "maxCallsPerRun": 30
+      },
+      "security": {
+        "dailyTokenBudget": 20000,
+        "dailyCallBudget": 100,
+        "maxCallsPerRun": 30
+      }
+    },
+    "tiers": {
+      "free": {
+        "dailyTokenBudget": 100000,
+        "dailyCallBudget": 1000
+      },
+      "auth": {
+        "dailyTokenBudget": 50000,
+        "dailyCallBudget": 200
+      },
+      "paid": {
+        "dailyTokenBudget": 50000,
+        "dailyCallBudget": 200
+      }
     }
   },
   "providers": {
-    "groq": {
-      "enabled": true,
-      "paid": false,
-      "models": [
-        {
-          "id": "meta-llama/llama-4-scout-17b-16e-instruct",
-          "maxInputChars": 4000
-        }
-      ]
-    },
-    "qwen": {
-      "enabled": true,
-      "paid": false,
-      "models": [
-        {
-          "id": "coder-model",
-          "maxInputChars": 4000
-        }
-      ]
-    },
     "ollama": {
       "enabled": true,
       "paid": false,
+      "tier": "free",
+      "type": "ollama",
+      "baseUrl": "http://localhost:11434",
       "models": [
         {
           "id": "qwen:latest",
@@ -47,18 +73,134 @@
           "tier": "large"
         }
       ]
+    },
+    "groq": {
+      "enabled": true,
+      "paid": false,
+      "tier": "free",
+      "type": "openai_compatible",
+      "baseUrl": "https://api.groq.com/openai/v1",
+      "apiKeyEnv": "GROQ_API_KEY",
+      "models": [
+        {
+          "id": "meta-llama/llama-4-scout-17b-16e-instruct",
+          "maxInputChars": 4000
+        }
+      ]
+    },
+    "qwen": {
+      "enabled": true,
+      "paid": false,
+      "tier": "free",
+      "type": "openai_compatible",
+      "baseUrl": "https://portal.qwen.ai/v1",
+      "auth": "qwen_oauth",
+      "models": [
+        {
+          "id": "coder-model",
+          "maxInputChars": 4000
+        }
+      ]
+    },
+    "openai_auth": {
+      "enabled": true,
+      "paid": false,
+      "tier": "auth",
+      "type": "openai_auth",
+      "readyEnv": "OPENAI_AUTH_READY"
+    },
+    "claude_auth": {
+      "enabled": true,
+      "paid": false,
+      "tier": "auth",
+      "type": "anthropic_auth",
+      "readyEnv": "CLAUDE_AUTH_READY"
+    },
+    "grok_api": {
+      "enabled": true,
+      "paid": true,
+      "tier": "paid",
+      "type": "openai_compatible",
+      "baseUrl": "https://api.x.ai/v1",
+      "apiKeyEnv": "GROK_API_KEY",
+      "models": [
+        {
+          "id": "grok-2",
+          "maxInputChars": 6000
+        }
+      ]
+    },
+    "openai_api": {
+      "enabled": true,
+      "paid": true,
+      "tier": "paid",
+      "type": "openai_compatible",
+      "baseUrl": "https://api.openai.com/v1",
+      "apiKeyEnv": "OPENAI_API_KEY",
+      "models": [
+        {
+          "id": "gpt-4o-mini",
+          "maxInputChars": 6000
+        }
+      ]
+    },
+    "claude_api": {
+      "enabled": true,
+      "paid": true,
+      "tier": "paid",
+      "type": "anthropic",
+      "baseUrl": "https://api.anthropic.com/v1",
+      "apiKeyEnv": "ANTHROPIC_API_KEY",
+      "models": [
+        {
+          "id": "claude-3-5-sonnet",
+          "maxInputChars": 6000
+        }
+      ]
     }
   },
   "routing": {
-    "itc_classify": {
-      "order": [
-        "groq",
-        "qwen",
-        "ollama"
-      ],
-      "preferLocalForShort": true,
-      "shortMessageChars": 240,
-      "fallbackToRules": true
+    "free_order": [
+      "ollama",
+      "groq",
+      "qwen"
+    ],
+    "intents": {
+      "itc_classify": {
+        "order": [
+          "free"
+        ],
+        "fallback": "rules",
+        "preferLocalForShort": true,
+        "shortMessageChars": 240
+      },
+      "coding": {
+        "order": [
+          "free",
+          "openai_auth",
+          "claude_auth",
+          "grok_api",
+          "openai_api",
+          "claude_api"
+        ],
+        "allowPaid": true
+      },
+      "governance": {
+        "order": [
+          "claude_auth",
+          "claude_api"
+        ],
+        "allowPaid": true,
+        "maxTokensPerRequest": 768
+      },
+      "security": {
+        "order": [
+          "claude_auth",
+          "claude_api"
+        ],
+        "allowPaid": true,
+        "maxTokensPerRequest": 768
+      }
     }
   }
 }

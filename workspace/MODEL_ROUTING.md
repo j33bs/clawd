@@ -4,6 +4,28 @@ This document defines the contextual model selection rules for OpenClaw.
 
 ---
 
+## Policy Router (Canonical)
+
+All LLM calls must go through the policy router:
+
+- Router: `workspace/scripts/policy_router.py`
+- Policy file: `workspace/policy/llm_policy.json`
+- Router event log: `itc/llm_router_events.jsonl`
+
+Routing, escalation, budgets, and circuit breakers are enforced centrally by the router. Local overrides are not allowed.
+
+## Coding Ladder (Policy Enforced)
+
+After the free tier is exhausted or unavailable, coding intents must escalate in this exact order:
+
+1. OpenAI Auth (login, non-API)
+2. Claude Auth (login, non-API)
+3. Grok API
+4. OpenAI API
+5. Claude API
+
+Free tier is always attempted first (local + free APIs).
+
 ## Available Models
 
 | Model | Provider | Use Case | Cost | Context |
@@ -75,24 +97,26 @@ This document defines the contextual model selection rules for OpenClaw.
 
 ## Token Budgeting & Policy Enforcement
 
-OpenClaw enforces LLM budgets for pipeline classifiers to reduce token burn and avoid rate-limit failures.
+OpenClaw enforces LLM budgets for all intents via the policy router to reduce token burn and avoid rate-limit failures.
 
 **Policy file (canonical):**
 `workspace/policy/llm_policy.json`
 
 **Enforced by:**
-`scripts/itc_classify.py`
+`workspace/scripts/policy_router.py` (all LLM calls, including `scripts/itc_classify.py`)
 
 **Runtime budget state (not tracked):**
 `itc/llm_budget.json`
 
 ### What the policy controls
 - Provider enablement (paid vs free, local vs remote)
-- Routing order per task (e.g., `groq → qwen → ollama`)
+- Routing order per intent (including the coding ladder)
 - Prefer-local for short messages (default: ≤240 chars)
 - Per-provider max input size (chars) to reduce token use
-- Daily token budget and call budget
+- Per-request token caps
+- Daily token/call budgets per intent and per tier
 - Max LLM calls per run
+- Circuit breaker per provider/model (cooldown after failure threshold)
 
 ### Defaults (current)
 - `dailyTokenBudget`: 25,000 tokens
