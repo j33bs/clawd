@@ -19,12 +19,26 @@ Usage:
 
 import argparse
 import json
+import os
 import re
 import sys
 import time
 from pathlib import Path
 
-BASE_DIR = Path("C:/Users/heath/.openclaw")
+
+def _resolve_repo_root(start: Path):
+    current = start
+    for _ in range(8):
+        if (current / ".git").exists():
+            return current
+        current = current.parent
+    return None
+
+
+_env_root = os.environ.get("OPENCLAW_ROOT")
+_file_root = _resolve_repo_root(Path(__file__).resolve())
+_cwd_root = _resolve_repo_root(Path.cwd())
+BASE_DIR = Path(_env_root) if _env_root else (_file_root or _cwd_root or Path("C:/Users/heath/.openclaw"))
 CANON_IN = BASE_DIR / "itc" / "canon" / "messages.jsonl"
 TAGGED_OUT = BASE_DIR / "itc" / "tagged" / "messages.jsonl"
 EVENT_LOG = BASE_DIR / "itc" / "classify_events.jsonl"

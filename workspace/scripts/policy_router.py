@@ -14,7 +14,19 @@ try:
 except ImportError:
     requests = None
 
-BASE_DIR = Path("C:/Users/heath/.openclaw")
+def _resolve_repo_root(start: Path):
+    current = start
+    for _ in range(8):
+        if (current / ".git").exists():
+            return current
+        current = current.parent
+    return None
+
+
+_env_root = os.environ.get("OPENCLAW_ROOT")
+_file_root = _resolve_repo_root(Path(__file__).resolve())
+_cwd_root = _resolve_repo_root(Path.cwd())
+BASE_DIR = Path(_env_root) if _env_root else (_file_root or _cwd_root or Path("C:/Users/heath/.openclaw"))
 POLICY_FILE = BASE_DIR / "workspace" / "policy" / "llm_policy.json"
 BUDGET_FILE = BASE_DIR / "itc" / "llm_budget.json"
 CIRCUIT_FILE = BASE_DIR / "itc" / "llm_circuit.json"

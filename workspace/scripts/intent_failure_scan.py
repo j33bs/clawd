@@ -34,7 +34,7 @@ ERROR_PATTERNS = [
         "intent": "LLM response (Anthropic)",
         "fixes": [
             "Verify ANTHROPIC_API_KEY in secrets.env",
-            "Confirm Anthropic baseUrl and model ID",
+            "Confirm Anthropic baseUrl and model ID in workspace/policy/llm_policy.json",
             "Check network connectivity",
         ],
     },
@@ -43,7 +43,7 @@ ERROR_PATTERNS = [
         "match": re.compile(r"404 page not found|ollama_http_404", re.I),
         "intent": "LLM response (Ollama)",
         "fixes": [
-            "Ensure Ollama baseUrl ends with /v1",
+            "Ensure Ollama baseUrl is reachable (default http://localhost:11434)",
             "Start Ollama: `ollama serve`",
             "Confirm model pulled: `ollama list`",
         ],
@@ -53,9 +53,9 @@ ERROR_PATTERNS = [
         "match": re.compile(r"chat not found", re.I),
         "intent": "Telegram send",
         "fixes": [
-            "Start bot in DM or add to target group",
-            "Use correct chat ID from sessions_list",
-            "Verify bot token and allowlist",
+            "Start bot in DM or add to target group/channel",
+            "Use numeric chat IDs from `workspace/scripts/itc/telegram_list_dialogs.py`",
+            "Verify allowlist in credentials/telegram-allowFrom.json",
         ],
     },
 ]
@@ -64,6 +64,35 @@ SECRET_PATTERNS = [
     re.compile(r"sk-[A-Za-z0-9_-]{10,}"),
     re.compile(r"gsk_[A-Za-z0-9_-]{10,}"),
 ]
+ROUTER_EVENT_LOG = Path("itc/llm_router_events.jsonl")
+ROUTER_REASON_FIXES = {
+    "request_http_429": [
+        "Reduce prompt size or max input chars in policy",
+        "Lower per-run call caps or wait for rate limit reset",
+    ],
+    "request_http_404": [
+        "Verify provider baseUrl and model ID in workspace/policy/llm_policy.json",
+    ],
+    "request_timeout": [
+        "Check network connectivity and provider status",
+        "Increase timeout if consistently slow",
+    ],
+    "request_conn_error": [
+        "Check network connectivity and provider status",
+    ],
+    "missing_api_key": [
+        "Set the required API key env var in secrets.env",
+    ],
+    "auth_login_required": [
+        "Complete auth login and set OPENAI_AUTH_READY/CLAUDE_AUTH_READY",
+    ],
+    "ollama_unreachable": [
+        "Start Ollama: `ollama serve` and verify baseUrl",
+    ],
+    "request_token_cap_exceeded": [
+        "Lower prompt size or raise maxTokensPerRequest in policy",
+    ],
+}
 
 
 def redact(text: str) -> str:
@@ -121,6 +150,31 @@ def scan_files(files, max_errors):
     return findings
 
 
+def scan_router_events(path: Path):
+    counts = {}
+    total = 0
+    if not path.exists():
+        return {"total": 0, "by_reason": {}}
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            for line in f:
+                try:
+                    obj = json.loads(line)
+                except Exception:
+                    continue
+                if obj.get("event") not in ("router_fail", "router_escalate"):
+                    continue
+                detail = obj.get("detail", {})
+                reason = detail.get("reason_code")
+                if not reason:
+                    continue
+                counts[reason] = counts.get(reason, 0) + 1
+                total += 1
+    except Exception:
+        return {"total": 0, "by_reason": {}}
+    return {"total": total, "by_reason": counts}
+
+
 def format_report(findings):
     date = time.strftime("%Y-%m-%d", time.localtime())
     lines = [f"# Intent Failure Report {date}", "", "## Summary"]
@@ -135,6 +189,27 @@ def format_report(findings):
             lines.append(f"  - {k}: {v}")
     else:
         lines.append("- categories: none")
+
+    router_stats = scan_router_events(ROUTER_EVENT_LOG)
+    lines.append(f"- router_failures: {router_stats.get('total', 0)}")
+    if router_stats.get("by_reason"):
+        lines.append("- router_failure_reasons:")
+        for k, v in sorted(router_stats["by_reason"].items(), key=lambda x: -x[1]):
+            lines.append(f"  - {k}: {v}")
+    else:
+        lines.append("- router_failure_reasons: none")
+
+    lines.append("")
+    lines.append("## Router Failures")
+    if router_stats.get("total", 0) > 0:
+        for k, v in sorted(router_stats.get("by_reason", {}).items(), key=lambda x: -x[1]):
+            lines.append(f"- {k}: {v}")
+            fixes = ROUTER_REASON_FIXES.get(k, [])
+            if fixes:
+                for fix in fixes:
+                    lines.append(f"  - {fix}")
+    else:
+        lines.append("No router failures recorded.")
 
     lines.append("")
     lines.append("## Findings")

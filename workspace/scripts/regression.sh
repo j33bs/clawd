@@ -162,7 +162,7 @@ fi
 echo "[7/8] Checking optional provider env gating..."
 
 if [ -f "openclaw.json" ]; then
-    python - <<'PY'
+    python3 - <<'PY'
 import json
 import sys
 
