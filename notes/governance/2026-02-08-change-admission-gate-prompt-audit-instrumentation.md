@@ -1,15 +1,17 @@
 # Change Admission Gate Record — Prompt audit instrumentation
 
 ## Design brief
-- Add append-only prompt-size audit logging at the model invocation boundary (`core/model_call.js`) to record prompt component sizes and a stable hash without logging prompt content.
-- Add helper module `core/prompt_audit.js` and a minimal test `tests/prompt_audit.test.js`.
+- Expand append-only prompt-size audit logging at the model invocation boundary (`core/model_call.js`) to emit phase-based records (`embedded_prompt_before`, `before_call`, `embedded_attempt`) with size-only metadata and stable hash.
+- Keep logging content-free (sizes, booleans, hashes only), with non-fatal logging failure handling.
+- Add synthetic model-call audit coverage in `tests/model_call_prompt_audit.test.js`.
 - Scope is instrumentation only; no routing/provider behavior change.
 
 ## Evidence pack
+- `node tests/model_call_prompt_audit.test.js` passes.
 - `node tests/prompt_audit.test.js` passes.
 - `node tests/chain_budget.test.js` passes.
 - `node tests/chain_runner_smoke.test.js` passes.
-- Commit scope limited to prompt audit helper, model-call instrumentation, and test coverage.
+- Commit scope limited to model-call audit instrumentation and test coverage.
 
 ## Rollback plan
 - Revert this commit to remove prompt-audit instrumentation and test additions.

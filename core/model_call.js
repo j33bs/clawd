@@ -167,22 +167,22 @@ function getMetadataField(metadata, keys = []) {
 }
 
 function buildPromptAuditPayload({
+  phase,
   backend,
   model,
   messages,
-  metadata
+  metadata,
+  attempt = null
 }) {
   const safeMessages = Array.isArray(messages) ? messages : [];
   const parts = {
-    system: 0,
-    instruction: 0,
+    systemPrompt: 0,
+    userPrompt: 0,
     history: 0,
-    state: 0,
-    user: 0,
-    scratch: 0
+    historyCount: 0
   };
 
-  const userMessageLengths = [];
+  const userMessageIndexes = [];
   safeMessages.forEach((message) => {
     if (!message || typeof message.content !== 'string') {
       return;
@@ -191,34 +191,75 @@ function buildPromptAuditPayload({
     const role = String(message.role || 'user').toLowerCase();
 
     if (role === 'system') {
-      parts.system += length;
+      parts.systemPrompt += length;
       return;
     }
 
     if (role === 'user') {
-      parts.user += length;
-      userMessageLengths.push(length);
-      return;
-    }
-
-    if (role === 'tool' || role === 'function' || role === 'scratch') {
-      parts.scratch += length;
+      userMessageIndexes.push(parts.historyCount);
+      parts.history += length;
+      parts.historyCount += 1;
       return;
     }
 
     parts.history += length;
+    if (role === 'assistant' || role === 'tool' || role === 'function' || role === 'scratch') {
+      parts.historyCount += 1;
+    }
   });
 
-  if (userMessageLengths.length > 0) {
-    parts.instruction = userMessageLengths[userMessageLengths.length - 1];
-    parts.history += Math.max(0, parts.user - parts.instruction);
+  if (userMessageIndexes.length > 0) {
+    const latestUserIndex = userMessageIndexes[userMessageIndexes.length - 1];
+    let runningIndex = -1;
+    safeMessages.forEach((message) => {
+      if (!message || typeof message.content !== 'string') {
+        return;
+      }
+      const role = String(message.role || 'user').toLowerCase();
+      if (
+        role !== 'assistant' &&
+        role !== 'user' &&
+        role !== 'tool' &&
+        role !== 'function' &&
+        role !== 'scratch'
+      ) {
+        return;
+      }
+      runningIndex += 1;
+      if (runningIndex === latestUserIndex && role === 'user') {
+        const length = message.content.length;
+        parts.userPrompt = length;
+        parts.history = Math.max(0, parts.history - length);
+      }
+    });
   }
 
-  const stateValue = getMetadataField(metadata, ['stateSummary', 'state_summary', 'state']);
-  parts.state = sizeOfValue(stateValue);
-
-  const scratchValue = getMetadataField(metadata, ['scratch', 'trace', 'traceLog', 'trace_log']);
-  parts.scratch += sizeOfValue(scratchValue);
+  const projectContextSource = sizeOfValue(
+    getMetadataField(metadata, ['projectContext', 'project_context', 'projectContextChars'])
+  );
+  const nonProjectContextSource = sizeOfValue(
+    getMetadataField(metadata, [
+      'nonProjectContext',
+      'non_project_context',
+      'nonProjectContextChars'
+    ])
+  );
+  const projectIncludedRaw = getMetadataField(metadata, [
+    'projectContextIncluded',
+    'project_context_included'
+  ]);
+  const nonProjectIncludedRaw = getMetadataField(metadata, [
+    'nonProjectContextIncluded',
+    'non_project_context_included'
+  ]);
+  const projectContextIncluded =
+    typeof projectIncludedRaw === 'boolean' ? projectIncludedRaw : null;
+  const nonProjectContextIncluded =
+    typeof nonProjectIncludedRaw === 'boolean' ? nonProjectIncludedRaw : null;
+  const projectContextIncludedChars = projectContextIncluded === false ? 0 : projectContextSource;
+  const nonProjectContextIncludedChars =
+    nonProjectContextIncluded === false ? 0 : nonProjectContextSource;
+  const approxChars = parts.systemPrompt + parts.userPrompt + parts.history;
 
   const hashInput = safeMessages
     .map((message) => {
@@ -231,12 +272,30 @@ function buildPromptAuditPayload({
 
   return {
     ts: Date.now(),
+    phase: phase || 'before_call',
     backend,
     model: model || null,
-    approxChars: estimateMessagesChars(safeMessages),
-    parts,
+    approxChars,
+    parts: {
+      ...parts,
+      projectContextSource,
+      nonProjectContextSource,
+      projectContextIncluded,
+      nonProjectContextIncluded,
+      projectContextIncludedChars,
+      nonProjectContextIncludedChars
+    },
+    attempt,
     hash: hashPromptAudit(hashInput)
   };
+}
+
+function appendPromptAuditSafe(payload) {
+  try {
+    appendAudit(payload);
+  } catch (auditError) {
+    console.warn(`[prompt_audit] ${auditError.message}`);
+  }
 }
 
 function continuityStateSummary(metadata, taskId) {
@@ -673,23 +732,44 @@ async function callModel({
         provider.defaultModel ||
         provider.model ||
         null;
-      try {
-        const auditEntry = buildPromptAuditPayload({
+      appendPromptAuditSafe(
+        buildPromptAuditPayload({
+          phase: 'embedded_prompt_before',
           backend: selectedBackend,
           model: selectedModel,
           messages: outboundMessages,
-          metadata: safeMetadata
-        });
-        appendAudit(auditEntry);
-      } catch (auditError) {
-        console.warn(`[prompt_audit] ${auditError.message}`);
-      }
+          metadata: safeMetadata,
+          attempt: 'prepare'
+        })
+      );
+
+      appendPromptAuditSafe(
+        buildPromptAuditPayload({
+          phase: 'before_call',
+          backend: selectedBackend,
+          model: selectedModel,
+          messages: outboundMessages,
+          metadata: safeMetadata,
+          attempt: 'provider_call'
+        })
+      );
 
       const result = await provider.call({
         messages: outboundMessages,
         metadata: safeMetadata,
         allowNetwork: routePlan.allowNetwork
       });
+
+      appendPromptAuditSafe(
+        buildPromptAuditPayload({
+          phase: 'embedded_attempt',
+          backend: selectedBackend,
+          model: selectedModel,
+          messages: outboundMessages,
+          metadata: safeMetadata,
+          attempt: 'success'
+        })
+      );
 
       return {
         backend: selectedBackend,
@@ -701,6 +781,24 @@ async function callModel({
         events
       };
     } catch (error) {
+      const selectedModel =
+        safeMetadata.model ||
+        safeMetadata.modelId ||
+        safeMetadata.model_id ||
+        provider.defaultModel ||
+        provider.model ||
+        null;
+      appendPromptAuditSafe(
+        buildPromptAuditPayload({
+          phase: 'embedded_attempt',
+          backend: selectedBackend || backend,
+          model: selectedModel,
+          messages: outboundMessages,
+          metadata: safeMetadata,
+          attempt: 'error'
+        })
+      );
+
       if (router.isLocalBackend(backend) && continuityOverflowError(error)) {
         if (!continuityOverflowLogged) {
           continuityOverflowLogged = true;
