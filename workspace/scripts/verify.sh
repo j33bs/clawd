@@ -115,6 +115,17 @@ else
     check_fail "verify_llm_policy.sh missing or not executable"
 fi
 
+echo "[Step 9] Checking intent-failure scan..."
+if [ -x "workspace/scripts/verify_intent_failure_scan.sh" ]; then
+    if ./workspace/scripts/verify_intent_failure_scan.sh; then
+        check_pass
+    else
+        check_fail "Intent-failure scan verification failed"
+    fi
+else
+    check_fail "verify_intent_failure_scan.sh missing or not executable"
+fi
+
 # ============================================
 # SUMMARY
 # ============================================
