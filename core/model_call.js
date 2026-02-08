@@ -8,6 +8,14 @@ const {
   estimateMessagesChars
 } = require('./continuity_prompt');
 const { appendAudit, hash: hashPromptAudit } = require('./prompt_audit');
+const {
+  DEFAULT_MAX_CONSTITUTION_CHARS,
+  DEFAULT_CONSTITUTION_SOURCE_PATH,
+  DEFAULT_SUPPORTING_SOURCE_PATHS,
+  loadConstitutionSources,
+  buildConstitutionAuditRecord,
+  appendConstitutionAudit
+} = require('./constitution_instantiation');
 
 const LOCAL_INTENT_ALLOWLIST = new Set([
   'route',
@@ -665,6 +673,14 @@ function appendPromptAuditSafe(payload) {
   }
 }
 
+function appendConstitutionAuditSafe(payload) {
+  try {
+    appendConstitutionAudit(payload);
+  } catch (auditError) {
+    console.warn(`[constitution_audit] ${auditError.message}`);
+  }
+}
+
 function continuityStateSummary(metadata, taskId) {
   if (metadata && typeof metadata === 'object') {
     const summary = metadata.stateSummary || metadata.state_summary || metadata.state;
@@ -744,6 +760,35 @@ async function callModel({
   const safeTaskId = taskId || generateTaskId();
   const safeMessages = Array.isArray(messages) ? messages : [];
   const safeMetadata = metadata && typeof metadata === 'object' ? { ...metadata } : {};
+  const constitutionMaxChars = Number(process.env.OPENCLAW_CONSTITUTION_MAX_CHARS || DEFAULT_MAX_CONSTITUTION_CHARS);
+
+  try {
+    const constitution = loadConstitutionSources({
+      sourcePath: DEFAULT_CONSTITUTION_SOURCE_PATH,
+      supportingPaths: DEFAULT_SUPPORTING_SOURCE_PATHS,
+      maxChars: Number.isFinite(constitutionMaxChars) ? constitutionMaxChars : DEFAULT_MAX_CONSTITUTION_CHARS
+    });
+    appendConstitutionAuditSafe(
+      buildConstitutionAuditRecord({
+        phase: 'constitution_instantiated',
+        runId: safeTaskId,
+        constitution
+      })
+    );
+  } catch (error) {
+    appendConstitutionAuditSafe({
+      ts: Date.now(),
+      phase: 'constitution_instantiated',
+      runId: safeTaskId,
+      sha256: null,
+      approxChars: 0,
+      truncated: false,
+      sourceCount: 0,
+      sources: [],
+      loadError: true,
+      errorCode: error && error.code ? String(error.code) : 'CONSTITUTION_LOAD_FAILED'
+    });
+  }
 
   const routePlan = router.buildRoutePlan({
     taskClass,
