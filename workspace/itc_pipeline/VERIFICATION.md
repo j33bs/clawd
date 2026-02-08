@@ -107,6 +107,11 @@ Or add to `secrets.env`:
 ALLOWED_CHAT_IDS=-1001234567890,-1009876543210,-1001122334455
 ```
 
+Exact example (verified chat IDs):
+```
+ALLOWED_CHAT_IDS=-1001369282532,-1001700695156,-1002117631304,-1001445373305
+```
+
 ---
 
 ## Verification Tests
