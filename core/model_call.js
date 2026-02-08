@@ -1,3 +1,4 @@
+const path = require('path');
 const { BACKENDS, ERROR_CODES } = require('./model_constants');
 const { normalizeProviderError } = require('./normalize_error');
 const { createModelRuntime } = require('./model_runtime');
@@ -13,6 +14,7 @@ const {
   DEFAULT_CONSTITUTION_SOURCE_PATH,
   DEFAULT_SUPPORTING_SOURCE_PATHS,
   loadConstitutionSources,
+  buildConstitutionBlock,
   buildConstitutionAuditRecord,
   appendConstitutionAudit
 } = require('./constitution_instantiation');
@@ -39,6 +41,8 @@ const STRICT_MAX_HISTORY_CHARS = 4000;
 const CONTEXT_WINDOW_PRECHECK_RATIO = 0.9;
 const CONTROLLED_PROMPT_BLOCK_MESSAGE =
   "Context trimmed to safe limits. Please send 'continue' to proceed.";
+const CONTROLLED_CONSTITUTION_UNAVAILABLE_MESSAGE =
+  'Constitution unavailable; refusing to run to preserve governance integrity.';
 const UNTRUSTED_CONTEXT_PATTERNS = [
   /chain_trace\.jsonl/i,
   /gateway\.log/i,
@@ -231,6 +235,25 @@ function normalizeMessageRole(role) {
     return normalized;
   }
   return 'user';
+}
+
+function envFlagEnabled(name) {
+  return String(process.env[name] || '')
+    .trim()
+    .toLowerCase() === '1';
+}
+
+function parseConstitutionSupportingPaths(value) {
+  if (value == null || value === '') {
+    return DEFAULT_SUPPORTING_SOURCE_PATHS;
+  }
+
+  const parsed = String(value)
+    .split(path.delimiter)
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+
+  return parsed.length > 0 ? parsed : DEFAULT_SUPPORTING_SOURCE_PATHS;
 }
 
 function computePromptParts(messages = []) {
@@ -760,22 +783,31 @@ async function callModel({
   const safeTaskId = taskId || generateTaskId();
   const safeMessages = Array.isArray(messages) ? messages : [];
   const safeMetadata = metadata && typeof metadata === 'object' ? { ...metadata } : {};
+  const constitutionEnforced = envFlagEnabled('OPENCLAW_CONSTITUTION_ENFORCE');
   const constitutionMaxChars = Number(process.env.OPENCLAW_CONSTITUTION_MAX_CHARS || DEFAULT_MAX_CONSTITUTION_CHARS);
+  const constitutionSourcePath =
+    process.env.OPENCLAW_CONSTITUTION_SOURCE_PATH || DEFAULT_CONSTITUTION_SOURCE_PATH;
+  const constitutionSupportingPaths = parseConstitutionSupportingPaths(
+    process.env.OPENCLAW_CONSTITUTION_SUPPORTING_PATHS
+  );
+  let constitutionSnapshot = null;
+  let constitutionLoadError = null;
 
   try {
-    const constitution = loadConstitutionSources({
-      sourcePath: DEFAULT_CONSTITUTION_SOURCE_PATH,
-      supportingPaths: DEFAULT_SUPPORTING_SOURCE_PATHS,
+    constitutionSnapshot = loadConstitutionSources({
+      sourcePath: constitutionSourcePath,
+      supportingPaths: constitutionSupportingPaths,
       maxChars: Number.isFinite(constitutionMaxChars) ? constitutionMaxChars : DEFAULT_MAX_CONSTITUTION_CHARS
     });
     appendConstitutionAuditSafe(
       buildConstitutionAuditRecord({
         phase: 'constitution_instantiated',
         runId: safeTaskId,
-        constitution
+        constitution: constitutionSnapshot
       })
     );
   } catch (error) {
+    constitutionLoadError = error;
     appendConstitutionAuditSafe({
       ts: Date.now(),
       phase: 'constitution_instantiated',
@@ -1071,6 +1103,84 @@ async function callModel({
     let outboundMessages = safeMessages;
     const droppedUntrusted = dropUntrustedMessages(outboundMessages);
     outboundMessages = droppedUntrusted.messages;
+
+    if (constitutionEnforced) {
+      if (constitutionLoadError || !constitutionSnapshot || !constitutionSnapshot.text) {
+        appendConstitutionAuditSafe({
+          ts: Date.now(),
+          phase: 'constitution_enforced',
+          runId: safeTaskId,
+          sha256: constitutionSnapshot && constitutionSnapshot.sha256 ? constitutionSnapshot.sha256 : null,
+          approxChars:
+            constitutionSnapshot && typeof constitutionSnapshot.approxChars === 'number'
+              ? constitutionSnapshot.approxChars
+              : 0,
+          truncated: Boolean(constitutionSnapshot && constitutionSnapshot.truncated),
+          sourceCount:
+            constitutionSnapshot && Array.isArray(constitutionSnapshot.sources)
+              ? constitutionSnapshot.sources.length
+              : 0,
+          sources:
+            constitutionSnapshot && Array.isArray(constitutionSnapshot.sources)
+              ? constitutionSnapshot.sources
+              : [],
+          included: false,
+          includedChars: 0,
+          enforceActive: true,
+          errorCode:
+            constitutionLoadError && constitutionLoadError.code
+              ? String(constitutionLoadError.code)
+              : 'CONSTITUTION_LOAD_FAILED'
+        });
+
+        await emitFallbackEvent({
+          event_type: 'BACKEND_ERROR',
+          task_id: safeTaskId,
+          task_class: routePlan.taskClass,
+          from_backend: selectedBackend || backend,
+          to_backend: selectedBackend || backend,
+          trigger_code: ERROR_CODES.UNKNOWN,
+          provider_error_code: 'constitution_unavailable',
+          network_used: router.networkUsedForBackend(selectedBackend || backend),
+          timestamp: timestampIso(),
+          rationale: 'constitution_unavailable_blocked',
+          metadata: {
+            enforce_active: true
+          }
+        });
+
+        return {
+          backend: selectedBackend || backend,
+          response: {
+            text: CONTROLLED_CONSTITUTION_UNAVAILABLE_MESSAGE,
+            raw: {
+              controlled: true,
+              reason: 'CONSTITUTION_UNAVAILABLE'
+            }
+          },
+          usage: null,
+          events
+        };
+      }
+
+      const constitutionBlock = buildConstitutionBlock({
+        text: constitutionSnapshot.text,
+        sha256: constitutionSnapshot.sha256,
+        truncated: constitutionSnapshot.truncated
+      });
+      outboundMessages = [{ role: 'system', content: constitutionBlock }, ...outboundMessages];
+
+      appendConstitutionAuditSafe({
+        ...buildConstitutionAuditRecord({
+          phase: 'constitution_enforced',
+          runId: safeTaskId,
+          constitution: constitutionSnapshot
+        }),
+        included: true,
+        includedChars: constitutionBlock.length,
+        enforceActive: true
+      });
+    }
 
     if (router.isLocalBackend(selectedBackend)) {
       const parts = splitContinuityParts(outboundMessages);
