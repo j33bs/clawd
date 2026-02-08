@@ -13,21 +13,27 @@ $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repoRoot = (Resolve-Path (Join-Path $scriptDir '..')).Path
 $target = Join-Path $repoRoot 'workspace/scripts/intent_failure_scan.py'
 
-if (Get-Command python -ErrorAction SilentlyContinue) {
-  & python $target --stdout
+if (Get-Command py -ErrorAction SilentlyContinue) {
+  $ver = (& py -3 --version 2>&1)
+  Write-Host "Interpreter: $ver (py -3)"
+  & py -3 $target --stdout
   exit $LASTEXITCODE
 }
 
-if (Get-Command py -ErrorAction SilentlyContinue) {
-  & py -3 $target --stdout
+if (Get-Command python -ErrorAction SilentlyContinue) {
+  $ver = (& python --version 2>&1)
+  Write-Host "Interpreter: $ver (python)"
+  & python $target --stdout
   exit $LASTEXITCODE
 }
 
 if (Get-Command wsl.exe -ErrorAction SilentlyContinue) {
   $linuxTarget = Convert-ToWslPath $target
+  $ver = (& wsl.exe sh -lc "python3 --version" 2>&1)
+  Write-Host "Interpreter: $ver (wsl python3)"
   & wsl.exe python3 $linuxTarget --stdout
   exit $LASTEXITCODE
 }
 
-Write-Error 'No Python runtime found (python, py, or wsl.exe).'
+Write-Error 'No Python runtime found. Install Python and ensure `py` or `python` is on PATH.'
 exit 127
