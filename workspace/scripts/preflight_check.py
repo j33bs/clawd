@@ -46,6 +46,10 @@ except Exception:
     resolve_allowlist = None
     AllowlistConfigError = None
 
+ALLOWLIST_EXAMPLE = (
+    "ALLOWED_CHAT_IDS=-1001369282532,-1001700695156,-1002117631304,-1001445373305"
+)
+
 
 def fail(msg, fixes, failures):
     failures.append({"msg": msg, "fixes": fixes})
@@ -119,10 +123,12 @@ def check_telegram(failures, warnings):
         return
 
     try:
-        allowlist, source, invalid = resolve_allowlist()
+        allowlist, source, invalid, warnings_list = resolve_allowlist()
     except AllowlistConfigError as exc:
         fail(str(exc), ["Fix allowlist configuration and retry"], failures)
         return
+    for warning in warnings_list:
+        warn(warning, warnings)
 
     if invalid:
         fail(
@@ -138,11 +144,11 @@ def check_telegram(failures, warnings):
     if not allowlist:
         fail(
             "telegram_not_configured: No allowed Telegram chat IDs configured. "
-            "Set ALLOWED_CHAT_IDS or edit credentials/telegram-allowFrom.json. "
-            "Example: ALLOWED_CHAT_IDS=-1001234567890,-1009876543210",
+            "Set ALLOWED_CHAT_IDS or add allow_chat_ids to credentials/telegram-allowFrom.json. "
+            f"Example: {ALLOWLIST_EXAMPLE}",
             [
                 "Set ALLOWED_CHAT_IDS env var",
-                "Or update credentials/telegram-allowFrom.json",
+                "Or update credentials/telegram-allowFrom.json (allow_chat_ids)",
             ],
             failures,
         )

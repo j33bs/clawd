@@ -45,7 +45,7 @@ from itc_pipeline.ingestion_boundary import (
     initialize_ingestion,
     get_dedupe_store
 )
-from itc_pipeline.allowlist import require_allowlist, AllowlistConfigError
+from itc_pipeline.allowlist import require_allowlist, AllowlistConfigError, ChatNotAllowedError
 
 logger = logging.getLogger(__name__)
 
@@ -206,6 +206,8 @@ async def run_ingestion(dry_run: bool = False):
             msg = normalize_message(event)
             if msg is None:
                 return
+            if msg.chat_id not in allowlist:
+                raise ChatNotAllowedError(msg.chat_id, msg.chat_title)
 
             # Forward to ingestion boundary (handles allowlist, dedupe)
             ingest_message(msg, dry_run=dry_run)

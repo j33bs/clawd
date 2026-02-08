@@ -54,7 +54,7 @@ ERROR_PATTERNS = [
         "intent": "Telegram config",
         "fixes": [
             "Set ALLOWED_CHAT_IDS env var with numeric chat IDs",
-            "Or update credentials/telegram-allowFrom.json",
+            "Or update credentials/telegram-allowFrom.json with allow_chat_ids",
             "Run workspace/scripts/itc/telegram_list_dialogs.py to discover IDs",
         ],
     },

@@ -9,6 +9,8 @@ Only messages from explicitly allowed chat IDs pass through.
 Configuration:
 - Environment variable ALLOWED_CHAT_IDS (comma-separated integers)
 - Or credentials/telegram-allowFrom.json (fallback)
+- Preferred JSON key: allow_chat_ids (array of ints)
+- Legacy JSON key: allowFrom (array, parsed as ints with warning)
 - Or direct configuration via ALLOWED_CHAT_IDS_DEFAULT constant (last resort)
 
 Target chats (by numeric ID - must be discovered via telegram_list_dialogs.py):
@@ -82,20 +84,34 @@ def _parse_ids(values: List[str], source_label: str) -> Tuple[Set[int], List[str
     return allowed, invalid
 
 
-def _load_allowlist_from_file(path: Path) -> Tuple[Set[int], List[str]]:
+def _load_allowlist_from_file(path: Path) -> Tuple[Set[int], List[str], str, List[str]]:
     if not path.exists():
-        return set(), []
+        return set(), [], "missing", []
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except Exception as exc:
         raise AllowlistConfigError(f"Allowlist file invalid JSON: {path} ({exc})")
-    values = data.get("allowFrom", [])
-    if not isinstance(values, list):
-        raise AllowlistConfigError(f"Allowlist file missing allowFrom list: {path}")
-    return _parse_ids(values, f"{path.name}")
+    warnings: List[str] = []
+    if "allow_chat_ids" in data:
+        values = data.get("allow_chat_ids", [])
+        if not isinstance(values, list):
+            raise AllowlistConfigError(f"allow_chat_ids must be a list in {path}")
+        allowed, invalid = _parse_ids(values, "allow_chat_ids")
+        return allowed, invalid, "allow_chat_ids", warnings
+    if "allowFrom" in data:
+        values = data.get("allowFrom", [])
+        if not isinstance(values, list):
+            raise AllowlistConfigError(f"allowFrom must be a list in {path}")
+        warnings.append(
+            "Legacy allowFrom detected in credentials/telegram-allowFrom.json. "
+            "Please migrate to allow_chat_ids."
+        )
+        allowed, invalid = _parse_ids(values, "allowFrom")
+        return allowed, invalid, "allowFrom", warnings
+    return set(), [], "missing", warnings
 
 
-def resolve_allowlist() -> Tuple[Set[int], str, List[str]]:
+def resolve_allowlist() -> Tuple[Set[int], str, List[str], List[str]]:
     """
     Resolve the allowlist with precedence:
     1) ALLOWED_CHAT_IDS env var (if set)
@@ -109,14 +125,14 @@ def resolve_allowlist() -> Tuple[Set[int], str, List[str]]:
     if env_value:
         parts = [p.strip() for p in env_value.split(",") if p.strip()]
         allowed, invalid = _parse_ids(parts, "ALLOWED_CHAT_IDS")
-        return allowed, "env", invalid
+        return allowed, "env", invalid, []
 
     path = Path(os.environ.get("OPENCLAW_ALLOWLIST_PATH", str(ALLOWLIST_FILE_DEFAULT)))
-    allowed, invalid = _load_allowlist_from_file(path)
+    allowed, invalid, source_key, warnings = _load_allowlist_from_file(path)
     if allowed or invalid or path.exists():
-        return allowed, "credentials", invalid
+        return allowed, f"credentials:{source_key}", invalid, warnings
 
-    return ALLOWED_CHAT_IDS_DEFAULT.copy(), "default", []
+    return ALLOWED_CHAT_IDS_DEFAULT.copy(), "default", [], []
 
 
 def load_allowlist_from_env() -> Set[int]:
@@ -128,7 +144,9 @@ def load_allowlist_from_env() -> Set[int]:
         Set of allowed chat IDs as integers.
         Falls back to ALLOWED_CHAT_IDS_DEFAULT if no config found.
     """
-    allowed, source, invalid = resolve_allowlist()
+    allowed, source, invalid, warnings = resolve_allowlist()
+    for warning in warnings:
+        logger.warning(warning)
     if invalid:
         raise AllowlistConfigError(
             f"Invalid chat_id entries in allowlist ({source}): {invalid}"
@@ -143,7 +161,9 @@ def load_allowlist_from_env() -> Set[int]:
 
 def require_allowlist() -> Set[int]:
     """Load allowlist and fail fast if missing/invalid."""
-    allowed, source, invalid = resolve_allowlist()
+    allowed, source, invalid, warnings = resolve_allowlist()
+    for warning in warnings:
+        logger.warning(warning)
     if invalid:
         raise AllowlistConfigError(
             f"Invalid chat_id entries in allowlist ({source}): {invalid}"
@@ -151,8 +171,7 @@ def require_allowlist() -> Set[int]:
     if not allowed:
         raise AllowlistConfigError(
             "No allowed Telegram chat IDs configured. "
-            "Set ALLOWED_CHAT_IDS or edit credentials/telegram-allowFrom.json. "
-            "Example: ALLOWED_CHAT_IDS=-1001234567890,-1009876543210"
+            "Set ALLOWED_CHAT_IDS or add allow_chat_ids to credentials/telegram-allowFrom.json."
         )
     return allowed
 
@@ -234,7 +253,7 @@ def log_allowlist_on_startup():
     Log the current allowlist configuration on startup.
     Call this when starting the ingestion process.
     """
-    allowlist, source, invalid = resolve_allowlist()
+    allowlist, source, invalid, warnings = resolve_allowlist()
 
     logger.info("=" * 60)
     logger.info("ITC Pipeline - Allowlist Configuration")
@@ -247,6 +266,8 @@ def log_allowlist_on_startup():
 
     if invalid:
         logger.error(f"Invalid allowlist entries: {invalid}")
+    for warning in warnings:
+        logger.warning(warning)
 
     if not allowlist:
         logger.warning(
