@@ -112,6 +112,25 @@ Exact example (verified chat IDs):
 ALLOWED_CHAT_IDS=-1001369282532,-1001700695156,-1002117631304,-1001445373305
 ```
 
+Windows PowerShell (interactive):
+```powershell
+$ids = Read-Host "Enter ALLOWED_CHAT_IDS"
+$env:ALLOWED_CHAT_IDS = $ids
+```
+
+Windows PowerShell (persist):
+```powershell
+setx ALLOWED_CHAT_IDS "-1001369282532,-1001700695156,-1002117631304,-1001445373305"
+```
+
+JSON allowlist example (`credentials/telegram-allowFrom.json`):
+```json
+{
+  "version": 1,
+  "allow_chat_ids": [-1001369282532, -1001700695156, -1002117631304, -1001445373305]
+}
+```
+
 ---
 
 ## Verification Tests
