@@ -78,6 +78,16 @@ ERROR_PATTERNS = [
             "Verify allowlist in credentials/telegram-allowFrom.json",
         ],
     },
+    {
+        "id": "openclaw_status_unavailable",
+        "match": re.compile(r"openclaw_status_unavailable", re.I),
+        "intent": "OpenClaw status check",
+        "fixes": [
+            "Ensure `openclaw` CLI is installed and on PATH",
+            "Retry `openclaw status` without --deep if it hangs",
+            "Check repo state/config if status commands are slow",
+        ],
+    },
 ]
 
 SECRET_PATTERNS = [
