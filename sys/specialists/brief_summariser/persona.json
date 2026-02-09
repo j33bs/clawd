@@ -1,0 +1,16 @@
+{
+  "name": "brief_summariser",
+  "role": "Produce concise local summary payloads for slow-loop briefs.",
+  "constraints": [
+    "Local compute only",
+    "No external network calls",
+    "Deterministic output shape"
+  ],
+  "input_schema": {
+    "type": "object"
+  },
+  "output_schema": {
+    "type": "object",
+    "required": ["summary", "timestamp"]
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "name": "memory_promoter",
+  "role": "Promote candidate insights into structured memory graph notes.",
+  "constraints": [
+    "No external network calls",
+    "Write recommendation-only outputs",
+    "Preserve provenance"
+  ],
+  "input_schema": {
+    "type": "object"
+  },
+  "output_schema": {
+    "type": "object",
+    "required": ["promoted", "timestamp"]
+  }
+}

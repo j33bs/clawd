@@ -1,22 +1,11 @@
 'use strict';
 
-function createScheduler() {
-  return {
-    enqueue() {
-      return {
-        queued: true,
-        id: 'scaffold-task'
-      };
-    },
-    runOnce() {
-      return {
-        ran: false,
-        reason: 'scheduler scaffold (commit 1)'
-      };
-    }
-  };
-}
+const { createQueueStore, nowIso } = require('./queue_store');
+const { createScheduler, plusSeconds } = require('./scheduler');
 
 module.exports = {
-  createScheduler
+  createQueueStore,
+  createScheduler,
+  plusSeconds,
+  nowIso
 };
