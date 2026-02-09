@@ -128,3 +128,6 @@ workspace/operator_transfer_brief.md
 # ============================================
 .claude/settings.local.json
 .claude/plans/
+
+# Run artifacts (do not commit)
+economics/
