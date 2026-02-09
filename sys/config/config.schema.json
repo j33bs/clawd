@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "System Evolution Config",
+  "type": "object",
+  "required": [
+    "feature_flags",
+    "paths",
+    "models",
+    "scheduler",
+    "evolution",
+    "knowledge"
+  ],
+  "properties": {
+    "feature_flags": {
+      "type": "object",
+      "required": [
+        "system_evolution_enabled",
+        "semantic_graph_enabled",
+        "renderer_enabled",
+        "scheduler_enabled",
+        "maintenance_enabled",
+        "breath_module_enabled"
+      ],
+      "properties": {
+        "system_evolution_enabled": { "type": "boolean" },
+        "semantic_graph_enabled": { "type": "boolean" },
+        "renderer_enabled": { "type": "boolean" },
+        "scheduler_enabled": { "type": "boolean" },
+        "maintenance_enabled": { "type": "boolean" },
+        "breath_module_enabled": { "type": "boolean" }
+      }
+    },
+    "paths": {
+      "type": "object",
+      "required": ["root", "state_dir", "templates_dir", "log_dir"],
+      "properties": {
+        "root": { "type": "string" },
+        "state_dir": { "type": "string" },
+        "templates_dir": { "type": "string" },
+        "log_dir": { "type": "string" }
+      }
+    },
+    "models": {
+      "type": "object",
+      "required": ["default"],
+      "properties": {
+        "default": { "type": "string" }
+      }
+    },
+    "scheduler": {
+      "type": "object",
+      "required": ["tick_seconds", "max_concurrency"],
+      "properties": {
+        "tick_seconds": { "type": "number" },
+        "max_concurrency": { "type": "number" }
+      }
+    },
+    "evolution": {
+      "type": "object",
+      "required": ["mode", "enable_hot_reload"],
+      "properties": {
+        "mode": { "type": "string" },
+        "enable_hot_reload": { "type": "boolean" }
+      }
+    },
+    "knowledge": {
+      "type": "object",
+      "required": ["breath"],
+      "properties": {
+        "breath": {
+          "type": "object",
+          "required": ["evidence_manifest"],
+          "properties": {
+            "evidence_manifest": { "type": "string" }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,27 @@
+[feature_flags]
+system_evolution_enabled = false
+semantic_graph_enabled = false
+renderer_enabled = false
+scheduler_enabled = false
+maintenance_enabled = false
+breath_module_enabled = false
+
+[paths]
+root = "."
+state_dir = "sys/state"
+templates_dir = "sys/templates"
+log_dir = "logs"
+
+[models]
+default = "openai/gpt-5-chat-latest"
+
+[scheduler]
+tick_seconds = 300
+max_concurrency = 1
+
+[evolution]
+mode = "prototype"
+enable_hot_reload = true
+
+[knowledge.breath]
+evidence_manifest = "sys/knowledge/breath/evidence/manifest.json"
