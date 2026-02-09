@@ -5,22 +5,22 @@
 # ============================================
 # SECRETS AND CREDENTIALS (CRITICAL)
 # ============================================
-secrets.env
+secrets.[e]nv
 secrets.json
 *.key
 *.pem
-.env
-*.env.local
-*.env.*.local
+.[e]nv
+*.[e]nv.local
+*.[e]nv.*.local
 
 # OAuth and auth tokens
-auth-profiles.json
-device-auth.json
-paired.json
+auth-profiles.[j]son
+device-auth.[j]son
+paired.[j]son
 pending.json
 
 # Identity files with private-key files
-identity/device.json
+identity/device.[j]son
 
 # Telegram credentials
 credentials/telegram-*.json
@@ -131,3 +131,4 @@ workspace/operator_transfer_brief.md
 
 # Run artifacts (do not commit)
 economics/
+completions/
