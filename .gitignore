@@ -28,6 +28,7 @@ __pycache__/
 .quarantine2/
 
 logs/
+sys/state/
 
 # Vendor runtime artifacts (non-canonical)
 notes/vendor_runtime/**

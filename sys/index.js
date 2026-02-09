@@ -6,6 +6,7 @@ const render = require('./render');
 const scheduler = require('./scheduler');
 const maintenance = require('./maintenance');
 const breath = require('./knowledge/breath');
+const utils = require('./utils/migration_log');
 
 module.exports = {
   config,
@@ -13,5 +14,6 @@ module.exports = {
   render,
   scheduler,
   maintenance,
-  breath
+  breath,
+  utils
 };
