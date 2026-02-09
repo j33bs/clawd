@@ -22,3 +22,11 @@ Leave feature flags off to disable the new prototype paths. Revert latest subsys
 
 ## post-mortem
 If regressions occur, record root cause, affected subsystem, and rollback SHA before re-attempting the phase.
+
+## lint governance substitute (temporary)
+- This repository is Node-first, so Pylint is not applicable for this workstream.
+- Substitute requirement: enforce the following gates until ESLint (or equivalent) is introduced:
+  - `node scripts/verify_model_routing.js`
+  - `node tests/sys_acceptance.test.js`
+  - `node scripts/sys_evolution_self_test.js`
+- Review date: 2026-03-15.

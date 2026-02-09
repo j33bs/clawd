@@ -22,3 +22,11 @@ Do not enable feature flags; scaffold remains inert relative to existing workflo
 
 ## post-mortem
 Capture failing command output and file-level diff if scaffold tests regress.
+
+## lint governance substitute (temporary)
+- Node-first repo: Pylint requirement is not applicable.
+- Mandatory substitute gates until ESLint (or equivalent) lands:
+  - `node scripts/verify_model_routing.js`
+  - `node tests/sys_acceptance.test.js`
+  - `node scripts/sys_evolution_self_test.js`
+- Review date: 2026-03-15.
