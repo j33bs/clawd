@@ -1,0 +1,16 @@
+{
+  "sources": [
+    {
+      "id": "breath-hrv-2025-01",
+      "title": "HRV coherence training in controlled breathing",
+      "year": 2025,
+      "venue": "Local Notes",
+      "local_path": "notes/research/breath/hrv_coherence_2025.pdf",
+      "notes": "Pilot local summary",
+      "claims": [
+        "Participants improved coherence score under paced breathing protocols.",
+        "Nasal breathing adherence correlated with calmer subjective ratings."
+      ]
+    }
+  ]
+}
