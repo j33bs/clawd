@@ -28,6 +28,7 @@ Usage:
 import json
 import time
 import os
+import sys
 import argparse
 from pathlib import Path
 from datetime import datetime, timezone
@@ -39,6 +40,14 @@ except ImportError:
     raise SystemExit(1)
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from core_infra.regime_detector import detect_regime
+from core_infra.volatility_metrics import compute_volatility
+from core_infra.channel_scoring import load_channel_scores
+from core_infra.strategy_blender import blend_signals
+from core_infra.econ_log import append_jsonl
 BASE_DIR = REPO_ROOT
 DEFAULT_CONFIG_PATH = REPO_ROOT / "pipelines" / "system1_trading.yaml"
 DEFAULT_FEATURES_CONFIG_PATH = REPO_ROOT / "pipelines" / "system1_trading.features.yaml"
@@ -138,6 +147,12 @@ def get_feature_params(cfg):
     if not isinstance(params, dict):
         params = {}
     return deep_merge(DEFAULT_FEATURE_PARAMS, params)
+
+
+def _econ_log(enabled, path, obj):
+    if not enabled:
+        return
+    append_jsonl(path, obj)
 
 
 def load_candles(symbols, candle_file):
@@ -427,6 +442,20 @@ def run(sim_filter=None, full=False, config_path=None, features_path=None):
         return
 
     config = load_config(config_path, features_path)
+    feature_params = get_feature_params(config)
+    f_regime = get_feature(config, "regime_detector")
+    f_vol = get_feature(config, "volatility_metrics")
+    f_chan = get_feature(config, "channel_scoring")
+    f_blend = get_feature(config, "strategy_blender")
+    f_log = get_feature(config, "econ_logging")
+    econ_path = os.path.join("economics", "observe.jsonl")
+    meta_features = {
+        "regime_detector": f_regime,
+        "volatility_metrics": f_vol,
+        "channel_scoring": f_chan,
+        "strategy_blender": f_blend,
+        "econ_logging": f_log,
+    }
 
     sims_cfg = config["sims"]
     if sim_filter:
@@ -509,6 +538,55 @@ def run(sim_filter=None, full=False, config_path=None, features_path=None):
                     sim.last_ts = max(sim.last_ts, bar["ts"])
 
         sim.save()
+
+        if f_regime or f_vol or f_chan or f_blend:
+            ts_iso = datetime.now(timezone.utc).isoformat()
+
+            if f_chan:
+                score_path = os.path.join("itc", "channel_scores.json")
+                scores = load_channel_scores(score_path, defaults=None)
+                _econ_log(f_log, econ_path, {
+                    "ts": ts_iso,
+                    "sim": sim.id,
+                    "type": "channel_scores",
+                    "payload": {
+                        "channels": list(scores.keys()),
+                        "weights": scores,
+                    },
+                    "meta": {"features": meta_features},
+                })
+
+            for symbol in sim.universe:
+                bars = candles_15m.get(symbol, [])
+
+                if f_regime:
+                    prices = [b.get("c") for b in bars]
+                    regime_out = detect_regime(prices, feature_params.get("regime_detector", {}))
+                    _econ_log(f_log, econ_path, {
+                        "ts": ts_iso,
+                        "sim": sim.id,
+                        "symbol": symbol,
+                        "type": "regime",
+                        "payload": regime_out,
+                        "meta": {"features": meta_features},
+                    })
+
+                if f_vol:
+                    vol_out = compute_volatility(
+                        candles=bars,
+                        prices=None,
+                        params=feature_params.get("volatility_metrics", {}),
+                    )
+                    _econ_log(f_log, econ_path, {
+                        "ts": ts_iso,
+                        "sim": sim.id,
+                        "symbol": symbol,
+                        "type": "volatility",
+                        "payload": vol_out,
+                        "meta": {"features": meta_features},
+                    })
+
+            # Blender demo intentionally skipped unless a clean signal list exists.
 
         pnl = sim.equity - sim.initial_capital
         pnl_pct = (pnl / sim.initial_capital) * 100
