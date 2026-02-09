@@ -1,0 +1,16 @@
+{
+  "name": "maintenance_runner",
+  "role": "Execute low-frequency maintenance quick-fix checks.",
+  "constraints": [
+    "Local checks only",
+    "No model calls required",
+    "Structured output"
+  ],
+  "input_schema": {
+    "type": "object"
+  },
+  "output_schema": {
+    "type": "object",
+    "required": ["task", "status"]
+  }
+}
