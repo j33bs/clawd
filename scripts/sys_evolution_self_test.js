@@ -15,6 +15,11 @@ const commands = [
   ['node', ['scripts/sys_evolution_sample_run.mjs']]
 ];
 
+if (process.env.OPENCLAW_AUDIT_LOGGING === '1') {
+  commands.push(['node', ['scripts/audit_snapshot.mjs']]);
+  commands.push(['node', ['scripts/audit_verify.mjs']]);
+}
+
 commands.forEach(([bin, args]) => {
   const label = `${bin} ${args.join(' ')}`;
   execFileSync(bin, args, { stdio: 'inherit' });

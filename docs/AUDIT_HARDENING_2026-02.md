@@ -60,3 +60,7 @@ Mitigations:
 2. Fill capsule markdown and json with intent, evidence, rollback, and risk.
 3. Keep capsule filenames immutable after publication.
 4. Link capsule in verification/gate notes for governed changes.
+
+## Opt-In Integration Hook
+- `scripts/sys_evolution_self_test.js` now calls `scripts/audit_snapshot.mjs` and `scripts/audit_verify.mjs` only when `OPENCLAW_AUDIT_LOGGING=1`.
+- Default behavior is unchanged when the flag is unset.
