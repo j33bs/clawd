@@ -1,0 +1,50 @@
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@id": "concept:breathwork",
+      "@type": "Concept",
+      "title": "Breathwork",
+      "path": null,
+      "tags": ["breathwork", "hrv"],
+      "created_at": "2026-02-09T00:00:00.000Z",
+      "updated_at": "2026-02-09T00:00:00.000Z"
+    },
+    {
+      "@id": "concept:coherence",
+      "@type": "Concept",
+      "title": "Coherence",
+      "path": null,
+      "tags": ["coherence"],
+      "created_at": "2026-02-09T00:00:00.000Z",
+      "updated_at": "2026-02-09T00:00:00.000Z"
+    },
+    {
+      "@id": "file:/tmp/breath-note.md",
+      "@type": "MemoryFile",
+      "title": "breath-note.md",
+      "path": "/tmp/breath-note.md",
+      "tags": ["memory-file"],
+      "created_at": "2026-02-09T00:00:00.000Z",
+      "updated_at": "2026-02-09T00:00:00.000Z"
+    },
+    {
+      "@id": "rel:file:/tmp/breath-note.md:is-about:concept:breathwork",
+      "@type": "Relation",
+      "from": "file:/tmp/breath-note.md",
+      "to": "concept:breathwork",
+      "rel_type": "is-about",
+      "created_at": "2026-02-09T00:00:00.000Z",
+      "updated_at": "2026-02-09T00:00:00.000Z"
+    },
+    {
+      "@id": "rel:concept:breathwork:extends:concept:coherence",
+      "@type": "Relation",
+      "from": "concept:breathwork",
+      "to": "concept:coherence",
+      "rel_type": "extends",
+      "created_at": "2026-02-09T00:00:00.000Z",
+      "updated_at": "2026-02-09T00:00:00.000Z"
+    }
+  ]
+}

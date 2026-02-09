@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "System Evolution Memory Graph",
+  "type": "object",
+  "required": ["@context", "@graph"],
+  "properties": {
+    "@context": { "type": "string" },
+    "@graph": {
+      "type": "array",
+      "items": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": ["@id", "@type", "title", "tags", "created_at", "updated_at"],
+            "properties": {
+              "@id": { "type": "string" },
+              "@type": { "type": "string" },
+              "title": { "type": "string" },
+              "path": { "type": "string" },
+              "tags": { "type": "array", "items": { "type": "string" } },
+              "created_at": { "type": "string" },
+              "updated_at": { "type": "string" }
+            }
+          },
+          {
+            "type": "object",
+            "required": ["@id", "@type", "from", "to", "rel_type", "created_at", "updated_at"],
+            "properties": {
+              "@id": { "type": "string" },
+              "@type": { "const": "Relation" },
+              "from": { "type": "string" },
+              "to": { "type": "string" },
+              "rel_type": {
+                "type": "string",
+                "enum": ["is-about", "extends", "learned-from", "supersedes"]
+              },
+              "created_at": { "type": "string" },
+              "updated_at": { "type": "string" }
+            }
+          }
+        ]
+      }
+    }
+  }
+}
