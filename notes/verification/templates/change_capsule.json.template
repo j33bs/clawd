@@ -1,0 +1,15 @@
+{
+  "date": "__DATE__",
+  "slug": "__SLUG__",
+  "intent": "",
+  "designBrief": "",
+  "evidence": [],
+  "tests": [
+    "node tests/sys_acceptance.test.js",
+    "sh scripts/gate_lint_substitute.sh"
+  ],
+  "rollback": "",
+  "risk": "",
+  "killSwitch": "",
+  "postMortem": ""
+}

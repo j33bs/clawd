@@ -53,3 +53,10 @@ Mitigations:
 - [ ] Change capsule created for non-trivial changes.
 - [ ] Tests and gates passed.
 - [ ] Rollback command documented.
+
+## Change Capsule Workflow
+1. Generate capsule pair:
+   - `node scripts/audit_capsule_new.mjs --slug <short-slug>`
+2. Fill capsule markdown and json with intent, evidence, rollback, and risk.
+3. Keep capsule filenames immutable after publication.
+4. Link capsule in verification/gate notes for governed changes.

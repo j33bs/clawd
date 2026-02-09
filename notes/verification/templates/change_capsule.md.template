@@ -1,0 +1,26 @@
+# Change Capsule — __SLUG__ (__DATE__)
+
+## intent
+Describe the operator intent and expected outcome.
+
+## design brief
+Summarize the minimal design and scope boundaries.
+
+## evidence
+List verification commands and key outputs.
+
+## tests
+- `node tests/sys_acceptance.test.js`
+- `sh scripts/gate_lint_substitute.sh`
+
+## rollback
+Provide exact rollback commands.
+
+## risk
+Document known risks and blast radius.
+
+## kill-switch
+Document immediate disable/stop mechanism.
+
+## post-mortem
+Capture failure learnings if issues occur.
