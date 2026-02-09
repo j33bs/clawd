@@ -13,7 +13,7 @@ class TestVolatilityMetrics(unittest.TestCase):
     def test_atr_basic(self):
         candles = []
         for i in range(5):
-            candles.append({"h": 10 + i, "l": 9 + i, "c": 9.5 + i})
+            candles.append({"o": 9.5 + i, "h": 10 + i, "l": 9 + i, "c": 9.5 + i})
         out = compute_atr(candles, period=3)
         self.assertAlmostEqual(out["atr"], 1.5, places=6)
         self.assertIsNotNone(out["atr_pct"])
