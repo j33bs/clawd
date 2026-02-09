@@ -1,0 +1,23 @@
+features:
+  regime_detector: false
+  volatility_metrics: false
+  channel_scoring: false
+  strategy_blender: false
+  econ_logging: false
+
+features_params:
+  regime_detector:
+    fast: 13
+    slow: 47
+    threshold: 0.001
+  volatility_metrics:
+    atr_period: 14
+    vol_period: 20
+  channel_scoring:
+    default_weight: 1.0
+  strategy_blender:
+    method: weighted_mean
+    min_confidence: 0.0
+    tie_break: flat
+  econ_logging:
+    observe_path: ".openclaw/economics/observe.jsonl"
