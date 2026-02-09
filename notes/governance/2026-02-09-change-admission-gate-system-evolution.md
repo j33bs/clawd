@@ -30,3 +30,8 @@ If regressions occur, record root cause, affected subsystem, and rollback SHA be
   - `node tests/sys_acceptance.test.js`
   - `node scripts/sys_evolution_self_test.js`
 - Review date: 2026-03-15.
+
+## sqlite risk-reduction addendum
+- Removed experimental `node:sqlite` usage from scheduler queue storage.
+- Introduced pinned stable dependency `better-sqlite3` behind `sys/db/sqlite_adapter.js`.
+- Scheduler behavior and task semantics remain unchanged; storage backend implementation only is swapped.

@@ -30,3 +30,9 @@ Capture failing command output and file-level diff if scaffold tests regress.
   - `node tests/sys_acceptance.test.js`
   - `node scripts/sys_evolution_self_test.js`
 - Review date: 2026-03-15.
+
+## sqlite backend verification addendum
+- Verify queue persistence and scheduler behavior after adapter swap using:
+  - `node tests/sys_scheduler.test.js`
+  - `node tests/sys_acceptance.test.js`
+- Backend is now stable `better-sqlite3` via adapter; no scheduler semantics change expected.

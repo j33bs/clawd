@@ -95,11 +95,11 @@ Each subsystem lands in its own commit; targeted rollback is `git revert <sha>` 
 - Logged execution traces in `logs/system_evolution_2026-02-09.txt` via command logging and migration log appends.
 
 ### Remaining Issues
-- SQLite backend relies on Node experimental `node:sqlite` API (works locally, emits runtime warning).
+- SQLite backend now uses stable `better-sqlite3` via `sys/db/sqlite_adapter.js`; operators should run the substitute lint gate after dependency updates.
 - Specialist execution is local/stubbed for deterministic operation; advanced specialist intelligence remains future work.
 - `sys/state/` is runtime-only and not populated in-repo by default.
 
 ### Next Evolutionary Cycle Direction
-- Optional swap from experimental `node:sqlite` to stable dependency if governance allows.
+- Expand SQLite adapter observability (query timing + error counters) without altering scheduler semantics.
 - Extend specialist parsers and provenance metadata for richer memory graph edges.
 - Add optional UI/reporting dashboard on top of `sys/state` outputs.
