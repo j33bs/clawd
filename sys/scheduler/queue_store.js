@@ -2,7 +2,7 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
-const { DatabaseSync } = require('node:sqlite');
+const { open } = require('../db/sqlite_adapter');
 
 function ensureDir(filePath) {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
@@ -16,7 +16,7 @@ function createQueueStore(options = {}) {
   const dbPath = options.dbPath || path.join(process.cwd(), 'sys', 'state', 'queue.sqlite');
   ensureDir(dbPath);
 
-  const db = new DatabaseSync(dbPath);
+  const db = open(dbPath);
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS tasks (
