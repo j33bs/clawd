@@ -44,6 +44,17 @@ The redactor:
 - applies secret pattern replacement with `[REDACTED_SECRET]`
 - creates per-file `*.bak` backups
 - prints counts only
+- if the hits file is missing, prints `files_listed: 0` and `files_modified: 0`
+
+## 3.5) Non-Printing Self-Check
+
+Run:
+
+```powershell
+python scripts/selfcheck_scrub_nonprinting.py
+```
+
+This verifies the scrub script keeps count-only output and does not emit raw match lines.
 
 ## 4) History Rewrite (filter-repo)
 
