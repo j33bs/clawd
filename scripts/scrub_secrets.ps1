@@ -22,7 +22,7 @@ $pattern = "(?i)(sk-[A-Za-z0-9]{20,}|ghp_[A-Za-z0-9]{36}|xox[baprs]-[A-Za-z0-9-]
 $rawWorktree = @()
 $rawWorktree = & git -C $repoRoot grep -nE --no-color -- $pattern -- . ':!node_modules' ':!.git' 2>$null
 $grepExitCode = $LASTEXITCODE
-if ($grepExitCode -gt 1) {
+if ($null -eq $grepExitCode -or $grepExitCode -gt 1) {
   throw "git grep failed."
 }
 if ($grepExitCode -eq 1) {
