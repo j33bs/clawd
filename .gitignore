@@ -38,6 +38,7 @@ credentials/*.json
 *.bak_*
 workspace.bak_*/
 openclaw.json.bak*
+openclaw.json
 *.git.bak/
 
 # ============================================
