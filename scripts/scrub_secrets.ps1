@@ -53,8 +53,9 @@ foreach ($line in @($rawWorktree)) {
 }
 Set-Content -LiteralPath $worktreeOut -Value $worktreeHits
 
-$rawHistory = & git -C $repoRoot log --all --pretty=format:%H --name-only -G $pattern 2>$null
-if ($LASTEXITCODE -ne 0) {
+$rawHistory = & git -C $repoRoot log --all --pretty=format:%H --name-only --regexp-ignore-case -G $pattern 2>$null
+$historyExitCode = $LASTEXITCODE
+if ($historyExitCode -ne 0) {
   throw "git log history scan failed."
 }
 Set-Content -LiteralPath $historyCandidatesOut -Value @($rawHistory)
