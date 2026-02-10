@@ -107,7 +107,9 @@ nul
 /market/
 /pdf/
 /pipelines/
-/scripts/
+/scripts/*
+!/scripts/scrub_secrets.ps1
+!/scripts/redact_worktree_hits.py
 /sim/
 /telegram/
 /update-check.json
