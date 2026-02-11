@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://openclaw.local/schemas/system2_observability_event.schema.json",
+  "title": "System2ObservabilityEvent",
+  "type": "object",
+  "required": ["ts", "event_type"],
+  "properties": {
+    "ts": { "type": "string", "format": "date-time" },
+    "event_type": {
+      "type": "string",
+      "enum": [
+        "routing_decision",
+        "model_call",
+        "tool_call",
+        "artifact_write",
+        "error_classified",
+        "budget_exhausted",
+        "degraded_mode_entered"
+      ]
+    },
+    "run_id": { "type": "string" },
+    "task_id": { "type": "string" },
+    "backend": { "type": "string" },
+    "details": { "type": "object", "additionalProperties": true }
+  },
+  "additionalProperties": true
+}
