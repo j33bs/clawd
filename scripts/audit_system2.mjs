@@ -13,6 +13,9 @@ const { createSignedEnvelope, verifyEnvelope } = require('../core/system2/federa
 const { System2ToolPlane } = require('../core/system2/tool_plane');
 const { System2EventLog } = require('../core/system2/event_log');
 const { FederatedRpcV0 } = require('../core/system2/federated_rpc_v0');
+const { BudgetCircuitBreaker } = require('../core/system2/budget_circuit_breaker');
+const { DegradedModeController, MODES } = require('../core/system2/degraded_mode_controller');
+const { System2Gateway } = require('../core/system2/gateway');
 
 function ensureDir(dirPath) {
   fs.mkdirSync(dirPath, { recursive: true });
@@ -143,6 +146,53 @@ async function main() {
     addCheck('event_log_cursor', batch.events.length === 1 && advanced.line === 1);
   } catch (error) {
     addCheck('event_log_cursor', false, {
+      error: error && error.message ? error.message : String(error)
+    });
+  }
+
+  // Budget circuit breaker smoke test
+  try {
+    const breaker = new BudgetCircuitBreaker({ tokenCap: 500, callCap: 10 });
+    const usage = breaker.recordUsage({ inputTokens: 100, outputTokens: 50 });
+    const canGo = breaker.canProceed(100);
+    addCheck('budget_circuit_breaker', usage.ok && canGo && usage.remaining === 350);
+  } catch (error) {
+    addCheck('budget_circuit_breaker', false, {
+      error: error && error.message ? error.message : String(error)
+    });
+  }
+
+  // Degraded mode controller smoke test
+  try {
+    const ctrl = new DegradedModeController();
+    ctrl.evaluate({ system1: { state: 'down' } });
+    const isRecovery = ctrl.mode === MODES.RECOVERY;
+    ctrl.evaluate({ system1: { state: 'up' }, budget_exhausted: false, system2: { inference_ok: true } });
+    const isNormal = ctrl.mode === MODES.NORMAL;
+    addCheck('degraded_mode_controller', isRecovery && isNormal);
+  } catch (error) {
+    addCheck('degraded_mode_controller', false, {
+      error: error && error.message ? error.message : String(error)
+    });
+  }
+
+  // Gateway smoke test (start, health check, stop)
+  try {
+    const gatewayPort = 14200 + Math.floor(Math.random() * 800);
+    const gateway = new System2Gateway({
+      port: gatewayPort,
+      host: '127.0.0.1',
+      signingKey: process.env.SYSTEM2_ENVELOPE_HMAC_KEY || 'system2-audit-smoke-key',
+      callSystem1Fn: async () => ({ ok: true, result: { smoke: true } })
+    });
+    const startResult = await gateway.start();
+    const healthRes = await fetch(`http://127.0.0.1:${gatewayPort}/health`);
+    const healthData = await healthRes.json();
+    await gateway.stop();
+    addCheck('gateway_start_health_stop',
+      startResult.runId && healthData.status === 'ok' && healthData.gateway === 'system2');
+  } catch (error) {
+    addCheck('gateway_start_health_stop', false, {
       error: error && error.message ? error.message : String(error)
     });
   }
