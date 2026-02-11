@@ -4,6 +4,7 @@ const CooldownManager = require('./cooldown_manager');
 const GovernanceLogger = require('./governance_logger');
 const OathClaudeProvider = require('./providers/oath_claude_provider');
 const AnthropicClaudeApiProvider = require('./providers/anthropic_claude_api_provider');
+const LiteLlmProxyProvider = require('./providers/litellm_proxy_provider');
 const LocalQwenProvider = require('./providers/local_qwen_provider');
 const LocalOllamaProvider = require('./providers/local_ollama_provider');
 const LocalOpenAiCompatProvider = require('./providers/local_openai_compat_provider');
@@ -13,6 +14,13 @@ function isLocalFallbackEnabled(options) {
     return options.localFallbackEnabled;
   }
   return String(process.env.OPENCLAW_LOCAL_FALLBACK || '').trim() === '1';
+}
+
+function isLiteLlmEnabled(options) {
+  if (typeof options.useLiteLlmProxy === 'boolean') {
+    return options.useLiteLlmProxy;
+  }
+  return String(process.env.OPENCLAW_SYSTEM2_USE_LITELLM_PROXY || '').trim() === '1';
 }
 
 function createModelRuntime(options = {}) {
@@ -31,7 +39,15 @@ function createModelRuntime(options = {}) {
     });
 
   const localFallbackEnabled = isLocalFallbackEnabled(options);
-  const router = options.router || new ModelRouter({ localFallbackEnabled });
+  const liteLlmEnabled = isLiteLlmEnabled(options);
+  const router =
+    options.router ||
+    new ModelRouter({
+      localFallbackEnabled,
+      primaryBackends: liteLlmEnabled
+        ? [BACKENDS.ANTHROPIC_CLAUDE_API, BACKENDS.OATH_CLAUDE, BACKENDS.LITELLM_PROXY]
+        : undefined
+    });
 
   const providers =
     options.providers ||
@@ -46,6 +62,12 @@ function createModelRuntime(options = {}) {
           ...options.anthropic
         })
       };
+
+      if (liteLlmEnabled) {
+        map[BACKENDS.LITELLM_PROXY] = new LiteLlmProxyProvider({
+          ...options.litellm
+        });
+      }
 
       if (localFallbackEnabled) {
         map[BACKENDS.LOCAL_OLLAMA] = new LocalOllamaProvider({

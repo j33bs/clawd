@@ -130,6 +130,14 @@ class ModelRouter {
 
     const canPreferLocal = allowNetwork === false;
 
+    if (
+      requestedPreferred &&
+      !candidates.includes(requestedPreferred) &&
+      (canPreferLocal || !this.isLocalBackend(requestedPreferred))
+    ) {
+      candidates = [requestedPreferred, ...candidates];
+    }
+
     // Advisory only and policy-compatible.
     if (
       requestedPreferred &&
