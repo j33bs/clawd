@@ -4,7 +4,6 @@
     "staged:allowlist": "node scripts/check_staged_allowlist.js",
     "gate:admission": "node scripts/check_change_admission_gate.js",
     "verify:local-fallback": "node tests/local_fallback_routing.test.js",
-    "audit:system2": "node scripts/audit_system2.mjs",
     "test:staged-allowlist": "node tests/staged_allowlist.test.js"
   },
   "dependencies": {
