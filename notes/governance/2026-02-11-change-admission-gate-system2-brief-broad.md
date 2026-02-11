@@ -122,3 +122,19 @@ If regressions occur, record failing command, affected subsystem, rollback SHA, 
   - `node scripts/verify_model_routing.js`
   - `node tests/local_fallback_routing.test.js`
   - `node tests/sys_acceptance.test.js`
+
+## phase 8 evidence update
+- Added System-2 observability schema:
+  - `schemas/system2_observability_event.schema.json`
+- Added audit entrypoint and evidence emitter:
+  - `scripts/audit_system2.mjs`
+  - `package.json` script: `audit:system2`
+- Added CI workflow:
+  - `.github/workflows/system2_macos_audit.yml`
+- Added operator runbook:
+  - `docs/system2/OPERATOR_RUNBOOK.md`
+- Verification run:
+  - `npm run audit:system2`
+  - `node scripts/verify_model_routing.js`
+  - `node tests/local_fallback_routing.test.js`
+  - `node tests/sys_acceptance.test.js`

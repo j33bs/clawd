@@ -1,0 +1,102 @@
+name: system2-macos-audit
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  system2_audit:
+    name: system2-audit (macOS)
+    runs-on: macos-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install dependencies
+        shell: bash
+        run: npm ci || npm install
+
+      - name: Run System-2 audit
+        id: audit
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p reports/ci/system2
+          set +e
+          npm run audit:system2 2>&1 | tee reports/ci/system2/system2_audit.log
+          ec=${PIPESTATUS[0]}
+          set -e
+          echo "exit_code=$ec" >> "$GITHUB_OUTPUT"
+          if [ "$ec" -ne 0 ]; then
+            exit "$ec"
+          fi
+
+      - name: Validate evidence contract
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs = require('fs');
+          const path = require('path');
+
+          const candidates = [
+            path.join(process.cwd(), 'reports', 'system2', 'system2_audit_evidence.json'),
+            path.join(process.cwd(), 'reports', 'ci', 'system2', 'system2_audit_evidence.json')
+          ];
+          const target = candidates.find((filePath) => fs.existsSync(filePath));
+          if (!target) {
+            console.error('evidence missing: system2 audit evidence json not found');
+            process.exit(1);
+          }
+
+          const payload = JSON.parse(fs.readFileSync(target, 'utf8'));
+          const errors = [];
+
+          if (typeof payload.gate_result !== 'string') {
+            errors.push('gate_result missing or malformed');
+          } else if (!['pass', 'fail'].includes(payload.gate_result.toLowerCase())) {
+            errors.push('gate_result must be pass/fail');
+          }
+
+          if (typeof payload.completion_rate !== 'number' || !Number.isFinite(payload.completion_rate)) {
+            errors.push('completion_rate missing or malformed');
+          }
+
+          if (typeof payload.traces !== 'number' || !Number.isFinite(payload.traces)) {
+            errors.push('traces missing or malformed');
+          }
+
+          if (typeof payload.smoke_log_truncated !== 'boolean') {
+            errors.push('smoke_log_truncated missing or malformed');
+          }
+
+          if (errors.length > 0) {
+            errors.forEach((entry) => console.error(entry));
+            process.exit(1);
+          }
+          NODE
+
+      - name: Upload System-2 artifacts (best effort)
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: system2-audit-logs
+          if-no-files-found: warn
+          path: |
+            reports/ci/system2/**
+            reports/system2/**
+            reports/**/*evidence*.json
