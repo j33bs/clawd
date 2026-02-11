@@ -109,3 +109,16 @@ If regressions occur, record failing command, affected subsystem, rollback SHA, 
   - `node scripts/verify_model_routing.js`
   - `node tests/local_fallback_routing.test.js`
   - `node tests/sys_acceptance.test.js`
+
+## phase 7 evidence update
+- Added event log and cursor sync skeleton:
+  - `core/system2/event_log.js`
+- Added schema:
+  - `schemas/system2_sync_cursor.schema.json`
+- Added tests:
+  - `tests/system2_event_log_sync.test.js`
+- Verification run:
+  - `node tests/system2_event_log_sync.test.js`
+  - `node scripts/verify_model_routing.js`
+  - `node tests/local_fallback_routing.test.js`
+  - `node tests/sys_acceptance.test.js`

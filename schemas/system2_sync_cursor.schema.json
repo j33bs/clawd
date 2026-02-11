@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://openclaw.local/schemas/system2_sync_cursor.schema.json",
+  "title": "System2SyncCursor",
+  "type": "object",
+  "required": ["line"],
+  "properties": {
+    "line": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "updated_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "additionalProperties": false
+}
