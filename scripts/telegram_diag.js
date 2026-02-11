@@ -3,7 +3,6 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { execSync } = require('child_process');
 
 const BASE_URL = 'https://api.telegram.org';
 const DEFAULT_TIMEOUT_MS = 10000;
@@ -85,41 +84,6 @@ function inspectToken(token) {
   };
 }
 
-function readLaunchAgentSummary() {
-  if (process.platform !== 'darwin') {
-    return {
-      launch_agent_detected: false,
-      launch_agent_has_token_env_key: false,
-      launchctl_getenv_present: false,
-      launchctl_getenv_length: 0
-    };
-  }
-
-  const plistPath = path.join(os.homedir(), 'Library', 'LaunchAgents', 'ai.openclaw.gateway.plist');
-  let hasTokenEnvKey = false;
-  if (fs.existsSync(plistPath)) {
-    const text = fs.readFileSync(plistPath, 'utf8');
-    hasTokenEnvKey = text.includes('<key>TELEGRAM_BOT_TOKEN</key>');
-  }
-
-  let launchctlToken = '';
-  try {
-    launchctlToken = execSync('launchctl getenv TELEGRAM_BOT_TOKEN', {
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'ignore']
-    }).trim();
-  } catch (_error) {
-    launchctlToken = '';
-  }
-
-  return {
-    launch_agent_detected: fs.existsSync(plistPath),
-    launch_agent_has_token_env_key: hasTokenEnvKey,
-    launchctl_getenv_present: launchctlToken.length > 0,
-    launchctl_getenv_length: launchctlToken.length
-  };
-}
-
 function redactToken(text, token) {
   if (typeof text !== 'string') return '';
   if (!token || typeof token !== 'string') return text.slice(0, 200);
@@ -185,7 +149,6 @@ async function main() {
     config_read_ok: cfg.configReadOk,
     config_error: cfg.configError || null,
     telegram_mode: cfg.telegramMode || null,
-    service_env: readLaunchAgentSummary(),
     ...inspectToken(token)
   };
   console.log(JSON.stringify(summary, null, 2));
