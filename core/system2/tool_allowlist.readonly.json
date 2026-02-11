@@ -1,0 +1,14 @@
+{
+  "version": "1.0.0",
+  "mode": "read_only",
+  "tools": [
+    {
+      "name": "list_dir",
+      "read_only": true
+    },
+    {
+      "name": "read_file",
+      "read_only": true
+    }
+  ]
+}
