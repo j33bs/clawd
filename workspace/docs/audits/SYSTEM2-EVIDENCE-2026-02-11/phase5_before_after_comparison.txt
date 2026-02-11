@@ -1,0 +1,14 @@
+# Phase 5 before/after comparison (status)
+timestamp=2026-02-11T13:24:53.164Z
+security.summary: before={"critical":1,"warn":1,"info":1} | after={"critical":0,"warn":1,"info":1}
+attack_surface: before=groups: open=0, allowlist=0
+tools.elevated: enabled
+hooks: disabled
+browser control: enabled | after=groups: open=0, allowlist=1
+tools.elevated: enabled
+hooks: disabled
+browser control: enabled
+gateway.loopback_no_auth finding present: before=true | after=false
+agents.workspaceDir: before=/Users/heathyeager/.openclaw/workspace | after=/Users/heathyeager/clawd
+memory.workspaceDir: before=/Users/heathyeager/.openclaw/workspace | after=/Users/heathyeager/clawd
+channelSummary.length: before=0 | after=2

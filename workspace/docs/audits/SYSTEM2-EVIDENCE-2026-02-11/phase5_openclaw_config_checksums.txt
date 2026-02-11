@@ -1,0 +1,6 @@
+# Phase 5 config checksums
+timestamp=2026-02-11T13:23:41Z
+backup:
+ebea63e3cf9775cca29fa6e8d031545f0081d53af267d3cab6b1eda2947fda4a  workspace/docs/audits/SYSTEM2-EVIDENCE-2026-02-11/backups/20260211T232324/openclaw.json.bak
+current:
+8a96a1d39ebd047eebf0f03bfb45ed34e7dd4488318bcee62914cbdda701fccc  /Users/heathyeager/.openclaw/openclaw.json

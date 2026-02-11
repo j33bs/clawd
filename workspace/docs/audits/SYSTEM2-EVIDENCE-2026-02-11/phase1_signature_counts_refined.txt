@@ -1,0 +1,105 @@
+# Phase 1.3 Refined Signature Counts
+timestamp=2026-02-11T13:11:05Z
+
+## File: /Users/heathyeager/.openclaw/logs/gateway.log
+- total_lines: 5935
+- invalid_bearer_token: 3
+- no_api_key_found: 1
+- no_auth_profile: 1
+- quota_exceeded_429: 3
+- provider_cooldown: 3
+- fetch_failed: 3
+- stuck_session: 0
+- telegram_retrying: 0
+- sendmessage_failed: 2
+- memory_search_errors: 0
+
+### last 30 auth/quota lines
+14:2026-01-29T14:02:38.951Z [ws] ⇄ res ✗ agent errorCode=UNAVAILABLE errorMessage=FailoverError: No API key found for provider "anthropic". Auth store: /Users/heathyeager/.clawdbot/agents/main/agent/auth-profiles.json (agentDir: /Users/heathyeager/.clawdbot/agents/main/agent). Configure auth for this agent (clawdbot agen... runId=e786b31a-5371-4533-80e8-2975697c5683 error=FailoverError: No API key found for provider "anthropic". Auth store: /Users/heathyeager/.clawdbot/agents/main/agent/auth-profiles.json (agentDir: /Users/heathyeager/.clawdbot/agents/main/agent). Configure auth for this agent (clawdbot agen... conn=2bb72d9d…7d21 id=3b9bfc98…eb1a
+5343:2026-02-08T07:01:45.340Z [ws] ⇄ res ✗ agent errorCode=UNAVAILABLE errorMessage=Error: All models failed (5): qwen-portal/coder-model: 429 Free allocated quota exceeded. (rate_limit) | anthropic/claude-opus-4-6: HTTP 401 authentication_error: Invalid bearer token (request_id: req_011CXvAxHnSXGLV3V5aAqpTD) (auth) | anth... runId=e229dd9a-01c4-453d-9ada-0bd6f3082727 error=Error: All models failed (5): qwen-portal/coder-model: 429 Free allocated quota exceeded. (rate_limit) | anthropic/claude-opus-4-6: HTTP 401 authentication_error: Invalid bearer token (request_id: req_011CXvAxHnSXGLV3V5aAqpTD) (auth) | anth... conn=0fbca9a1…2207 id=091e29aa…4cf5
+5344:2026-02-08T07:31:06.468Z [ws] ⇄ res ✗ agent errorCode=UNAVAILABLE errorMessage=Error: All models failed (5): qwen-portal/coder-model: 429 Free allocated quota exceeded. (rate_limit) | anthropic/claude-opus-4-6: HTTP 401 authentication_error: Invalid bearer token (request_id: req_011CXvDC7PF1hvYbkf97hsVA) (auth) | anth... runId=b6aa18a9-d90c-4273-bb83-0ea19b48b72f error=Error: All models failed (5): qwen-portal/coder-model: 429 Free allocated quota exceeded. (rate_limit) | anthropic/claude-opus-4-6: HTTP 401 authentication_error: Invalid bearer token (request_id: req_011CXvDC7PF1hvYbkf97hsVA) (auth) | anth... conn=7b4fcf8e…e55e id=c9a5a2a6…8551
+5346:2026-02-08T08:49:34.439Z [ws] ⇄ res ✗ agent errorCode=UNAVAILABLE errorMessage=Error: All models failed (5): qwen-portal/coder-model: 429 Free allocated quota exceeded. (rate_limit) | anthropic/claude-opus-4-6: HTTP 401 authentication_error: Invalid bearer token (request_id: req_011CXvKB9pFscmWRP4YyRRGp) (auth) | anth... runId=b4afd411-530f-46b5-87e8-dd65289d8bf3 error=Error: All models failed (5): qwen-portal/coder-model: 429 Free allocated quota exceeded. (rate_limit) | anthropic/claude-opus-4-6: HTTP 401 authentication_error: Invalid bearer token (request_id: req_011CXvKB9pFscmWRP4YyRRGp) (auth) | anth... conn=f0a5895e…0de3 id=dc09d383…a399
+5347:2026-02-08T08:51:29.521Z [ws] ⇄ res ✗ agent errorCode=UNAVAILABLE errorMessage=Error: All models failed (5): qwen-portal/coder-model: Provider qwen-portal is in cooldown (all profiles unavailable) (rate_limit) | anthropic/claude-opus-4-6: Provider anthropic is in cooldown (all profiles unavailable) (rate_limit) | anth... runId=2e54d50b-466f-46d7-baae-91eb173b8a31 error=Error: All models failed (5): qwen-portal/coder-model: Provider qwen-portal is in cooldown (all profiles unavailable) (rate_limit) | anthropic/claude-opus-4-6: Provider anthropic is in cooldown (all profiles unavailable) (rate_limit) | anth... conn=e3c84da4…9006 id=2f85a18e…15c2
+5348:2026-02-08T08:57:36.296Z [ws] ⇄ res ✗ agent errorCode=UNAVAILABLE errorMessage=Error: All models failed (5): qwen-portal/coder-model: Provider qwen-portal is in cooldown (all profiles unavailable) (rate_limit) | anthropic/claude-opus-4-6: Provider anthropic is in cooldown (all profiles unavailable) (rate_limit) | anth... runId=1fc512ec-8f05-4644-a85b-99c5c914bb4f error=Error: All models failed (5): qwen-portal/coder-model: Provider qwen-portal is in cooldown (all profiles unavailable) (rate_limit) | anthropic/claude-opus-4-6: Provider anthropic is in cooldown (all profiles unavailable) (rate_limit) | anth... conn=43527961…72d1 id=53bf4921…2e4f
+5459:2026-02-10T15:20:54.051Z [ws] ⇄ res ✗ agent errorCode=UNAVAILABLE errorMessage=Error: All models failed (12): google-gemini-cli/gemini-3-pro-preview: LLM request timed out. (unknown) | anthropic/claude-opus-4-6: No available auth profile for anthropic (all in cooldown or unavailable). (rate_limit) | anthropic/claude-o... runId=8f2b9cbf-7a65-4e43-8c4f-cbe0333889c5 error=Error: All models failed (12): google-gemini-cli/gemini-3-pro-preview: LLM request timed out. (unknown) | anthropic/claude-opus-4-6: No available auth profile for anthropic (all in cooldown or unavailable). (rate_limit) | anthropic/claude-o... conn=3dece314…ed15 id=a2aaeed3…26ef
+
+### last 30 loop/network lines
+5622:  - Observed `sendChatAction failed` network failure.
+5657:   - Notable errors include `fetch failed` and `sendChatAction failed` network failures
+
+## File: /Users/heathyeager/.openclaw/logs/gateway.err.log
+- total_lines: 298387
+- invalid_bearer_token: 82
+- no_api_key_found: 445
+- no_auth_profile: 119
+- quota_exceeded_429: 46
+- provider_cooldown: 119
+- fetch_failed: 1923
+- stuck_session: 29
+- telegram_retrying: 86
+- sendmessage_failed: 99
+- memory_search_errors: 0
+
+### last 30 auth/quota lines
+297326:2026-02-11T00:18:41.203Z [diagnostic] lane task error: lane=main durationMs=10 error="FailoverError: No API key found for provider "openai". You are authenticated with OpenAI Codex OAuth. Use openai-codex/gpt-5.3-codex (OAuth) or set OPENAI_API_KEY to use openai/gpt-5.1-codex."
+297327:2026-02-11T00:18:41.204Z [diagnostic] lane task error: lane=session:agent:main:main durationMs=11 error="FailoverError: No API key found for provider "openai". You are authenticated with OpenAI Codex OAuth. Use openai-codex/gpt-5.3-codex (OAuth) or set OPENAI_API_KEY to use openai/gpt-5.1-codex."
+297328:2026-02-11T00:18:45.453Z [diagnostic] lane task error: lane=main durationMs=15 error="FailoverError: No API key found for provider "openai". You are authenticated with OpenAI Codex OAuth. Use openai-codex/gpt-5.3-codex (OAuth) or set OPENAI_API_KEY to use openai/gpt-5.1-codex."
+297329:2026-02-11T00:18:45.454Z [diagnostic] lane task error: lane=session:agent:main:main durationMs=20 error="FailoverError: No API key found for provider "openai". You are authenticated with OpenAI Codex OAuth. Use openai-codex/gpt-5.3-codex (OAuth) or set OPENAI_API_KEY to use openai/gpt-5.1-codex."
+297330:2026-02-11T00:18:45.512Z [diagnostic] lane task error: lane=main durationMs=54 error="FailoverError: No API key found for provider "google". Auth store: /Users/heathyeager/.openclaw/agents/main/agent/auth-profiles.json (agentDir: /Users/heathyeager/.openclaw/agents/main/agent). Configure auth for this agent (openclaw agents add <id>) or copy auth-profiles.json from the main agentDir."
+297331:2026-02-11T00:18:45.513Z [diagnostic] lane task error: lane=session:agent:main:main durationMs=57 error="FailoverError: No API key found for provider "google". Auth store: /Users/heathyeager/.openclaw/agents/main/agent/auth-profiles.json (agentDir: /Users/heathyeager/.openclaw/agents/main/agent). Configure auth for this agent (openclaw agents add <id>) or copy auth-profiles.json from the main agentDir."
+297332:2026-02-11T00:18:45.526Z [diagnostic] lane task error: lane=main durationMs=9 error="FailoverError: No API key found for provider "google". Auth store: /Users/heathyeager/.openclaw/agents/main/agent/auth-profiles.json (agentDir: /Users/heathyeager/.openclaw/agents/main/agent). Configure auth for this agent (openclaw agents add <id>) or copy auth-profiles.json from the main agentDir."
+297333:2026-02-11T00:18:45.527Z [diagnostic] lane task error: lane=session:agent:main:main durationMs=11 error="FailoverError: No API key found for provider "google". Auth store: /Users/heathyeager/.openclaw/agents/main/agent/auth-profiles.json (agentDir: /Users/heathyeager/.openclaw/agents/main/agent). Configure auth for this agent (openclaw agents add <id>) or copy auth-profiles.json from the main agentDir."
+297334:2026-02-11T00:18:45.539Z [diagnostic] lane task error: lane=main durationMs=9 error="FailoverError: No API key found for provider "google". Auth store: /Users/heathyeager/.openclaw/agents/main/agent/auth-profiles.json (agentDir: /Users/heathyeager/.openclaw/agents/main/agent). Configure auth for this agent (openclaw agents add <id>) or copy auth-profiles.json from the main agentDir."
+297335:2026-02-11T00:18:45.540Z [diagnostic] lane task error: lane=session:agent:main:main durationMs=11 error="FailoverError: No API key found for provider "google". Auth store: /Users/heathyeager/.openclaw/agents/main/agent/auth-profiles.json (agentDir: /Users/heathyeager/.openclaw/agents/main/agent). Configure auth for this agent (openclaw agents add <id>) or copy auth-profiles.json from the main agentDir."
+297336:2026-02-11T00:18:45.553Z [diagnostic] lane task error: lane=main durationMs=10 error="FailoverError: No API key found for provider "openai". You are authenticated with OpenAI Codex OAuth. Use openai-codex/gpt-5.3-codex (OAuth) or set OPENAI_API_KEY to use openai/gpt-5.1-codex."
+297337:2026-02-11T00:18:45.553Z [diagnostic] lane task error: lane=session:agent:main:main durationMs=12 error="FailoverError: No API key found for provider "openai". You are authenticated with OpenAI Codex OAuth. Use openai-codex/gpt-5.3-codex (OAuth) or set OPENAI_API_KEY to use openai/gpt-5.1-codex."
+297338:2026-02-11T00:18:45.568Z [diagnostic] lane task error: lane=main durationMs=12 error="FailoverError: No API key found for provider "openai". You are authenticated with OpenAI Codex OAuth. Use openai-codex/gpt-5.3-codex (OAuth) or set OPENAI_API_KEY to use openai/gpt-5.1-codex."
+297339:2026-02-11T00:18:45.569Z [diagnostic] lane task error: lane=session:agent:main:main durationMs=13 error="FailoverError: No API key found for provider "openai". You are authenticated with OpenAI Codex OAuth. Use openai-codex/gpt-5.3-codex (OAuth) or set OPENAI_API_KEY to use openai/gpt-5.1-codex."
+297350:2026-02-11T00:25:15.364Z [diagnostic] lane task error: lane=main durationMs=22 error="FailoverError: No API key found for provider "openai". You are authenticated with OpenAI Codex OAuth. Use openai-codex/gpt-5.3-codex (OAuth) or set OPENAI_API_KEY to use openai/gpt-5.1-codex."
+297351:2026-02-11T00:25:15.366Z [diagnostic] lane task error: lane=session:agent:main:main durationMs=27 error="FailoverError: No API key found for provider "openai". You are authenticated with OpenAI Codex OAuth. Use openai-codex/gpt-5.3-codex (OAuth) or set OPENAI_API_KEY to use openai/gpt-5.1-codex."
+297355:2026-02-11T00:25:57.231Z [diagnostic] lane task error: lane=main durationMs=22 error="FailoverError: No API key found for provider "openai". You are authenticated with OpenAI Codex OAuth. Use openai-codex/gpt-5.3-codex (OAuth) or set OPENAI_API_KEY to use openai/gpt-5.1-codex."
+297356:2026-02-11T00:25:57.232Z [diagnostic] lane task error: lane=session:agent:main:main durationMs=27 error="FailoverError: No API key found for provider "openai". You are authenticated with OpenAI Codex OAuth. Use openai-codex/gpt-5.3-codex (OAuth) or set OPENAI_API_KEY to use openai/gpt-5.1-codex."
+297359:2026-02-11T00:26:34.711Z [diagnostic] lane task error: lane=main durationMs=18 error="FailoverError: No API key found for provider "openai". You are authenticated with OpenAI Codex OAuth. Use openai-codex/gpt-5.3-codex (OAuth) or set OPENAI_API_KEY to use openai/gpt-5.1-codex."
+297360:2026-02-11T00:26:34.712Z [diagnostic] lane task error: lane=session:agent:main:main durationMs=21 error="FailoverError: No API key found for provider "openai". You are authenticated with OpenAI Codex OAuth. Use openai-codex/gpt-5.3-codex (OAuth) or set OPENAI_API_KEY to use openai/gpt-5.1-codex."
+297521:2026-02-11T03:08:11.455Z [diagnostic] lane task error: lane=main durationMs=65267 error="FailoverError: 429 Free allocated quota exceeded."
+297522:2026-02-11T03:08:11.459Z [diagnostic] lane task error: lane=session:agent:main:main durationMs=65280 error="FailoverError: 429 Free allocated quota exceeded."
+297642:2026-02-11T04:51:32.536Z [diagnostic] lane task error: lane=main durationMs=104131 error="FailoverError: 429 Free allocated quota exceeded."
+297643:2026-02-11T04:51:32.539Z [diagnostic] lane task error: lane=session:agent:main:main durationMs=104137 error="FailoverError: 429 Free allocated quota exceeded."
+297952:2026-02-11T05:59:14.435Z [diagnostic] lane task error: lane=main durationMs=210788 error="FailoverError: 429 Free allocated quota exceeded."
+297953:2026-02-11T05:59:14.437Z [diagnostic] lane task error: lane=session:agent:main:main durationMs=210792 error="FailoverError: 429 Free allocated quota exceeded."
+298282:2026-02-11T11:00:32.891Z [diagnostic] lane task error: lane=main durationMs=48574 error="FailoverError: 429 Free allocated quota exceeded."
+298283:2026-02-11T11:00:32.894Z [diagnostic] lane task error: lane=session:agent:main:main durationMs=48581 error="FailoverError: 429 Free allocated quota exceeded."
+298350:2026-02-11T12:33:52.085Z [diagnostic] lane task error: lane=main durationMs=55829 error="FailoverError: 429 Free allocated quota exceeded."
+298351:2026-02-11T12:33:52.089Z [diagnostic] lane task error: lane=session:agent:main:main durationMs=55838 error="FailoverError: 429 Free allocated quota exceeded."
+
+### last 30 loop/network lines
+298293:2026-02-11T11:20:28.070Z [openclaw] Non-fatal unhandled rejection (continuing): TypeError: fetch failed
+298296:2026-02-11T11:21:30.637Z [openclaw] Non-fatal unhandled rejection (continuing): TypeError: fetch failed
+298299:2026-02-11T11:25:39.227Z [openclaw] Non-fatal unhandled rejection (continuing): TypeError: fetch failed
+298302:2026-02-11T11:27:43.717Z [openclaw] Non-fatal unhandled rejection (continuing): TypeError: fetch failed
+298305:2026-02-11T11:30:49.356Z [openclaw] Non-fatal unhandled rejection (continuing): TypeError: fetch failed
+298311:2026-02-11T11:37:09.100Z [openclaw] Non-fatal unhandled rejection (continuing): TypeError: fetch failed
+298314:2026-02-11T11:39:14.393Z [openclaw] Non-fatal unhandled rejection (continuing): TypeError: fetch failed
+298317:2026-02-11T11:40:47.872Z [openclaw] Non-fatal unhandled rejection (continuing): TypeError: fetch failed
+298320:2026-02-11T11:50:11.717Z [openclaw] Non-fatal unhandled rejection (continuing): TypeError: fetch failed
+298323:2026-02-11T11:51:14.021Z [openclaw] Non-fatal unhandled rejection (continuing): TypeError: fetch failed
+298326:2026-02-11T11:56:24.985Z [openclaw] Non-fatal unhandled rejection (continuing): TypeError: fetch failed
+298329:2026-02-11T11:57:27.359Z [openclaw] Non-fatal unhandled rejection (continuing): TypeError: fetch failed
+298332:2026-02-11T11:58:29.987Z [openclaw] Non-fatal unhandled rejection (continuing): TypeError: fetch failed
+298335:2026-02-11T12:04:41.665Z [openclaw] Non-fatal unhandled rejection (continuing): TypeError: fetch failed
+298338:2026-02-11T12:06:14.788Z [openclaw] Non-fatal unhandled rejection (continuing): TypeError: fetch failed
+298341:2026-02-11T12:14:02.133Z [openclaw] Non-fatal unhandled rejection (continuing): TypeError: fetch failed
+298344:2026-02-11T12:17:07.556Z [openclaw] Non-fatal unhandled rejection (continuing): TypeError: fetch failed
+298347:2026-02-11T12:26:59.187Z [openclaw] Non-fatal unhandled rejection (continuing): TypeError: fetch failed
+298352:2026-02-11T12:34:29.942Z [openclaw] Non-fatal unhandled rejection (continuing): TypeError: fetch failed
+298359:2026-02-11T12:45:52.856Z [openclaw] Non-fatal unhandled rejection (continuing): TypeError: fetch failed
+298362:2026-02-11T12:48:59.391Z [openclaw] Non-fatal unhandled rejection (continuing): TypeError: fetch failed
+298365:2026-02-11T12:52:37.087Z [openclaw] Non-fatal unhandled rejection (continuing): TypeError: fetch failed
+298368:2026-02-11T13:01:57.330Z [openclaw] Non-fatal unhandled rejection (continuing): TypeError: fetch failed
+298371:2026-02-11T13:05:03.799Z [openclaw] Non-fatal unhandled rejection (continuing): TypeError: fetch failed
+298374:2026-02-11T13:05:43.935Z [openclaw] Non-fatal unhandled rejection (continuing): TypeError: fetch failed
+298377:2026-02-11T13:05:43.947Z [telegram] sendMessage failed: Network request for 'sendMessage' failed!
+298378:2026-02-11T13:05:43.950Z [telegram] final reply failed: HttpError: Network request for 'sendMessage' failed!
+298379:2026-02-11T13:06:37.495Z [openclaw] Non-fatal unhandled rejection (continuing): TypeError: fetch failed
+298382:2026-02-11T13:09:13.294Z [openclaw] Non-fatal unhandled rejection (continuing): TypeError: fetch failed
+298385:2026-02-11T13:09:44.527Z [openclaw] Non-fatal unhandled rejection (continuing): TypeError: fetch failed

@@ -1,0 +1,13 @@
+# postfix RCE policy fields (safe extract)
+timestamp=2026-02-11T13:39:35.054Z
+config_path=/Users/heathyeager/.openclaw/openclaw.json
+channels.telegram.enabled=true
+channels.telegram.dmPolicy=pairing
+channels.telegram.groupPolicy=allowlist
+channels.telegram.streamMode=off
+gateway.mode=local
+gateway.bind=loopback
+gateway.auth.mode=token
+gateway.tailscale.mode=off
+agents.defaults.workspace=/Users/heathyeager/.openclaw/workspace
+agents.list_count=1

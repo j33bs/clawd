@@ -1,0 +1,4 @@
+total 24
+drwxr-xr-x@ 3 heathyeager  staff    96B Feb 11 23:25 .
+drwxr-xr-x@ 3 heathyeager  staff    96B Feb 11 23:23 ..
+-rw-r--r--@ 1 heathyeager  staff   8.4K Feb 11 23:25 openclaw.json.bak.redacted

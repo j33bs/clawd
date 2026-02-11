@@ -1,0 +1,45 @@
+{
+  "ts": "2026-02-11T13:45:26.229Z",
+  "outDir": "/Users/heathyeager/clawd/workspace/docs/audits/SYSTEM2-EVIDENCE-2026-02-11/postfix_obs/snapshots/20260211T134517Z",
+  "allOk": true,
+  "commandSummary": [
+    {
+      "id": "health",
+      "command": "openclaw health --json",
+      "exitCode": 0,
+      "parsed": true
+    },
+    {
+      "id": "status",
+      "command": "openclaw status --json",
+      "exitCode": 0,
+      "parsed": true
+    },
+    {
+      "id": "approvals_get",
+      "command": "openclaw approvals get --json",
+      "exitCode": 0,
+      "parsed": true
+    },
+    {
+      "id": "nodes_list",
+      "command": "openclaw nodes list --json",
+      "exitCode": 0,
+      "parsed": true
+    }
+  ],
+  "contracts": [
+    {
+      "path": "core/system2/constants.js",
+      "exists": true
+    },
+    {
+      "path": "core/system2/observability/index.js",
+      "exists": true
+    },
+    {
+      "path": "core/system2/observability/event_emitter.js",
+      "exists": true
+    }
+  ]
+}
