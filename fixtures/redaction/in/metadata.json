@@ -1,0 +1,6 @@
+{
+  "service": "redaction-fixture",
+  "contact": "ops@example.internal",
+  "path": "/Users/demo/clawd/workspace/docs/audits/input",
+  "token": "sk-TESTABCDEFGHIJKLMN123456"
+}

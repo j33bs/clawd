@@ -70,6 +70,7 @@ telegram_health_reports.json
 # TEMP AND CACHE
 # ============================================
 tmp/
+.tmp/
 tmp/afk_verify_*.log
 tmp/intent_failures_FRESH_*.md
 cache/
