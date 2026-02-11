@@ -75,10 +75,6 @@ function isAllowlistedPath(filePath) {
     return true;
   }
 
-  if (/^schemas\/system2_.*\.schema\.json$/i.test(filePath)) {
-    return true;
-  }
-
   if (filePath.startsWith('sys/config/')) {
     return true;
   }
