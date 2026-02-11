@@ -117,3 +117,43 @@ Sources:
 - ✓ Bootstrap state doesn't block responses once paired
 - ✓ Fetch errors are transient network issues (non-blocking)
 - ✓ Authentication was properly configured all along
+
+## Telegram Token / Webhook Diagnostics (Secret-Safe)
+
+Use repo-local diagnostics (never prints token value):
+
+```bash
+node scripts/telegram_diag.js
+```
+
+Outputs:
+- token length
+- has whitespace/quotes/newline flags
+- `getMe` HTTP status + truncated response preview
+- `getWebhookInfo` HTTP status + webhook set/unset
+
+If polling is expected and webhook is set, reset webhook without dropping updates:
+
+```bash
+node scripts/telegram_diag.js --reset-webhook
+```
+
+To explicitly drop pending updates (opt-in only):
+
+```bash
+node scripts/telegram_diag.js --reset-webhook --drop-pending
+```
+
+## macOS LaunchAgent Environment Mismatch
+
+Interactive shell env vars do not automatically propagate into LaunchAgent services.
+
+Practical check:
+- `launchctl list | grep -i openclaw`
+- Inspect `~/Library/LaunchAgents/ai.openclaw.gateway.plist` `EnvironmentVariables`
+
+If Telegram works in shell but not service, configure token through OpenClaw config (preferred) or service environment, then reload service:
+
+```bash
+openclaw gateway restart
+```

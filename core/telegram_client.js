@@ -49,9 +49,61 @@ function isRetryableError(error) {
   );
 }
 
+function inspectToken(token) {
+  if (typeof token !== 'string' || token.length === 0) {
+    return {
+      present: false,
+      length: 0,
+      hasWhitespace: false,
+      hasQuotes: false,
+      hasNewline: false,
+      malformed: false
+    };
+  }
+
+  const hasWhitespace = /\s/.test(token);
+  const hasQuotes = /['"]/.test(token);
+  const hasNewline = /[\r\n]/.test(token);
+  return {
+    present: true,
+    length: token.length,
+    hasWhitespace,
+    hasQuotes,
+    hasNewline,
+    malformed: hasWhitespace || hasQuotes || hasNewline
+  };
+}
+
+function classifyTelegramErrorCategory(status) {
+  if (status === 401) {
+    return 'token_rejected_401';
+  }
+  if (status === 404) {
+    return 'endpoint_not_found_404';
+  }
+  return 'telegram_http_error';
+}
+
+function classifyTelegramError(status, payload, fallbackMessage) {
+  const category = classifyTelegramErrorCategory(status);
+  if (category === 'token_rejected_401') {
+    return new Error('Token rejected (401)');
+  }
+  if (category === 'endpoint_not_found_404') {
+    return new Error('Endpoint 404 (likely malformed token/path)');
+  }
+  if (payload && typeof payload.description === 'string' && payload.description.trim()) {
+    return new Error(payload.description.trim());
+  }
+  return new Error(fallbackMessage);
+}
+
 class TelegramClient {
   constructor(options = {}) {
-    this.token = options.token || process.env.TELEGRAM_BOT_TOKEN || null;
+    this.token = Object.prototype.hasOwnProperty.call(options, 'token')
+      ? options.token
+      : (process.env.TELEGRAM_BOT_TOKEN || null);
+    this.tokenInspection = inspectToken(this.token);
     this.baseUrl = (options.baseUrl || DEFAULT_BASE_URL).replace(/\/$/, '');
     this.timeoutMs = Number(options.timeoutMs ?? DEFAULT_TIMEOUT_MS);
     this.baseDelayMs = Number(options.baseDelayMs ?? DEFAULT_BASE_DELAY_MS);
@@ -76,8 +128,19 @@ class TelegramClient {
   }
 
   async request(method, payload, options = {}) {
-    if (!this.token) {
-      return { ok: false, error: new Error('TELEGRAM_BOT_TOKEN is missing') };
+    if (!this.tokenInspection.present) {
+      return {
+        ok: false,
+        errorCategory: 'token_missing',
+        error: new Error('Token missing')
+      };
+    }
+    if (this.tokenInspection.malformed) {
+      return {
+        ok: false,
+        errorCategory: 'token_malformed',
+        error: new Error('Token malformed (whitespace/quotes/newline)')
+      };
     }
 
     const allowBreakerSkip = options.allowBreakerSkip === true;
@@ -134,24 +197,28 @@ class TelegramClient {
       const status = response.status;
 
       if (!response.ok) {
+        const errorCategory = classifyTelegramErrorCategory(status);
         return {
           ok: false,
           status,
+          errorCategory,
           retryable: isRetryableStatus(status),
           retryAfterMs: this.extractRetryAfterMs(json),
-          error: new Error(`Telegram request failed: ${status}`),
+          error: classifyTelegramError(status, json, `Telegram request failed: ${status}`),
           payload: json
         };
       }
 
       if (json && json.ok === false) {
         const errorCode = json.error_code || status;
+        const errorCategory = classifyTelegramErrorCategory(errorCode);
         return {
           ok: false,
           status: errorCode,
+          errorCategory,
           retryable: isRetryableStatus(errorCode),
           retryAfterMs: this.extractRetryAfterMs(json),
-          error: new Error(json.description || 'Telegram error'),
+          error: classifyTelegramError(errorCode, json, 'Telegram error'),
           payload: json
         };
       }
