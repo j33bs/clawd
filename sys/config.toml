@@ -41,7 +41,3 @@ envelope_signing_key_env = "SYSTEM2_ENVELOPE_HMAC_KEY"
 event_log_path = "sys/state/system2/events.jsonl"
 sync_cursor_path = "sys/state/system2/sync_cursor.json"
 tool_plane_enabled = false
-gateway_port = 4100
-gateway_host = "127.0.0.1"
-token_budget_cap = 100000
-call_budget_cap = 200
