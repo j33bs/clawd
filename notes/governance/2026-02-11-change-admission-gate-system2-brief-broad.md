@@ -80,3 +80,20 @@ If regressions occur, record failing command, affected subsystem, rollback SHA, 
   - `node scripts/verify_model_routing.js`
   - `node tests/local_fallback_routing.test.js`
   - `node tests/sys_acceptance.test.js`
+
+## phase 5 evidence update
+- Added federated envelope and RPC modules:
+  - `core/system2/federated_envelope.js`
+  - `core/system2/federated_rpc_v0.js`
+  - `core/integration/system1_adapter.js`
+- Added schema:
+  - `schemas/federated_job_envelope.schema.json`
+- Added tests:
+  - `tests/federated_envelope.test.js`
+  - `tests/federated_rpc_v0.test.js`
+- Verification run:
+  - `node tests/federated_envelope.test.js`
+  - `node tests/federated_rpc_v0.test.js`
+  - `node scripts/verify_model_routing.js`
+  - `node tests/local_fallback_routing.test.js`
+  - `node tests/sys_acceptance.test.js`
