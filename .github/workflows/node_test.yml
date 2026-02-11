@@ -22,3 +22,5 @@ jobs:
         run: npm ci
       - name: Run tests
         run: npm test
+      - name: Module resolution gate
+        run: npm run gate:module-resolution

@@ -3,6 +3,7 @@
   "private": true,
   "version": "0.0.0",
   "scripts": {
-    "test": "node scripts/run_tests.js"
+    "test": "node scripts/run_tests.js",
+    "gate:module-resolution": "node scripts/module_resolution_gate.js --json"
   }
 }
