@@ -141,27 +141,8 @@ node scripts/telegram_diag.js --reset-webhook
 To explicitly drop pending updates (opt-in only):
 
 ```bash
-node scripts/telegram_diag.js --reset-webhook --drop-pending-updates
+node scripts/telegram_diag.js --reset-webhook --drop-pending
 ```
-
-## Telegram E2E Verification (Secret-Safe)
-
-Live mode (requires chat id):
-
-```bash
-node scripts/telegram_diag.js --e2e --timeout-ms 30000 --chat-id <CHAT_ID>
-```
-
-Passive mode (no chat id; operator sends `/start` during the window):
-
-```bash
-node scripts/telegram_diag.js --e2e --timeout-ms 30000
-```
-
-Expected outputs:
-- machine-readable report at `reports/diag/telegram_e2e.json`
-- required fields: `timestamp`, `mode`, `ok`, `observed_update`, `observed_reply`, `latency_ms`, `error_category`
-- secret-safe stdout only (no token, no message body, no usernames)
 
 ## macOS LaunchAgent Environment Mismatch
 
