@@ -32,20 +32,3 @@ Then revert latest System-2 commit if further rollback is required.
 
 ## post-mortem
 If regressions occur, record failing command, affected subsystem, rollback SHA, and corrective follow-up before re-attempting rollout.
-
-## phase 2 evidence update
-- Added `system2` config contract to:
-  - `sys/config/defaults.js`
-  - `sys/config/config.schema.json`
-  - `sys/config.toml`
-  - `sys/config.toml.example`
-- Added startup invariant probe:
-  - `core/system2/startup_invariants.js`
-  - `scripts/system2_invariant_probe.js`
-- Added tests:
-  - `tests/system2_startup_invariants.test.js`
-  - updated `tests/sys_config.test.js`
-- Verification run:
-  - `node scripts/system2_invariant_probe.js`
-  - `node tests/sys_config.test.js`
-  - `node tests/system2_startup_invariants.test.js`
