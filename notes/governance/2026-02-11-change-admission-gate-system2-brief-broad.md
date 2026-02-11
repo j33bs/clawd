@@ -97,3 +97,15 @@ If regressions occur, record failing command, affected subsystem, rollback SHA, 
   - `node scripts/verify_model_routing.js`
   - `node tests/local_fallback_routing.test.js`
   - `node tests/sys_acceptance.test.js`
+
+## phase 6 evidence update
+- Added read-only tool plane host:
+  - `core/system2/tool_plane.js`
+- Tool allowlist hash remains enforced by startup invariants (`scripts/system2_invariant_probe.js`).
+- Added tests:
+  - `tests/system2_tool_plane.test.js`
+- Verification run:
+  - `node tests/system2_tool_plane.test.js`
+  - `node scripts/verify_model_routing.js`
+  - `node tests/local_fallback_routing.test.js`
+  - `node tests/sys_acceptance.test.js`
