@@ -18,6 +18,7 @@ const {
   buildConstitutionAuditRecord,
   appendConstitutionAudit
 } = require('./constitution_instantiation');
+const { evaluateRoutingDecision } = require('./system2/routing_policy_contract');
 
 const LOCAL_INTENT_ALLOWLIST = new Set([
   'route',
@@ -783,6 +784,12 @@ async function callModel({
   const safeTaskId = taskId || generateTaskId();
   const safeMessages = Array.isArray(messages) ? messages : [];
   const safeMetadata = metadata && typeof metadata === 'object' ? { ...metadata } : {};
+  const system2PolicyEnabled = envFlagEnabled('OPENCLAW_SYSTEM2_POLICY_ENFORCE');
+  const system2PolicyInput =
+    safeMetadata.system2_policy_input ||
+    safeMetadata.system2PolicyInput ||
+    null;
+  let system2PolicyDecision = null;
   const constitutionEnforced = envFlagEnabled('OPENCLAW_CONSTITUTION_ENFORCE');
   const constitutionMaxChars = Number(process.env.OPENCLAW_CONSTITUTION_MAX_CHARS || DEFAULT_MAX_CONSTITUTION_CHARS);
   const constitutionSourcePath =
@@ -822,11 +829,47 @@ async function callModel({
     });
   }
 
+  if (system2PolicyEnabled && system2PolicyInput && typeof system2PolicyInput === 'object') {
+    try {
+      system2PolicyDecision = evaluateRoutingDecision(system2PolicyInput);
+      safeMetadata.system2_policy_decision = system2PolicyDecision;
+    } catch (policyError) {
+      await Promise.resolve();
+      events.push({
+        event_type: 'BACKEND_ERROR',
+        task_id: safeTaskId,
+        task_class: taskClass || 'BASIC',
+        from_backend: 'UNKNOWN',
+        to_backend: 'UNKNOWN',
+        trigger_code: ERROR_CODES.UNKNOWN,
+        provider_error_code: 'system2_policy_evaluation_failed',
+        network_used: false,
+        timestamp: timestampIso(),
+        rationale: 'system2_policy_evaluation_failed',
+        metadata: {
+          error: policyError && policyError.message ? policyError.message : String(policyError)
+        }
+      });
+    }
+  }
+
+  const effectiveAllowNetwork =
+    system2PolicyDecision &&
+    system2PolicyDecision.degrade_flags &&
+    system2PolicyDecision.degrade_flags.local_only
+      ? false
+      : allowNetwork;
+
+  const effectivePreferredBackend =
+    system2PolicyDecision && system2PolicyDecision.selected_model_route
+      ? system2PolicyDecision.selected_model_route
+      : preferredBackend;
+
   const routePlan = router.buildRoutePlan({
     taskClass,
     requiresClaude,
-    allowNetwork,
-    preferredBackend,
+    allowNetwork: effectiveAllowNetwork,
+    preferredBackend: effectivePreferredBackend,
     metadata: safeMetadata,
     messages: safeMessages
   });
@@ -981,6 +1024,42 @@ async function callModel({
         requires_claude: routePlan.requiresClaude
       }
     });
+  }
+
+  if (
+    system2PolicyDecision &&
+    system2PolicyDecision.degrade_flags &&
+    system2PolicyDecision.degrade_flags.deny_reason
+  ) {
+    await emitFallbackEvent({
+      event_type: 'BACKEND_ERROR',
+      task_id: safeTaskId,
+      task_class: routePlan.taskClass,
+      from_backend: routePlan.preferredBackend || 'UNKNOWN',
+      to_backend: routePlan.preferredBackend || 'UNKNOWN',
+      trigger_code: ERROR_CODES.QUOTA,
+      provider_error_code: 'system2_policy_denied',
+      network_used: false,
+      timestamp: timestampIso(),
+      rationale: 'system2_policy_denied',
+      metadata: {
+        deny_reason: system2PolicyDecision.degrade_flags.deny_reason
+      }
+    });
+
+    return {
+      backend: routePlan.preferredBackend || 'UNKNOWN',
+      response: {
+        text: `Request denied by System-2 policy: ${system2PolicyDecision.degrade_flags.deny_reason}`,
+        raw: {
+          controlled: true,
+          reason: 'SYSTEM2_POLICY_DENIED',
+          decision: system2PolicyDecision
+        }
+      },
+      usage: null,
+      events
+    };
   }
 
   await emitCooldownClears();
