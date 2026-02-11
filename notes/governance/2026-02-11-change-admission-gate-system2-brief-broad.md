@@ -49,3 +49,18 @@ If regressions occur, record failing command, affected subsystem, rollback SHA, 
   - `node scripts/system2_invariant_probe.js`
   - `node tests/sys_config.test.js`
   - `node tests/system2_startup_invariants.test.js`
+
+## phase 3 evidence update
+- Added routing policy contract:
+  - `core/system2/routing_policy_contract.js`
+  - `schemas/system2_routing_policy_contract.schema.json`
+- Integrated policy gate into `core/model_call.js` (additive, env-guarded via `OPENCLAW_SYSTEM2_POLICY_ENFORCE=1`).
+- Added tests:
+  - `tests/system2_routing_policy_contract.test.js`
+  - `tests/model_call_system2_policy.test.js`
+- Verification run:
+  - `node tests/system2_routing_policy_contract.test.js`
+  - `node tests/model_call_system2_policy.test.js`
+  - `node scripts/verify_model_routing.js`
+  - `node tests/local_fallback_routing.test.js`
+  - `node tests/sys_acceptance.test.js`
