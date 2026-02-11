@@ -8,7 +8,8 @@
     "models",
     "scheduler",
     "evolution",
-    "knowledge"
+    "knowledge",
+    "system2"
   ],
   "properties": {
     "feature_flags": {
@@ -74,6 +75,41 @@
             "evidence_manifest": { "type": "string" }
           }
         }
+      }
+    },
+    "system2": {
+      "type": "object",
+      "required": [
+        "feature_enabled",
+        "workspace_path",
+        "identity_path",
+        "policy_version",
+        "tool_allowlist_path",
+        "tool_allowlist_hash",
+        "federation_enabled",
+        "federation_external_root",
+        "litellm_endpoint",
+        "use_litellm_proxy",
+        "envelope_signing_key_env",
+        "event_log_path",
+        "sync_cursor_path",
+        "tool_plane_enabled"
+      ],
+      "properties": {
+        "feature_enabled": { "type": "boolean" },
+        "workspace_path": { "type": "string" },
+        "identity_path": { "type": "string" },
+        "policy_version": { "type": "string" },
+        "tool_allowlist_path": { "type": "string" },
+        "tool_allowlist_hash": { "type": "string" },
+        "federation_enabled": { "type": "boolean" },
+        "federation_external_root": { "type": "string" },
+        "litellm_endpoint": { "type": "string" },
+        "use_litellm_proxy": { "type": "boolean" },
+        "envelope_signing_key_env": { "type": "string" },
+        "event_log_path": { "type": "string" },
+        "sync_cursor_path": { "type": "string" },
+        "tool_plane_enabled": { "type": "boolean" }
       }
     }
   }

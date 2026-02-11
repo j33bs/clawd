@@ -44,6 +44,7 @@ function isAllowlistedPath(filePath) {
   if (
     filePath === '.gitignore' ||
     filePath === 'scripts/check_staged_allowlist.js' ||
+    filePath === 'scripts/system2_invariant_probe.js' ||
     filePath === 'scripts/init_fallback_system.js' ||
     filePath === 'scripts/multi_agent_fallback.js' ||
     filePath === 'scripts/verify_model_routing.js' ||
@@ -71,6 +72,14 @@ function isAllowlistedPath(filePath) {
   }
 
   if (/^schemas\/.*event.*\.schema\.json$/.test(filePath)) {
+    return true;
+  }
+
+  if (filePath.startsWith('sys/config/')) {
+    return true;
+  }
+
+  if (filePath === 'sys/config.toml' || filePath === 'sys/config.toml.example') {
     return true;
   }
 
