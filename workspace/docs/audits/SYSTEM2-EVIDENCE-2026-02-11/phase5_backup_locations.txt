@@ -1,0 +1,5 @@
+# Phase 5 backup locations
+timestamp=2026-02-11T13:25:53Z
+evidence_backup_dir=workspace/docs/audits/SYSTEM2-EVIDENCE-2026-02-11/backups/20260211T232324
+private_backup_file=/Users/heathyeager/.openclaw/audit-backups/20260211T232324/openclaw.json.bak
+evidence_redacted_backup=workspace/docs/audits/SYSTEM2-EVIDENCE-2026-02-11/backups/20260211T232324/openclaw.json.bak.redacted

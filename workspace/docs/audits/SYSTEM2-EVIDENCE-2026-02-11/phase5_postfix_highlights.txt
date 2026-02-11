@@ -1,0 +1,17 @@
+# Phase 5 post-fix highlights
+timestamp=2026-02-11T13:24:41.250Z
+status.security.summary={"critical":0,"warn":1,"info":1}
+status.security.attack_surface=groups: open=0, allowlist=1
+tools.elevated: enabled
+hooks: disabled
+browser control: enabled
+status.memory.workspaceDir=/Users/heathyeager/clawd
+status.agents.workspaceDir=/Users/heathyeager/clawd
+health.ok=true
+health.channels.telegram.configured=false
+approvals_get_raw={"path":"/Users/heathyeager/.openclaw/exec-approvals.json","exists":false,"hash":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","file":{"version":1,"socket":{},"defaults":{},"agents":{}}}
+nodes_list_raw=Pending: 0 · Paired: 0
+{
+  "pending": [],
+  "paired": []
+}

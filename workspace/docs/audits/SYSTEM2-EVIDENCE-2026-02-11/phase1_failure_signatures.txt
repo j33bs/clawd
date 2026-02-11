@@ -1,0 +1,119 @@
+# Phase 1.3 Failure Signature Scan
+timestamp=2026-02-11T13:10:44Z
+
+## File: /Users/heathyeager/.openclaw/logs/gateway.log
+- lines:     5935
+- auth_401_403_count: 9
+- permission_denial_count: 1
+- retry_backoff_count: 8
+- loop_risk_count: 7
+
+### recent auth/permission snippets (last 30 matches)
+308:2026-01-30T13:41:41.403Z [browser/server] Browser control listening on http://127.0.0.1:18791/
+734:2026-01-30T18:00:21.401Z [canvas] host mounted at http://127.0.0.1:18789/__clawdbot__/canvas/ (root /Users/heathyeager/clawd/canvas)
+1895:2026-01-31T08:32:06.403Z [heartbeat] started
+2242:2026-01-31T12:19:48.401Z [gateway] listening on ws://[::1]:18789
+3467:2026-02-01T15:06:27.401Z [Heath’s MacBook Pro (Clawdbot)._clawdbot-gw._tcp.local.] failed probing with reason: Error: Can't probe for a service which is announced already. Received announcing for service Heath’s MacBook Pro (Clawdbot)._clawdbot-gw._tcp.local.. Trying again in 2 seconds!
+5343:2026-02-08T07:01:45.340Z [ws] ⇄ res ✗ agent errorCode=UNAVAILABLE errorMessage=Error: All models failed (5): qwen-portal/coder-model: 429 Free allocated quota exceeded. (rate_limit) | anthropic/claude-opus-4-6: HTTP 401 authentication_error: Invalid bearer token (request_id: req_011CXvAxHnSXGLV3V5aAqpTD) (auth) | anth... runId=e229dd9a-01c4-453d-9ada-0bd6f3082727 error=Error: All models failed (5): qwen-portal/coder-model: 429 Free allocated quota exceeded. (rate_limit) | anthropic/claude-opus-4-6: HTTP 401 authentication_error: Invalid bearer token (request_id: req_011CXvAxHnSXGLV3V5aAqpTD) (auth) | anth... conn=0fbca9a1…2207 id=091e29aa…4cf5
+5344:2026-02-08T07:31:06.468Z [ws] ⇄ res ✗ agent errorCode=UNAVAILABLE errorMessage=Error: All models failed (5): qwen-portal/coder-model: 429 Free allocated quota exceeded. (rate_limit) | anthropic/claude-opus-4-6: HTTP 401 authentication_error: Invalid bearer token (request_id: req_011CXvDC7PF1hvYbkf97hsVA) (auth) | anth... runId=b6aa18a9-d90c-4273-bb83-0ea19b48b72f error=Error: All models failed (5): qwen-portal/coder-model: 429 Free allocated quota exceeded. (rate_limit) | anthropic/claude-opus-4-6: HTTP 401 authentication_error: Invalid bearer token (request_id: req_011CXvDC7PF1hvYbkf97hsVA) (auth) | anth... conn=7b4fcf8e…e55e id=c9a5a2a6…8551
+5346:2026-02-08T08:49:34.439Z [ws] ⇄ res ✗ agent errorCode=UNAVAILABLE errorMessage=Error: All models failed (5): qwen-portal/coder-model: 429 Free allocated quota exceeded. (rate_limit) | anthropic/claude-opus-4-6: HTTP 401 authentication_error: Invalid bearer token (request_id: req_011CXvKB9pFscmWRP4YyRRGp) (auth) | anth... runId=b4afd411-530f-46b5-87e8-dd65289d8bf3 error=Error: All models failed (5): qwen-portal/coder-model: 429 Free allocated quota exceeded. (rate_limit) | anthropic/claude-opus-4-6: HTTP 401 authentication_error: Invalid bearer token (request_id: req_011CXvKB9pFscmWRP4YyRRGp) (auth) | anth... conn=f0a5895e…0de3 id=dc09d383…a399
+5455:2026-02-10T14:54:51.904Z [ws] ⇄ res ✗ sessions.patch 7ms errorCode=INVALID_REQUEST errorMessage=model not allowed: openai/gpt-4o conn=0d21a70c…08d1 id=2a2b1731…ae60
+5877:5. **Add unified CI** to run both Node and Python verification suites plus secrets/forbidden-file checks.
+
+### recent retry/loop snippets (last 40 matches)
+14:2026-01-29T14:02:38.951Z [ws] ⇄ res ✗ agent errorCode=UNAVAILABLE errorMessage=FailoverError: No API key found for provider "anthropic". Auth store: /Users/heathyeager/.clawdbot/agents/main/agent/auth-profiles.json (agentDir: /Users/heathyeager/.clawdbot/agents/main/agent). Configure auth for this agent (clawdbot agen... runId=e786b31a-5371-4533-80e8-2975697c5683 error=FailoverError: No API key found for provider "anthropic". Auth store: /Users/heathyeager/.clawdbot/agents/main/agent/auth-profiles.json (agentDir: /Users/heathyeager/.clawdbot/agents/main/agent). Configure auth for this agent (clawdbot agen... conn=2bb72d9d…7d21 id=3b9bfc98…eb1a
+5343:2026-02-08T07:01:45.340Z [ws] ⇄ res ✗ agent errorCode=UNAVAILABLE errorMessage=Error: All models failed (5): qwen-portal/coder-model: 429 Free allocated quota exceeded. (rate_limit) | anthropic/claude-opus-4-6: HTTP 401 authentication_error: Invalid bearer token (request_id: req_011CXvAxHnSXGLV3V5aAqpTD) (auth) | anth... runId=e229dd9a-01c4-453d-9ada-0bd6f3082727 error=Error: All models failed (5): qwen-portal/coder-model: 429 Free allocated quota exceeded. (rate_limit) | anthropic/claude-opus-4-6: HTTP 401 authentication_error: Invalid bearer token (request_id: req_011CXvAxHnSXGLV3V5aAqpTD) (auth) | anth... conn=0fbca9a1…2207 id=091e29aa…4cf5
+5344:2026-02-08T07:31:06.468Z [ws] ⇄ res ✗ agent errorCode=UNAVAILABLE errorMessage=Error: All models failed (5): qwen-portal/coder-model: 429 Free allocated quota exceeded. (rate_limit) | anthropic/claude-opus-4-6: HTTP 401 authentication_error: Invalid bearer token (request_id: req_011CXvDC7PF1hvYbkf97hsVA) (auth) | anth... runId=b6aa18a9-d90c-4273-bb83-0ea19b48b72f error=Error: All models failed (5): qwen-portal/coder-model: 429 Free allocated quota exceeded. (rate_limit) | anthropic/claude-opus-4-6: HTTP 401 authentication_error: Invalid bearer token (request_id: req_011CXvDC7PF1hvYbkf97hsVA) (auth) | anth... conn=7b4fcf8e…e55e id=c9a5a2a6…8551
+5346:2026-02-08T08:49:34.439Z [ws] ⇄ res ✗ agent errorCode=UNAVAILABLE errorMessage=Error: All models failed (5): qwen-portal/coder-model: 429 Free allocated quota exceeded. (rate_limit) | anthropic/claude-opus-4-6: HTTP 401 authentication_error: Invalid bearer token (request_id: req_011CXvKB9pFscmWRP4YyRRGp) (auth) | anth... runId=b4afd411-530f-46b5-87e8-dd65289d8bf3 error=Error: All models failed (5): qwen-portal/coder-model: 429 Free allocated quota exceeded. (rate_limit) | anthropic/claude-opus-4-6: HTTP 401 authentication_error: Invalid bearer token (request_id: req_011CXvKB9pFscmWRP4YyRRGp) (auth) | anth... conn=f0a5895e…0de3 id=dc09d383…a399
+5347:2026-02-08T08:51:29.521Z [ws] ⇄ res ✗ agent errorCode=UNAVAILABLE errorMessage=Error: All models failed (5): qwen-portal/coder-model: Provider qwen-portal is in cooldown (all profiles unavailable) (rate_limit) | anthropic/claude-opus-4-6: Provider anthropic is in cooldown (all profiles unavailable) (rate_limit) | anth... runId=2e54d50b-466f-46d7-baae-91eb173b8a31 error=Error: All models failed (5): qwen-portal/coder-model: Provider qwen-portal is in cooldown (all profiles unavailable) (rate_limit) | anthropic/claude-opus-4-6: Provider anthropic is in cooldown (all profiles unavailable) (rate_limit) | anth... conn=e3c84da4…9006 id=2f85a18e…15c2
+5348:2026-02-08T08:57:36.296Z [ws] ⇄ res ✗ agent errorCode=UNAVAILABLE errorMessage=Error: All models failed (5): qwen-portal/coder-model: Provider qwen-portal is in cooldown (all profiles unavailable) (rate_limit) | anthropic/claude-opus-4-6: Provider anthropic is in cooldown (all profiles unavailable) (rate_limit) | anth... runId=1fc512ec-8f05-4644-a85b-99c5c914bb4f error=Error: All models failed (5): qwen-portal/coder-model: Provider qwen-portal is in cooldown (all profiles unavailable) (rate_limit) | anthropic/claude-opus-4-6: Provider anthropic is in cooldown (all profiles unavailable) (rate_limit) | anth... conn=43527961…72d1 id=53bf4921…2e4f
+5459:2026-02-10T15:20:54.051Z [ws] ⇄ res ✗ agent errorCode=UNAVAILABLE errorMessage=Error: All models failed (12): google-gemini-cli/gemini-3-pro-preview: LLM request timed out. (unknown) | anthropic/claude-opus-4-6: No available auth profile for anthropic (all in cooldown or unavailable). (rate_limit) | anthropic/claude-o... runId=8f2b9cbf-7a65-4e43-8c4f-cbe0333889c5 error=Error: All models failed (12): google-gemini-cli/gemini-3-pro-preview: LLM request timed out. (unknown) | anthropic/claude-opus-4-6: No available auth profile for anthropic (all in cooldown or unavailable). (rate_limit) | anthropic/claude-o... conn=3dece314…ed15 id=a2aaeed3…26ef
+5558:2026-02-10T22:58:52.100Z [ws] ⇄ res ✗ config.patch 5ms errorCode=INVALID_REQUEST errorMessage=config changed since last load; re-run config.get and retry conn=cf46700c…31b7 id=3c9fa59f…0096
+5559:2026-02-10T22:59:02.602Z [reload] config change detected; evaluating reload (meta.lastTouchedAt, models.providers.anthropic.models, models.providers.ollama.models, models.providers.qwen-portal.models, agents.defaults.contextPruning, agents.list, bindings, channels.telegram.timeoutSeconds, channels.telegram.retry, channels.telegram.network, diagnostics)
+5621:  - Observed `getUpdates` timeout + retry message.
+5623:  - Repeated non-fatal `fetch failed` errors in gateway error logs.
+5655:   - `gateway.err.log`: **4** new telegram/network/timeout/retry/send-failure related matches
+5657:   - Notable errors include `fetch failed` and `sendChatAction failed` network failures
+5677:- Investigate intermittent Telegram network failures (`fetch failed`, send action failure)
+5761:2026-02-11T00:17:52.791Z [ws] ⇄ res ✗ config.patch 3ms errorCode=INVALID_REQUEST errorMessage=config changed since last load; re-run config.get and retry conn=d44e5ae1…ad74 id=95eb1d89…3233
+
+## File: /Users/heathyeager/.openclaw/logs/gateway.err.log
+- lines:   298387
+- auth_401_403_count: 168
+- permission_denial_count: 0
+- retry_backoff_count: 216
+- loop_risk_count: 2650
+
+### recent auth/permission snippets (last 30 matches)
+294380:2026-02-07T05:04:12.156Z [diagnostic] lane task error: lane=session:agent:main:main durationMs=485 error="FailoverError: HTTP 401 authentication_error: Invalid bearer token (request_id: req_011CXt8BTQeDaxVth1aBt827)"
+294383:2026-02-07T05:04:12.222Z Embedded agent failed before reply: All models failed (3): qwen-portal/coder-model: 429 Free allocated quota exceeded. (rate_limit) | anthropic/claude-opus-4-6: HTTP 401 authentication_error: Invalid bearer token (request_id: req_011CXt8BTQeDaxVth1aBt827) (auth) | anthropic/claude-opus-4-5: No available auth profile for anthropic (all in cooldown or unavailable). (rate_limit)
+294540:2026-02-07T10:32:47.401Z [openclaw] Non-fatal unhandled rejection (continuing): TypeError: fetch failed
+295114:2026-02-08T05:34:54.403Z [openclaw] Non-fatal unhandled rejection (continuing): TypeError: fetch failed
+295155:2026-02-08T06:45:47.168Z [diagnostic] lane task error: lane=main durationMs=1015 error="FailoverError: HTTP 401 authentication_error: Invalid bearer token (request_id: req_011CXv9jfSD6gWLXkZL3J6mJ)"
+295156:2026-02-08T06:45:47.170Z [diagnostic] lane task error: lane=session:agent:main:main durationMs=1020 error="FailoverError: HTTP 401 authentication_error: Invalid bearer token (request_id: req_011CXv9jfSD6gWLXkZL3J6mJ)"
+295163:2026-02-08T06:45:47.226Z Embedded agent failed before reply: All models failed (5): qwen-portal/coder-model: 429 Free allocated quota exceeded. (rate_limit) | anthropic/claude-opus-4-6: HTTP 401 authentication_error: Invalid bearer token (request_id: req_011CXv9jfSD6gWLXkZL3J6mJ) (auth) | anthropic/claude-opus-4-5: No available auth profile for anthropic (all in cooldown or unavailable). (rate_limit) | openai/gpt-5-chat-latest: No API key found for provider "openai". You are authenticated with OpenAI Codex OAuth. Use openai-codex/gpt-5.2 (ChatGPT OAuth) or set OPENAI_API_KEY for openai/gpt-5.2. (auth) | openai/gpt-5.1-codex-mini: No API key found for provider "openai". You are authenticated with OpenAI Codex OAuth. Use openai-codex/gpt-5.2 (ChatGPT OAuth) or set OPENAI_API_KEY for openai/gpt-5.2. (auth)
+295178:2026-02-08T07:01:45.275Z [diagnostic] lane task error: lane=main durationMs=704 error="FailoverError: HTTP 401 authentication_error: Invalid bearer token (request_id: req_011CXvAxHnSXGLV3V5aAqpTD)"
+295179:2026-02-08T07:01:45.277Z [diagnostic] lane task error: lane=session:agent:main:main durationMs=709 error="FailoverError: HTTP 401 authentication_error: Invalid bearer token (request_id: req_011CXvAxHnSXGLV3V5aAqpTD)"
+295197:2026-02-08T07:31:06.405Z [diagnostic] lane task error: lane=main durationMs=454 error="FailoverError: HTTP 401 authentication_error: Invalid bearer token (request_id: req_011CXvDC7PF1hvYbkf97hsVA)"
+295198:2026-02-08T07:31:06.406Z [diagnostic] lane task error: lane=session:agent:main:main durationMs=459 error="FailoverError: HTTP 401 authentication_error: Invalid bearer token (request_id: req_011CXvDC7PF1hvYbkf97hsVA)"
+295246:2026-02-08T08:49:34.335Z [diagnostic] lane task error: lane=main durationMs=466 error="FailoverError: HTTP 401 authentication_error: Invalid bearer token (request_id: req_011CXvKB9pFscmWRP4YyRRGp)"
+295247:2026-02-08T08:49:34.337Z [diagnostic] lane task error: lane=session:agent:main:main durationMs=471 error="FailoverError: HTTP 401 authentication_error: Invalid bearer token (request_id: req_011CXvKB9pFscmWRP4YyRRGp)"
+295286:2026-02-09T20:04:18.004Z [diagnostic] lane task error: lane=main durationMs=746 error="FailoverError: HTTP 401 authentication_error: Invalid bearer token (request_id: req_011CXy6SHqdT1bezxFgQuExh)"
+295287:2026-02-09T20:04:18.006Z [diagnostic] lane task error: lane=session:agent:main:main durationMs=753 error="FailoverError: HTTP 401 authentication_error: Invalid bearer token (request_id: req_011CXy6SHqdT1bezxFgQuExh)"
+295382:2026-02-10T02:16:06.002Z [diagnostic] lane task error: lane=main durationMs=494 error="FailoverError: HTTP 401 authentication_error: Invalid bearer token (request_id: req_011CXyaniLbKW2673x6HrkTe)"
+295383:2026-02-10T02:16:06.003Z [diagnostic] lane task error: lane=session:agent:main:main durationMs=498 error="FailoverError: HTTP 401 authentication_error: Invalid bearer token (request_id: req_011CXyaniLbKW2673x6HrkTe)"
+296161:2026-02-10T15:04:43.998Z [diagnostic] lane task error: lane=main durationMs=4829 error="FailoverError: HTTP 401 authentication_error: Invalid bearer token (request_id: req_011CXzbQCzkLz8CZaHfPc1an)"
+296162:2026-02-10T15:04:44.000Z [diagnostic] lane task error: lane=session:agent:main:main durationMs=4833 error="FailoverError: HTTP 401 authentication_error: Invalid bearer token (request_id: req_011CXzbQCzkLz8CZaHfPc1an)"
+296221:2026-02-10T15:20:54.152Z Embedded agent failed before reply: All models failed (12): google-gemini-cli/gemini-3-pro-preview: LLM request timed out. (unknown) | anthropic/claude-opus-4-6: HTTP 401 authentication_error: Invalid bearer token (request_id: req_011CXzbQCzkLz8CZaHfPc1an) (auth) | anthropic/claude-opus-4-5: No available auth profile for anthropic (all in cooldown or unavailable). (rate_limit) | qwen-portal/coder-model: 429 Free allocated quota exceeded. (rate_limit) | openai/gpt-5.1-codex-mini: No API key found for provider "openai". You are authenticated with OpenAI Codex OAuth. Use openai-codex/gpt-5.3-codex (OAuth) or set OPENAI_API_KEY to use openai/gpt-5.1-codex. (auth) | google/gemini-flash-lite-latest: No API key found for provider "google". Auth store: /Users/heathyeager/.clawdbot/agents/main/agent/auth-profiles.json (agentDir: /Users/heathyeager/.clawdbot/agents/main/agent). Configure auth for this agent (openclaw agents add <id>) or copy auth-profiles.json from the main agentDir. (auth) | google/gemini-flash-latest: No API key found for provider "google". Auth store: /Users/heathyeager/.clawdbot/agents/main/agent/auth-profiles.json (agentDir: /Users/heathyeager/.clawdbot/agents/main/agent). Configure auth for this agent (openclaw agents add <id>) or copy auth-profiles.json from the main agentDir. (auth) | google/gemini-3-pro-preview: No API key found for provider "google". Auth store: /Users/heathyeager/.clawdbot/agents/main/agent/auth-profiles.json (agentDir: /Users/heathyeager/.clawdbot/agents/main/agent). Configure auth for this agent (openclaw agents add <id>) or copy auth-profiles.json from the main agentDir. (auth) | openai/gpt-5.3-codex: No API key found for provider "openai". You are authenticated with OpenAI Codex OAuth. Use openai-codex/gpt-5.3-codex (OAuth) or set OPENAI_API_KEY to use openai/gpt-5.1-codex. (auth) | openai/gpt-5.2-chat-latest: No API key found for provider "openai". You are authenticated with OpenAI Codex OAuth. Use openai-codex/gpt-5.3-codex (OAuth) or set OPENAI_API_KEY to use openai/gpt-5.1-codex. (auth) | openai-codex/gpt-5.3-codex: 429 Free allocated quota exceeded. (rate_limit) | openai-codex/gpt-5.2: No available auth profile for openai-codex (all in cooldown or unavailable). (rate_limit)
+296428:2026-02-10T18:37:57.676Z [diagnostic] lane task error: lane=main durationMs=2554 error="FailoverError: HTTP 401 authentication_error: Invalid bearer token (request_id: req_011CXzsfKM2F1ARbTG5vyrpN)"
+296429:2026-02-10T18:37:57.678Z [diagnostic] lane task error: lane=session:agent:main:main durationMs=2559 error="FailoverError: HTTP 401 authentication_error: Invalid bearer token (request_id: req_011CXzsfKM2F1ARbTG5vyrpN)"
+296539:2026-02-10T20:29:23.144Z [diagnostic] lane task error: lane=main durationMs=714 error="FailoverError: HTTP 401 authentication_error: Invalid bearer token (request_id: req_011CY12AAKnAhQzRRqAPtcEQ)"
+296540:2026-02-10T20:29:23.145Z [diagnostic] lane task error: lane=session:agent:main:main durationMs=719 error="FailoverError: HTTP 401 authentication_error: Invalid bearer token (request_id: req_011CY12AAKnAhQzRRqAPtcEQ)"
+296707:2026-02-10T22:57:37.758Z [diagnostic] lane task error: lane=main durationMs=620 error="FailoverError: HTTP 401 authentication_error: Invalid bearer token (request_id: req_011CY1DTpRjo7bcv9X4L4NMQ)"
+296708:2026-02-10T22:57:37.760Z [diagnostic] lane task error: lane=session:agent:main:main durationMs=625 error="FailoverError: HTTP 401 authentication_error: Invalid bearer token (request_id: req_011CY1DTpRjo7bcv9X4L4NMQ)"
+297034:2026-02-11T00:00:53.053Z [diagnostic] lane task error: lane=main durationMs=966 error="FailoverError: HTTP 401 authentication_error: Invalid bearer token (request_id: req_011CY1JHb3dVHz61CC6p8KiB)"
+297035:2026-02-11T00:00:53.055Z [diagnostic] lane task error: lane=session:agent:main:main durationMs=970 error="FailoverError: HTTP 401 authentication_error: Invalid bearer token (request_id: req_011CY1JHb3dVHz61CC6p8KiB)"
+297730:2026-02-11T05:11:57.401Z [openclaw] Non-fatal unhandled rejection (continuing): TypeError: fetch failed
+298159:2026-02-11T09:18:11.403Z [openclaw] Non-fatal unhandled rejection (continuing): TypeError: fetch failed
+
+### recent retry/loop snippets (last 40 matches)
+298262:2026-02-11T10:54:44.364Z [openclaw] Non-fatal unhandled rejection (continuing): TypeError: fetch failed
+298265:2026-02-11T10:54:44.572Z [openclaw] Non-fatal unhandled rejection (continuing): TypeError: fetch failed
+298268:2026-02-11T10:54:44.984Z [openclaw] Non-fatal unhandled rejection (continuing): TypeError: fetch failed
+298271:2026-02-11T10:54:45.794Z [openclaw] Non-fatal unhandled rejection (continuing): TypeError: fetch failed
+298274:2026-02-11T10:54:47.404Z [openclaw] Non-fatal unhandled rejection (continuing): TypeError: fetch failed
+298282:2026-02-11T11:00:32.891Z [diagnostic] lane task error: lane=main durationMs=48574 error="FailoverError: 429 Free allocated quota exceeded."
+298283:2026-02-11T11:00:32.894Z [diagnostic] lane task error: lane=session:agent:main:main durationMs=48581 error="FailoverError: 429 Free allocated quota exceeded."
+298284:2026-02-11T11:05:57.240Z [openclaw] Non-fatal unhandled rejection (continuing): TypeError: fetch failed
+298287:2026-02-11T11:11:08.596Z [openclaw] Non-fatal unhandled rejection (continuing): TypeError: fetch failed
+298290:2026-02-11T11:14:46.842Z [openclaw] Non-fatal unhandled rejection (continuing): TypeError: fetch failed
+298293:2026-02-11T11:20:28.070Z [openclaw] Non-fatal unhandled rejection (continuing): TypeError: fetch failed
+298296:2026-02-11T11:21:30.637Z [openclaw] Non-fatal unhandled rejection (continuing): TypeError: fetch failed
+298299:2026-02-11T11:25:39.227Z [openclaw] Non-fatal unhandled rejection (continuing): TypeError: fetch failed
+298302:2026-02-11T11:27:43.717Z [openclaw] Non-fatal unhandled rejection (continuing): TypeError: fetch failed
+298305:2026-02-11T11:30:49.356Z [openclaw] Non-fatal unhandled rejection (continuing): TypeError: fetch failed
+298311:2026-02-11T11:37:09.100Z [openclaw] Non-fatal unhandled rejection (continuing): TypeError: fetch failed
+298314:2026-02-11T11:39:14.393Z [openclaw] Non-fatal unhandled rejection (continuing): TypeError: fetch failed
+298317:2026-02-11T11:40:47.872Z [openclaw] Non-fatal unhandled rejection (continuing): TypeError: fetch failed
+298320:2026-02-11T11:50:11.717Z [openclaw] Non-fatal unhandled rejection (continuing): TypeError: fetch failed
+298323:2026-02-11T11:51:14.021Z [openclaw] Non-fatal unhandled rejection (continuing): TypeError: fetch failed
+298326:2026-02-11T11:56:24.985Z [openclaw] Non-fatal unhandled rejection (continuing): TypeError: fetch failed
+298329:2026-02-11T11:57:27.359Z [openclaw] Non-fatal unhandled rejection (continuing): TypeError: fetch failed
+298332:2026-02-11T11:58:29.987Z [openclaw] Non-fatal unhandled rejection (continuing): TypeError: fetch failed
+298335:2026-02-11T12:04:41.665Z [openclaw] Non-fatal unhandled rejection (continuing): TypeError: fetch failed
+298338:2026-02-11T12:06:14.788Z [openclaw] Non-fatal unhandled rejection (continuing): TypeError: fetch failed
+298341:2026-02-11T12:14:02.133Z [openclaw] Non-fatal unhandled rejection (continuing): TypeError: fetch failed
+298344:2026-02-11T12:17:07.556Z [openclaw] Non-fatal unhandled rejection (continuing): TypeError: fetch failed
+298347:2026-02-11T12:26:59.187Z [openclaw] Non-fatal unhandled rejection (continuing): TypeError: fetch failed
+298350:2026-02-11T12:33:52.085Z [diagnostic] lane task error: lane=main durationMs=55829 error="FailoverError: 429 Free allocated quota exceeded."
+298351:2026-02-11T12:33:52.089Z [diagnostic] lane task error: lane=session:agent:main:main durationMs=55838 error="FailoverError: 429 Free allocated quota exceeded."
+298352:2026-02-11T12:34:29.942Z [openclaw] Non-fatal unhandled rejection (continuing): TypeError: fetch failed
+298359:2026-02-11T12:45:52.856Z [openclaw] Non-fatal unhandled rejection (continuing): TypeError: fetch failed
+298362:2026-02-11T12:48:59.391Z [openclaw] Non-fatal unhandled rejection (continuing): TypeError: fetch failed
+298365:2026-02-11T12:52:37.087Z [openclaw] Non-fatal unhandled rejection (continuing): TypeError: fetch failed
+298368:2026-02-11T13:01:57.330Z [openclaw] Non-fatal unhandled rejection (continuing): TypeError: fetch failed
+298371:2026-02-11T13:05:03.799Z [openclaw] Non-fatal unhandled rejection (continuing): TypeError: fetch failed
+298374:2026-02-11T13:05:43.935Z [openclaw] Non-fatal unhandled rejection (continuing): TypeError: fetch failed
+298379:2026-02-11T13:06:37.495Z [openclaw] Non-fatal unhandled rejection (continuing): TypeError: fetch failed
+298382:2026-02-11T13:09:13.294Z [openclaw] Non-fatal unhandled rejection (continuing): TypeError: fetch failed
+298385:2026-02-11T13:09:44.527Z [openclaw] Non-fatal unhandled rejection (continuing): TypeError: fetch failed

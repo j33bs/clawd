@@ -1,0 +1,15 @@
+# Parsed status/health highlights
+timestamp=2026-02-11T13:16:43.069Z
+status.gateway.reachable=true
+status.agents.defaultId=main
+status.agents.workspaceDir=/Users/heathyeager/.openclaw/workspace
+status.memory.workspaceDir=/Users/heathyeager/.openclaw/workspace
+status.memory.provider=openai
+status.memory.model=text-embedding-3-small
+status.securityAudit.summary={"critical":1,"warn":1,"info":1}
+status.securityAudit.findings=[{"checkId":"summary.attack_surface","severity":"info","title":"Attack surface summary"},{"checkId":"gateway.trusted_proxies_missing","severity":"warn","title":"Reverse proxy headers are not trusted"},{"checkId":"gateway.loopback_no_auth","severity":"critical","title":"Gateway auth missing on loopback"}]
+health.ok=true
+health.channels.telegram.configured=false
+health.channels.telegram.running=false
+health.defaultAgentId=main
+health.agentHeartbeat={"enabled":true,"every":"30m","everyMs":1800000,"prompt":"Read HEARTBEAT.md if it exists (workspace context). Follow it strictly. Do not infer or repeat old tasks from prior chats. If nothing needs attention, reply HEARTBEAT_OK.","target":"last","ackMaxChars":300}
