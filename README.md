@@ -127,6 +127,26 @@ If still failing:
    - Set `OPENCLAW_DEBUG_HANDSHAKE=1` in the gateway process environment.
    - Restart gateway and reproduce once.
 
+### Handshake Debug Modes
+
+- Inspect mode (default):
+  - `scripts\ps.cmd -File .\openclaw.ps1 gateway handshake-debug`
+  - Read-only. Collects schema/evidence artifacts only.
+  - Does not modify installed dist files.
+- Apply mode (explicit, local-only diagnostic):
+  - `scripts\ps.cmd -File .\openclaw.ps1 gateway handshake-debug --apply`
+  - Patches local installed `gateway-cli-*.js` with token-safe handshake debug logging.
+  - Creates per-file backups as `*.bak.handshake-debug-v1.<timestamp>`.
+  - Not recommended as a long-term state.
+- Revert mode:
+  - `scripts\ps.cmd -File .\openclaw.ps1 gateway handshake-debug --revert`
+  - Restores installed files from latest handshake-debug backup.
+
+Rollback (manual backup restore):
+
+1. Locate backup files next to installed `gateway-cli-*.js` in `%APPDATA%\npm\node_modules\openclaw\dist`.
+2. Copy `gateway-cli-*.js.bak.handshake-debug-v1.<timestamp>` back over `gateway-cli-*.js`.
+
 ## Configuration
 
 - Config location: `%USERPROFILE%\.openclaw\openclaw.json`

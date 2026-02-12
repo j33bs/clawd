@@ -96,11 +96,47 @@ function Write-GatewayHealDiagnostics {
     Write-Output "  1) Clear Local Storage + IndexedDB for 127.0.0.1 in browser devtools."
     Write-Output "  2) Hard refresh (or private window), then re-open dashboard."
     Write-Output "  3) If still failing, set OPENCLAW_DEBUG_HANDSHAKE=1 and restart gateway."
-    Write-Output "  4) Collect .tmp/system1_evidence/ui_connect_error.log and .tmp/system1_evidence/client_id_schema.txt."
+    Write-Output "  4) Optional local diagnostic patch: .\openclaw.ps1 gateway handshake-debug --apply"
+    Write-Output "  5) Collect .tmp/system1_evidence/ui_connect_error.log and .tmp/system1_evidence/client_id_schema.txt."
   }
 }
 
 if ($CliArgs.Count -lt 2 -or $CliArgs[0] -ne "audit" -or $CliArgs[1] -ne "system1") {
+  if ($CliArgs.Count -ge 2 -and $CliArgs[0] -eq "gateway" -and $CliArgs[1] -eq "handshake-debug") {
+    $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+    $handshakeScript = Join-Path $scriptDir "scripts/fix_gateway_handshake_debug.ps1"
+    $apply = $false
+    $revert = $false
+
+    if ($CliArgs.Count -ge 3) {
+      foreach ($arg in $CliArgs[2..($CliArgs.Count - 1)]) {
+        switch ($arg) {
+          '--apply' { $apply = $true }
+          '-Apply' { $apply = $true }
+          '--revert' { $revert = $true }
+          '-Revert' { $revert = $true }
+          default {
+            Write-Error "Unknown argument for gateway handshake-debug: $arg"
+            Write-Output "Usage: .\openclaw.ps1 gateway handshake-debug [--apply|--revert]"
+            exit 2
+          }
+        }
+      }
+    }
+
+    if ($apply -and $revert) {
+      Write-Error "Use either --apply or --revert, not both."
+      exit 2
+    }
+
+    $argsForScript = @()
+    if ($apply) { $argsForScript += '-Apply' }
+    if ($revert) { $argsForScript += '-Revert' }
+
+    & $handshakeScript @argsForScript
+    exit $LASTEXITCODE
+  }
+
   if ($CliArgs.Count -ge 2 -and $CliArgs[0] -eq "gateway" -and $CliArgs[1] -eq "heal") {
     $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
     $fixScript = Join-Path $scriptDir "scripts/fix_gateway_auth.ps1"
@@ -151,7 +187,7 @@ if ($CliArgs.Count -lt 2 -or $CliArgs[0] -ne "audit" -or $CliArgs[1] -ne "system
     exit 0
   }
 
-  Write-Error "Usage: .\openclaw.ps1 audit system1`n       .\openclaw.ps1 gateway heal"
+  Write-Error "Usage: .\openclaw.ps1 audit system1`n       .\openclaw.ps1 gateway heal`n       .\openclaw.ps1 gateway handshake-debug [--apply|--revert]"
   exit 2
 }
 
