@@ -90,6 +90,14 @@ function Write-GatewayHealDiagnostics {
   if ($ProbeExit -ne 0 -and $ProbeText -match '(?i)/usr/bin/ssh|ENOENT') {
     Write-Output "Probe still indicates an SSH transport path; verify gateway.remote.* keys were removed for local mode."
   }
+
+  if ($ProbeExit -ne 0 -and $ProbeText -match '(?i)invalid connect params|/client/id|anyOf') {
+    Write-Output "Control UI handshake triage:"
+    Write-Output "  1) Clear Local Storage + IndexedDB for 127.0.0.1 in browser devtools."
+    Write-Output "  2) Hard refresh (or private window), then re-open dashboard."
+    Write-Output "  3) If still failing, set OPENCLAW_DEBUG_HANDSHAKE=1 and restart gateway."
+    Write-Output "  4) Collect .tmp/system1_evidence/ui_connect_error.log and .tmp/system1_evidence/client_id_schema.txt."
+  }
 }
 
 if ($CliArgs.Count -lt 2 -or $CliArgs[0] -ne "audit" -or $CliArgs[1] -ne "system1") {
@@ -97,6 +105,7 @@ if ($CliArgs.Count -lt 2 -or $CliArgs[0] -ne "audit" -or $CliArgs[1] -ne "system
     $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
     $fixScript = Join-Path $scriptDir "scripts/fix_gateway_auth.ps1"
     $transportScript = Join-Path $scriptDir "scripts/fix_gateway_transport.ps1"
+    $handshakeScript = Join-Path $scriptDir "scripts/fix_gateway_handshake_debug.ps1"
     $startScript = Join-Path $scriptDir "scripts/start_gateway_task.ps1"
 
     & $fixScript
@@ -109,6 +118,12 @@ if ($CliArgs.Count -lt 2 -or $CliArgs[0] -ne "audit" -or $CliArgs[1] -ne "system
     $transportExit = $LASTEXITCODE
     if ($transportExit -ne 0) {
       exit $transportExit
+    }
+
+    & $handshakeScript
+    $handshakeExit = $LASTEXITCODE
+    if ($handshakeExit -ne 0) {
+      exit $handshakeExit
     }
 
     & $startScript

@@ -86,6 +86,8 @@ Evidence artifacts:
 
 - `.tmp/system1_evidence/gateway_auth_baseline.txt`
 - `.tmp/system1_evidence/fix_gateway_auth_result.json`
+- `.tmp/system1_evidence/handshake_debug_patch_result.json`
+- `.tmp/system1_evidence/client_id_schema.txt`
 - `.tmp/system1_evidence/start_gateway_task_result.json`
 - `.tmp/system1_evidence/gateway_heal_output.txt`
 - `.tmp/system1_evidence/gateway_probe_after_heal.txt`
@@ -94,6 +96,36 @@ Evidence artifacts:
 Reference troubleshooting guidance:
 
 - `https://docs.openclaw.ai/gateway/troubleshooting`
+
+### Control UI 1008 Invalid Connect Params (`/client/id`)
+
+Symptom:
+
+- Control UI loads, then WebSocket disconnects with:
+  - `disconnected (1008): invalid connect params: at /client/id ... anyOf`
+
+Likely cause (common, not universal):
+
+- Cached UI state/version skew after an upgrade, so the browser sends stale connect payload fields.
+
+Deterministic triage:
+
+1. Open browser DevTools for `http://127.0.0.1:<port>/`.
+2. Application/Storage:
+   - Clear Local Storage for `127.0.0.1`.
+   - Clear IndexedDB for `127.0.0.1`.
+3. Hard refresh (or open a private/incognito window).
+4. Re-open the dashboard URL (including `?token=...` when your deployment uses token-in-URL).
+
+If still failing:
+
+1. Run `scripts\ps.cmd -File .\openclaw.ps1 gateway heal`.
+2. Collect:
+   - `.tmp/system1_evidence/ui_connect_error.log`
+   - `.tmp/system1_evidence/client_id_schema.txt`
+3. Optional deep handshake logging (token-safe):
+   - Set `OPENCLAW_DEBUG_HANDSHAKE=1` in the gateway process environment.
+   - Restart gateway and reproduce once.
 
 ## Configuration
 
