@@ -133,3 +133,14 @@ workspace/operator_transfer_brief.md
 # Run artifacts (do not commit)
 economics/
 completions/
+
+# Local quarantine / audit clutter (keep out of PRs)
+/.quarantine/
+/archive/
+/logs/
+/core/system2/constants.js
+/core/system2/federation/
+/core/system2/observability/
+/tests/federation_contract.test.js
+/workspace/docs/audits/QUARANTINE-BUNDLE-2026-02-12/
+/workspace/docs/audits/TRIAGE-QUARANTINED-TREE-2026-02-12.md
