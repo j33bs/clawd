@@ -48,3 +48,17 @@ Regression-focused diff (fails on increases for selected counters):
 ```bash
 npm run system2:diff -- --a <run1>/snapshot_summary.json --b <run2>/snapshot_summary.json --fail-on snapshot_summary.log_signature_counts.auth_error,snapshot_summary.log_signature_counts.quota_error,snapshot_summary.log_signature_counts.fetch_error
 ```
+
+## A/B experiment protocol
+Run a two-step operator experiment with one change between runs:
+```bash
+npm run system2:experiment -- --out .tmp/system2_experiments/exp1 --fail-on snapshot_summary.log_signature_counts.auth_error,snapshot_summary.log_signature_counts.quota_error,snapshot_summary.log_signature_counts.fetch_error
+```
+
+Protocol rules:
+- Change exactly one operator setting between run A and run B.
+- Do not batch multiple changes in a single experiment.
+- Use decision output from `report.json`:
+  - `KEEP`: measurable change without fail-on regressions
+  - `REVERT`: fail-on regression detected
+  - `INCONCLUSIVE`: no measurable delta
