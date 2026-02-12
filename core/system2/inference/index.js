@@ -12,6 +12,7 @@ const { REQUEST_CLASSES, ALL_REQUEST_CLASSES, PROVIDER_KINDS, AUTH_TYPES, TOOL_S
 const { loadFreeComputeConfig, REDACT_ENV_VARS, REDACT_HEADERS, redactIfSensitive } = require('./config');
 const { CATALOG_VERSION, CATALOG, getProvider, queryProviders } = require('./catalog');
 const { ProviderAdapter } = require('./provider_adapter');
+const { SecretsBridge, PROVIDER_ENV_MAP, BACKEND_TYPES, maskSecretFingerprint } = require('./secrets_bridge');
 const { QuotaLedger } = require('./quota_ledger');
 const { routeRequest, explainRouting } = require('./router');
 const { createVllmProvider, probeVllmServer, vllmStartCommand, buildVllmStatusArtifact } = require('./vllm_provider');
@@ -27,6 +28,8 @@ module.exports = {
   CATALOG_VERSION, CATALOG, getProvider, queryProviders,
   // Adapter
   ProviderAdapter,
+  // Secrets Bridge
+  SecretsBridge, PROVIDER_ENV_MAP, BACKEND_TYPES, maskSecretFingerprint,
   // Quota
   QuotaLedger,
   // Router
