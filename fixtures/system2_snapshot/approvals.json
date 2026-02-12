@@ -1,0 +1,6 @@
+{
+  "approvals": [
+    { "id": "a-1", "decision": "allow" },
+    { "id": "a-2", "decision": "deny" }
+  ]
+}
