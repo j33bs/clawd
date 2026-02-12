@@ -68,16 +68,47 @@ function Invoke-ProcessCapture {
   }
 }
 
+function Write-GatewayHealDiagnostics {
+  param(
+    [int]$StartExit,
+    [int]$ProbeExit,
+    [string]$ProbeText
+  )
+
+  Write-Output "Next diagnostics:"
+  Write-Output "  openclaw status"
+  Write-Output "  openclaw channels status --probe"
+  Write-Output "  openclaw doctor"
+  Write-Output "  .tmp/system1_evidence/transport_fix_result.json"
+  Write-Output "  .tmp/system1_evidence/port_remediation.json"
+  Write-Output "  .tmp/system1_evidence/start_gateway_task_result.json"
+
+  if ($StartExit -ne 0) {
+    Write-Output "Gateway task start script failed with exit code $StartExit."
+  }
+
+  if ($ProbeExit -ne 0 -and $ProbeText -match '(?i)/usr/bin/ssh|ENOENT') {
+    Write-Output "Probe still indicates an SSH transport path; verify gateway.remote.* keys were removed for local mode."
+  }
+}
+
 if ($CliArgs.Count -lt 2 -or $CliArgs[0] -ne "audit" -or $CliArgs[1] -ne "system1") {
   if ($CliArgs.Count -ge 2 -and $CliArgs[0] -eq "gateway" -and $CliArgs[1] -eq "heal") {
     $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
     $fixScript = Join-Path $scriptDir "scripts/fix_gateway_auth.ps1"
+    $transportScript = Join-Path $scriptDir "scripts/fix_gateway_transport.ps1"
     $startScript = Join-Path $scriptDir "scripts/start_gateway_task.ps1"
 
     & $fixScript
     $fixExit = $LASTEXITCODE
     if ($fixExit -ne 0) {
       exit $fixExit
+    }
+
+    & $transportScript
+    $transportExit = $LASTEXITCODE
+    if ($transportExit -ne 0) {
+      exit $transportExit
     }
 
     & $startScript
@@ -90,12 +121,8 @@ if ($CliArgs.Count -lt 2 -or $CliArgs[0] -ne "audit" -or $CliArgs[1] -ne "system
     $probeExit = $probe.ExitCode
     $probeText = [string]$probe.Output
 
-    if ($probeExit -ne 0 -and $probeText -match '(?i)unauthorized|token mismatch|provide gateway auth token') {
-      Write-Output "Next diagnostics:"
-      Write-Output "  openclaw status"
-      Write-Output "  openclaw channels status --probe"
-      Write-Output "  openclaw doctor"
-      exit 1
+    if ($startExit -ne 0 -or $probeExit -ne 0) {
+      Write-GatewayHealDiagnostics -StartExit $startExit -ProbeExit $probeExit -ProbeText $probeText
     }
 
     if ($probeExit -ne 0) {
