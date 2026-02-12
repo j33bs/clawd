@@ -31,18 +31,27 @@ class ProviderAdapter {
     this.entry = catalogEntry;
     this.providerId = catalogEntry.provider_id;
     this.protocol = catalogEntry.protocol;
-    this._env = options.env || process.env;
-    this._emitEvent = options.emitEvent || (() => {});
+    // Non-enumerable: never leak env or callbacks via JSON.stringify
+    Object.defineProperty(this, '_env', {
+      value: options.env || process.env, writable: false, enumerable: false
+    });
+    Object.defineProperty(this, '_emitEvent', {
+      value: options.emitEvent || (() => {}), writable: true, enumerable: false
+    });
 
     // Resolve base URL
     this.baseUrl = this._env[catalogEntry.base_url.env_override]
       || catalogEntry.base_url.default;
 
-    // Resolve auth
-    this._authToken = null;
-    if (catalogEntry.auth && catalogEntry.auth.env_var) {
-      this._authToken = this._env[catalogEntry.auth.env_var] || null;
-    }
+    // Resolve auth — non-enumerable so it never leaks via JSON.stringify
+    Object.defineProperty(this, '_authToken', {
+      value: (catalogEntry.auth && catalogEntry.auth.env_var)
+        ? (this._env[catalogEntry.auth.env_var] || null)
+        : null,
+      writable: true,
+      enumerable: false,
+      configurable: false
+    });
 
     // Resolve model ID (first concrete model or AUTO_DISCOVER)
     const firstModel = catalogEntry.models[0];
