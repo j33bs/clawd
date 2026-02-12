@@ -56,6 +56,45 @@ scripts\ps.cmd -File .\openclaw.ps1 audit system1
 scripts\ps.cmd -ExecutionPolicy Bypass -File .\scripts\scrub_secrets.ps1
 ```
 
+## Gateway Self-Heal (System-1 / Windows)
+
+Symptom:
+
+- Web UI shows disconnected.
+- Agent replies fail.
+- `openclaw gateway probe` reports unauthorized or token mismatch.
+
+Cause:
+
+- `gateway.auth.token` and `gateway.remote.token` drift apart.
+- OpenClaw Gateway Scheduled Task is stopped.
+
+Fix:
+
+```cmd
+scripts\ps.cmd -File .\openclaw.ps1 gateway heal
+```
+
+Expected script outputs (token-safe):
+
+- `aligned` or `unchanged` from token alignment.
+- `started` or `already_running` from gateway task startup.
+- `port_in_use` when local port `18789` is occupied by another process.
+- `openclaw gateway probe` output without unauthorized token mismatch errors.
+
+Evidence artifacts:
+
+- `.tmp/system1_evidence/gateway_auth_baseline.txt`
+- `.tmp/system1_evidence/fix_gateway_auth_result.json`
+- `.tmp/system1_evidence/start_gateway_task_result.json`
+- `.tmp/system1_evidence/gateway_heal_output.txt`
+- `.tmp/system1_evidence/gateway_probe_after_heal.txt`
+- `.tmp/system1_evidence/status_after_heal.txt`
+
+Reference troubleshooting guidance:
+
+- `https://docs.openclaw.ai/gateway/troubleshooting`
+
 ## Configuration
 
 - Config location: `%USERPROFILE%\.openclaw\openclaw.json`

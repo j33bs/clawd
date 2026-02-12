@@ -45,8 +45,71 @@ function Invoke-ProcessRelay {
   }
 }
 
+function Invoke-ProcessCapture {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string]$FilePath,
+    [string[]]$Arguments = @()
+  )
+
+  $tmpStdout = [System.IO.Path]::GetTempFileName()
+  $tmpStderr = [System.IO.Path]::GetTempFileName()
+  try {
+    $proc = Start-Process -FilePath $FilePath -ArgumentList $Arguments -NoNewWindow -Wait -PassThru -RedirectStandardOutput $tmpStdout -RedirectStandardError $tmpStderr
+    $stdout = if (Test-Path -LiteralPath $tmpStdout) { Get-Content -LiteralPath $tmpStdout -Raw } else { "" }
+    $stderr = if (Test-Path -LiteralPath $tmpStderr) { Get-Content -LiteralPath $tmpStderr -Raw } else { "" }
+    return [pscustomobject]@{
+      ExitCode = $proc.ExitCode
+      Output = ($stdout + $stderr).TrimEnd("`r", "`n")
+    }
+  } finally {
+    Remove-Item -LiteralPath $tmpStdout -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $tmpStderr -Force -ErrorAction SilentlyContinue
+  }
+}
+
 if ($CliArgs.Count -lt 2 -or $CliArgs[0] -ne "audit" -or $CliArgs[1] -ne "system1") {
-  Write-Error "Usage: .\openclaw.ps1 audit system1"
+  if ($CliArgs.Count -ge 2 -and $CliArgs[0] -eq "gateway" -and $CliArgs[1] -eq "heal") {
+    $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+    $fixScript = Join-Path $scriptDir "scripts/fix_gateway_auth.ps1"
+    $startScript = Join-Path $scriptDir "scripts/start_gateway_task.ps1"
+
+    & $fixScript
+    $fixExit = $LASTEXITCODE
+    if ($fixExit -ne 0) {
+      exit $fixExit
+    }
+
+    & $startScript
+    $startExit = $LASTEXITCODE
+
+    $probe = Invoke-ProcessCapture -FilePath "cmd.exe" -Arguments @("/c", "openclaw gateway probe")
+    if (-not [string]::IsNullOrWhiteSpace($probe.Output)) {
+      Write-Output $probe.Output
+    }
+    $probeExit = $probe.ExitCode
+    $probeText = [string]$probe.Output
+
+    if ($probeExit -ne 0 -and $probeText -match '(?i)unauthorized|token mismatch|provide gateway auth token') {
+      Write-Output "Next diagnostics:"
+      Write-Output "  openclaw status"
+      Write-Output "  openclaw channels status --probe"
+      Write-Output "  openclaw doctor"
+      exit 1
+    }
+
+    if ($probeExit -ne 0) {
+      exit $probeExit
+    }
+
+    if ($startExit -ne 0) {
+      exit $startExit
+    }
+
+    exit 0
+  }
+
+  Write-Error "Usage: .\openclaw.ps1 audit system1`n       .\openclaw.ps1 gateway heal"
   exit 2
 }
 
