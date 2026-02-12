@@ -24,3 +24,5 @@ jobs:
         run: npm test
       - name: Module resolution gate
         run: npm run gate:module-resolution
+      - name: Redaction fixtures check
+        run: npm run check:redaction-fixtures

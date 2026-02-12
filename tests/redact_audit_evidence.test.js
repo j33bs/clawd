@@ -2,6 +2,10 @@
 'use strict';
 
 const assert = require('assert');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const { spawnSync } = require('node:child_process');
 const { applyRules, buildRules, validateJson } = require('../scripts/redact_audit_evidence');
 
 function test(name, fn) {
@@ -12,6 +16,11 @@ function test(name, fn) {
     console.error('FAIL ' + name + ': ' + err.message);
     process.exitCode = 1;
   }
+}
+
+function runCli(args) {
+  const scriptPath = path.resolve(__dirname, '..', 'scripts', 'redact_audit_evidence.js');
+  return spawnSync(process.execPath, [scriptPath, ...args], { encoding: 'utf8' });
 }
 
 // --- Idempotence ---
@@ -117,4 +126,50 @@ test('placeholders are not themselves redactable patterns', function () {
   const rules = buildRules();
   const { result } = applyRules(input, rules);
   assert.strictEqual(result, input, 'placeholders should pass through unchanged');
+});
+
+test('CLI redacts synthetic fixtures and writes output bundle', function () {
+  const fixtureIn = path.resolve(__dirname, '..', 'fixtures', 'redaction', 'in');
+  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'clawd-redaction-'));
+  const outputDir = path.join(tempRoot, 'out');
+
+  const run = runCli(['--in', fixtureIn, '--out', outputDir, '--json']);
+  assert.strictEqual(run.status, 0, 'CLI should exit 0');
+  assert.ok(run.stdout.trim().startsWith('{'), 'CLI should emit JSON summary');
+
+  const summary = JSON.parse(run.stdout);
+  assert.ok(summary.files_scanned >= 3, 'should scan fixture files');
+  assert.ok(summary.files_changed >= 3, 'should redact fixture files');
+
+  const credentialsOut = fs.readFileSync(path.join(outputDir, 'credentials.txt'), 'utf8');
+  const infoOut = fs.readFileSync(path.join(outputDir, 'system', 'info.md'), 'utf8');
+  const metadataOut = fs.readFileSync(path.join(outputDir, 'metadata.json'), 'utf8');
+
+  assert.ok(!credentialsOut.includes('sk-TEST1234567890ABCDE'), 'OpenAI-like key should be redacted');
+  assert.ok(!credentialsOut.includes('ghp_FAKE123456789012345678901234567890'), 'GitHub-like key should be redacted');
+  assert.ok(!credentialsOut.includes('/Users/demo'), 'absolute macOS path should be redacted');
+  assert.ok(credentialsOut.includes('{{SECRET_TOKEN}}'), 'token placeholder should be present');
+  assert.ok(credentialsOut.includes('{{EMAIL}}'), 'email placeholder should be present');
+  assert.ok(credentialsOut.includes('{{HOST}}'), 'host placeholder should be present');
+
+  assert.ok(!infoOut.includes('heathyeager'), 'username should be redacted in markdown fixture');
+  assert.ok(infoOut.includes('{{USER}}'), 'username placeholder should be present');
+  assert.ok(validateJson(metadataOut), 'redacted JSON output should remain valid JSON');
+  assert.ok(!metadataOut.includes('sk-TESTABCDEFGHIJKLMN123456'), 'JSON token should be redacted');
+
+  fs.rmSync(tempRoot, { recursive: true, force: true });
+});
+
+test('CLI dry-run emits summary and does not write output files', function () {
+  const fixtureIn = path.resolve(__dirname, '..', 'fixtures', 'redaction', 'in');
+  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'clawd-redaction-dry-'));
+  const outputDir = path.join(tempRoot, 'out');
+
+  const run = runCli(['--in', fixtureIn, '--out', outputDir, '--json', '--dry-run']);
+  assert.strictEqual(run.status, 0, 'dry-run should exit 0');
+  const summary = JSON.parse(run.stdout);
+  assert.strictEqual(summary.dry_run, true, 'summary should indicate dry-run mode');
+  assert.strictEqual(fs.existsSync(outputDir), false, 'dry-run should not create output directory');
+
+  fs.rmSync(tempRoot, { recursive: true, force: true });
 });
