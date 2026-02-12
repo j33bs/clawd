@@ -1,63 +1,114 @@
-# ITC Trading Pipeline System
+# OpenClaw System Architecture (System-1 + System-2)
 
-This system implements a data-driven trading pipeline that processes information from Telegram channels to inform trading decisions.
+OpenClaw in this repo is a governed, git-backed agentic system operated as two co-equal subsystems.
+
+## System Overview
+
+- System-1 (Windows): Tier-0 gateway, CI/audit anchor, and local tool-plane host.
+- System-2 (Mac): Co-equal gateway, tool-plane host, and orchestration peer.
+- Both systems follow the same routing and governance contracts; neither is a disposable sidecar.
 
 ## Architecture
 
-### Data Ingestion
-- `telethon_ingest.py`: Captures raw Telegram messages
-- `itc_normalize.py`: Converts to canonical format
-- `itc_route.py`: Routes messages to appropriate destinations
-
-### Market Data
-- `market_stream.py`: Captures exchange data (OHLCV)
-- Stores in `.openclaw/market/candles_1m.jsonl`
-
-### Trading Simulation
-- `sim_runner.py`: Runs two different strategies:
-  - `SIM_A`: Pure market-structure (price regime) long/flat
-  - `SIM_B`: Market-structure + ITC sentiment signals
-- Each sim starts with $1000 capital
-
-### Governance
-- Daily loss limit: 3%
-- Max drawdown kill: 15%
-- Max trades per day: 30
-
-### Reporting
-- `daily_rollup.py`: Generates daily performance metrics
-- Ledger stored in `.openclaw/economics/economics.log`
-
-## File Structure
-
-```
-.openclaw/
-├── itc/
-│   ├── raw/               # Raw Telegram data
-│   └── canon/             # Canonical format
-├── market/                # Market data (candles, funding)
-├── sim/
-│   ├── SIM_A/             # Strategy A files
-│   └── SIM_B/             # Strategy B files
-├── economics/             # Performance ledger
-├── secrets/               # API keys, session data
-├── pipelines/             # Configuration files
-└── scripts/               # Pipeline scripts
+```text
++-----------------------------+        federated RPC         +-----------------------------+
+| System-1 (Windows)          | <--------------------------> | System-2 (Mac)              |
+| - Gateway (Tier-0)          |  submit / poll / stream /   | - Gateway (peer)            |
+| - CI + audit gates          |  cancel                      | - Orchestration peer        |
+| - Tool plane host           |                              | - Tool plane host           |
++--------------+--------------+                              +--------------+--------------+
+               |                                                            |
+               | routing policy contract (inspectable, versioned)           |
+               +-------------------------------+----------------------------+
+                                               |
+                                   +-----------v-----------+
+                                   | Execution + Tool Plane|
+                                   | MCP allowlists        |
+                                   | Sandbox policy        |
+                                   +-----------+-----------+
+                                               |
+                                   +-----------v-----------+
+                                   | Memory + Event Logs   |
+                                   | Append-only records   |
+                                   | Cursor-based sync     |
+                                   +-----------------------+
 ```
 
-## Usage
+## Operational Contracts
 
-1. Configure your Telegram API credentials in `.openclaw/secrets/`
-2. Start the ingestion: `python scripts/telethon_ingest.py`
-3. Start market data collection: `python scripts/market_stream.py`
-4. Run simulations: `python scripts/sim_runner.py`
-5. Generate reports: `python scripts/daily_rollup.py`
+- Governance is proposal-first and evidence-first.
+- Changes must be reversible and promoted through explicit gates.
+- Evidence bundles are required for audit-affecting changes.
+- LOAR constraint: scale behavior by policy knobs (routing, budgets, limits), not by changing formats/contracts.
 
-## Governance Constraints
+## Windows Canonical Execution
 
-The system enforces strict governance rules:
-- No parameter changes during the month-long evaluation period
-- Automatic halting when drawdown or daily loss limits are reached
-- Trade frequency limits to prevent overtrading
+Use `scripts\ps.cmd` as the single PowerShell entrypoint on Windows.
 
-These constraints ensure a fair evaluation of the trading strategies.
+- It prefers `pwsh` when available.
+- It falls back to `powershell.exe` when `pwsh` is unavailable.
+- It always uses `-NoProfile` and propagates exit codes.
+
+Canonical commands:
+
+```cmd
+scripts\ps.cmd -File .\openclaw.ps1 audit system1
+scripts\ps.cmd -ExecutionPolicy Bypass -File .\scripts\scrub_secrets.ps1
+```
+
+## Configuration
+
+- Config location: `%USERPROFILE%\.openclaw\openclaw.json`
+- Validate config: `openclaw doctor`
+- Apply safe automatic repairs: `openclaw doctor --fix`
+
+Memory search rule:
+
+- `agents.defaults.memorySearch.provider` must match a valid enum for the installed build.
+- If provider is unknown for the current build, omit `memorySearch.provider` and allow OpenClaw to auto-select/disable until configured.
+- For this installed build, valid values are `openai`, `local`, `gemini`, `voyage`.
+
+## Safety and Public-Readiness
+
+- Run secret scrub before PRs and before publishing snapshots.
+- Never weaken secret-scanning patterns to suppress findings.
+- Keep evidence bundles in `.tmp/system1_evidence/` for review.
+- Do not commit `.tmp/` evidence artifacts.
+- Keep diffs minimal and include exact rollback commands.
+
+## Quickstart (System-1 / Windows)
+
+1. Install prerequisites: Node.js, Python 3, and OpenClaw CLI on PATH.
+2. Validate local config:
+
+```cmd
+openclaw doctor
+```
+
+3. Run System-1 audit gate:
+
+```cmd
+scripts\ps.cmd -File .\openclaw.ps1 audit system1
+```
+
+4. Run unit tests:
+
+```cmd
+python3 -m unittest discover -s tests_unittest
+```
+
+5. Run secret scrub:
+
+```cmd
+scripts\ps.cmd -ExecutionPolicy Bypass -File .\scripts\scrub_secrets.ps1
+```
+
+Expected local artifacts (review-only, not committed):
+
+- `.tmp/system1_evidence/system1_audit_output.txt`
+- `.tmp/system1_evidence/system1_evidence.json`
+- `.tmp/system1_evidence/scrub_secrets_output.txt`
+- `.tmp/system1_evidence/scrub_history_assessment.json`
+- `.tmp/system1_evidence/scrub_worktree_assessment.json`
+- `.tmp/system1_evidence/test_results.txt`
+- `.tmp/system1_evidence/rollback.md`
