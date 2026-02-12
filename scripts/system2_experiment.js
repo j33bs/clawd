@@ -6,6 +6,16 @@ const path = require('node:path');
 const readline = require('node:readline/promises');
 const { spawnSync } = require('node:child_process');
 
+class StageError extends Error {
+  constructor(message, options = {}) {
+    super(message);
+    this.name = 'StageError';
+    this.stage = options.stage || 'unknown';
+    this.exitCode = typeof options.exitCode === 'number' ? options.exitCode : null;
+    this.stderrTail = options.stderrTail || '';
+  }
+}
+
 function parseList(value) {
   if (!value) {
     return [];
@@ -73,7 +83,16 @@ function parseArgs(argv) {
   return args;
 }
 
-function runNpmJson(args, acceptableCodes) {
+function tailLines(value, maxLines = 20) {
+  const text = typeof value === 'string' ? value.trim() : '';
+  if (!text) {
+    return '';
+  }
+  const lines = text.split(/\r?\n/);
+  return lines.slice(-maxLines).join('\n');
+}
+
+function runNpmJson(args, acceptableCodes, stage) {
   const result = spawnSync('npm', ['run', '--silent', ...args], {
     encoding: 'utf8',
     maxBuffer: 20 * 1024 * 1024
@@ -83,23 +102,50 @@ function runNpmJson(args, acceptableCodes) {
   const allowed = new Set(acceptableCodes || [0]);
   if (!allowed.has(status)) {
     const stderr = (result.stderr || '').trim();
-    throw new Error(`command failed: npm run ${args.join(' ')} (exit ${status})${stderr ? `: ${stderr}` : ''}`);
+    throw new StageError(
+      `command failed: npm run ${args.join(' ')} (exit ${status})${stderr ? `: ${stderr}` : ''}`,
+      {
+        stage: stage || 'unknown',
+        exitCode: status,
+        stderrTail: tailLines(stderr)
+      }
+    );
   }
 
   const stdout = (result.stdout || '').trim();
   if (!stdout) {
-    throw new Error(`command produced empty JSON output: npm run ${args.join(' ')}`);
+    throw new StageError(`command produced empty JSON output: npm run ${args.join(' ')}`, {
+      stage: stage || 'unknown',
+      exitCode: status,
+      stderrTail: tailLines(result.stderr || '')
+    });
   }
 
   try {
     return { status, json: JSON.parse(stdout) };
   } catch (error) {
-    throw new Error(`command produced invalid JSON output: npm run ${args.join(' ')} (${error.message})`);
+    throw new StageError(`command produced invalid JSON output: npm run ${args.join(' ')} (${error.message})`, {
+      stage: stage || 'unknown',
+      exitCode: status,
+      stderrTail: tailLines(result.stderr || '')
+    });
   }
 }
 
 function ensureDir(dirPath) {
   fs.mkdirSync(dirPath, { recursive: true });
+}
+
+function writeReport(reportPath, partial) {
+  const report = partial && typeof partial === 'object'
+    ? partial
+    : {
+        status: 'ERROR',
+        decision: 'UNAVAILABLE'
+      };
+  ensureDir(path.dirname(reportPath));
+  fs.writeFileSync(reportPath, JSON.stringify(report, null, 2) + '\n', 'utf8');
+  return report;
 }
 
 function copySnapshotSummary(simulateDir, label, targetRunDir) {
@@ -120,6 +166,46 @@ async function promptForChange(message) {
     await rl.question(message);
   } finally {
     rl.close();
+  }
+}
+
+function normalizePathForReport(absPath) {
+  return path.relative(process.cwd(), absPath) || '.';
+}
+
+function findSnapshotSummary(runDir) {
+  const candidates = [
+    path.join(runDir, 'snapshot_summary.json'),
+    path.join(runDir, 'raw', 'snapshot_summary.json'),
+    path.join(runDir, 'snapshot-summary.json')
+  ];
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) {
+      return candidate;
+    }
+  }
+  return null;
+}
+
+function ensureJsonFileExists(filePath, stage, label) {
+  if (!fs.existsSync(filePath)) {
+    throw new StageError(`${label} missing: ${filePath}`, { stage });
+  }
+}
+
+function safeReadJson(filePath, stage, label) {
+  ensureJsonFileExists(filePath, stage, label);
+  let raw;
+  try {
+    raw = fs.readFileSync(filePath, 'utf8');
+  } catch (error) {
+    throw new StageError(`${label} unreadable: ${filePath} (${error.message})`, { stage });
+  }
+
+  try {
+    return JSON.parse(raw);
+  } catch (error) {
+    throw new StageError(`${label} invalid JSON: ${filePath} (${error.message})`, { stage });
   }
 }
 
@@ -155,6 +241,13 @@ async function runExperiment(options) {
   const runBDir = path.join(outDir, 'runB');
   const diffPath = path.join(outDir, 'diff.json');
   const reportPath = path.join(outDir, 'report.json');
+  const reportPaths = {
+    out: normalizePathForReport(outDir),
+    runA: normalizePathForReport(runADir),
+    runB: normalizePathForReport(runBDir),
+    diffJson: normalizePathForReport(diffPath),
+    reportJson: normalizePathForReport(reportPath)
+  };
 
   fs.rmSync(outDir, { recursive: true, force: true });
   ensureDir(runADir);
@@ -162,61 +255,96 @@ async function runExperiment(options) {
 
   let runASummaryPath;
   let runBSummaryPath;
+  let currentStage = 'evidence_A';
 
-  if (options.simulateDir) {
-    copySnapshotSummary(options.simulateDir, 'A', runADir);
-    copySnapshotSummary(options.simulateDir, 'B', runBDir);
-    runASummaryPath = path.join(runADir, 'snapshot_summary.json');
-    runBSummaryPath = path.join(runBDir, 'snapshot_summary.json');
-  } else {
-    runNpmJson(['system2:evidence', '--', '--out', runADir], [0]);
-    runASummaryPath = path.join(runADir, 'raw', 'snapshot_summary.json');
-
-    if (!options.noPrompt) {
-      if (!process.stdin.isTTY) {
-        throw new Error('interactive prompt requested in non-interactive session; use --no-prompt');
+  try {
+    if (options.simulateDir) {
+      copySnapshotSummary(options.simulateDir, 'A', runADir);
+      runASummaryPath = findSnapshotSummary(runADir);
+      if (!runASummaryPath) {
+        throw new StageError(`snapshot summary path missing after ${currentStage}`, { stage: currentStage });
       }
-      await promptForChange('Make your single operator change now, then press Enter to continue... ');
+
+      currentStage = 'evidence_B';
+      copySnapshotSummary(options.simulateDir, 'B', runBDir);
+      runBSummaryPath = findSnapshotSummary(runBDir);
+      if (!runBSummaryPath) {
+        throw new StageError(`snapshot summary path missing after ${currentStage}`, { stage: currentStage });
+      }
+    } else {
+      runNpmJson(['system2:evidence', '--', '--out', runADir], [0], currentStage);
+      runASummaryPath = findSnapshotSummary(runADir);
+      if (!runASummaryPath) {
+        throw new StageError(`snapshot summary path missing after ${currentStage}`, { stage: currentStage });
+      }
+
+      if (!options.noPrompt) {
+        if (!process.stdin.isTTY) {
+          throw new StageError('interactive prompt requested in non-interactive session; use --no-prompt', {
+            stage: currentStage
+          });
+        }
+        await promptForChange('Make your single operator change now, then press Enter to continue... ');
+      }
+
+      currentStage = 'evidence_B';
+      runNpmJson(['system2:evidence', '--', '--out', runBDir], [0], currentStage);
+      runBSummaryPath = findSnapshotSummary(runBDir);
+      if (!runBSummaryPath) {
+        throw new StageError(`snapshot summary path missing after ${currentStage}`, { stage: currentStage });
+      }
     }
 
-    runNpmJson(['system2:evidence', '--', '--out', runBDir], [0]);
-    runBSummaryPath = path.join(runBDir, 'raw', 'snapshot_summary.json');
+    const failOnCsv = options.failOn.join(',');
+    currentStage = 'diff';
+    const diffRun = runNpmJson(
+      ['system2:diff', '--', '--a', runASummaryPath, '--b', runBSummaryPath, '--json', '--fail-on', failOnCsv],
+      [0, 2],
+      currentStage
+    );
+
+    fs.writeFileSync(diffPath, JSON.stringify(diffRun.json, null, 2) + '\n', 'utf8');
+    const diffJson = safeReadJson(diffPath, currentStage, 'diff.json');
+
+    currentStage = 'report_write';
+    const decision = decide(diffJson, diffRun.status);
+    const report = {
+      out_dir: normalizePathForReport(outDir),
+      runA: {
+        label: options.labelA,
+        summary_path: normalizePathForReport(runASummaryPath)
+      },
+      runB: {
+        label: options.labelB,
+        summary_path: normalizePathForReport(runBSummaryPath)
+      },
+      diff_exit: diffRun.status,
+      regressions_count: decision.regressionsCount,
+      decision: decision.decision,
+      rationale: decision.rationale,
+      fail_on: options.failOn
+    };
+
+    writeReport(reportPath, report);
+    return report;
+  } catch (error) {
+    const stageError = error instanceof StageError
+      ? error
+      : new StageError(error.message || String(error), { stage: currentStage });
+
+    writeReport(reportPath, {
+      status: 'ERROR',
+      decision: 'UNAVAILABLE',
+      error: {
+        stage: stageError.stage || currentStage,
+        exitCode: stageError.exitCode,
+        stderr_tail: stageError.stderrTail || ''
+      },
+      paths: reportPaths
+    });
+
+    throw stageError;
   }
-
-  if (!fs.existsSync(runASummaryPath) || !fs.existsSync(runBSummaryPath)) {
-    throw new Error('snapshot summary path missing after evidence capture');
-  }
-
-  const failOnCsv = options.failOn.join(',');
-  const diffRun = runNpmJson(
-    ['system2:diff', '--', '--a', runASummaryPath, '--b', runBSummaryPath, '--json', '--fail-on', failOnCsv],
-    [0, 2]
-  );
-
-  fs.writeFileSync(diffPath, JSON.stringify(diffRun.json, null, 2) + '\n', 'utf8');
-
-  const decision = decide(diffRun.json, diffRun.status);
-
-  const report = {
-    out_dir: path.relative(process.cwd(), outDir) || '.',
-    runA: {
-      label: options.labelA,
-      summary_path: path.relative(process.cwd(), runASummaryPath) || runASummaryPath
-    },
-    runB: {
-      label: options.labelB,
-      summary_path: path.relative(process.cwd(), runBSummaryPath) || runBSummaryPath
-    },
-    diff_exit: diffRun.status,
-    regressions_count: decision.regressionsCount,
-    decision: decision.decision,
-    rationale: decision.rationale,
-    fail_on: options.failOn
-  };
-
-  fs.writeFileSync(reportPath, JSON.stringify(report, null, 2) + '\n', 'utf8');
-
-  return report;
 }
 
 async function main() {
