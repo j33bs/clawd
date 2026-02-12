@@ -72,6 +72,12 @@ function loadFreeComputeConfig(env) {
     ledger: {
       path: ledgerPath,
       resetHour: ledgerResetHour
+    },
+    secretsBridge: {
+      enabled: e.ENABLE_SECRETS_BRIDGE === '1',
+      backend: String(e.SECRETS_BACKEND || 'auto').toLowerCase(),
+      allowUiIntake: e.SECRETS_ALLOW_UI_INTAKE === '1',
+      uiLocalhostOnly: e.SECRETS_UI_LOCALHOST_ONLY !== '0'
     }
   };
 }

@@ -13,6 +13,7 @@
 const { CATALOG } = require('./catalog');
 const { ProviderAdapter } = require('./provider_adapter');
 const { loadFreeComputeConfig } = require('./config');
+const { SecretsBridge } = require('./secrets_bridge');
 const { QuotaLedger } = require('./quota_ledger');
 const { routeRequest, explainRouting } = require('./router');
 
@@ -33,6 +34,7 @@ class ProviderRegistry {
     this._env = options.env || process.env;
     this._emitEvent = options.emitEvent || (() => {});
     this.config = options.configOverride || loadFreeComputeConfig(this._env);
+    this._secretsBridge = null;
 
     this._adapters = new Map();       // provider_id → ProviderAdapter
     this._health = new Map();         // provider_id → { ok, reason, checkedAt }
@@ -43,6 +45,22 @@ class ProviderRegistry {
       resetHour: this.config.ledger.resetHour,
       disabled: !this.config.enabled
     });
+
+    if (this.config.secretsBridge && this.config.secretsBridge.enabled) {
+      this._secretsBridge = new SecretsBridge({ env: this._env });
+      try {
+        const injection = this._secretsBridge.injectRuntimeEnv(this._env);
+        this._emitEvent('freecompute_secrets_bridge_injection', {
+          backend: injection.backend,
+          injected_count: injection.injected.length,
+          skipped_count: injection.skipped.length
+        });
+      } catch (error) {
+        this._emitEvent('freecompute_secrets_bridge_error', {
+          error: error.message
+        });
+      }
+    }
 
     if (this.config.enabled) {
       this._initAdapters();

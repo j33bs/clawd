@@ -11,6 +11,7 @@
     "system2:evidence": "node scripts/system2_evidence_bundle.js",
     "system2:diff": "node scripts/system2_snapshot_diff.js",
     "system2:experiment": "node scripts/system2_experiment.js",
-    "system2:experiment:auth": "npm run system2:experiment -- --fail-on log_signature_counts.auth_error"
+    "system2:experiment:auth": "npm run system2:experiment -- --fail-on log_signature_counts.auth_error",
+    "secrets": "node scripts/openclaw_secrets_cli.js"
   }
 }
