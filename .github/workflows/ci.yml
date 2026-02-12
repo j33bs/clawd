@@ -44,6 +44,13 @@ jobs:
           set -o pipefail
           bash workspace/scripts/verify.sh 2>&1 | tee ci_artifacts/verify.log
 
+      - name: System-1 wrapper commands (Windows)
+        if: runner.os == 'Windows'
+        shell: cmd
+        run: |
+          scripts\ps.cmd -File .\openclaw.ps1 audit system1
+          scripts\ps.cmd -ExecutionPolicy Bypass -File .\scripts\scrub_secrets.ps1
+
       - name: Build System-1 evidence
         if: always()
         env:

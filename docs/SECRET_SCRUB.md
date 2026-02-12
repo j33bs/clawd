@@ -7,7 +7,7 @@ Use this workflow to detect and remediate secret-like material without printing 
 Run:
 
 ```powershell
-pwsh -File scripts/scrub_secrets.ps1
+scripts\ps.cmd -ExecutionPolicy Bypass -File .\scripts\scrub_secrets.ps1
 ```
 
 This writes:
@@ -35,7 +35,7 @@ Run:
 
 ```powershell
 python scripts/redact_worktree_hits.py
-pwsh -File scripts/scrub_secrets.ps1
+scripts\ps.cmd -ExecutionPolicy Bypass -File .\scripts\scrub_secrets.ps1
 ```
 
 The redactor:
@@ -85,7 +85,7 @@ git filter-repo --replace-text .\replace-rules.txt
 After rewrite, rerun the scrub scan and only then push:
 
 ```powershell
-pwsh -File scripts/scrub_secrets.ps1
+scripts\ps.cmd -ExecutionPolicy Bypass -File .\scripts\scrub_secrets.ps1
 git push --force-with-lease
 ```
 
