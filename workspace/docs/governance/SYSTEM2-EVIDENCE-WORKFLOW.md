@@ -62,3 +62,17 @@ Protocol rules:
   - `KEEP`: measurable change without fail-on regressions
   - `REVERT`: fail-on regression detected
   - `INCONCLUSIVE`: no measurable delta
+
+## Auth experiment (calibrated)
+Calibrated auth regression path (empirically calibrated on the operator environment):
+`log_signature_counts.auth_error`
+
+Run auth-focused experiment with explicit fail-on:
+```bash
+npm run system2:experiment -- --fail-on log_signature_counts.auth_error
+```
+
+Run auth-focused experiment via preset:
+```bash
+npm run system2:experiment:auth
+```

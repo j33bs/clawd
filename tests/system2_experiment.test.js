@@ -7,11 +7,12 @@ const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 
-const FAIL_ON = [
+const LEGACY_FAIL_ON = [
   'snapshot_summary.log_signature_counts.auth_error',
   'snapshot_summary.log_signature_counts.quota_error',
   'snapshot_summary.log_signature_counts.fetch_error'
 ].join(',');
+const AUTH_CALIBRATED_FAIL_ON = 'log_signature_counts.auth_error';
 
 function test(name, fn) {
   try {
@@ -23,17 +24,16 @@ function test(name, fn) {
   }
 }
 
-function runCli(simulateName) {
+function runCliWithFixtureDir(fixtureDir, failOn) {
   const scriptPath = path.resolve(__dirname, '..', 'scripts', 'system2_experiment.js');
-  const fixtureDir = path.resolve(__dirname, '..', 'fixtures', 'system2_experiment', simulateName);
-  const outDir = fs.mkdtempSync(path.join(os.tmpdir(), `clawd-exp-${simulateName}-`));
+  const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'clawd-exp-'));
 
   const run = spawnSync(
     process.execPath,
     [
       scriptPath,
       '--out', outDir,
-      '--fail-on', FAIL_ON,
+      '--fail-on', failOn,
       '--simulate', fixtureDir,
       '--no-prompt',
       '--label-a', 'baseline',
@@ -56,6 +56,46 @@ function runCli(simulateName) {
   assert.strictEqual(saved.decision, report.decision, 'stdout and report.json should match decision');
 
   return { outDir, report, saved };
+}
+
+function runCli(simulateName) {
+  const fixtureDir = path.resolve(__dirname, '..', 'fixtures', 'system2_experiment', simulateName);
+  return runCliWithFixtureDir(fixtureDir, LEGACY_FAIL_ON);
+}
+
+function buildCalibratedRegressionFixture() {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'clawd-exp-calibrated-'));
+  fs.mkdirSync(path.join(root, 'runA'), { recursive: true });
+  fs.mkdirSync(path.join(root, 'runB'), { recursive: true });
+
+  const runA = {
+    timestamp_utc: '2026-02-12T01:00:00.000Z',
+    health_ok: true,
+    status_ok: true,
+    approvals_count: 0,
+    log_signature_counts: {
+      auth_error: 0,
+      quota_error: 0,
+      fetch_error: 0
+    }
+  };
+
+  const runB = {
+    timestamp_utc: '2026-02-12T01:05:00.000Z',
+    health_ok: true,
+    status_ok: true,
+    approvals_count: 0,
+    log_signature_counts: {
+      auth_error: 3,
+      quota_error: 0,
+      fetch_error: 0
+    }
+  };
+
+  fs.writeFileSync(path.join(root, 'runA', 'snapshot_summary.json'), JSON.stringify(runA, null, 2) + '\n', 'utf8');
+  fs.writeFileSync(path.join(root, 'runB', 'snapshot_summary.json'), JSON.stringify(runB, null, 2) + '\n', 'utf8');
+
+  return root;
 }
 
 test('no-change fixture yields INCONCLUSIVE', function () {
@@ -82,6 +122,25 @@ test('regression fixture yields REVERT', function () {
   fs.rmSync(result.outDir, { recursive: true, force: true });
 });
 
+test('auth preset script maps to calibrated fail-on path', function () {
+  const pkgPath = path.resolve(__dirname, '..', 'package.json');
+  const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+  assert.strictEqual(
+    pkg.scripts['system2:experiment:auth'],
+    'npm run system2:experiment -- --fail-on log_signature_counts.auth_error'
+  );
+});
+
+test('calibrated auth fail-on yields REVERT on regression fixture', function () {
+  const fixtureDir = buildCalibratedRegressionFixture();
+  const result = runCliWithFixtureDir(fixtureDir, AUTH_CALIBRATED_FAIL_ON);
+  assert.strictEqual(result.report.decision, 'REVERT');
+  assert.ok(result.report.regressions_count > 0);
+
+  fs.rmSync(result.outDir, { recursive: true, force: true });
+  fs.rmSync(fixtureDir, { recursive: true, force: true });
+});
+
 test('failing subprocess writes UNAVAILABLE report and exits 3', function () {
   const scriptPath = path.resolve(__dirname, '..', 'scripts', 'system2_experiment.js');
   const fixtureDir = path.resolve(__dirname, '..', 'fixtures', 'system2_experiment', 'diff_failure');
@@ -92,7 +151,7 @@ test('failing subprocess writes UNAVAILABLE report and exits 3', function () {
     [
       scriptPath,
       '--out', outDir,
-      '--fail-on', FAIL_ON,
+      '--fail-on', LEGACY_FAIL_ON,
       '--simulate', fixtureDir,
       '--no-prompt'
     ],
