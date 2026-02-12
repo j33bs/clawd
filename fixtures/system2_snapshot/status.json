@@ -1,0 +1,12 @@
+{
+  "ok": true,
+  "status": "ok",
+  "notes": [
+    "auth error: invalid bearer token",
+    "MODULE_NOT_FOUND: ./missing/module",
+    "quota exceeded",
+    "fetch failed",
+    "path=/Users/demo/clawd/workspace/docs/audits/sample",
+    "token=sk-TEST1234567890ABCDE"
+  ]
+}
