@@ -24,6 +24,9 @@ npm run redact:audit-evidence -- --in .tmp/system2_evidence/raw --out .tmp/syste
 - Commit only manifests or redacted outputs when explicitly intended.
 - Keep outputs bounded via `--max-log-lines` and `--max-bytes`.
 - Review redacted output before sharing.
+- Never paste tokens into terminals or chat logs while running System-2 workflows.
+- Treat any pasted token as compromised.
+- Rotate compromised tokens immediately.
 
 ## Verification
 Before opening a PR that touches evidence workflows:
