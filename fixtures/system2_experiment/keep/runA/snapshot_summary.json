@@ -1,0 +1,15 @@
+{
+  "timestamp_utc": "2026-02-12T01:00:00.000Z",
+  "snapshot_summary": {
+    "timestamp_utc": "2026-02-12T01:00:00.000Z",
+    "health_ok": true,
+    "status_ok": true,
+    "approvals_count": 0,
+    "nodes_pending": 2,
+    "log_signature_counts": {
+      "auth_error": 1,
+      "quota_error": 0,
+      "fetch_error": 0
+    }
+  }
+}
