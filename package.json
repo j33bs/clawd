@@ -2,6 +2,9 @@
   "name": "openclaw",
   "private": true,
   "version": "0.0.0",
+  "bin": {
+    "openclaw": "scripts/openclaw_cli.js"
+  },
   "scripts": {
     "test": "node scripts/run_tests.js",
     "gate:module-resolution": "node scripts/module_resolution_gate.js --json",
@@ -12,6 +15,7 @@
     "system2:diff": "node scripts/system2_snapshot_diff.js",
     "system2:experiment": "node scripts/system2_experiment.js",
     "system2:experiment:auth": "npm run system2:experiment -- --fail-on log_signature_counts.auth_error",
+    "openclaw": "node scripts/openclaw_cli.js",
     "secrets": "node scripts/openclaw_secrets_cli.js"
   }
 }
