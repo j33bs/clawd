@@ -1,0 +1,20 @@
+{
+  "timestamp_utc": "2026-02-12T00:05:00.000Z",
+  "snapshot_summary": {
+    "timestamp_utc": "2026-02-12T00:05:00.000Z",
+    "health_ok": true,
+    "status_ok": true,
+    "approvals_count": 0,
+    "nodes_pending": 1,
+    "log_signature_counts": {
+      "auth_error": 2,
+      "quota_error": 0,
+      "fetch_error": 0
+    }
+  },
+  "added_only": "new",
+  "array_field": [
+    "a",
+    "b"
+  ]
+}
