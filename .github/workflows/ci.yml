@@ -14,8 +14,79 @@ jobs:
   ci:
     name: ci
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PYTHONUNBUFFERED: "1"
     steps:
       - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Run preflight
+        id: preflight
+        run: |
+          mkdir -p ci_artifacts
+          set -o pipefail
+          python3 workspace/scripts/preflight_check.py 2>&1 | tee ci_artifacts/preflight.log
+
+      - name: Run unit tests
+        id: unit_tests
+        run: |
+          set -o pipefail
+          python3 -m unittest discover -s tests_unittest 2>&1 | tee ci_artifacts/unittest.log
+
+      - name: Run verification gate
+        id: verify_gate
+        run: |
+          set -o pipefail
+          bash workspace/scripts/verify.sh 2>&1 | tee ci_artifacts/verify.log
+
+      - name: Build System-1 evidence
+        if: always()
+        env:
+          PREFLIGHT_OUTCOME: ${{ steps.preflight.outcome }}
+          UNITTEST_OUTCOME: ${{ steps.unit_tests.outcome }}
+          VERIFY_OUTCOME: ${{ steps.verify_gate.outcome }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          outcomes = {
+              "preflight": os.getenv("PREFLIGHT_OUTCOME", "skipped"),
+              "unit_tests": os.getenv("UNITTEST_OUTCOME", "skipped"),
+              "verify_gate": os.getenv("VERIFY_OUTCOME", "skipped"),
+          }
+          passed = sum(1 for value in outcomes.values() if value == "success")
+          total = len(outcomes)
+          payload = {
+              "gate_result": "pass" if passed == total else "fail",
+              "completion_rate": (passed / total) if total else 0.0,
+              "traces": total,
+              "smoke_log_truncated": False,
+              "step_outcomes": outcomes,
+          }
+          out_dir = Path("ci_artifacts")
+          out_dir.mkdir(parents=True, exist_ok=True)
+          (out_dir / "system1_evidence.json").write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+          summary = "\n".join([
+              f"gate_result={payload['gate_result']}",
+              f"completion_rate={payload['completion_rate']}",
+              f"traces={payload['traces']}",
+              f"smoke_log_truncated={str(payload['smoke_log_truncated']).lower()}",
+          ]) + "\n"
+          (out_dir / "system1_evidence_summary.txt").write_text(summary, encoding="utf-8")
+          print(summary, end="")
+          PY
+
+      - name: Validate System-1 evidence schema
+        if: always()
+        run: |
+          python3 tools/validate_system1_evidence.py ci_artifacts/system1_evidence.json --summary-out ci_artifacts/system1_evidence_validated.txt
 
       - name: Detect Node project
         id: detect
@@ -50,3 +121,11 @@ jobs:
         run: |
           echo "No package.json found; CI status check is active."
           git --version
+
+      - name: Upload CI logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-logs-${{ github.run_id }}
+          path: ci_artifacts/*
+          if-no-files-found: ignore
