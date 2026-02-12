@@ -32,3 +32,19 @@ npm test
 npm run gate:module-resolution
 npm run check:redaction-fixtures
 ```
+
+## Compare two runs
+Human-readable diff:
+```bash
+npm run system2:diff -- --a <run1>/snapshot_summary.json --b <run2>/snapshot_summary.json
+```
+
+Machine-readable diff:
+```bash
+npm run system2:diff -- --a <run1>/snapshot_summary.json --b <run2>/snapshot_summary.json --json
+```
+
+Regression-focused diff (fails on increases for selected counters):
+```bash
+npm run system2:diff -- --a <run1>/snapshot_summary.json --b <run2>/snapshot_summary.json --fail-on snapshot_summary.log_signature_counts.auth_error,snapshot_summary.log_signature_counts.quota_error,snapshot_summary.log_signature_counts.fetch_error
+```
