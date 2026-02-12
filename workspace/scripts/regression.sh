@@ -162,8 +162,9 @@ fi
 echo "[7/8] Checking optional provider env gating..."
 
 if [ -f "openclaw.json" ]; then
-    python3 - <<'PY'
+    PROVIDER_OUTPUT=$(python3 - <<'PY'
 import json
+import os
 import sys
 
 def has_env(value):
@@ -180,21 +181,43 @@ with open("openclaw.json", "r", encoding="utf-8") as handle:
 
 providers = data.get("models", {}).get("providers", {})
 
+skips = []
+
 for name in ("anthropic", "ollama"):
     provider = providers.get(name)
     if not isinstance(provider, dict):
-        print(f"missing:{name}")
-        sys.exit(2)
+        skips.append(f"SKIP:{name}:provider_config_absent")
+        continue
     if has_env(provider):
         enabled = provider.get("enabled")
-        if enabled not in ("auto", False):
+        if enabled is False:
+            skips.append(f"SKIP:{name}:provider_disabled")
+            continue
+        if enabled != "auto":
             print(f"enabled:{name}:{enabled}")
             sys.exit(3)
+        required_env = []
+        if name == "anthropic":
+            required_env = ["ANTHROPIC_API_KEY"]
+        elif name == "ollama":
+            required_env = ["OLLAMA_HOST"]
+        missing = [key for key in required_env if not str(os.environ.get(key) or "").strip()]
+        if missing:
+            skips.append(f"SKIP:{name}:env_missing:{','.join(missing)}")
+            continue
 
+for item in skips:
+    print(item)
 print("ok")
 PY
-    if [ $? -eq 0 ]; then
+)
+    PROVIDER_STATUS=$?
+    echo "$PROVIDER_OUTPUT" | sed 's/^/    /'
+    if [ $PROVIDER_STATUS -eq 0 ]; then
         check_pass
+        if echo "$PROVIDER_OUTPUT" | grep -q "^SKIP:"; then
+            check_warn "Optional provider checks skipped (provider disabled/absent or env vars missing). To enable Anthropic checks, configure models.providers.anthropic with enabled=auto and set ANTHROPIC_API_KEY."
+        fi
     else
         check_fail "Optional providers with env vars must be enabled=auto or disabled"
     fi

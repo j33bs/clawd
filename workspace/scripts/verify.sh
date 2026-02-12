@@ -95,11 +95,18 @@ else
     check_fail "MODEL_ROUTING.md missing"
 fi
 
-echo "[Step 6] Checking secrets template..."
-if [ -f "secrets.env.template" ]; then
-    check_pass
+echo "[Step 6] Checking environment template..."
+CANONICAL_ENV_TEMPLATE="env.template"
+LEGACY_ENV_TEMPLATE="secrets.env.template"
+if [ -f "$CANONICAL_ENV_TEMPLATE" ] || [ -f "$LEGACY_ENV_TEMPLATE" ]; then
+    if [ -f "$CANONICAL_ENV_TEMPLATE" ]; then
+        check_pass
+    else
+        check_pass
+        echo "    Legacy template path detected: $LEGACY_ENV_TEMPLATE (preferred: $CANONICAL_ENV_TEMPLATE)"
+    fi
 else
-    check_fail "secrets.env.template missing"
+    check_fail "Missing environment template. Add env.template (canonical) or secrets.env.template (legacy)."
 fi
 
 echo "[Step 7] Checking .gitattributes..."

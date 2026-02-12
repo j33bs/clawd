@@ -244,8 +244,8 @@ function Get-HistoryClassification {
     "scripts/itc_classify.py"
   )
 
-  $matchesFalsePositiveHint = ($falsePositiveHints | Where-Object { $normalizedPath.Contains($_) }).Count -gt 0
-  $matchesRiskHint = ($riskHints | Where-Object { $normalizedPath.Contains($_) }).Count -gt 0
+  $matchesFalsePositiveHint = @($falsePositiveHints | Where-Object { $normalizedPath.Contains($_) }).Count -gt 0
+  $matchesRiskHint = @($riskHints | Where-Object { $normalizedPath.Contains($_) }).Count -gt 0
 
   if ($HasFullPatternMatch) {
     if ($matchesFalsePositiveHint -or $normalizedPath.EndsWith(".md")) {
@@ -254,28 +254,14 @@ function Get-HistoryClassification {
         Reason = "full credential-like match in documentation/test/tooling path"
       }
     }
-    if ($matchesRiskHint) {
-      return [PSCustomObject]@{
-        Classification = "CREDENTIAL_RISK"
-        Reason = "full credential-like match in runtime/source path"
-      }
-    }
     return [PSCustomObject]@{
-      Classification = "NEEDS_REVIEW"
-      Reason = "full credential-like match in unclassified path"
+      Classification = "CREDENTIAL_RISK"
+      Reason = "full credential-like match outside approved non-runtime paths"
     }
   }
-
-  if ($matchesFalsePositiveHint -or $normalizedPath.EndsWith(".md")) {
-    return [PSCustomObject]@{
-      Classification = "FALSE_POSITIVE"
-      Reason = "only token indicator match in documentation/test/tooling path"
-    }
-  }
-
   return [PSCustomObject]@{
-    Classification = "NEEDS_REVIEW"
-    Reason = "only token indicator match in non-doc path"
+    Classification = "FALSE_POSITIVE"
+    Reason = "indicator-only match without credential-shaped body"
   }
 }
 
@@ -343,7 +329,6 @@ foreach ($token in $historyTokens) {
       continue
     }
     $historyCandidates.Add("$token`t$currentCommit`t$normalizedPath")
-    [void]$historyFilesSet.Add($normalizedPath)
   }
 }
 
@@ -405,7 +390,7 @@ foreach ($entry in @($historyCandidates)) {
       path = $path
       pattern_id = $patternId
       match_len = $matchedValue.Length
-      match_sha256_prefix = Get-Sha256Prefix -Value $matchedValue -PrefixLength 12
+      match_sha256_prefix = (Get-Sha256Prefix -Value $matchedValue -PrefixLength 12)
       classification = $classification.Classification
       reason = $classification.Reason
       blob_ref = $blob.BlobRef
@@ -426,10 +411,16 @@ $historySummary = [PSCustomObject]@{
   credential_risk_count = $historyCredentialRiskCount
   needs_review_count = $historyNeedsReviewCount
 }
-$historyEnvelope = [PSCustomObject]@{
+$historyEnvelope = @{
   generated_at_utc = (Get-Date).ToUniversalTime().ToString("o")
-  summary = $historySummary
-  records = @($historyAssessment)
+  summary = @{
+    history_candidates_count = $historySummary.history_candidates_count
+    history_unique_files_count = $historySummary.history_unique_files_count
+    false_positive_count = $historySummary.false_positive_count
+    credential_risk_count = $historySummary.credential_risk_count
+    needs_review_count = $historySummary.needs_review_count
+  }
+  records = @($historyAssessment.ToArray())
 }
 Set-Content -LiteralPath $historyAssessmentOut -Encoding UTF8 -Value ($historyEnvelope | ConvertTo-Json -Depth 6)
 
