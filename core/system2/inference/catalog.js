@@ -289,7 +289,7 @@ const CATALOG = Object.freeze([
     },
     models: [
       {
-        model_id: 'gpt-5.2-chat-latest',
+        model_id: 'gpt-5-chat-latest',
         task_classes: ['fast_chat', 'long_context', 'tool_use', 'batch'],
         context_window_hint: null,
         tool_support: 'via_adapter',
@@ -303,11 +303,11 @@ const CATALOG = Object.freeze([
         notes: 'Paid chat fallback (cheaper). Operator must configure spend protections and limits.'
       },
       {
-        model_id: 'gpt-5.3-codex',
+        model_id: 'gpt-5-codex',
         task_classes: ['code', 'tool_use'],
         context_window_hint: null,
         tool_support: 'via_adapter',
-        notes: 'Paid coding/tool fallback. Operator must configure spend protections and limits.'
+        notes: 'Paid coding/tool fallback (may require explicit enable; see FREECOMPUTE_OPENAI_CODEX_MODEL).'
       }
     ],
     constraints: {

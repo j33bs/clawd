@@ -86,7 +86,7 @@ function routeRequest(params) {
       m.task_classes.includes(taskClass)
     );
     if (pid === 'openai' && !(config && config.openaiCodexModelEnabled)) {
-      matchingModels = matchingModels.filter((m) => m.model_id !== 'gpt-5.3-codex');
+      matchingModels = matchingModels.filter((m) => m.model_id !== 'gpt-5-codex');
     }
     if (matchingModels.length === 0) {
       explanation.push(`${pid}: no models for task_class=${taskClass}`);
@@ -147,7 +147,7 @@ function routeRequest(params) {
       // OpenAI model preference (within paid fallback)
       if (pid === 'openai') {
         if (taskClass === 'code') {
-          if (model.model_id === 'gpt-5.3-codex') {
+          if (model.model_id === 'gpt-5-codex') {
             score += 5;
             reasons.push('openai_code_prefer_codex');
           } else if (model.model_id === 'gpt-5-mini') {
@@ -155,18 +155,18 @@ function routeRequest(params) {
             reasons.push('openai_code_prefer_mini');
           }
         } else if (taskClass === 'tool_use') {
-          if (model.model_id === 'gpt-5.2-chat-latest') {
+          if (model.model_id === 'gpt-5-chat-latest') {
             score += 5;
             reasons.push('openai_tool_prefer_chat_latest');
           } else if (model.model_id === 'gpt-5-mini') {
             score += 3;
             reasons.push('openai_tool_prefer_mini');
-          } else if (model.model_id === 'gpt-5.3-codex') {
+          } else if (model.model_id === 'gpt-5-codex') {
             score += 1;
             reasons.push('openai_tool_allow_codex');
           }
         } else {
-          if (model.model_id === 'gpt-5.2-chat-latest') {
+          if (model.model_id === 'gpt-5-chat-latest') {
             score += 5;
             reasons.push('openai_chat_prefer_latest');
           } else if (model.model_id === 'gpt-5-mini') {
