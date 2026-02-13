@@ -23,6 +23,14 @@ Behavior:
 - no networking: local append only
 - schema stability: emitted event is `system2_event_v1` v1; fields are additive-only (no renames/removals); bump version for breaking changes
 
+## System-2 Seam Definition of Done (DoD)
+- Default-off gate: behind an explicit config key (default false), optionally with env fallback.
+- Fail-closed: if enabled but misconfigured, emit one operator-safe warning and perform no side-effects.
+- Side-effect discipline: no networking unless explicitly chartered; no directory creation unless explicitly specified.
+- Determinism: inject time/clock via `now`/`nowFn` (or equivalent); tests assert stable JSON content.
+- Verification: include one deterministic automated test and one operator smoke script (e.g. `node scripts/system2_observability_smoke.js`) that proves seam ON => exactly one JSONL line; seam OFF => no file writes; redaction works.
+- Event contract stability: additive-only fields; breaking changes require version bump.
+
 Capture + redact bundle:
 ```bash
 npm run system2:evidence -- --out .tmp/system2_evidence
