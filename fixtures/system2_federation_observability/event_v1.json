@@ -1,0 +1,20 @@
+{
+  "type": "system2_event_v1",
+  "version": "1",
+  "ts_utc": "2026-02-13T00:00:00.000Z",
+  "event_type": "system2_contract_probe",
+  "level": "info",
+  "payload": {
+    "redaction": {
+      "applied": true,
+      "rules_version": "rules_v1"
+    },
+    "message": "contract fixture"
+  },
+  "context": {
+    "run_id": "run_0001",
+    "node_id": "node_a",
+    "subsystem": "contract_tests"
+  }
+}
+

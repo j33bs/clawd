@@ -1,0 +1,20 @@
+{
+  "type": "system2_event_v1",
+  "version": "1",
+  "ts_utc": "2026-02-13T00:00:00.000Z",
+  "event_type": "system2_redaction_probe",
+  "level": "info",
+  "payload": {
+    "authorization": "sensitive_value",
+    "x-api-key": "sensitive_value",
+    "api_key": "sensitive_value",
+    "OPENCLAW_GROQ_API_KEY": "sensitive_value",
+    "safe_field": "safe_value"
+  },
+  "context": {
+    "run_id": "run_0002",
+    "node_id": "node_a",
+    "subsystem": "contract_tests"
+  }
+}
+

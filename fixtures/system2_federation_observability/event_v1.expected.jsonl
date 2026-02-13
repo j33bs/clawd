@@ -1,0 +1,1 @@
+{"context":{"node_id":"node_a","run_id":"run_0001","subsystem":"contract_tests"},"event_type":"system2_contract_probe","level":"info","payload":{"message":"contract fixture","redaction":{"applied":true,"rules_version":"rules_v1"}},"ts_utc":"2026-02-13T00:00:00.000Z","type":"system2_event_v1","version":"1"}
