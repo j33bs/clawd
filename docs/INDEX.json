@@ -23,7 +23,7 @@
     }
   ],
   "counts": {
-    "total_files": 247
+    "total_files": 256
   },
   "top_level": [
     {
@@ -116,7 +116,7 @@
     },
     {
       "name": "tests_unittest",
-      "count": 6
+      "count": 7
     },
     {
       "name": "tools",
@@ -128,7 +128,7 @@
     },
     {
       "name": "workspace",
-      "count": 116
+      "count": 124
     }
   ],
   "files": [
@@ -254,6 +254,7 @@
     "tests_unittest/__init__.py",
     "tests_unittest/test_channel_scoring.py",
     "tests_unittest/test_econ_log.py",
+    "tests_unittest/test_governance_auto_ingest.py",
     "tests_unittest/test_regime_detector.py",
     "tests_unittest/test_strategy_blender.py",
     "tests_unittest/test_volatility_metrics.py",
@@ -314,6 +315,14 @@
     "workspace/docs/governance/BRANCH-PROTECTION.md",
     "workspace/docs/governance/REDACTION-WORKFLOW.md",
     "workspace/docs/governance/SYSTEM2-EVIDENCE-WORKFLOW.md",
+    "workspace/governance/.bak/20260213-214058/AGENTS.md",
+    "workspace/governance/.bak/20260213-214058/BOOTSTRAP.md",
+    "workspace/governance/.bak/20260213-214058/HEARTBEAT.md",
+    "workspace/governance/.bak/20260213-214058/IDENTITY.md",
+    "workspace/governance/.bak/20260213-214058/PRINCIPLES.md",
+    "workspace/governance/.bak/20260213-214058/SOUL.md",
+    "workspace/governance/.bak/20260213-214058/TOOLS.md",
+    "workspace/governance/.bak/20260213-214058/USER.md",
     "workspace/governance/AGENTS.md",
     "workspace/governance/BOOTSTRAP.md",
     "workspace/governance/GOVERNANCE_LOG.md",
