@@ -40,7 +40,7 @@ test('maskSecretFingerprint never returns raw secret value', function () {
 test('bridge serialization does not expose env secret values', function () {
   const env = {
     ENABLE_SECRETS_BRIDGE: '1',
-    OPENCLAW_GROQ_API_KEY: 'gsk_sensitive_test_secret'
+    OPENCLAW_GROQ_API_KEY: 'EXAMPLE_API_KEY'
   };
   const bridge = new SecretsBridge({ env, backendAdapter: {} });
   const json = JSON.stringify(bridge);
