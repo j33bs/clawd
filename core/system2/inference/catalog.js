@@ -55,7 +55,7 @@ const CATALOG = Object.freeze([
     healthcheck: {
       type: 'openai_compatible',
       endpoints: { models: '/models', chat: '/chat/completions' },
-      timeouts_ms: { connect: 800, read: 6000 },
+      timeouts_ms: { connect: 800, read: 6000, chat: 120000 },
       probe_prompt: 'Respond with a single word: OK',
       probe_max_tokens: 8
     },
@@ -110,7 +110,7 @@ const CATALOG = Object.freeze([
     healthcheck: {
       type: 'openai_compatible',
       endpoints: { models: '/models', chat: '/chat/completions' },
-      timeouts_ms: { connect: 1000, read: 8000 },
+      timeouts_ms: { connect: 1000, read: 8000, chat: 120000 },
       probe_prompt: 'Respond with a single word: OK',
       probe_max_tokens: 8
     },

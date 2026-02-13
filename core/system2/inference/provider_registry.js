@@ -182,6 +182,7 @@ class ProviderRegistry {
       while (true) {
         try {
           const result = await adapter.call(callParams);
+          const resolvedModelId = result.model || candidate.model_id;
 
           // Record success
           this.ledger.record(candidate.provider_id, {
@@ -192,7 +193,7 @@ class ProviderRegistry {
 
           this._emitEvent('freecompute_dispatch', {
             provider_id: candidate.provider_id,
-            model_id: candidate.model_id,
+            model_id: resolvedModelId,
             tokens_in: result.usage.inputTokens,
             tokens_out: result.usage.outputTokens,
             ok: true
@@ -201,7 +202,7 @@ class ProviderRegistry {
           return {
             ...result,
             provider_id: candidate.provider_id,
-            model_id: candidate.model_id
+            model_id: resolvedModelId
           };
         } catch (err) {
           const kind = classifyDispatchError(err);

@@ -627,6 +627,63 @@ test('adapter: does not expose auth token', () => {
   assert.ok(!json.includes('gsk_secret_test_key'), 'auth token leaked in serialization');
 });
 
+test('adapter: uses healthcheck chat timeout override when present', async () => {
+  const http = require('node:http');
+  const { EventEmitter } = require('node:events');
+
+  const originalRequest = http.request;
+  try {
+    let observedTimeout = null;
+    http.request = (options, cb) => {
+      observedTimeout = options && options.timeout;
+
+      const res = new EventEmitter();
+      res.statusCode = 200;
+
+      // Emit a minimal OpenAI-compatible response.
+      process.nextTick(() => {
+        cb(res);
+        res.emit('data', JSON.stringify({
+          model: 'stub',
+          choices: [{ message: { content: 'ok' } }],
+          usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 }
+        }));
+        res.emit('end');
+      });
+
+      const req = new EventEmitter();
+      req.write = () => {};
+      req.end = () => {};
+      req.destroy = () => {};
+      return req;
+    };
+
+    const entry = {
+      provider_id: 'test_openai_like',
+      kind: 'external',
+      protocol: 'openai_compatible',
+      enabled_default: false,
+      base_url: { default: 'http://example.invalid/v1', env_override: 'TEST_BASE_URL' },
+      auth: { type: 'none', env_var: null, redact_in_logs: true },
+      models: [{ model_id: 'stub-model', task_classes: ['fast_chat'], context_window_hint: null, tool_support: 'via_adapter' }],
+      constraints: { quota: { rpm_default: 1, rpd_default: 1, tpm_default: 1, tpd_default: 1 }, backoff: {}, circuit_breaker: {} },
+      healthcheck: { type: 'openai_compatible', endpoints: { models: '/models', chat: '/chat/completions' }, timeouts_ms: { chat: 12345 } },
+      routing_tags: { prefers: [], avoids: [] }
+    };
+
+    const adapter = new ProviderAdapter(entry, { env: {} });
+    const result = await adapter.call({
+      messages: [{ role: 'user', content: 'test' }],
+      metadata: { model: 'stub-model', maxTokens: 8, temperature: 0 }
+    });
+
+    assert.equal(result.text, 'ok');
+    assert.equal(observedTimeout, 12345);
+  } finally {
+    http.request = originalRequest;
+  }
+});
+
 // ════════════════════════════════════════════════════════════════════
 // 9. INTEGRATION TESTS (skipped by default)
 // ════════════════════════════════════════════════════════════════════

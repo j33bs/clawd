@@ -208,7 +208,8 @@ class ProviderAdapter {
     };
 
     const data = await this._httpPost(chatUrl, body, {
-      timeoutMs: (this._hc.timeouts_ms && this._hc.timeouts_ms.read) || 30000
+      // Some local providers can take 60s+ for cold-start inference; allow per-provider chat timeout override.
+      timeoutMs: (this._hc.timeouts_ms && this._hc.timeouts_ms.chat) || 30000
     });
 
     const choice = (data.choices && data.choices[0]) || {};
