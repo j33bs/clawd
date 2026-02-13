@@ -19,7 +19,11 @@ param(
   [int]$RunSeconds = 10,
   [int]$Port = 18789,
   [int]$PollMs = 400,
-  [switch]$NoObservedUpdate
+  [switch]$NoObservedUpdate,
+  # Local vLLM OpenAI-compatible endpoint (used when OPENCLAW_VLLM_BASE_URL is not already set).
+  [string]$VllmBaseUrl = "http://127.0.0.1:8000/v1",
+  # If set, do not set ENABLE_LOCAL_VLLM/OPENCLAW_VLLM_BASE_URL for this run.
+  [switch]$DisableLocalVllm
 )
 
 Set-StrictMode -Version Latest
@@ -192,7 +196,14 @@ Write-JsonStable -Path $runtimeModelsPath -obj @{ providers = $effectiveProvider
 
 # Launch gateway with agent dir redirected to untracked runtime dir.
 $prevAgentDir = $env:OPENCLAW_AGENT_DIR
+$prevVllmEnabled = $env:ENABLE_LOCAL_VLLM
+$prevVllmBaseUrl = $env:OPENCLAW_VLLM_BASE_URL
 $env:OPENCLAW_AGENT_DIR = $runtimeAgentDir
+
+if (-not $DisableLocalVllm) {
+  if ([string]::IsNullOrWhiteSpace($env:ENABLE_LOCAL_VLLM)) { $env:ENABLE_LOCAL_VLLM = "1" }
+  if ([string]::IsNullOrWhiteSpace($env:OPENCLAW_VLLM_BASE_URL)) { $env:OPENCLAW_VLLM_BASE_URL = $VllmBaseUrl }
+}
 try {
   $start = Get-Date
   $proc = Start-Process -FilePath "cmd.exe" -ArgumentList "/c", "gateway.cmd" -WorkingDirectory $repoRoot -PassThru -WindowStyle Hidden
@@ -214,6 +225,8 @@ try {
   }
 } finally {
   $env:OPENCLAW_AGENT_DIR = $prevAgentDir
+  if ($null -ne $prevVllmEnabled) { $env:ENABLE_LOCAL_VLLM = $prevVllmEnabled } else { Remove-Item Env:ENABLE_LOCAL_VLLM -ErrorAction SilentlyContinue }
+  if ($null -ne $prevVllmBaseUrl) { $env:OPENCLAW_VLLM_BASE_URL = $prevVllmBaseUrl } else { Remove-Item Env:OPENCLAW_VLLM_BASE_URL -ErrorAction SilentlyContinue }
 }
 
 # Backstop guard (post-run compare).

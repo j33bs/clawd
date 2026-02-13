@@ -65,7 +65,15 @@
         }
       ]
     },
+    "local_vllm": {
+      "enabled": "auto",
+      "baseUrl": "http://127.0.0.1:8000/v1",
+      "api": "openai-completions",
+      "models": [],
+      "apiKey": "ollama"
+    },
     "ollama": {
+      "enabled": false,
       "baseUrl": "http://localhost:11434/v1",
       "api": "openai-completions",
       "models": [
