@@ -69,6 +69,25 @@
         }
       ]
     },
+    "vllm": {
+      "enabled": true,
+      "paid": false,
+      "tier": "free",
+      "type": "openai_compatible",
+      "baseUrlEnv": "OPENCLAW_VLLM_BASE_URL",
+      "baseUrl": "http://127.0.0.1:8000/v1",
+      "modelEnv": "OPENCLAW_VLLM_MODEL_ID",
+      "apiKeyEnv": "OPENCLAW_VLLM_API_KEY",
+      "apiKeyOptional": true,
+      "models": [
+        {
+          "id": "AUTO_DISCOVER",
+          "maxInputChars": 4000,
+          "tier": "large"
+        }
+      ],
+      "description": "Local vLLM endpoint, System-1 preferred"
+    },
     "ollama": {
       "enabled": false,
       "paid": false,
@@ -176,6 +195,12 @@
   "routing": {
     "free_order": [
       "local_vllm",
+      "groq",
+      "qwen"
+    ],
+    "free_order_system1": [
+      "vllm",
+      "ollama",
       "groq",
       "qwen"
     ],

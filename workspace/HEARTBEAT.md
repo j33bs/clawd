@@ -9,6 +9,7 @@ Check these in order. Skip any that were checked <2h ago.
 ## 2. System health
 - Run `openclaw health` via exec. If Telegram is down, attempt recovery.
 - Check `openclaw sessions --active 60` for stuck sessions.
+- If System-1 context feels stale, rebuild the repo index: `python3 workspace/scripts/build_index.py` (writes `workspace/INDEX.json` + `workspace/INDEX.md`).
 
 ## 3. Regression check
 - Run `bash workspace/scripts/regression.sh` if not run today. Log result to daily memory.

@@ -8,6 +8,7 @@ import json
 import os
 import time
 from pathlib import Path
+from urllib.parse import urlparse
 
 try:
     import requests
@@ -285,6 +286,60 @@ def read_env_or_secrets(key_name):
     return None
 
 
+def _node_role():
+    return (os.environ.get("OPENCLAW_NODE_ROLE") or "").strip().lower()
+
+
+def _is_local_url(url):
+    try:
+        host = urlparse(url).hostname
+    except Exception:
+        host = None
+    return host in ("localhost", "127.0.0.1", "::1")
+
+
+def _provider_base_url(provider_cfg):
+    env_name = provider_cfg.get("baseUrlEnv")
+    if env_name:
+        v = read_env_or_secrets(env_name)
+        if v:
+            return v
+    return provider_cfg.get("baseUrl", "")
+
+
+def _provider_api_key(provider_cfg):
+    env_name = provider_cfg.get("apiKeyEnv") or ""
+    if not env_name:
+        return None
+    return read_env_or_secrets(env_name)
+
+
+def _discover_openai_model_id(base_url, api_key=None, timeout=5):
+    if requests is None:
+        return None
+    if not base_url:
+        return None
+    url = base_url.rstrip("/") + "/models"
+    headers = {}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+    try:
+        resp = requests.get(url, headers=headers, timeout=timeout)
+        if resp.status_code != 200:
+            return None
+        data = resp.json()
+        items = data.get("data") if isinstance(data, dict) else None
+        if not isinstance(items, list) or not items:
+            return None
+        ids = []
+        for it in items:
+            if isinstance(it, dict) and it.get("id"):
+                ids.append(it["id"])
+        return sorted(ids)[0] if ids else None
+    except Exception:
+        return None
+
+
 def get_qwen_token():
     if not QWEN_AUTH_FILE.exists():
         return None, "qwen_auth_missing"
@@ -453,7 +508,11 @@ def _resolve_order(intent_cfg, policy):
     order = []
     for entry in intent_cfg.get("order", []):
         if entry == "free":
-            order.extend(policy.get("routing", {}).get("free_order", []))
+            routing = policy.get("routing", {})
+            if _node_role() == "system1":
+                order.extend(routing.get("free_order_system1") or routing.get("free_order", []))
+            else:
+                order.extend(routing.get("free_order", []))
         else:
             order.append(entry)
     # de-dup preserving order
@@ -508,6 +567,11 @@ class PolicyRouter:
     def _provider_model(self, name, intent_cfg, context):
         provider = self._provider_cfg(name)
         models = provider.get("models", [])
+        model_env = provider.get("modelEnv")
+        if model_env:
+            env_mid = read_env_or_secrets(model_env)
+            if env_mid:
+                return env_mid
         override = (context or {}).get("override_model")
         if override and name == "ollama":
             return override
@@ -524,7 +588,18 @@ class PolicyRouter:
             for m in models:
                 if m.get("tier") == "large":
                     return m.get("id")
-        return models[0].get("id")
+        model_id = models[0].get("id")
+        if model_id == "AUTO_DISCOVER" and provider.get("type") == "openai_compatible":
+            base_url = _provider_base_url(provider)
+            api_key = None
+            if provider.get("auth") == "qwen_oauth":
+                api_key, _ = get_qwen_token()
+            else:
+                api_key = _provider_api_key(provider)
+            discovered = _discover_openai_model_id(base_url, api_key=api_key)
+            if discovered:
+                return discovered
+        return model_id
 
     def _provider_max_chars(self, name, model_id):
         provider = self._provider_cfg(name)
@@ -558,9 +633,12 @@ class PolicyRouter:
                 if not token:
                     return False, err or "missing_token"
             else:
-                api_key = read_env_or_secrets(provider.get("apiKeyEnv", ""))
-                if not api_key:
-                    return False, "missing_api_key"
+                base_url = _provider_base_url(provider)
+                api_key_env = provider.get("apiKeyEnv") or ""
+                api_key = _provider_api_key(provider)
+                if api_key_env and not api_key:
+                    if not (provider.get("apiKeyOptional") or _is_local_url(base_url)):
+                        return False, "missing_api_key"
 
         if ptype == "anthropic":
             api_key = read_env_or_secrets(provider.get("apiKeyEnv", ""))
@@ -568,7 +646,7 @@ class PolicyRouter:
                 return False, "missing_api_key"
 
         if ptype == "ollama":
-            base = provider.get("baseUrl", "http://localhost:11434")
+            base = _provider_base_url(provider) or "http://localhost:11434"
             if not _ollama_reachable(base):
                 return False, "ollama_unreachable"
 
@@ -743,13 +821,13 @@ class PolicyRouter:
                     if provider.get("auth") == "qwen_oauth":
                         api_key, _ = get_qwen_token()
                     else:
-                        api_key = read_env_or_secrets(provider.get("apiKeyEnv", ""))
-                    result = _call_openai_compatible(provider.get("baseUrl", ""), api_key, model_id, payload)
+                        api_key = _provider_api_key(provider)
+                    result = _call_openai_compatible(_provider_base_url(provider), api_key, model_id, payload)
                 elif ptype == "anthropic":
                     api_key = read_env_or_secrets(provider.get("apiKeyEnv", ""))
-                    result = _call_anthropic(provider.get("baseUrl", ""), api_key, model_id, payload)
+                    result = _call_anthropic(_provider_base_url(provider), api_key, model_id, payload)
                 elif ptype == "ollama":
-                    base = provider.get("baseUrl", "http://localhost:11434")
+                    base = _provider_base_url(provider) or "http://localhost:11434"
                     result = _call_ollama(base, model_id, payload)
                 elif ptype == "openai_auth" or ptype == "anthropic_auth":
                     result = {"ok": False, "reason_code": "auth_login_required"}

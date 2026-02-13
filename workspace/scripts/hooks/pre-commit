@@ -115,6 +115,13 @@ for file in $STAGED_FILES; do
             IS_PLACEHOLDER=1
             while IFS= read -r match_line; do
                 LINE_HAS_PLACEHOLDER=0
+
+                # Allow env-var identifiers in config fields (these are not live secrets).
+                # Example: "apiKeyEnv": "OPENCLAW_VLLM_API_KEY"
+                if echo "$match_line" | grep -qE '"apiKeyEnv"\s*:\s*"[A-Z][A-Z0-9_]{7,}"'; then
+                    LINE_HAS_PLACEHOLDER=1
+                fi
+
                 for placeholder in "${KNOWN_PLACEHOLDERS[@]}"; do
                     if echo "$match_line" | grep -qF "$placeholder"; then
                         LINE_HAS_PLACEHOLDER=1

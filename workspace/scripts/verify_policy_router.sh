@@ -194,11 +194,39 @@ def test_budget_enforcement_and_token_cap():
         assert not res_block["ok"] and res_block["reason_code"] == "intent_call_budget_exhausted", res_block
 
 
+def test_system1_free_order_override():
+    prev = os.environ.get("OPENCLAW_NODE_ROLE")
+    os.environ["OPENCLAW_NODE_ROLE"] = "system1"
+    try:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            policy = base_policy()
+            policy["providers"] = {
+                "freeA": {"enabled": True, "paid": False, "tier": "free", "type": "mock", "models": [{"id": "a"}]},
+                "freeB": {"enabled": True, "paid": False, "tier": "free", "type": "mock", "models": [{"id": "b"}]},
+            }
+            policy["routing"]["free_order"] = ["freeA"]
+            policy["routing"]["free_order_system1"] = ["freeB"]
+            policy["routing"]["intents"]["itc_classify"] = {"order": ["free"]}
+
+            def ok_handler(payload, model_id, ctx):
+                return {"ok": True, "text": "news"}
+
+            router = make_router(tmpdir, policy, {"freeA": ok_handler, "freeB": ok_handler})
+            result = router.execute_with_escalation("itc_classify", {"prompt": "hello"})
+            assert result["ok"] and result["provider"] == "freeB", result
+    finally:
+        if prev is None:
+            os.environ.pop("OPENCLAW_NODE_ROLE", None)
+        else:
+            os.environ["OPENCLAW_NODE_ROLE"] = prev
+
+
 def main():
     test_free_tier_selected()
     test_coding_ladder_order_and_reason_codes()
     test_circuit_breaker()
     test_budget_enforcement_and_token_cap()
+    test_system1_free_order_override()
     print("ok")
 
 

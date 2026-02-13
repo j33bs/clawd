@@ -57,6 +57,12 @@ for name, cfg in providers.items():
         print(f'FAIL: provider {name} missing type')
         sys.exit(1)
 
+free_order_system1 = routing.get('free_order_system1', None)
+if free_order_system1 is not None:
+    if not isinstance(free_order_system1, list) or not free_order_system1:
+        print('FAIL: routing.free_order_system1 must be non-empty list when present')
+        sys.exit(1)
+
 intent_routes = routing.get('intents', {})
 if not intent_routes:
     print('FAIL: routing.intents missing')
@@ -78,6 +84,12 @@ for name in free_order:
     if name not in providers:
         print(f'FAIL: free_order references unknown provider {name}')
         sys.exit(1)
+
+if isinstance(free_order_system1, list):
+    for name in free_order_system1:
+        if name not in providers:
+            print(f'FAIL: free_order_system1 references unknown provider {name}')
+            sys.exit(1)
 
 print('ok')
 PY

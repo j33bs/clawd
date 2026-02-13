@@ -54,6 +54,12 @@ This runner sets:
 * `ENABLE_LOCAL_VLLM=1` (unless `-DisableLocalVllm` is passed)
 * `OPENCLAW_VLLM_BASE_URL=http://127.0.0.1:8000/v1` (unless already set)
 
+For System-1 policy routing, you can also set:
+
+* `OPENCLAW_NODE_ROLE=system1`
+
+This activates the System-1 free-tier fallback chain (`routing.free_order_system1`) in `workspace/policy/llm_policy.json` for the Python policy router (`workspace/scripts/policy_router.py`).
+
 ## Rollback
 
 * Stop vLLM: `scripts/vllm_stop.ps1`

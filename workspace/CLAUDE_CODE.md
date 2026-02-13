@@ -33,6 +33,18 @@ If there are simple follow-up tasks that Dessy/Qwen should handle, write a hando
 workspace/handoffs/YYYY-MM-DD-HHmm-{label}.md
 ```
 
+You can generate a correctly named, timestamped file with:
+
+```bash
+python3 workspace/scripts/handoff.py "<label>" --from claude-code --status pending --content "..."
+```
+
+Or write the notes via stdin:
+
+```bash
+cat notes.md | python3 workspace/scripts/handoff.py "<label>"
+```
+
 Format:
 ```markdown
 # Handoff: {label}

@@ -29,6 +29,24 @@ In `workspace/policy/llm_policy.json`:
 * `providers.local_vllm.enabled` is `true`
 * `routing.free_order` places `local_vllm` first
 
+## System-1 Free Order Override
+
+When running a System-1 node, set:
+
+* `OPENCLAW_NODE_ROLE=system1`
+
+The policy router will expand `free` using `routing.free_order_system1` (fallback: `routing.free_order`).
+
+The default System-1 free order is:
+
+* `vllm` -> `ollama` -> `groq` -> `qwen`
+
+`providers.vllm` supports:
+
+* `OPENCLAW_VLLM_BASE_URL` (OpenAI-compatible base URL, default `http://127.0.0.1:8000/v1`)
+* `OPENCLAW_VLLM_MODEL_ID` (optional; if unset, the router will attempt `/models` discovery)
+* `OPENCLAW_VLLM_API_KEY` (optional; local endpoints commonly require none)
+
 ## Governed Escalation
 
 Escalation is policy-driven and operator-controlled:

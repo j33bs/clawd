@@ -85,6 +85,10 @@ venv/
 # Intent failure reports (generated)
 workspace/handoffs/intent_failures_*.md
 
+# Deterministic index (generated)
+workspace/INDEX.json
+workspace/INDEX.md
+
 # ============================================
 # OS AND IDE FILES
 # ============================================
