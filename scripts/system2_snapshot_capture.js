@@ -188,11 +188,45 @@ function writeText(filePath, text) {
   fs.writeFileSync(filePath, text, 'utf8');
 }
 
+function warnOnceFactory(warnFn) {
+  let warned = false;
+  return function warnOnce(msg) {
+    if (warned) return;
+    warned = true;
+    try {
+      warnFn(msg);
+    } catch (_) {
+      // Best-effort only: never let warnings crash snapshot capture.
+    }
+  };
+}
+
+function loadSystem2ObservabilityConfig(options) {
+  const env = (options && options.env) || process.env;
+  const explicit = options && options.system2 && options.system2.observability;
+
+  // Precedence: explicit config > env vars > defaults.
+  const enabled = explicit && typeof explicit.enabled === 'boolean'
+    ? explicit.enabled
+    : env.SYSTEM2_OBSERVABILITY_ENABLED === '1';
+
+  const jsonlPath = explicit && typeof explicit.jsonlPath === 'string'
+    ? explicit.jsonlPath
+    : String(env.SYSTEM2_OBSERVABILITY_JSONL_PATH || '');
+
+  const extraPayload = explicit && explicit.extraPayload && typeof explicit.extraPayload === 'object'
+    ? explicit.extraPayload
+    : null;
+
+  return { enabled, jsonlPath, extraPayload };
+}
+
 function captureSnapshot(options) {
   const outDir = path.resolve(options.outDir);
   const maxLogLines = options.maxLogLines || DEFAULT_MAX_LOG_LINES;
   const runner = options.runner || defaultRunner;
   const now = options.now || (() => new Date().toISOString());
+  const warnOnce = warnOnceFactory(options.warn || ((msg) => console.warn(msg)));
 
   fs.mkdirSync(outDir, { recursive: true });
 
@@ -289,6 +323,54 @@ function captureSnapshot(options) {
   summary.log_signature_counts = countLogSignatures(sampledLogs);
 
   writeText(path.join(outDir, 'snapshot_summary.json'), JSON.stringify(summary, null, 2) + '\n');
+
+  // Phase-3 seam: System-2 observability emission (default-off).
+  // Must not affect behavior unless explicitly enabled.
+  try {
+    const obs = loadSystem2ObservabilityConfig(options);
+    if (obs.enabled === true) {
+      if (typeof obs.jsonlPath !== 'string' || obs.jsonlPath.trim().length === 0) {
+        warnOnce('system2 observability enabled but jsonl path is missing; disabling emission');
+      } else {
+        const parentDir = path.dirname(obs.jsonlPath);
+        let parentOk = false;
+        try {
+          parentOk = fs.existsSync(parentDir) && fs.statSync(parentDir).isDirectory();
+        } catch (_) {
+          parentOk = false;
+        }
+        if (!parentOk) {
+          warnOnce('system2 observability enabled but jsonl parent directory is missing; disabling emission');
+        } else {
+          const { appendEventJsonl } = require('../core/system2/observability/jsonl_sink');
+          const { deepRedact } = require('../core/system2/observability/redaction');
+
+          const payload = Object.assign(
+            {
+              snapshot_ok: summary.commands_failed.length === 0,
+              commands_failed: summary.commands_failed,
+              log_signature_counts: summary.log_signature_counts
+            },
+            obs.extraPayload || {}
+          );
+
+          const event = {
+            type: 'system2_event_v1',
+            version: '1',
+            ts_utc: summary.timestamp_utc,
+            event_type: 'system2_snapshot_captured',
+            level: 'info',
+            payload: deepRedact(payload || {}, 'payload'),
+            context: { subsystem: 'system2_snapshot_capture' }
+          };
+
+          fs.appendFileSync(obs.jsonlPath, appendEventJsonl(event), 'utf8');
+        }
+      }
+    }
+  } catch (error) {
+    warnOnce(`system2 observability emit failed: ${error.message}`);
+  }
 
   return {
     ok: summary.commands_failed.length === 0,
