@@ -183,8 +183,8 @@ providers = data.get("models", {}).get("providers", {})
 for name in ("anthropic", "ollama"):
     provider = providers.get(name)
     if not isinstance(provider, dict):
-        print(f"missing:{name}")
-        sys.exit(2)
+        # Provider not configured in this local openclaw.json; gating check not applicable.
+        continue
     if has_env(provider):
         enabled = provider.get("enabled")
         if enabled not in ("auto", False):
