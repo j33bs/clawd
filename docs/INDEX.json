@@ -23,7 +23,7 @@
     }
   ],
   "counts": {
-    "total_files": 245
+    "total_files": 247
   },
   "top_level": [
     {
@@ -128,7 +128,7 @@
     },
     {
       "name": "workspace",
-      "count": 114
+      "count": 116
     }
   ],
   "files": [
@@ -263,17 +263,11 @@
     "tools/quarantine_review.py",
     "tools/regression_guard.py",
     "tools/run_checks.sh",
-    "workspace/AGENTS.md",
     "workspace/BOUNDARIES.md",
     "workspace/CLAUDE_CODE.md",
     "workspace/CONSTITUTION.md",
-    "workspace/HEARTBEAT.md",
-    "workspace/IDENTITY.md",
     "workspace/MEMORY.md",
     "workspace/MODEL_ROUTING.md",
-    "workspace/SOUL.md",
-    "workspace/TOOLS.md",
-    "workspace/USER.md",
     "workspace/docs/audits/MERGE-EXEC2-2026-02-12.md",
     "workspace/docs/audits/NEXTSTEPS-EXEC2-2026-02-12.md",
     "workspace/docs/audits/POSTMERGE-VALIDATION-2026-02-12.md",
@@ -320,7 +314,15 @@
     "workspace/docs/governance/BRANCH-PROTECTION.md",
     "workspace/docs/governance/REDACTION-WORKFLOW.md",
     "workspace/docs/governance/SYSTEM2-EVIDENCE-WORKFLOW.md",
+    "workspace/governance/AGENTS.md",
+    "workspace/governance/BOOTSTRAP.md",
     "workspace/governance/GOVERNANCE_LOG.md",
+    "workspace/governance/HEARTBEAT.md",
+    "workspace/governance/IDENTITY.md",
+    "workspace/governance/PRINCIPLES.md",
+    "workspace/governance/SOUL.md",
+    "workspace/governance/TOOLS.md",
+    "workspace/governance/USER.md",
     "workspace/handoffs/.gitkeep",
     "workspace/handoffs/audit_2026-02-08.md",
     "workspace/handoffs/audit_protocol_impl_2026-02-06.md",

@@ -7,7 +7,7 @@ Highlights (navigation anchors):
 - `core/system2/inference/catalog.js` (ok)
 - `core/system2/inference/secrets_bridge.js` (ok)
 
-Total files indexed (paths only): **245**
+Total files indexed (paths only): **247**
 
 Top-level path counts:
 - `.claude`: 1
@@ -35,7 +35,7 @@ Top-level path counts:
 - `tests_unittest`: 6
 - `tools`: 6
 - `VERIFICATION.md`: 1
-- `workspace`: 114
+- `workspace`: 116
 
 Notes:
 - This index is paths-only (no content reads).
