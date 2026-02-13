@@ -54,6 +54,9 @@ function loadFreeComputeConfig(env) {
   const ledgerPath = e.FREECOMPUTE_LEDGER_PATH || '.tmp/quota-ledger';
   const ledgerResetHour = Number(e.FREECOMPUTE_LEDGER_RESET_HOUR || 0); // 0 = midnight UTC
 
+  // ── Model gates (default-off) ──
+  const openaiCodexModelEnabled = e.FREECOMPUTE_OPENAI_CODEX_MODEL === '1';
+
   return {
     enabled,
     vllmEnabled,
@@ -68,6 +71,7 @@ function loadFreeComputeConfig(env) {
       halfOpenProbeSeconds: cbHalfOpenProbeSeconds,
       timeoutMs: cbTimeoutMs
     },
+    openaiCodexModelEnabled,
     taskClassCaps,
     ledger: {
       path: ledgerPath,
@@ -105,6 +109,9 @@ function _defaultRetriesForClass(tc) {
 // ── Redaction Rules ──────────────────────────────────────────────────
 
 const REDACT_ENV_VARS = Object.freeze([
+  'OPENCLAW_OPENAI_API_KEY',
+  'OPENAI_API_KEY',
+  'GROQ_API_KEY',
   'OPENCLAW_VLLM_API_KEY',
   'OPENCLAW_GEMINI_API_KEY',
   'OPENCLAW_GROQ_API_KEY',

@@ -23,6 +23,31 @@ const CB_STATES = Object.freeze({
   HALF_OPEN: 'HALF_OPEN'
 });
 
+function classifyDispatchError(err) {
+  const code = err && err.code;
+  const msg = String((err && err.message) || '');
+  if (code === 'PROVIDER_TIMEOUT' || code === 'ETIMEDOUT' || /timeout/i.test(msg)) {
+    return 'timeout';
+  }
+  if (code === 'PROVIDER_HTTP_ERROR' && typeof err.statusCode === 'number') {
+    if (err.statusCode === 401 || err.statusCode === 403) return 'auth';
+    if (err.statusCode === 400 || err.statusCode === 404) return 'config';
+    return 'http_error';
+  }
+  return 'unknown';
+}
+
+function hasAuthCredential(auth, env) {
+  if (!auth || auth.type === 'none' || auth.type === 'bearer_optional') return true;
+  const primary = auth.env_var;
+  const aliases = Array.isArray(auth.alias_env_vars) ? auth.alias_env_vars : [];
+  if (primary && env[primary]) return true;
+  for (const k of aliases) {
+    if (k && env[k]) return true;
+  }
+  return false;
+}
+
 class ProviderRegistry {
   /**
    * @param {object} [options]
@@ -142,46 +167,60 @@ class ProviderRegistry {
       const adapter = this._adapters.get(candidate.provider_id);
       if (!adapter) continue;
 
-      try {
-        const result = await adapter.call({
-          messages: params.messages,
-          metadata: {
-            model: candidate.model_id,
-            ...(params.metadata || {})
+      const callParams = {
+        messages: params.messages,
+        metadata: {
+          model: candidate.model_id,
+          ...(params.metadata || {})
+        }
+      };
+
+      let attempt = 0;
+      const maxTimeoutRetries = 1;
+
+      while (true) {
+        try {
+          const result = await adapter.call(callParams);
+
+          // Record success
+          this.ledger.record(candidate.provider_id, {
+            tokensIn: result.usage.inputTokens,
+            tokensOut: result.usage.outputTokens
+          });
+          this._recordCbSuccess(candidate.provider_id);
+
+          this._emitEvent('freecompute_dispatch', {
+            provider_id: candidate.provider_id,
+            model_id: candidate.model_id,
+            tokens_in: result.usage.inputTokens,
+            tokens_out: result.usage.outputTokens,
+            ok: true
+          });
+
+          return {
+            ...result,
+            provider_id: candidate.provider_id,
+            model_id: candidate.model_id
+          };
+        } catch (err) {
+          const kind = classifyDispatchError(err);
+          this._recordCbFailure(candidate.provider_id, kind);
+
+          this._emitEvent('freecompute_dispatch_error', {
+            provider_id: candidate.provider_id,
+            model_id: candidate.model_id,
+            error: err.message
+          });
+
+          // Retry timeouts at most once per provider per request.
+          if (kind === 'timeout' && attempt < maxTimeoutRetries) {
+            attempt += 1;
+            continue;
           }
-        });
 
-        // Record success
-        this.ledger.record(candidate.provider_id, {
-          tokensIn: result.usage.inputTokens,
-          tokensOut: result.usage.outputTokens
-        });
-        this._recordCbSuccess(candidate.provider_id);
-
-        this._emitEvent('freecompute_dispatch', {
-          provider_id: candidate.provider_id,
-          model_id: candidate.model_id,
-          tokens_in: result.usage.inputTokens,
-          tokens_out: result.usage.outputTokens,
-          ok: true
-        });
-
-        return {
-          ...result,
-          provider_id: candidate.provider_id,
-          model_id: candidate.model_id
-        };
-      } catch (err) {
-        this._recordCbFailure(candidate.provider_id);
-
-        this._emitEvent('freecompute_dispatch_error', {
-          provider_id: candidate.provider_id,
-          model_id: candidate.model_id,
-          error: err.message
-        });
-
-        // Try next candidate
-        continue;
+          // Try next candidate
+          break;
+        }
       }
     }
 
@@ -280,8 +319,7 @@ class ProviderRegistry {
 
       // Check if auth credential is available for providers that require it
       if (entry.auth && entry.auth.type !== 'none' && entry.auth.type !== 'bearer_optional') {
-        const token = this._env[entry.auth.env_var];
-        if (!token) {
+        if (!hasAuthCredential(entry.auth, this._env)) {
           // Skip providers without configured credentials
           continue;
         }
@@ -295,6 +333,7 @@ class ProviderRegistry {
       this._circuitBreakers.set(pid, {
         state: CB_STATES.CLOSED,
         failures: 0,
+        timeoutFailures: 0,
         openedAt: 0
       });
     }
@@ -304,18 +343,36 @@ class ProviderRegistry {
     const cb = this._circuitBreakers.get(providerId);
     if (!cb) return;
     cb.failures = 0;
+    cb.timeoutFailures = 0;
     if (cb.state === CB_STATES.HALF_OPEN) {
       cb.state = CB_STATES.CLOSED;
     }
   }
 
-  _recordCbFailure(providerId) {
+  _recordCbFailure(providerId, kind) {
     const cb = this._circuitBreakers.get(providerId);
     if (!cb) return;
     cb.failures += 1;
 
     const entry = CATALOG.find((e) => e.provider_id === providerId);
     const threshold = (entry && entry.constraints.circuit_breaker.consecutive_failures_to_open) || 3;
+
+    if (kind === 'timeout') {
+      cb.timeoutFailures += 1;
+      if (cb.timeoutFailures >= 2) {
+        cb.state = CB_STATES.OPEN;
+        cb.openedAt = Date.now();
+        return;
+      }
+    } else {
+      cb.timeoutFailures = 0;
+    }
+
+    if (kind === 'auth' || kind === 'config') {
+      cb.state = CB_STATES.OPEN;
+      cb.openedAt = Date.now();
+      return;
+    }
 
     if (cb.state === CB_STATES.HALF_OPEN || cb.failures >= threshold) {
       cb.state = CB_STATES.OPEN;
@@ -324,4 +381,10 @@ class ProviderRegistry {
   }
 }
 
-module.exports = { ProviderRegistry, CB_STATES };
+module.exports = {
+  ProviderRegistry,
+  CB_STATES,
+  _test: {
+    classifyDispatchError
+  }
+};

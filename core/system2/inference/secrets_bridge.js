@@ -24,6 +24,7 @@ const { ProviderAdapter } = require('./provider_adapter');
 const PROVIDER_ENV_MAP = Object.freeze({
   groq: Object.freeze({
     envVar: 'OPENCLAW_GROQ_API_KEY',
+    aliasEnvVars: ['GROQ_API_KEY'],
     baseUrlEnvVar: 'OPENCLAW_GROQ_BASE_URL',
     catalogProviderId: 'groq'
   }),
@@ -253,12 +254,17 @@ class SecretsBridge {
 
     for (const providerId of providers) {
       const mapping = this.normalizeProvider(providerId);
-      if (env[mapping.envVar]) {
-        skipped.push({
-          provider: mapping.providerId,
-          envVar: mapping.envVar,
-          reason: 'operator_override'
-        });
+      const envVars = [mapping.envVar, ...(mapping.aliasEnvVars || [])];
+      const existing = envVars.map((k) => env[k]).find((v) => !!v);
+      if (existing) {
+        // Operator override wins, but we still propagate to missing aliases to avoid drift.
+        for (const k of envVars) {
+          if (!env[k]) {
+            env[k] = existing;
+            injected.push({ provider: mapping.providerId, envVar: k });
+          }
+        }
+        skipped.push({ provider: mapping.providerId, envVar: mapping.envVar, reason: 'operator_override' });
         continue;
       }
 
@@ -272,11 +278,10 @@ class SecretsBridge {
         continue;
       }
 
-      env[mapping.envVar] = secret;
-      injected.push({
-        provider: mapping.providerId,
-        envVar: mapping.envVar
-      });
+      for (const k of envVars) {
+        env[k] = secret;
+        injected.push({ provider: mapping.providerId, envVar: k });
+      }
     }
 
     return {

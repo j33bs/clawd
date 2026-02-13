@@ -44,10 +44,15 @@ class ProviderAdapter {
       || catalogEntry.base_url.default;
 
     // Resolve auth — non-enumerable so it never leaks via JSON.stringify
+    const authEnvVar = (catalogEntry.auth && catalogEntry.auth.env_var) || null;
+    const authAliasEnvVars = (catalogEntry.auth && Array.isArray(catalogEntry.auth.alias_env_vars))
+      ? catalogEntry.auth.alias_env_vars
+      : [];
+    const resolvedAuthToken = authEnvVar
+      ? (this._env[authEnvVar] || authAliasEnvVars.map((k) => this._env[k]).find((v) => !!v) || null)
+      : null;
     Object.defineProperty(this, '_authToken', {
-      value: (catalogEntry.auth && catalogEntry.auth.env_var)
-        ? (this._env[catalogEntry.auth.env_var] || null)
-        : null,
+      value: resolvedAuthToken,
       writable: true,
       enumerable: false,
       configurable: false
@@ -288,6 +293,13 @@ class ProviderAdapter {
         let data = '';
         res.on('data', (chunk) => { data += chunk; });
         res.on('end', () => {
+          if (res.statusCode < 200 || res.statusCode >= 300) {
+            const err = new Error(`http ${res.statusCode} from ${this.providerId}`);
+            err.code = 'PROVIDER_HTTP_ERROR';
+            err.statusCode = res.statusCode;
+            reject(err);
+            return;
+          }
           try {
             resolve(JSON.parse(data));
           } catch (_) {
@@ -298,7 +310,9 @@ class ProviderAdapter {
 
       req.on('timeout', () => {
         req.destroy();
-        reject(new Error(`timeout connecting to ${this.providerId}`));
+        const err = new Error(`timeout connecting to ${this.providerId}`);
+        err.code = 'PROVIDER_TIMEOUT';
+        reject(err);
       });
       req.on('error', (err) => reject(err));
 

@@ -148,6 +148,7 @@ const CATALOG = Object.freeze([
     auth: {
       type: 'bearer',
       env_var: 'OPENCLAW_GROQ_API_KEY',
+      alias_env_vars: ['GROQ_API_KEY'],
       redact_in_logs: true
     },
     models: [
@@ -265,6 +266,82 @@ const CATALOG = Object.freeze([
         type: 'doc',
         title: 'Model Studio free quota (Intl edition)',
         url: 'https://www.alibabacloud.com/help/en/model-studio/new-free-quota',
+        retrieved_utc: null
+      }
+    ]
+  },
+
+  // ── PAID FALLBACK PROVIDERS ──
+  {
+    provider_id: 'openai',
+    kind: 'external',
+    protocol: 'openai_compatible',
+    enabled_default: false,
+    base_url: {
+      default: 'https://api.openai.com/v1',
+      env_override: 'OPENCLAW_OPENAI_BASE_URL'
+    },
+    auth: {
+      type: 'bearer',
+      env_var: 'OPENCLAW_OPENAI_API_KEY',
+      alias_env_vars: ['OPENAI_API_KEY'],
+      redact_in_logs: true
+    },
+    models: [
+      {
+        model_id: 'gpt-5.2-chat-latest',
+        task_classes: ['fast_chat', 'long_context', 'tool_use', 'batch'],
+        context_window_hint: null,
+        tool_support: 'via_adapter',
+        notes: 'Paid chat fallback. Operator must configure spend protections and limits.'
+      },
+      {
+        model_id: 'gpt-5-mini',
+        task_classes: ['fast_chat', 'tool_use', 'batch', 'code'],
+        context_window_hint: null,
+        tool_support: 'via_adapter',
+        notes: 'Paid chat fallback (cheaper). Operator must configure spend protections and limits.'
+      },
+      {
+        model_id: 'gpt-5.3-codex',
+        task_classes: ['code', 'tool_use'],
+        context_window_hint: null,
+        tool_support: 'via_adapter',
+        notes: 'Paid coding/tool fallback. Operator must configure spend protections and limits.'
+      }
+    ],
+    constraints: {
+      quota: {
+        rpm_default: 5,
+        rpd_default: 50,
+        tpm_default: 60000,
+        tpd_default: 300000,
+        reset_policy: 'provider_defined',
+        operator_override_required: true
+      },
+      billing_safety: {
+        notes: 'Paid provider. Enable provider-side billing protections and enforce operator budgets.'
+      },
+      backoff: { strategy: 'bounded_exponential', max_retries: 1, cooldown_seconds: 10 },
+      circuit_breaker: {
+        consecutive_failures_to_open: 2,
+        open_seconds: 180,
+        half_open_probe_interval_seconds: 60
+      }
+    },
+    healthcheck: {
+      type: 'openai_compatible',
+      endpoints: { models: '/models', chat: '/chat/completions' },
+      timeouts_ms: { connect: 900, read: 9000 },
+      probe_prompt: 'Reply with: OK',
+      probe_max_tokens: 8
+    },
+    routing_tags: { prefers: ['paid_fallback'], avoids: [] },
+    evidence: [
+      {
+        type: 'doc',
+        title: 'OpenAI API',
+        url: 'https://platform.openai.com/docs',
         retrieved_utc: null
       }
     ]
