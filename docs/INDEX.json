@@ -23,7 +23,7 @@
     }
   ],
   "counts": {
-    "total_files": 241
+    "total_files": 245
   },
   "top_level": [
     {
@@ -80,7 +80,7 @@
     },
     {
       "name": "docs",
-      "count": 8
+      "count": 10
     },
     {
       "name": "fixtures",
@@ -108,11 +108,11 @@
     },
     {
       "name": "scripts",
-      "count": 24
+      "count": 25
     },
     {
       "name": "tests",
-      "count": 13
+      "count": 14
     },
     {
       "name": "tests_unittest",
@@ -178,6 +178,8 @@
     "docs/AFK_RUN_REPORT_2026-02-08_1357.md",
     "docs/FRESH_INTENT_SCAN_REPORT_2026-02-08_142006.md",
     "docs/HANDOFF_TEMPLATE.md",
+    "docs/INDEX.json",
+    "docs/INDEX.md",
     "docs/RUNBOOK_OPERATIONS_2026-02-08_2253.md",
     "docs/SECRET_SCRUB.md",
     "docs/TELEGRAM_MONITORING_SETUP.md",
@@ -226,6 +228,7 @@
     "scripts/scrub_secrets.ps1",
     "scripts/selfcheck_scrub_nonprinting.py",
     "scripts/sim_runner.py",
+    "scripts/system2/provider_diag.js",
     "scripts/system2_evidence_bundle.js",
     "scripts/system2_experiment.js",
     "scripts/system2_observability_smoke.js",
@@ -236,6 +239,7 @@
     "scripts/vllm_probe.js",
     "tests/budget_circuit_breaker.test.js",
     "tests/freecompute_cloud.test.js",
+    "tests/freecompute_registry_error_classification.test.js",
     "tests/module_resolution_gate.test.js",
     "tests/redact_audit_evidence.test.js",
     "tests/secrets_bridge.test.js",
