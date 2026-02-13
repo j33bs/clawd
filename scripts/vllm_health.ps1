@@ -45,6 +45,14 @@ function Test-Tcp([string]$hostname, [int]$port, [int]$timeoutMs = 800) {
   }
 }
 
+function Get-EnvValue([string]$name) {
+  try {
+    $it = Get-Item "Env:$name" -ErrorAction SilentlyContinue
+    if ($it) { return [string]$it.Value }
+  } catch {}
+  return $null
+}
+
 try {
   if (-not $BaseUrl) {
     $BaseUrl = "http://127.0.0.1:$Port/v1"
@@ -63,7 +71,7 @@ try {
   $headers = @{}
   # Avoid embedding api_key-like strings that trigger scanners; build env var name at runtime.
   $authEnvName = "OPENCLAW_VLLM_API" + "_KEY"
-  $authToken = (Get-Item "Env:$authEnvName" -ErrorAction SilentlyContinue).Value
+  $authToken = Get-EnvValue $authEnvName
   if (-not [string]::IsNullOrWhiteSpace($authToken)) {
     # Never print this header.
     $headers['Authorization'] = "Bearer $authToken"
