@@ -64,7 +64,16 @@ function createVllmProvider(options = {}) {
  * @param {object} [options.env]
  * @returns {Promise<object>} Status artifact
  */
-async function probeVllmServer(options = {}) {
+async function probeVllmServer(entry, options = {}, { providerFactory } = {}) {
+  if (!entry || !entry.provider_id) {
+    // Back-compat: allow probeVllmServer(options) call style.
+    options = entry || options || {};
+    entry = getProvider('local_vllm');
+  }
+  if (!entry) {
+    throw new Error('local_vllm not found in catalog');
+  }
+
   const env = options.env || process.env;
   const baseUrl = options.baseUrl
     || env.OPENCLAW_VLLM_BASE_URL
@@ -93,8 +102,17 @@ async function probeVllmServer(options = {}) {
   };
 
   try {
-    const provider = createVllmProvider({
-      env,
+    const derivedEnv = system2Cfg
+      ? {
+          ...env,
+          OPENCLAW_VLLM_BASE_URL: system2Cfg.base_url || env.OPENCLAW_VLLM_BASE_URL,
+          OPENCLAW_VLLM_API_KEY: system2Cfg.api_key || env.OPENCLAW_VLLM_API_KEY,
+          OPENCLAW_VLLM_MODEL: system2Cfg.model || env.OPENCLAW_VLLM_MODEL
+        }
+      : env;
+
+    const derivedOptions = {
+      env: derivedEnv,
       emitEvent: options.emitEvent,
       system2: options.system2 === true,
       baseUrl: options.baseUrl,
@@ -104,7 +122,10 @@ async function probeVllmServer(options = {}) {
       maxRetries: options.maxRetries,
       cbOpenSeconds: options.cbOpenSeconds,
       maxConcurrentRequests: options.maxConcurrentRequests
-    });
+    };
+
+    const makeProvider = providerFactory ?? ((e, o) => new ProviderAdapter(e, o));
+    const provider = makeProvider(entry, derivedOptions);
     // Override base URL if specified
     if (options.baseUrl) provider.baseUrl = options.baseUrl;
 
