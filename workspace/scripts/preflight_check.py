@@ -153,10 +153,21 @@ def _auto_ingest_known_gov_root_strays(repo_root: Path) -> Optional[Dict[str, An
     backups: List[str] = []
     stamp = _ts_suffix()
 
+    # Validate the full set before moving anything (atomicity).
     for name in expected:
         src = repo_root / name
         if not src.exists():
-            continue
+            print("STOP (governance auto-ingest missing expected file)")
+            print(f"path={name}")
+            return {"stopped": True, "error": "missing_expected_file", "missing": name}
+        if src.is_symlink() or not src.is_file():
+            print("STOP (governance auto-ingest requires regular files; no symlinks/dirs)")
+            print(f"path={name}")
+            kind = "symlink" if src.is_symlink() else "non_file"
+            return {"stopped": True, "error": "non_regular_file", "path": name, "kind": kind}
+
+    for name in expected:
+        src = repo_root / name
         dest = overlay_dir / name
         if dest.exists():
             backup_name = f"{name}.bak-{stamp}"

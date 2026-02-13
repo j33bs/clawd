@@ -77,6 +77,82 @@ class TestGovernanceAutoIngest(unittest.TestCase):
             self.assertTrue(any(b.startswith("AGENTS.md.bak-") for b in backups), backups)
             self.assertTrue(any((overlay / b).exists() for b in backups))
 
+    def test_partial_set_of_known_root_strays_stops_no_ingest(self):
+        preflight_check = _load_preflight_check_module()
+        with tempfile.TemporaryDirectory() as td:
+            repo = Path(td) / "repo"
+            overlay = Path(td) / "overlay"
+            repo.mkdir(parents=True, exist_ok=True)
+            overlay.mkdir(parents=True, exist_ok=True)
+
+            r = _run(["git", "init"], repo)
+            self.assertEqual(r.returncode, 0, r.stderr)
+
+            subset = list(preflight_check._KNOWN_GOV_ROOT_STRAYS)[:3]
+            for name in subset:
+                (repo / name).write_text(f"dummy {name}\n", encoding="utf-8")
+
+            sync = overlay / "sync_into_repo.sh"
+            sync.write_text("#!/bin/bash\nexit 0\n", encoding="utf-8")
+            sync.chmod(sync.stat().st_mode | stat.S_IXUSR)
+
+            env = os.environ.copy()
+            env["CLAWD_GOV_OVERLAY_DIR"] = str(overlay)
+            env["CLAWD_GOV_OVERLAY_SYNC"] = str(sync)
+
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                with unittest.mock.patch.dict(os.environ, env, clear=False):
+                    summary = preflight_check._auto_ingest_known_gov_root_strays(repo)
+
+            self.assertIsNotNone(summary)
+            self.assertTrue(summary.get("stopped"))
+
+            # Nothing moved.
+            for name in subset:
+                self.assertTrue((repo / name).exists())
+                self.assertFalse((overlay / name).exists())
+
+    def test_non_file_known_name_stops_no_ingest(self):
+        preflight_check = _load_preflight_check_module()
+        with tempfile.TemporaryDirectory() as td:
+            repo = Path(td) / "repo"
+            overlay = Path(td) / "overlay"
+            repo.mkdir(parents=True, exist_ok=True)
+            overlay.mkdir(parents=True, exist_ok=True)
+
+            r = _run(["git", "init"], repo)
+            self.assertEqual(r.returncode, 0, r.stderr)
+
+            # Create the exact set, but make one entry a directory (not a regular file).
+            bad = "AGENTS.md"
+            (repo / bad).mkdir(parents=True, exist_ok=True)
+            for name in preflight_check._KNOWN_GOV_ROOT_STRAYS:
+                if name == bad:
+                    continue
+                (repo / name).write_text(f"dummy {name}\n", encoding="utf-8")
+
+            sync = overlay / "sync_into_repo.sh"
+            sync.write_text("#!/bin/bash\nexit 0\n", encoding="utf-8")
+            sync.chmod(sync.stat().st_mode | stat.S_IXUSR)
+
+            env = os.environ.copy()
+            env["CLAWD_GOV_OVERLAY_DIR"] = str(overlay)
+            env["CLAWD_GOV_OVERLAY_SYNC"] = str(sync)
+
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                with unittest.mock.patch.dict(os.environ, env, clear=False):
+                    summary = preflight_check._auto_ingest_known_gov_root_strays(repo)
+
+            self.assertIsNotNone(summary)
+            self.assertTrue(summary.get("stopped"))
+
+            # Nothing moved.
+            for name in preflight_check._KNOWN_GOV_ROOT_STRAYS:
+                self.assertTrue((repo / name).exists())
+                self.assertFalse((overlay / name).exists())
+
     def test_stops_on_other_untracked_root_files(self):
         preflight_check = _load_preflight_check_module()
         with tempfile.TemporaryDirectory() as td:
