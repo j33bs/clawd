@@ -15,6 +15,7 @@
 
 const { ProviderAdapter } = require('./provider_adapter');
 const { getProvider } = require('./catalog');
+const { resolveSystem2VllmConfig } = require('./system2_config_resolver');
 
 /**
  * Create a vLLM provider adapter with discovery.
@@ -29,6 +30,29 @@ function createVllmProvider(options = {}) {
   if (!entry) {
     throw new Error('local_vllm not found in catalog');
   }
+
+  if (options.system2 === true) {
+    const env = options.env || process.env;
+    const cfg = resolveSystem2VllmConfig({
+      env,
+      emitEvent: options.emitEvent,
+      baseUrl: options.baseUrl,
+      apiKey: options.apiKey,
+      model: options.model,
+      timeoutMs: options.timeoutMs,
+      maxRetries: options.maxRetries,
+      cbOpenSeconds: options.cbOpenSeconds,
+      maxConcurrentRequests: options.maxConcurrentRequests
+    });
+
+    const resolvedEnv = { ...env };
+    if (cfg.base_url) resolvedEnv.OPENCLAW_VLLM_BASE_URL = cfg.base_url;
+    if (cfg.api_key) resolvedEnv.OPENCLAW_VLLM_API_KEY = cfg.api_key;
+    if (cfg.model) resolvedEnv.OPENCLAW_VLLM_MODEL = cfg.model;
+
+    return new ProviderAdapter(entry, { ...options, env: resolvedEnv });
+  }
+
   return new ProviderAdapter(entry, options);
 }
 
@@ -45,10 +69,23 @@ async function probeVllmServer(options = {}) {
   const baseUrl = options.baseUrl
     || env.OPENCLAW_VLLM_BASE_URL
     || 'http://127.0.0.1:18888/v1';
+  const system2Cfg = options.system2 === true
+    ? resolveSystem2VllmConfig({
+        env,
+        emitEvent: options.emitEvent,
+        baseUrl: options.baseUrl,
+        apiKey: options.apiKey,
+        model: options.model,
+        timeoutMs: options.timeoutMs,
+        maxRetries: options.maxRetries,
+        cbOpenSeconds: options.cbOpenSeconds,
+        maxConcurrentRequests: options.maxConcurrentRequests
+      })
+    : null;
 
   const status = {
     ts: new Date().toISOString(),
-    base_url: baseUrl,
+    base_url: system2Cfg ? system2Cfg.base_url : baseUrl,
     healthy: false,
     models: [],
     inference_ok: false,
@@ -56,7 +93,18 @@ async function probeVllmServer(options = {}) {
   };
 
   try {
-    const provider = createVllmProvider({ env });
+    const provider = createVllmProvider({
+      env,
+      emitEvent: options.emitEvent,
+      system2: options.system2 === true,
+      baseUrl: options.baseUrl,
+      apiKey: options.apiKey,
+      model: options.model,
+      timeoutMs: options.timeoutMs,
+      maxRetries: options.maxRetries,
+      cbOpenSeconds: options.cbOpenSeconds,
+      maxConcurrentRequests: options.maxConcurrentRequests
+    });
     // Override base URL if specified
     if (options.baseUrl) provider.baseUrl = options.baseUrl;
 
@@ -67,9 +115,10 @@ async function probeVllmServer(options = {}) {
     if (healthResult.ok && status.models.length > 0) {
       // Try a minimal inference
       try {
+        const probeModel = (system2Cfg && system2Cfg.model) || status.models[0];
         const result = await provider.call({
           messages: [{ role: 'user', content: 'Respond with a single word: OK' }],
-          metadata: { model: status.models[0], maxTokens: 8 }
+          metadata: { model: probeModel, maxTokens: 8 }
         });
         status.inference_ok = Boolean(result.text);
       } catch (err) {
