@@ -1,0 +1,106 @@
+#!/bin/bash
+# OpenClaw Pre-Push Hook (Tracked Template)
+# Category: B (Security)
+# Install: bash workspace/scripts/install-hooks.sh
+#
+# Key property: scans only the push range derived from pre-push stdin.
+# This avoids false positives from ancestors already present on the remote.
+
+set -e
+
+RED='\033[0;31m'
+YELLOW='\033[1;33m'
+GREEN='\033[0;32m'
+NC='\033[0m' # No Color
+
+echo "=== OpenClaw Pre-Push Validation ==="
+
+remote="$1"
+url="$2"
+
+ZERO_SHA="0000000000000000000000000000000000000000"
+
+resolve_scan_range() {
+    local branch="$1"
+    local local_sha="$2"
+    local remote_sha="$3"
+
+    # Existing remote branch: scan only commits not on remote branch tip.
+    if [ "$remote_sha" != "$ZERO_SHA" ]; then
+        echo "$remote_sha..$local_sha"
+        return 0
+    fi
+
+    # New branch push:
+    # - DO NOT scan the entire history (that includes ancestors already on the remote).
+    # - Instead, scan only commits new relative to an upstream/base ref.
+    local upstream=""
+    upstream=$(git rev-parse --verify -q "${branch}@{upstream}" 2>/dev/null || true)
+
+    local base_ref=""
+    if [ -n "$upstream" ]; then
+        base_ref="$upstream"
+    elif git rev-parse --verify -q origin/main >/dev/null 2>&1; then
+        base_ref="origin/main"
+    fi
+
+    if [ -n "$base_ref" ]; then
+        local mb=""
+        mb=$(git merge-base "$base_ref" "$local_sha" 2>/dev/null || true)
+        if [ -n "$mb" ]; then
+            echo "$mb..$local_sha"
+            return 0
+        fi
+        echo "$base_ref..$local_sha"
+        return 0
+    fi
+
+    # Last resort: scan the local tip only.
+    echo "$local_sha"
+}
+
+# Secret patterns (case-insensitive).
+# Construct sensitive regexes without embedding the raw literals in this file.
+# This prevents the hook templates themselves from tripping secret scans.
+SECRET_PATTERNS="PRI""VATE KEY|-----BE""GIN.*KE""Y-----|bearer [a-zA-Z0-9_-]{20,}|api[_-]?key.*[a-zA-Z0-9_-]{20,}"
+
+scan_commit_for_secrets() {
+    local commit="$1"
+
+    # Scan commit file snapshots (not patch output).
+    # This avoids false positives when a later commit removes a previously-existing secret-like literal.
+    local files
+    files=$(git diff-tree --no-commit-id --diff-filter=ACM -r --name-only "$commit" 2>/dev/null || echo "")
+
+    for file in $files; do
+        if git show "${commit}:${file}" 2>/dev/null | grep -qiE "$SECRET_PATTERNS"; then
+            return 1
+        fi
+    done
+    return 0
+}
+
+while read -r local_ref local_sha remote_ref remote_sha; do
+    BRANCH=$(echo "$local_ref" | sed 's|refs/heads/||')
+    echo "Validating push: ${BRANCH:-<detached>} -> ${remote:-<remote>}"
+
+    RANGE=$(resolve_scan_range "$BRANCH" "$local_sha" "$remote_sha")
+    echo "[1/1] Scanning commits for secrets (range: $RANGE)..."
+
+    COMMITS=$(git rev-list "$RANGE" 2>/dev/null || echo "$local_sha")
+    for commit in $COMMITS; do
+        if ! scan_commit_for_secrets "$commit"; then
+            echo -e "${RED}ERROR: Potential secret found in commit $commit${NC}"
+            echo ""
+            echo "Remediation:"
+            echo "  1. git rebase -i HEAD~N (where N is commits back)"
+            echo "  2. Remove the secret from the commit"
+            echo "  3. Use secrets.env for sensitive values"
+            exit 1
+        fi
+    done
+
+    echo -e "${GREEN}  No secrets detected in push range${NC}"
+done
+
+exit 0
