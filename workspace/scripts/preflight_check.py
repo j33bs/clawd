@@ -5,8 +5,12 @@ Fails fast with actionable guidance.
 """
 import json
 import os
+import shutil
+import subprocess
 import sys
+import time
 from pathlib import Path
+from typing import Any, Dict, List, Optional
 
 
 def _resolve_repo_root(start: Path):
@@ -50,6 +54,19 @@ ALLOWLIST_EXAMPLE = (
     "ALLOWED_CHAT_IDS=-1001369282532,-1001700695156,-1002117631304,-1001445373305"
 )
 
+# Known governance docs that sometimes appear untracked at repo root.
+# Policy: if (and only if) the untracked repo-root set matches this list exactly,
+# auto-ingest them into the operator's governance overlay and sync into the repo.
+_KNOWN_GOV_ROOT_STRAYS = (
+    "AGENTS.md",
+    "BOOTSTRAP.md",
+    "HEARTBEAT.md",
+    "IDENTITY.md",
+    "SOUL.md",
+    "TOOLS.md",
+    "USER.md",
+)
+
 
 def fail(msg, fixes, failures):
     failures.append({"msg": msg, "fixes": fixes})
@@ -66,6 +83,120 @@ def load_json(path):
         return json.loads(path.read_text(encoding="utf-8"))
     except Exception:
         return None
+
+
+def _run_git_status_porcelain_z(repo_root: Path) -> bytes:
+    proc = subprocess.run(
+        ["git", "-C", str(repo_root), "status", "--porcelain=v1", "-z", "-uall"],
+        capture_output=True,
+        check=False,
+    )
+    return proc.stdout or b""
+
+
+def _untracked_repo_root_files(repo_root: Path) -> List[str]:
+    data = _run_git_status_porcelain_z(repo_root)
+    entries = data.split(b"\x00")
+    out: List[str] = []
+    for entry in entries:
+        if not entry:
+            continue
+        try:
+            status = entry[:2].decode("utf-8", errors="ignore")
+            path = entry[3:].decode("utf-8", errors="ignore")
+        except Exception:
+            continue
+        if status != "??":
+            continue
+        norm = path.replace("\\", "/").strip("/")
+        # Only repo-root files (no slashes).
+        if not norm or "/" in norm:
+            continue
+        out.append(norm)
+    return sorted(set(out))
+
+
+def _ts_suffix() -> str:
+    # Stable, filesystem-safe, local time.
+    return time.strftime("%Y%m%d-%H%M%S")
+
+
+def _auto_ingest_known_gov_root_strays(repo_root: Path) -> Optional[Dict[str, Any]]:
+    """
+    Returns a summary dict if ingestion was performed, else None.
+
+    Env overrides (useful for tests/smoke checks):
+      - CLAWD_GOV_OVERLAY_DIR
+      - CLAWD_GOV_OVERLAY_SYNC
+    """
+    root_untracked = _untracked_repo_root_files(repo_root)
+    if not root_untracked:
+        return None
+
+    expected = sorted(_KNOWN_GOV_ROOT_STRAYS)
+    if root_untracked != expected:
+        # Only block on untracked *repo-root* files; ignore deeper paths here.
+        print("STOP (unrelated workspace drift detected)")
+        print("untracked_repo_root_files:")
+        for p in root_untracked:
+            print(f"- {p}")
+        return {"stopped": True, "root_untracked": root_untracked}
+
+    overlay_dir = Path(os.environ.get("CLAWD_GOV_OVERLAY_DIR", str(Path.home() / ".clawd_governance_overlay"))).expanduser()
+    sync_script = Path(
+        os.environ.get("CLAWD_GOV_OVERLAY_SYNC", str(overlay_dir / "sync_into_repo.sh"))
+    ).expanduser()
+
+    overlay_dir.mkdir(parents=True, exist_ok=True)
+
+    moved: List[str] = []
+    backups: List[str] = []
+    stamp = _ts_suffix()
+
+    for name in expected:
+        src = repo_root / name
+        if not src.exists():
+            continue
+        dest = overlay_dir / name
+        if dest.exists():
+            backup_name = f"{name}.bak-{stamp}"
+            backup = overlay_dir / backup_name
+            dest.rename(backup)
+            backups.append(backup_name)
+        shutil.move(str(src), str(dest))
+        moved.append(name)
+
+    if not sync_script.exists():
+        print(f"FAIL: governance overlay sync script missing: {sync_script}")
+        return {"stopped": True, "error": "sync_script_missing", "moved": moved, "backups": backups}
+
+    # Do not stream stdout/stderr (avoid accidental leakage); capture and gate by exit code.
+    env = os.environ.copy()
+    env["OPENCLAW_ROOT"] = str(repo_root)
+    proc = subprocess.run(
+        ["bash", str(sync_script)],
+        capture_output=True,
+        text=True,
+        env=env,
+        check=False,
+    )
+    if proc.returncode != 0:
+        print("FAIL: governance overlay sync script failed")
+        print(f"exit_code={proc.returncode}")
+        return {"stopped": True, "error": "sync_failed", "moved": moved, "backups": backups}
+
+    # Sanity: ensure repo-root strays are gone.
+    remaining = _untracked_repo_root_files(repo_root)
+    if remaining:
+        print("FAIL: repo-root untracked files remain after auto-ingest")
+        for p in remaining:
+            print(f"- {p}")
+        return {"stopped": True, "error": "post_ingest_root_untracked_remaining", "moved": moved, "backups": backups}
+
+    print("governance_auto_ingest: ok")
+    print(f"moved_files={moved}")
+    print(f"overlay_backups={backups}")
+    return {"stopped": False, "moved": moved, "backups": backups}
 
 
 def check_policy(failures):
@@ -176,6 +307,10 @@ def check_telegram(failures, warnings):
 def main():
     failures = []
     warnings = []
+
+    ingest = _auto_ingest_known_gov_root_strays(BASE_DIR)
+    if ingest and ingest.get("stopped"):
+        sys.exit(2)
 
     check_requests(failures)
     policy = check_policy(failures)
