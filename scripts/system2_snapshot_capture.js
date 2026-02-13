@@ -188,11 +188,45 @@ function writeText(filePath, text) {
   fs.writeFileSync(filePath, text, 'utf8');
 }
 
+function warnOnceFactory(warnFn) {
+  let warned = false;
+  return function warnOnce(msg) {
+    if (warned) return;
+    warned = true;
+    try {
+      warnFn(msg);
+    } catch (_) {
+      // Best-effort only: never let warnings crash snapshot capture.
+    }
+  };
+}
+
+function loadSystem2ObservabilityConfig(options) {
+  const env = (options && options.env) || process.env;
+  const explicit = options && options.system2 && options.system2.observability;
+
+  // Precedence: explicit config > env vars > defaults.
+  const enabled = explicit && typeof explicit.enabled === 'boolean'
+    ? explicit.enabled
+    : env.SYSTEM2_OBSERVABILITY_ENABLED === '1';
+
+  const jsonlPath = explicit && typeof explicit.jsonlPath === 'string'
+    ? explicit.jsonlPath
+    : String(env.SYSTEM2_OBSERVABILITY_JSONL_PATH || '');
+
+  const extraPayload = explicit && explicit.extraPayload && typeof explicit.extraPayload === 'object'
+    ? explicit.extraPayload
+    : null;
+
+  return { enabled, jsonlPath, extraPayload };
+}
+
 function captureSnapshot(options) {
   const outDir = path.resolve(options.outDir);
   const maxLogLines = options.maxLogLines || DEFAULT_MAX_LOG_LINES;
   const runner = options.runner || defaultRunner;
   const now = options.now || (() => new Date().toISOString());
+  const warnOnce = warnOnceFactory(options.warn || ((msg) => console.warn(msg)));
 
   fs.mkdirSync(outDir, { recursive: true });
 
@@ -289,6 +323,50 @@ function captureSnapshot(options) {
   summary.log_signature_counts = countLogSignatures(sampledLogs);
 
   writeText(path.join(outDir, 'snapshot_summary.json'), JSON.stringify(summary, null, 2) + '\n');
+
+  // Phase-3 seam: System-2 observability emission (default-off).
+  // Must not affect behavior unless explicitly enabled.
+  try {
+    const obs = loadSystem2ObservabilityConfig(options);
+    if (obs.enabled === true) {
+      if (typeof obs.jsonlPath !== 'string' || obs.jsonlPath.trim().length === 0) {
+        warnOnce('system2 observability enabled but SYSTEM2_OBSERVABILITY_JSONL_PATH is missing; disabling emission');
+      } else {
+        const { makeEmitter } = require('../core/system2/observability/emitter');
+        const { appendEventJsonl } = require('../core/system2/observability/jsonl_sink');
+
+        const sink = {
+          appendEvent: async function appendEvent(evt) {
+            fs.mkdirSync(path.dirname(obs.jsonlPath), { recursive: true });
+            fs.appendFileSync(obs.jsonlPath, appendEventJsonl(evt), 'utf8');
+          }
+        };
+
+        const emit = makeEmitter({
+          enabled: true,
+          strict: true,
+          sink,
+          nowFn: function fixedNow() { return new Date(summary.timestamp_utc); }
+        });
+
+        const payload = Object.assign(
+          {
+            snapshot_ok: summary.commands_failed.length === 0,
+            commands_failed: summary.commands_failed,
+            log_signature_counts: summary.log_signature_counts
+          },
+          obs.extraPayload || {}
+        );
+
+        // Intentionally not awaited: sink is synchronous and the async emitter
+        // evaluates sink.appendEvent before its first await.
+        emit('system2_snapshot_captured', payload, { subsystem: 'system2_snapshot_capture' })
+          .catch((err) => warnOnce(`system2 observability emit failed: ${err.message}`));
+      }
+    }
+  } catch (error) {
+    warnOnce(`system2 observability emit failed: ${error.message}`);
+  }
 
   return {
     ok: summary.commands_failed.length === 0,
