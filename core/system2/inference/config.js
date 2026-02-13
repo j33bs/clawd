@@ -20,8 +20,12 @@ const { REQUEST_CLASSES } = require('./schemas');
 function loadFreeComputeConfig(env) {
   const e = env || process.env;
 
-  const enabled = e.ENABLE_FREECOMPUTE_CLOUD === '1';
-  const vllmEnabled = e.ENABLE_LOCAL_VLLM === '1';
+  // Canonical key: ENABLE_FREECOMPUTE_CLOUD
+  // Compatibility alias: ENABLE_FREECOMPUTE
+  const enabled = e.ENABLE_FREECOMPUTE_CLOUD === '1' || e.ENABLE_FREECOMPUTE === '1';
+
+  // Local vLLM is the escape hatch; default-on unless explicitly disabled.
+  const vllmEnabled = e.ENABLE_LOCAL_VLLM !== '0';
 
   // ── Per-provider enable/disable ──
   const providerAllowlist = (e.FREECOMPUTE_PROVIDER_ALLOWLIST || '')

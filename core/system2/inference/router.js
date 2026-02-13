@@ -24,6 +24,7 @@ const { CATALOG } = require('./catalog');
  * @param {object} params.providerHealth  - { provider_id → { ok: boolean } }
  * @param {object} params.quotaState      - { provider_id → { allowed: boolean, reason? } }
  * @param {object} params.config          - Output of loadFreeComputeConfig()
+ * @param {string[]} [params.availableProviderIds] - Optional: restrict routing to providers with adapters
  * @returns {{ candidates: Array<{ provider_id, model_id, reason, score }>, explanation: string[] }}
  */
 function routeRequest(params) {
@@ -34,18 +35,20 @@ function routeRequest(params) {
     budget = {},
     providerHealth = {},
     quotaState = {},
-    config
+    config,
+    availableProviderIds
   } = params;
 
   if (!config || !config.enabled) {
     return {
       candidates: [],
-      explanation: ['FreeComputeCloud is disabled (ENABLE_FREECOMPUTE_CLOUD=0)']
+      explanation: ['FreeComputeCloud is disabled (ENABLE_FREECOMPUTE_CLOUD=0 and ENABLE_FREECOMPUTE=0)']
     };
   }
 
   const explanation = [];
   const scored = [];
+  const available = Array.isArray(availableProviderIds) ? new Set(availableProviderIds) : null;
 
   for (const provider of CATALOG) {
     const pid = provider.provider_id;
@@ -53,6 +56,12 @@ function routeRequest(params) {
     // Operator policy: OpenAI/Codex API automation is disabled for now.
     if (pid.startsWith('openai')) {
       explanation.push(`${pid}: skipped (operator disabled; no API automation)`);
+      continue;
+    }
+
+    // If a registry provided the concrete adapter set, don't emit candidates for absent adapters.
+    if (available && !available.has(pid)) {
+      explanation.push(`${pid}: skipped (no adapter / not configured)`);
       continue;
     }
 
@@ -162,6 +171,23 @@ function routeRequest(params) {
     if (a.provider_id !== b.provider_id) return a.provider_id.localeCompare(b.provider_id);
     return a.model_id.localeCompare(b.model_id);
   });
+
+  // Hard escape hatch: if local_vllm is available+healthy, never return empty.
+  if (scored.length === 0 && config.vllmEnabled && (!available || available.has('local_vllm'))) {
+    const h = providerHealth.local_vllm;
+    const q = quotaState.local_vllm;
+    const healthy = !h || h.ok;
+    const quotaOk = !q || q.allowed;
+    if (healthy && quotaOk) {
+      scored.push({
+        provider_id: 'local_vllm',
+        model_id: 'AUTO_DISCOVER',
+        reason: 'escape_hatch_local_vllm',
+        score: 1000
+      });
+      explanation.push('escape_hatch_local_vllm: injected local_vllm as final fallback');
+    }
+  }
 
   if (scored.length === 0) {
     explanation.push('No eligible providers found for this request');

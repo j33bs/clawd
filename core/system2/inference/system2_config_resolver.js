@@ -23,7 +23,7 @@ function resolveSystem2VllmConfig(options = {}) {
     base_url: options.baseUrl
       || env.SYSTEM2_VLLM_BASE_URL
       || env.OPENCLAW_VLLM_BASE_URL
-      || 'http://127.0.0.1:18888/v1',
+      || 'http://127.0.0.1:8000/v1',
 
     api_key: options.apiKey
       || env.SYSTEM2_VLLM_API_KEY
@@ -92,4 +92,3 @@ function resolveSystem2VllmConfig(options = {}) {
 module.exports = {
   resolveSystem2VllmConfig
 };
-

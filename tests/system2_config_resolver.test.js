@@ -61,7 +61,7 @@ test('prefers SYSTEM2_VLLM_* over OPENCLAW_VLLM_*', function () {
 
 test('uses defaults when envs not set', function () {
   const config = resolveSystem2VllmConfig({ env: {} });
-  assert.strictEqual(config.base_url, 'http://127.0.0.1:18888/v1');
+  assert.strictEqual(config.base_url, 'http://127.0.0.1:8000/v1');
   assert.strictEqual(config.api_key, null);
   assert.strictEqual(config.timeout_ms, 30000);
 });
@@ -99,4 +99,3 @@ test('invalid numeric env yields NaN (no throw)', function () {
   });
   assert.ok(Number.isNaN(config.timeout_ms));
 });
-

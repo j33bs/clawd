@@ -208,11 +208,16 @@ console.log('── Config + Redaction ──');
 test('config: defaults to disabled', () => {
   const cfg = loadFreeComputeConfig({});
   assert.equal(cfg.enabled, false);
-  assert.equal(cfg.vllmEnabled, false);
+  assert.equal(cfg.vllmEnabled, true);
 });
 
 test('config: enables with flag', () => {
   const cfg = loadFreeComputeConfig({ ENABLE_FREECOMPUTE_CLOUD: '1' });
+  assert.equal(cfg.enabled, true);
+});
+
+test('config: enables with alias flag', () => {
+  const cfg = loadFreeComputeConfig({ ENABLE_FREECOMPUTE: '1' });
   assert.equal(cfg.enabled, true);
 });
 
@@ -491,10 +496,10 @@ test('ledger: disk persistence (write)', () => {
 console.log('── vLLM Utilities ──');
 
 test('vllmStartCommand: produces valid command', () => {
-  const cmd = vllmStartCommand({ model: 'Qwen/Qwen2.5-7B', port: 18888 });
+  const cmd = vllmStartCommand({ model: 'Qwen/Qwen2.5-7B', port: 8000 });
   assert.ok(cmd.includes('vllm.entrypoints'));
   assert.ok(cmd.includes('Qwen/Qwen2.5-7B'));
-  assert.ok(cmd.includes('18888'));
+  assert.ok(cmd.includes('8000'));
   assert.ok(!cmd.includes('$OPENCLAW_VLLM_API_KEY')); // No key when not requested
 });
 
@@ -532,8 +537,8 @@ test('registry: enabled but no credentials → no adapters', () => {
   assert.equal(reg.config.enabled, true);
   // No API keys set, so external providers with required auth are skipped
   const snap = reg.snapshot();
-  // Only local_vllm would be eligible if ENABLE_LOCAL_VLLM=1
-  assert.ok(snap.adapters.length === 0 || snap.adapters.every((a) => a.provider_id === 'local_vllm'));
+  // Local vLLM is the escape hatch; it should be present by default when enabled.
+  assert.ok(snap.adapters.length === 1 && snap.adapters[0].provider_id === 'local_vllm');
   reg.dispose();
 });
 
@@ -544,6 +549,35 @@ await testAsync('registry: dispatch returns null when disabled', async () => {
     messages: [{ role: 'user', content: 'test' }]
   });
   assert.equal(result, null);
+  reg.dispose();
+});
+
+await testAsync('registry: dispatch uses local_vllm when it is the only eligible adapter', async () => {
+  const reg = new ProviderRegistry({
+    env: { ENABLE_FREECOMPUTE_CLOUD: '1' }
+  });
+
+  // Replace the real adapter to avoid network. Keep provider_id key intact so routing selects it.
+  reg._adapters.set('local_vllm', {
+    async call() {
+      return {
+        text: 'ok',
+        raw: {},
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, estimatedCostUsd: 0 }
+      };
+    },
+    async health() {
+      return { ok: true, models: ['stub-model'] };
+    }
+  });
+
+  const result = await reg.dispatch({
+    taskClass: 'fast_chat',
+    messages: [{ role: 'user', content: 'test' }]
+  });
+
+  assert.ok(result, 'expected non-null result');
+  assert.equal(result.provider_id, 'local_vllm');
   reg.dispose();
 });
 

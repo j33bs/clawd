@@ -22,7 +22,7 @@ const CATALOG = Object.freeze([
     protocol: 'openai_compatible',
     enabled_default: false,
     base_url: {
-      default: 'http://127.0.0.1:18888/v1',
+      default: 'http://127.0.0.1:8000/v1',
       env_override: 'OPENCLAW_VLLM_BASE_URL'
     },
     auth: {

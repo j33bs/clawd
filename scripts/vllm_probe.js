@@ -29,7 +29,7 @@ async function main() {
     console.log('=== vLLM Start Command (dry-run) ===\n');
     console.log(vllmStartCommand({
       model: process.env.OPENCLAW_VLLM_MODEL || '<MODEL_NAME>',
-      port: Number(process.env.OPENCLAW_VLLM_PORT || 18888),
+      port: Number(process.env.OPENCLAW_VLLM_PORT || 8000),
       apiKey: Boolean(process.env.OPENCLAW_VLLM_API_KEY)
     }));
     console.log('\n(No execution performed. Set env vars and run manually.)');

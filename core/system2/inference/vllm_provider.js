@@ -77,7 +77,7 @@ async function probeVllmServer(entry, options = {}, { providerFactory } = {}) {
   const env = options.env || process.env;
   const baseUrl = options.baseUrl
     || env.OPENCLAW_VLLM_BASE_URL
-    || 'http://127.0.0.1:18888/v1';
+    || 'http://127.0.0.1:8000/v1';
   const system2Cfg = options.system2 === true
     ? resolveSystem2VllmConfig({
         env,
@@ -166,7 +166,7 @@ async function probeVllmServer(entry, options = {}, { providerFactory } = {}) {
  */
 function vllmStartCommand(options = {}) {
   const model = options.model || '<MODEL_NAME>';
-  const port = options.port || 18888;
+  const port = options.port || 8000;
   const gpuUtil = options.gpuMemoryUtilization || '0.90';
 
   const parts = [

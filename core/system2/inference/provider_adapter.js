@@ -62,6 +62,21 @@ class ProviderAdapter {
     const firstModel = catalogEntry.models[0];
     this._defaultModelId = firstModel ? firstModel.model_id : null;
 
+    // If this provider uses AUTO_DISCOVER, prefer operator-configured model env vars.
+    // This avoids accidentally calling /chat/completions with model=AUTO_DISCOVER.
+    if (this._defaultModelId === 'AUTO_DISCOVER') {
+      const env = this._env || {};
+      if (this.providerId === 'local_vllm' && env.OPENCLAW_VLLM_MODEL) {
+        this._defaultModelId = env.OPENCLAW_VLLM_MODEL;
+      }
+      if (this.providerId === 'remote_vllm' && env.OPENCLAW_REMOTE_VLLM_MODEL) {
+        this._defaultModelId = env.OPENCLAW_REMOTE_VLLM_MODEL;
+      }
+    }
+
+    // Cache for model discovery (best-effort).
+    this._discoveredModels = [];
+
     // Healthcheck config
     this._hc = catalogEntry.healthcheck || {};
   }
@@ -93,10 +108,14 @@ class ProviderAdapter {
    * @returns {Promise<{ text: string, raw: object, usage: object }>}
    */
   async call({ messages = [], metadata = {} }) {
-    const model = metadata.model || this._defaultModelId;
+    let model = metadata.model || this._defaultModelId;
     const maxTokens = metadata.maxTokens || metadata.max_tokens || 4096;
     const temperature = typeof metadata.temperature === 'number'
       ? metadata.temperature : 0.7;
+
+    if (!model || model === 'AUTO_DISCOVER') {
+      model = await this._resolveAutoModel();
+    }
 
     const startMs = Date.now();
     let result;
@@ -147,7 +166,34 @@ class ProviderAdapter {
       ? data.data.map((m) => m.id).filter(Boolean)
       : [];
 
+    if (models.length > 0) {
+      this._discoveredModels = models;
+    }
     return { ok: true, models };
+  }
+
+  async _resolveAutoModel() {
+    const env = this._env || {};
+    // Operator overrides first.
+    if (this.providerId === 'local_vllm' && env.OPENCLAW_VLLM_MODEL) return env.OPENCLAW_VLLM_MODEL;
+    if (this.providerId === 'remote_vllm' && env.OPENCLAW_REMOTE_VLLM_MODEL) return env.OPENCLAW_REMOTE_VLLM_MODEL;
+
+    // If we already discovered models, use the first deterministically.
+    if (Array.isArray(this._discoveredModels) && this._discoveredModels.length > 0) {
+      return this._discoveredModels[0];
+    }
+
+    // Best-effort discovery via /models.
+    const h = await this.health();
+    const models = (h && Array.isArray(h.models)) ? h.models : [];
+    if (models.length > 0) {
+      this._discoveredModels = models;
+      return models[0];
+    }
+
+    const err = new Error(`no models available for provider ${this.providerId}`);
+    err.code = 'PROVIDER_NO_MODELS';
+    throw err;
   }
 
   async _callOpenAI({ messages, model, maxTokens, temperature }) {

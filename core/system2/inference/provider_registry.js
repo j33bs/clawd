@@ -152,7 +152,8 @@ class ProviderRegistry {
       budget: params.budget,
       providerHealth,
       quotaState,
-      config: this.config
+      config: this.config,
+      availableProviderIds: Array.from(this._adapters.keys())
     });
 
     if (candidates.length === 0) {
@@ -271,7 +272,8 @@ class ProviderRegistry {
       ...params,
       providerHealth,
       quotaState,
-      config: this.config
+      config: this.config,
+      availableProviderIds: Array.from(this._adapters.keys())
     });
   }
 
