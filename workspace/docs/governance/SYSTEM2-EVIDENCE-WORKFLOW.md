@@ -9,6 +9,18 @@ Capture snapshot only:
 npm run system2:snapshot -- --out .tmp/system2_snapshot --json
 ```
 
+## Observability Seam (Default-Off)
+Config:
+- `system2.observability.enabled` (default false)
+- `system2.observability.jsonlPath` (default empty string)
+- env fallbacks: `SYSTEM2_OBSERVABILITY_ENABLED=1`, `SYSTEM2_OBSERVABILITY_JSONL_PATH=/path/events.jsonl`
+
+Behavior:
+- disabled: no file writes
+- enabled + missing/blank path: warn once, no writes (fail-closed)
+- enabled + parent dir missing: warn once, no writes (fail-closed)
+- enabled + valid path: append exactly one JSONL line per snapshot capture
+
 Capture + redact bundle:
 ```bash
 npm run system2:evidence -- --out .tmp/system2_evidence
