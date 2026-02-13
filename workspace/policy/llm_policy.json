@@ -55,8 +55,22 @@
     }
   },
   "providers": {
-    "ollama": {
+    "local_vllm": {
       "enabled": true,
+      "paid": false,
+      "tier": "free",
+      "type": "openai_compatible",
+      "baseUrl": "http://127.0.0.1:8000/v1",
+      "models": [
+        {
+          "id": "AUTO_DISCOVER",
+          "maxInputChars": 4000,
+          "tier": "large"
+        }
+      ]
+    },
+    "ollama": {
+      "enabled": false,
       "paid": false,
       "tier": "free",
       "type": "ollama",
@@ -161,10 +175,14 @@
   },
   "routing": {
     "free_order": [
-      "ollama",
+      "local_vllm",
       "groq",
       "qwen"
     ],
+    "burst_mode": {
+      "enabled": false,
+      "ttlSec": 900
+    },
     "intents": {
       "itc_classify": {
         "order": [
