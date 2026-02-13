@@ -73,7 +73,11 @@ scan_commit_for_secrets() {
     files=$(git diff-tree --no-commit-id --diff-filter=ACM -r --name-only "$commit" 2>/dev/null || echo "")
 
     for file in $files; do
-        if git show "${commit}:${file}" 2>/dev/null | grep -qiE "$SECRET_PATTERNS"; then
+        content=$(git show "${commit}:${file}" 2>/dev/null || echo "")
+        # Allow env-var identifiers in config fields (these are not live secrets).
+        # Example: "apiKeyEnv": "OPENCLAW_VLLM_API_KEY"
+        filtered=$(printf '%s' "$content" | sed -E '/"apiKeyEnv"[[:space:]]*:[[:space:]]*"[A-Z][A-Z0-9_]{7,}"/d')
+        if printf '%s' "$filtered" | grep -qiE "$SECRET_PATTERNS"; then
             return 1
         fi
     done
