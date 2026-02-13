@@ -13,6 +13,10 @@ const { CATALOG } = require('../../core/system2/inference/catalog');
 const { loadFreeComputeConfig } = require('../../core/system2/inference/config');
 
 function isConfigured(entry, env) {
+  if (entry && entry.provider_id === 'remote_vllm') {
+    const key = entry.base_url && entry.base_url.env_override;
+    return !!(key && env[key]);
+  }
   const auth = entry && entry.auth;
   if (!auth || auth.type === 'none' || auth.type === 'bearer_optional') return true;
   const keys = [auth.env_var].concat(Array.isArray(auth.alias_env_vars) ? auth.alias_env_vars : []);
@@ -35,6 +39,10 @@ function main() {
 
   const providers = [...CATALOG].sort((a, b) => a.provider_id.localeCompare(b.provider_id));
   for (const p of providers) {
+    if (p.provider_id.startsWith('openai')) {
+      lines.push(`- ${p.provider_id}: policy=disabled configured=n/a`);
+      continue;
+    }
     const auth = p.auth || {};
     const keys = [auth.env_var].concat(Array.isArray(auth.alias_env_vars) ? auth.alias_env_vars : []).filter(Boolean);
     const configured = isConfigured(p, env);
@@ -45,4 +53,3 @@ function main() {
 }
 
 main();
-

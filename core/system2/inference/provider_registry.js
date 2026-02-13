@@ -308,6 +308,9 @@ class ProviderRegistry {
     for (const entry of CATALOG) {
       const pid = entry.provider_id;
 
+      // Operator policy: OpenAI/Codex API automation is disabled for now.
+      if (pid.startsWith('openai')) continue;
+
       // Skip local_vllm unless explicitly enabled
       if (pid === 'local_vllm' && !this.config.vllmEnabled) continue;
 
@@ -315,6 +318,13 @@ class ProviderRegistry {
       if (entry.kind === 'external') {
         if (this.config.providerAllowlist.length > 0 && !this.config.providerAllowlist.includes(pid)) continue;
         if (this.config.providerDenylist.includes(pid)) continue;
+      }
+
+      // remote_vllm: require explicit base URL configuration (no default networking).
+      if (pid === 'remote_vllm') {
+        const baseUrlKey = entry.base_url && entry.base_url.env_override;
+        const baseUrl = baseUrlKey ? this._env[baseUrlKey] : null;
+        if (!baseUrl) continue;
       }
 
       // Check if auth credential is available for providers that require it

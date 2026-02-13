@@ -70,6 +70,61 @@ const CATALOG = Object.freeze([
     ]
   },
 
+  // ── OPERATOR-RENTED VLLM (paid fallback, explicit enable) ──
+  {
+    provider_id: 'remote_vllm',
+    kind: 'external',
+    protocol: 'openai_compatible',
+    enabled_default: false,
+    base_url: {
+      default: '',
+      env_override: 'OPENCLAW_REMOTE_VLLM_BASE_URL'
+    },
+    auth: {
+      type: 'bearer_optional',
+      env_var: 'OPENCLAW_REMOTE_VLLM_API_KEY',
+      redact_in_logs: true
+    },
+    models: [
+      {
+        model_id: 'AUTO_DISCOVER',
+        task_classes: ['fast_chat', 'long_context', 'code', 'batch', 'tool_use'],
+        context_window_hint: null,
+        tool_support: 'via_adapter',
+        notes: 'Operator-rented endpoint. Replaced with concrete IDs after first successful /v1/models probe.'
+      }
+    ],
+    constraints: {
+      quota: {
+        mode: 'operator_budgeted',
+        max_concurrent_requests: { default: 2, env_override: 'OPENCLAW_REMOTE_VLLM_MAX_CONCURRENCY' },
+        max_tokens_per_request: { default: 8192, env_override: 'OPENCLAW_REMOTE_VLLM_MAX_TOKENS_PER_REQUEST' }
+      },
+      backoff: { strategy: 'bounded_exponential', max_retries: 1, cooldown_seconds: 10 },
+      circuit_breaker: {
+        consecutive_failures_to_open: 2,
+        open_seconds: 180,
+        half_open_probe_interval_seconds: 60
+      }
+    },
+    healthcheck: {
+      type: 'openai_compatible',
+      endpoints: { models: '/models', chat: '/chat/completions' },
+      timeouts_ms: { connect: 1000, read: 8000 },
+      probe_prompt: 'Respond with a single word: OK',
+      probe_max_tokens: 8
+    },
+    routing_tags: { prefers: ['paid_fallback', 'cheap'], avoids: [] },
+    evidence: [
+      {
+        type: 'doc',
+        title: 'vLLM OpenAI-compatible server',
+        url: 'https://docs.vllm.ai/en/latest/serving/openai_compatible_server/',
+        retrieved_utc: null
+      }
+    ]
+  },
+
   // ── EXTERNAL "FREE / LOW-COST" PROVIDERS ──
   {
     provider_id: 'gemini',
@@ -277,6 +332,7 @@ const CATALOG = Object.freeze([
     kind: 'external',
     protocol: 'openai_compatible',
     enabled_default: false,
+    policy_disabled: true,
     base_url: {
       default: 'https://api.openai.com/v1',
       env_override: 'OPENCLAW_OPENAI_BASE_URL'
@@ -287,29 +343,7 @@ const CATALOG = Object.freeze([
       alias_env_vars: ['OPENAI_API_KEY'],
       redact_in_logs: true
     },
-    models: [
-      {
-        model_id: 'gpt-5-chat-latest',
-        task_classes: ['fast_chat', 'long_context', 'tool_use', 'batch'],
-        context_window_hint: null,
-        tool_support: 'via_adapter',
-        notes: 'Paid chat fallback. Operator must configure spend protections and limits.'
-      },
-      {
-        model_id: 'gpt-5-mini',
-        task_classes: ['fast_chat', 'tool_use', 'batch', 'code'],
-        context_window_hint: null,
-        tool_support: 'via_adapter',
-        notes: 'Paid chat fallback (cheaper). Operator must configure spend protections and limits.'
-      },
-      {
-        model_id: 'gpt-5-codex',
-        task_classes: ['code', 'tool_use'],
-        context_window_hint: null,
-        tool_support: 'via_adapter',
-        notes: 'Paid coding/tool fallback (may require explicit enable; see FREECOMPUTE_OPENAI_CODEX_MODEL).'
-      }
-    ],
+    models: [],
     constraints: {
       quota: {
         rpm_default: 5,
