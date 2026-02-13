@@ -20,6 +20,8 @@ Behavior:
 - enabled + missing/blank path: warn once, no writes (fail-closed)
 - enabled + parent dir missing: warn once, no writes (fail-closed)
 - enabled + valid path: append exactly one JSONL line per snapshot capture
+- no networking: local append only
+- schema stability: emitted event is `system2_event_v1` v1; fields are additive-only (no renames/removals); bump version for breaking changes
 
 Capture + redact bundle:
 ```bash
