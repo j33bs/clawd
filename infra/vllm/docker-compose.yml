@@ -29,7 +29,10 @@ services:
       - "127.0.0.1:${VLLM_PORT:-8000}:8000"
     # If you use HF models, cache can be persisted on the host.
     volumes:
-      - "${VLLM_MODEL_CACHE:-./.state/vllm_cache}:/root/.cache"
+      # Default points into workspace/.state (gitignored).
+      - "${VLLM_MODEL_CACHE:-../../workspace/.state/vllm_cache}:/root/.cache"
+    # Prefer the compose-native GPU request if supported.
+    gpus: all
     # GPU passthrough (Docker Compose v2+). Requires NVIDIA Container Toolkit.
     deploy:
       resources:
