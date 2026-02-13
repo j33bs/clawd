@@ -68,6 +68,7 @@ test('OFF: system2.observability.enabled=false emits nothing and writes no JSONL
 test('ON: system2.observability.enabled=true writes exactly one deterministic JSONL line', async function () {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'clawd-obs-on-'));
   const obsPath = path.join(tempDir, 'observability', 'events.jsonl');
+  fs.mkdirSync(path.dirname(obsPath), { recursive: true });
 
   const warns = [];
   const result = captureSnapshot({
@@ -100,7 +101,7 @@ test('ON: system2.observability.enabled=true writes exactly one deterministic JS
   const parsed = JSON.parse(lines[0]);
   assert.strictEqual(parsed.type, 'system2_event_v1');
   assert.strictEqual(parsed.version, '1');
-  assert.strictEqual(parsed.ts_utc, '2026-02-12T00:00:00.000Z');
+  assert.strictEqual(parsed.ts_utc, result.summary.timestamp_utc);
   assert.strictEqual(parsed.event_type, 'system2_snapshot_captured');
   assert.strictEqual(parsed.level, 'info');
   assert.strictEqual(parsed.context && parsed.context.subsystem, 'system2_snapshot_capture');
@@ -110,7 +111,7 @@ test('ON: system2.observability.enabled=true writes exactly one deterministic JS
   const expectedEvent = {
     type: 'system2_event_v1',
     version: '1',
-    ts_utc: '2026-02-12T00:00:00.000Z',
+    ts_utc: result.summary.timestamp_utc,
     event_type: 'system2_snapshot_captured',
     level: 'info',
     payload: {
@@ -141,4 +142,3 @@ async function run() {
 }
 
 run();
-

@@ -330,38 +330,42 @@ function captureSnapshot(options) {
     const obs = loadSystem2ObservabilityConfig(options);
     if (obs.enabled === true) {
       if (typeof obs.jsonlPath !== 'string' || obs.jsonlPath.trim().length === 0) {
-        warnOnce('system2 observability enabled but SYSTEM2_OBSERVABILITY_JSONL_PATH is missing; disabling emission');
+        warnOnce('system2 observability enabled but jsonl path is missing; disabling emission');
       } else {
-        const { makeEmitter } = require('../core/system2/observability/emitter');
-        const { appendEventJsonl } = require('../core/system2/observability/jsonl_sink');
+        const parentDir = path.dirname(obs.jsonlPath);
+        let parentOk = false;
+        try {
+          parentOk = fs.existsSync(parentDir) && fs.statSync(parentDir).isDirectory();
+        } catch (_) {
+          parentOk = false;
+        }
+        if (!parentOk) {
+          warnOnce('system2 observability enabled but jsonl parent directory is missing; disabling emission');
+        } else {
+          const { appendEventJsonl } = require('../core/system2/observability/jsonl_sink');
+          const { deepRedact } = require('../core/system2/observability/redaction');
 
-        const sink = {
-          appendEvent: async function appendEvent(evt) {
-            fs.mkdirSync(path.dirname(obs.jsonlPath), { recursive: true });
-            fs.appendFileSync(obs.jsonlPath, appendEventJsonl(evt), 'utf8');
-          }
-        };
+          const payload = Object.assign(
+            {
+              snapshot_ok: summary.commands_failed.length === 0,
+              commands_failed: summary.commands_failed,
+              log_signature_counts: summary.log_signature_counts
+            },
+            obs.extraPayload || {}
+          );
 
-        const emit = makeEmitter({
-          enabled: true,
-          strict: true,
-          sink,
-          nowFn: function fixedNow() { return new Date(summary.timestamp_utc); }
-        });
+          const event = {
+            type: 'system2_event_v1',
+            version: '1',
+            ts_utc: summary.timestamp_utc,
+            event_type: 'system2_snapshot_captured',
+            level: 'info',
+            payload: deepRedact(payload || {}, 'payload'),
+            context: { subsystem: 'system2_snapshot_capture' }
+          };
 
-        const payload = Object.assign(
-          {
-            snapshot_ok: summary.commands_failed.length === 0,
-            commands_failed: summary.commands_failed,
-            log_signature_counts: summary.log_signature_counts
-          },
-          obs.extraPayload || {}
-        );
-
-        // Intentionally not awaited: sink is synchronous and the async emitter
-        // evaluates sink.appendEvent before its first await.
-        emit('system2_snapshot_captured', payload, { subsystem: 'system2_snapshot_capture' })
-          .catch((err) => warnOnce(`system2 observability emit failed: ${err.message}`));
+          fs.appendFileSync(obs.jsonlPath, appendEventJsonl(event), 'utf8');
+        }
       }
     }
   } catch (error) {
