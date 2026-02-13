@@ -292,10 +292,27 @@ test('router: returns empty when disabled', () => {
     taskClass: 'fast_chat',
     providerHealth: {},
     quotaState: {},
-    config: { enabled: false }
+    config: { enabled: false, vllmEnabled: false }
   });
   assert.equal(result.candidates.length, 0);
   assert.ok(result.explanation.some((e) => e.includes('disabled')));
+});
+
+test('router: returns local candidate when cloud disabled but local vLLM enabled', () => {
+  const result = routeRequest({
+    taskClass: 'fast_chat',
+    providerHealth: {},
+    quotaState: {},
+    config: {
+      enabled: false,
+      vllmEnabled: true,
+      providerAllowlist: [],
+      providerDenylist: []
+    },
+    availableProviderIds: ['local_vllm']
+  });
+  assert.ok(result.candidates.length >= 1);
+  assert.equal(result.candidates[0].provider_id, 'local_vllm');
 });
 
 test('router: prefers local over external', () => {
@@ -526,7 +543,8 @@ test('registry: disabled by default', () => {
   assert.equal(reg.config.enabled, false);
   const snap = reg.snapshot();
   assert.equal(snap.enabled, false);
-  assert.equal(snap.adapters.length, 0);
+  // Even when cloud/free tiers are disabled, local vLLM remains an escape hatch.
+  assert.ok(snap.adapters.length === 1 && snap.adapters[0].provider_id === 'local_vllm');
   reg.dispose();
 });
 
@@ -544,11 +562,27 @@ test('registry: enabled but no credentials → no adapters', () => {
 
 await testAsync('registry: dispatch returns null when disabled', async () => {
   const reg = new ProviderRegistry({ env: {} });
+
+  // Replace the real adapter to avoid network. Keep provider_id key intact so routing selects it.
+  reg._adapters.set('local_vllm', {
+    async call() {
+      return {
+        text: 'ok',
+        raw: {},
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, estimatedCostUsd: 0 }
+      };
+    },
+    async health() {
+      return { ok: true, models: ['stub-model'] };
+    }
+  });
+
   const result = await reg.dispatch({
     taskClass: 'fast_chat',
     messages: [{ role: 'user', content: 'test' }]
   });
-  assert.equal(result, null);
+  assert.ok(result, 'expected non-null result');
+  assert.equal(result.provider_id, 'local_vllm');
   reg.dispose();
 });
 

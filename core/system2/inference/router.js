@@ -39,10 +39,15 @@ function routeRequest(params) {
     availableProviderIds
   } = params;
 
-  if (!config || !config.enabled) {
+  const cloudEnabled = Boolean(config && config.enabled);
+  const localEnabled = Boolean(config && config.vllmEnabled);
+
+  // Cloud/free tiers are gated behind ENABLE_FREECOMPUTE_CLOUD (or alias),
+  // but local vLLM remains a safe escape hatch even when cloud is disabled.
+  if (!config || (!cloudEnabled && !localEnabled)) {
     return {
       candidates: [],
-      explanation: ['FreeComputeCloud is disabled (ENABLE_FREECOMPUTE_CLOUD=0 and ENABLE_FREECOMPUTE=0)']
+      explanation: ['FreeComputeCloud is disabled (ENABLE_FREECOMPUTE_CLOUD=0 and ENABLE_FREECOMPUTE=0) and local vLLM is disabled (ENABLE_LOCAL_VLLM=0)']
     };
   }
 
@@ -59,6 +64,12 @@ function routeRequest(params) {
       continue;
     }
 
+    // Cloud-disabled mode: only consider local providers (escape hatch).
+    if (provider.kind === 'external' && !cloudEnabled) {
+      explanation.push(`${pid}: skipped (cloud disabled; set ENABLE_FREECOMPUTE_CLOUD=1 or ENABLE_FREECOMPUTE=1)`);
+      continue;
+    }
+
     // If a registry provided the concrete adapter set, don't emit candidates for absent adapters.
     if (available && !available.has(pid)) {
       explanation.push(`${pid}: skipped (no adapter / not configured)`);
@@ -66,7 +77,7 @@ function routeRequest(params) {
     }
 
     // ── Feature flag gate ──
-    if (pid === 'local_vllm' && !config.vllmEnabled) {
+    if (pid === 'local_vllm' && !localEnabled) {
       explanation.push(`${pid}: skipped (ENABLE_LOCAL_VLLM=0)`);
       continue;
     }
@@ -173,7 +184,7 @@ function routeRequest(params) {
   });
 
   // Hard escape hatch: if local_vllm is available+healthy, never return empty.
-  if (scored.length === 0 && config.vllmEnabled && (!available || available.has('local_vllm'))) {
+  if (scored.length === 0 && localEnabled && (!available || available.has('local_vllm'))) {
     const h = providerHealth.local_vllm;
     const q = quotaState.local_vllm;
     const healthy = !h || h.ok;

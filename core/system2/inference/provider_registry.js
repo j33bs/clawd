@@ -87,9 +87,9 @@ class ProviderRegistry {
       }
     }
 
-    if (this.config.enabled) {
-      this._initAdapters();
-    }
+    // Always initialize adapters so local vLLM can act as an escape hatch even
+    // when FreeComputeCloud (cloud/free tiers) is disabled.
+    this._initAdapters();
   }
 
   /**
@@ -105,7 +105,9 @@ class ProviderRegistry {
    * @returns {Promise<{ text, raw, usage, provider_id, model_id } | null>}
    */
   async dispatch(params) {
-    if (!this.config.enabled) {
+    // Cloud/free tiers are gated behind ENABLE_FREECOMPUTE_CLOUD (or alias),
+    // but local vLLM can still serve requests when ENABLE_LOCAL_VLLM!=0.
+    if (!this.config.enabled && !this.config.vllmEnabled) {
       return null;
     }
 
@@ -316,6 +318,9 @@ class ProviderRegistry {
 
       // Skip local_vllm unless explicitly enabled
       if (pid === 'local_vllm' && !this.config.vllmEnabled) continue;
+
+      // When cloud/free tiers are disabled, do not instantiate external providers.
+      if (entry.kind === 'external' && !this.config.enabled) continue;
 
       // Skip external unless in allowlist (if allowlist is set) or not in denylist
       if (entry.kind === 'external') {

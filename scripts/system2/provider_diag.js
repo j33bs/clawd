@@ -80,8 +80,12 @@ function classifyProvider(entry, env, cfg) {
   }
 
   // Compute "eligible" for automated routing (includes global feature flag).
-  const eligible = Boolean(cfg.enabled && enabled && configured);
-  if (!cfg.enabled && !reason) reason = 'disabled_by_policy';
+  const cloudEnabled = Boolean(cfg && cfg.enabled);
+  const localEnabled = Boolean(cfg && cfg.vllmEnabled);
+  const routingEnabledForProvider = pid === 'local_vllm' ? localEnabled : cloudEnabled;
+
+  const eligible = Boolean(routingEnabledForProvider && enabled && configured);
+  if (!routingEnabledForProvider && !reason) reason = 'disabled_by_policy';
   if (!eligible && !reason) reason = 'not_configured';
 
   return { configured, enabled, eligible, reason };
