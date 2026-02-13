@@ -1,0 +1,13 @@
+scripts/redact_audit_evidence.js
+tests/redact_audit_evidence.test.js
+workspace/docs/audits/MERGE-EXEC2-2026-02-12.md
+workspace/docs/audits/NEXTSTEPS-EXEC2-2026-02-12.md
+workspace/docs/audits/POSTMERGE-VALIDATION-2026-02-12.md
+workspace/docs/audits/QUARANTINE-BUNDLE-2026-02-12/diff_stat.txt
+workspace/docs/audits/QUARANTINE-BUNDLE-2026-02-12/name_status.txt
+workspace/docs/audits/QUARANTINE-BUNDLE-2026-02-12/staged_index.patch
+workspace/docs/audits/QUARANTINE-BUNDLE-2026-02-12/status_porcelain.txt
+workspace/docs/audits/QUARANTINE-BUNDLE-2026-02-12/tracked_worktree.patch
+workspace/docs/audits/QUARANTINE-BUNDLE-2026-02-12/untracked_files.txt
+workspace/docs/audits/REDACTION-REPORT-2026-02-12.md
+workspace/docs/audits/SYSTEM2-EVIDENCE-2026-02-11/postfix_rce/redaction_manifest.txt

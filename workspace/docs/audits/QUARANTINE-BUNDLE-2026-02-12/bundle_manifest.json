@@ -1,0 +1,18 @@
+{
+  "generated_at_utc": "2026-02-11T22:39:41Z",
+  "repo_root": "/Users/heathyeager/clawd",
+  "branch": "redact/audit-evidence-20260212",
+  "head": "c2583819dc877e1b19abdfbb2b4ad6c8cdf4486c",
+  "files": {
+    "status_porcelain": {"path": "workspace/docs/audits/QUARANTINE-BUNDLE-2026-02-12/status_porcelain.txt", "line_count": 89},
+    "name_status": {"path": "workspace/docs/audits/QUARANTINE-BUNDLE-2026-02-12/name_status.txt", "line_count": 79},
+    "untracked_files": {"path": "workspace/docs/audits/QUARANTINE-BUNDLE-2026-02-12/untracked_files.txt", "line_count": 13},
+    "tracked_worktree_patch": {"path": "workspace/docs/audits/QUARANTINE-BUNDLE-2026-02-12/tracked_worktree.patch", "bytes": 1164784},
+    "staged_index_patch": {"path": "workspace/docs/audits/QUARANTINE-BUNDLE-2026-02-12/staged_index.patch"},
+    "untracked_archive": {"path": "workspace/docs/audits/QUARANTINE-BUNDLE-2026-02-12/untracked_files.tgz", "bytes": 97893}
+  },
+  "notes": [
+    "untracked_files.txt includes artifacts created under the bundle directory during this run",
+    "all git operations used for collection were read-only"
+  ]
+}

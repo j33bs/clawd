@@ -1,0 +1,63 @@
+{
+  "_meta": {
+    "description": "Evidence citations for FreeComputeCloud provider catalog defaults",
+    "generated_utc": "2026-02-13",
+    "note": "All URLs are public documentation. Numeric defaults are CONSERVATIVE estimates — operators MUST verify against their own account limits before production use."
+  },
+  "citations": [
+    {
+      "provider_id": "local_vllm",
+      "title": "vLLM OpenAI-Compatible Server Documentation",
+      "url": "https://docs.vllm.ai/en/latest/serving/openai_compatible_server/",
+      "retrieved_utc": "2026-02-13",
+      "notes": "vLLM serves an OpenAI-compatible HTTP API at /v1/chat/completions and /v1/models. Supports optional --api-key flag for server-side auth. No external rate limits (local)."
+    },
+    {
+      "provider_id": "gemini",
+      "title": "Gemini API Rate Limits",
+      "url": "https://ai.google.dev/gemini-api/docs/rate-limits",
+      "retrieved_utc": "2026-02-13",
+      "notes": "Free tier limits vary by model. gemini-2.0-flash: 15 RPM, 1M TPM, 1500 RPD. gemini-2.5-pro-preview: 5 RPM, 250K TPM, 25 RPD. Limits are per-project and may vary by region/eligibility. Catalog defaults use lower conservative values.",
+      "key_facts": {
+        "gemini_2_0_flash_free": { "rpm": 15, "tpm": 1000000, "rpd": 1500 },
+        "gemini_2_5_pro_free": { "rpm": 5, "tpm": 250000, "rpd": 25 },
+        "catalog_defaults_used": { "rpm": 10, "tpm": 100000, "rpd": 100 }
+      }
+    },
+    {
+      "provider_id": "groq",
+      "title": "Groq Rate Limits Documentation",
+      "url": "https://console.groq.com/docs/rate-limits",
+      "retrieved_utc": "2026-02-13",
+      "notes": "Groq rate limits are org-level. Free tier for llama-3.3-70b-versatile: 30 RPM, 15K TPM, 14.4K RPD. Limits queryable from response headers (x-ratelimit-*). Catalog defaults use conservative values below published limits.",
+      "key_facts": {
+        "llama_3_3_70b_free": { "rpm": 30, "tpm": 15000, "rpd": 14400 },
+        "catalog_defaults_used": { "rpm": 10, "tpm": 200000, "rpd": 200 }
+      }
+    },
+    {
+      "provider_id": "qwen_alibaba",
+      "title": "Alibaba Cloud Model Studio Free Quota",
+      "url": "https://www.alibabacloud.com/help/en/model-studio/new-free-quota",
+      "retrieved_utc": "2026-02-13",
+      "notes": "Free token quota for new accounts varies by model (e.g., 1M free tokens for qwen-plus). International vs mainland editions have different endpoints and eligibility. Catalog uses intl endpoint (dashscope-intl.aliyuncs.com).",
+      "key_facts": {
+        "qwen_plus_free_tokens": "1M (new accounts, verify in console)",
+        "endpoint_intl": "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
+        "catalog_defaults_used": { "rpm": 5, "rpd": 50 }
+      }
+    },
+    {
+      "provider_id": "openrouter",
+      "title": "OpenRouter Rate Limits and Free Models",
+      "url": "https://openrouter.ai/docs/api/reference/limits",
+      "retrieved_utc": "2026-02-13",
+      "notes": "Free model variants (suffixed :free) have reduced rate limits. Limits vary by model and change frequently. OpenRouter requires HTTP-Referer and X-Title headers. Catalog defaults are conservative.",
+      "key_facts": {
+        "free_variant_suffix": ":free",
+        "requires_headers": ["HTTP-Referer", "X-Title"],
+        "catalog_defaults_used": { "rpm": 20, "rpd": 50 }
+      }
+    }
+  ]
+}
