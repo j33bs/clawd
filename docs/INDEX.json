@@ -23,7 +23,7 @@
     }
   ],
   "counts": {
-    "total_files": 256
+    "total_files": 257
   },
   "top_level": [
     {
@@ -108,7 +108,7 @@
     },
     {
       "name": "scripts",
-      "count": 25
+      "count": 26
     },
     {
       "name": "tests",
@@ -229,6 +229,7 @@
     "scripts/selfcheck_scrub_nonprinting.py",
     "scripts/sim_runner.py",
     "scripts/system2/provider_diag.js",
+    "scripts/system2/run_local_vllm.sh",
     "scripts/system2_evidence_bundle.js",
     "scripts/system2_experiment.js",
     "scripts/system2_observability_smoke.js",

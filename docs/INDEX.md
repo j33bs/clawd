@@ -7,7 +7,7 @@ Highlights (navigation anchors):
 - `core/system2/inference/catalog.js` (ok)
 - `core/system2/inference/secrets_bridge.js` (ok)
 
-Total files indexed (paths only): **256**
+Total files indexed (paths only): **257**
 
 Top-level path counts:
 - `.claude`: 1
@@ -30,7 +30,7 @@ Top-level path counts:
 - `pipelines`: 1
 - `README.md`: 1
 - `reports`: 3
-- `scripts`: 25
+- `scripts`: 26
 - `tests`: 14
 - `tests_unittest`: 7
 - `tools`: 6
