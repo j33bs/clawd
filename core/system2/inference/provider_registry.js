@@ -64,6 +64,7 @@ class ProviderRegistry {
     this._adapters = new Map();       // provider_id → ProviderAdapter
     this._health = new Map();         // provider_id → { ok, reason, checkedAt }
     this._circuitBreakers = new Map(); // provider_id → { state, failures, openedAt }
+    this._localGenerationProbe = { ok: null, reason: null, checkedAt: 0 };
 
     this.ledger = new QuotaLedger({
       ledgerPath: this.config.ledger.path,
@@ -110,6 +111,9 @@ class ProviderRegistry {
     if (!this.config.enabled && !this.config.vllmEnabled) {
       return null;
     }
+
+    // Refresh local vLLM generation probe (deterministic, cached).
+    await this._ensureLocalVllmGenerationProbe();
 
     // Build health and quota state for routing
     const providerHealth = {};
@@ -355,6 +359,39 @@ class ProviderRegistry {
         openedAt: 0
       });
     }
+  }
+
+  async _ensureLocalVllmGenerationProbe() {
+    const adapter = this._adapters.get('local_vllm');
+    if (!adapter || typeof adapter.generationProbe !== 'function') {
+      return { ok: true, reason: null };
+    }
+
+    const now = Date.now();
+    const ttlMs = 60 * 1000;
+    if (this._localGenerationProbe.checkedAt && (now - this._localGenerationProbe.checkedAt) < ttlMs) {
+      // Keep existing cached health decision.
+      return { ok: Boolean(this._localGenerationProbe.ok), reason: this._localGenerationProbe.reason };
+    }
+
+    // Short probe to detect "HTTP alive but generation wedged" failures.
+    const timeoutMs = Number(this._env.FREECOMPUTE_LOCAL_VLLM_PROBE_TIMEOUT_MS || 5000);
+    const result = await adapter.generationProbe({ timeoutMs });
+
+    this._localGenerationProbe = {
+      ok: Boolean(result && result.ok),
+      reason: (result && result.reason) || null,
+      checkedAt: now
+    };
+
+    if (this._localGenerationProbe.ok) {
+      this._health.set('local_vllm', { ok: true, checkedAt: now });
+    } else {
+      const sub = this._localGenerationProbe.reason ? `:${this._localGenerationProbe.reason}` : '';
+      this._health.set('local_vllm', { ok: false, reason: `generation_probe_failed${sub}`, checkedAt: now });
+    }
+
+    return { ok: this._localGenerationProbe.ok, reason: this._localGenerationProbe.reason };
   }
 
   _recordCbSuccess(providerId) {

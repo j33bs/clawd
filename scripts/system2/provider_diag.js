@@ -94,19 +94,34 @@ function classifyProvider(entry, env, cfg) {
 async function probeLocalVllm(env) {
   const entry = getProvider('local_vllm');
   if (!entry) {
-    return { endpoint_present: false, models_fetch_ok: false, models_count: 0 };
+    return {
+      endpoint_present: false,
+      models_fetch_ok: false,
+      models_count: 0,
+      generation_probe_ok: false,
+      generation_probe_reason: 'not_configured'
+    };
   }
   try {
     const adapter = new ProviderAdapter(entry, { env });
     const health = await adapter.health();
     const models = (health && Array.isArray(health.models)) ? health.models : [];
+    const gen = await adapter.generationProbe({ timeoutMs: 5000 });
     return {
       endpoint_present: Boolean(health && health.ok),
       models_fetch_ok: Boolean(health && health.ok),
-      models_count: models.length
+      models_count: models.length,
+      generation_probe_ok: Boolean(gen && gen.ok),
+      generation_probe_reason: (gen && gen.ok) ? 'ok' : ((gen && gen.reason) || 'unknown')
     };
   } catch (_) {
-    return { endpoint_present: false, models_fetch_ok: false, models_count: 0 };
+    return {
+      endpoint_present: false,
+      models_fetch_ok: false,
+      models_count: 0,
+      generation_probe_ok: false,
+      generation_probe_reason: 'unknown'
+    };
   }
 }
 
@@ -127,6 +142,8 @@ async function main() {
   lines.push(`local_vllm_endpoint_present=${localProbe.endpoint_present ? 'true' : 'false'}`);
   lines.push(`local_vllm_models_fetch_ok=${localProbe.models_fetch_ok ? 'true' : 'false'}`);
   lines.push(`local_vllm_models_count=${localProbe.models_count}`);
+  lines.push(`local_vllm_generation_probe_ok=${localProbe.generation_probe_ok ? 'true' : 'false'}`);
+  lines.push(`local_vllm_generation_probe_reason=${localProbe.generation_probe_reason}`);
   lines.push('');
   lines.push('providers:');
 
@@ -135,6 +152,10 @@ async function main() {
     const auth = p.auth || {};
     const keys = [auth.env_var].concat(Array.isArray(auth.alias_env_vars) ? auth.alias_env_vars : []).filter(Boolean);
     const s = classifyProvider(p, env, cfg);
+    if (p.provider_id === 'local_vllm' && !localProbe.generation_probe_ok) {
+      s.eligible = false;
+      s.reason = 'generation_probe_failed';
+    }
     lines.push(
       `- ${p.provider_id}: configured=${s.configured ? 'yes' : 'no'} enabled=${s.enabled ? 'yes' : 'no'} eligible=${s.eligible ? 'yes' : 'no'} reason=${s.eligible ? 'ok' : s.reason} auth_env_keys=${keys.length > 0 ? keys.join(',') : '(none)'}`
     );

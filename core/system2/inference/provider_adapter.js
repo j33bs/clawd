@@ -152,6 +152,58 @@ class ProviderAdapter {
     return result;
   }
 
+  /**
+   * Deterministic "generation probe" (tiny request, short timeout).
+   *
+   * This is intentionally separate from health(), since /health and /models can
+   * remain responsive while generation endpoints wedge/hang.
+   *
+   * @param {object} [options]
+   * @param {string} [options.model]      - Optional model override
+   * @param {string} [options.prompt]     - Prompt for /completions
+   * @param {number} [options.timeoutMs]  - Hard timeout for probe
+   * @returns {Promise<{ ok: boolean, reason?: string }>}
+   */
+  async generationProbe(options = {}) {
+    if (this.protocol !== 'openai_compatible') {
+      return { ok: false, reason: 'unsupported_protocol' };
+    }
+
+    const timeoutMs = typeof options.timeoutMs === 'number' ? options.timeoutMs : 5000;
+    const prompt = typeof options.prompt === 'string' ? options.prompt : 'OK\n';
+
+    let model = options.model || this._defaultModelId;
+    if (!model || model === 'AUTO_DISCOVER') {
+      model = await this._resolveAutoModel();
+    }
+
+    const url = this.baseUrl.replace(/\/+$/, '') + '/completions';
+    const body = {
+      model,
+      prompt,
+      max_tokens: 1,
+      temperature: 0,
+      stream: false
+    };
+
+    try {
+      const data = await this._httpPost(url, body, { timeoutMs });
+      // OpenAI-compatible completions: choices[0].text is the primary field.
+      const choice = (data && data.choices && data.choices[0]) || null;
+      const text = choice && typeof choice.text === 'string' ? choice.text : null;
+      if (text === null) {
+        return { ok: false, reason: 'parse_error' };
+      }
+      return { ok: true };
+    } catch (err) {
+      if (err && err.code === 'PROVIDER_TIMEOUT') return { ok: false, reason: 'timeout' };
+      if (err && err.code === 'PROVIDER_HTTP_ERROR') return { ok: false, reason: `http_${err.statusCode || 'error'}` };
+      const msg = String((err && err.message) || '');
+      if (/invalid JSON/i.test(msg)) return { ok: false, reason: 'parse_error' };
+      return { ok: false, reason: 'unknown' };
+    }
+  }
+
   // ── OpenAI-Compatible Protocol ──────────────────────────────────────
 
   async _healthOpenAI() {

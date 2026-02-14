@@ -98,6 +98,8 @@ async function probeVllmServer(entry, options = {}, { providerFactory } = {}) {
     healthy: false,
     models: [],
     inference_ok: false,
+    generation_probe_ok: false,
+    generation_probe_reason: null,
     error: null
   };
 
@@ -134,17 +136,29 @@ async function probeVllmServer(entry, options = {}, { providerFactory } = {}) {
     status.models = healthResult.models || [];
 
     if (healthResult.ok && status.models.length > 0) {
-      // Try a minimal inference
+      // Deterministic generation probe (short timeout) to catch "HTTP alive but generation wedged".
       try {
         const probeModel = (system2Cfg && system2Cfg.model) || status.models[0];
-        const result = await provider.call({
-          messages: [{ role: 'user', content: 'Respond with a single word: OK' }],
-          metadata: { model: probeModel, maxTokens: 8 }
-        });
-        status.inference_ok = Boolean(result.text);
+        if (typeof provider.generationProbe === 'function') {
+          const timeoutMs = Number(env.FREECOMPUTE_LOCAL_VLLM_PROBE_TIMEOUT_MS || 5000);
+          const gen = await provider.generationProbe({ timeoutMs, model: probeModel });
+          status.generation_probe_ok = Boolean(gen && gen.ok);
+          status.generation_probe_reason = (gen && gen.ok) ? 'ok' : ((gen && gen.reason) || 'unknown');
+          status.inference_ok = status.generation_probe_ok;
+          if (!status.generation_probe_ok && !status.error) {
+            status.error = `generation probe failed: ${status.generation_probe_reason}`;
+          }
+        } else {
+          status.generation_probe_ok = false;
+          status.generation_probe_reason = 'not_supported';
+          status.inference_ok = false;
+          if (!status.error) status.error = 'generation probe not supported by provider';
+        }
       } catch (err) {
+        status.generation_probe_ok = false;
+        status.generation_probe_reason = 'unknown';
         status.inference_ok = false;
-        status.error = `inference probe failed: ${err.message}`;
+        status.error = `generation probe failed: ${err.message}`;
       }
     }
   } catch (err) {

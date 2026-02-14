@@ -593,6 +593,93 @@ await testAsync('registry: dispatch uses local_vllm when it is the only eligible
 
   // Replace the real adapter to avoid network. Keep provider_id key intact so routing selects it.
   reg._adapters.set('local_vllm', {
+    async generationProbe() {
+      return { ok: true };
+    },
+    async call() {
+      return {
+        text: 'ok',
+        raw: {},
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, estimatedCostUsd: 0 }
+      };
+    },
+    async health() {
+      return { ok: true, models: ['stub-model'] };
+    }
+  });
+
+  const result = await reg.dispatch({
+    taskClass: 'fast_chat',
+    messages: [{ role: 'user', content: 'test' }]
+  });
+
+  assert.ok(result, 'expected non-null result');
+  assert.equal(result.provider_id, 'local_vllm');
+  reg.dispose();
+});
+
+await testAsync('registry: generation probe failure skips local and falls back to configured external', async () => {
+  const reg = new ProviderRegistry({
+    env: { ENABLE_FREECOMPUTE_CLOUD: '1', OPENCLAW_GROQ_API_KEY: 'x' }
+  });
+
+  reg._adapters.set('local_vllm', {
+    async generationProbe() {
+      return { ok: false, reason: 'timeout' };
+    },
+    async call() {
+      throw new Error('local should not be called when generation probe fails');
+    },
+    async health() {
+      return { ok: true, models: ['stub-model'] };
+    }
+  });
+
+  reg._adapters.set('groq', {
+    async call() {
+      return {
+        text: 'ok',
+        raw: {},
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, estimatedCostUsd: 0 }
+      };
+    },
+    async health() {
+      return { ok: true, models: ['stub-model'] };
+    }
+  });
+
+  const result = await reg.dispatch({
+    taskClass: 'fast_chat',
+    messages: [{ role: 'user', content: 'test' }]
+  });
+
+  assert.ok(result, 'expected non-null result');
+  assert.equal(result.provider_id, 'groq');
+  reg.dispose();
+});
+
+await testAsync('registry: generation probe ok keeps local preferred even with external configured', async () => {
+  const reg = new ProviderRegistry({
+    env: { ENABLE_FREECOMPUTE_CLOUD: '1', OPENCLAW_GROQ_API_KEY: 'x' }
+  });
+
+  reg._adapters.set('local_vllm', {
+    async generationProbe() {
+      return { ok: true };
+    },
+    async call() {
+      return {
+        text: 'ok',
+        raw: {},
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, estimatedCostUsd: 0 }
+      };
+    },
+    async health() {
+      return { ok: true, models: ['stub-model'] };
+    }
+  });
+
+  reg._adapters.set('groq', {
     async call() {
       return {
         text: 'ok',
