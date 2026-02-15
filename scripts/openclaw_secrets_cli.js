@@ -76,6 +76,10 @@ async function main() {
 
   if (command === 'status') {
     const rows = bridge.status();
+    // Safe status header: booleans/labels only, never secret values.
+    console.log(`secrets_bridge_enabled=${bridge.config.enabled ? 'true' : 'false'}`);
+    // Rows already include the detected backend, but printing it once makes "status" actionable.
+    console.log(`secrets_backend=${rows[0]?.backend || 'unknown'}`);
     for (const row of rows) {
       const state = row.present ? 'present' : 'missing';
       const envState = row.injectedFromEnv ? 'env_override' : 'store_only';
