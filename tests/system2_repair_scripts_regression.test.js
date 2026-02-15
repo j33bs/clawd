@@ -14,8 +14,11 @@ function main() {
   assert.ok(modelsRepairTxt.includes('BANNED_PROVIDER_KEYS'), 'models repair script must define BANNED_PROVIDER_KEYS');
   assert.ok(modelsRepairTxt.includes('system2-litellm'), 'models repair script must remove system2-litellm lane');
   assert.ok(modelsRepairTxt.includes('openai-codex'), 'models repair script must remove openai-codex lanes');
-  assert.ok(modelsRepairTxt.includes('s.startswith'), 'models repair scrub must match model-id prefixes (startswith), not arbitrary substrings');
-  assert.ok(!modelsRepairTxt.includes('m in s for m in MARKERS'), 'models repair must not treat MARKERS as generic substrings');
+  // Prefix-based scrub: allow refactors (e.g., s.startswith(m) vs explicit literals), but require prefix semantics.
+  assert.ok(modelsRepairTxt.includes('openai/'), 'models repair must reference openai/ model-id prefix');
+  assert.ok(modelsRepairTxt.includes('openai-codex/'), 'models repair must reference openai-codex/ model-id prefix');
+  assert.ok(/startswith\s*\(/.test(modelsRepairTxt), 'models repair must use startswith(...) prefix checks (not substring scans)');
+  assert.ok(!/m\s+in\s+s\s+for\s+m\s+in\s+MARKERS/.test(modelsRepairTxt), 'models repair must not treat MARKERS as generic substrings');
   assert.ok(!modelsRepairTxt.includes('OLLAMA_API_KEY'), 'models repair script must not inject or depend on OLLAMA_API_KEY');
 
   const authRepairPath = path.join(repoRoot, 'scripts/system2_repair_agent_auth_profiles.sh');
