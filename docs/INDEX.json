@@ -23,7 +23,7 @@
     }
   ],
   "counts": {
-    "total_files": 257
+    "total_files": 266
   },
   "top_level": [
     {
@@ -51,6 +51,10 @@
       "count": 2
     },
     {
+      "name": "AGENTS.md",
+      "count": 1
+    },
+    {
       "name": "AUDIT_README.md",
       "count": 1
     },
@@ -63,12 +67,16 @@
       "count": 1
     },
     {
+      "name": "BOOTSTRAP.md",
+      "count": 1
+    },
+    {
       "name": "CONTRIBUTING.md",
       "count": 1
     },
     {
       "name": "core",
-      "count": 20
+      "count": 21
     },
     {
       "name": "core_infra",
@@ -85,6 +93,14 @@
     {
       "name": "fixtures",
       "count": 23
+    },
+    {
+      "name": "HEARTBEAT.md",
+      "count": 1
+    },
+    {
+      "name": "IDENTITY.md",
+      "count": 1
     },
     {
       "name": "package-lock.json",
@@ -111,16 +127,28 @@
       "count": 26
     },
     {
+      "name": "SOUL.md",
+      "count": 1
+    },
+    {
       "name": "tests",
       "count": 14
     },
     {
       "name": "tests_unittest",
-      "count": 7
+      "count": 8
     },
     {
       "name": "tools",
       "count": 6
+    },
+    {
+      "name": "TOOLS.md",
+      "count": 1
+    },
+    {
+      "name": "USER.md",
+      "count": 1
     },
     {
       "name": "VERIFICATION.md",
@@ -138,14 +166,22 @@
     ".github/workflows/node_test.yml",
     ".gitignore",
     ".quarantine/untracked_misc_2026-02-08/logs/economics.log",
+    "AGENTS.md",
     "AUDIT_README.md",
     "AUDIT_SCOPE.md",
     "AUDIT_SNAPSHOT.md",
+    "BOOTSTRAP.md",
     "CONTRIBUTING.md",
+    "HEARTBEAT.md",
+    "IDENTITY.md",
     "README.md",
+    "SOUL.md",
+    "TOOLS.md",
+    "USER.md",
     "VERIFICATION.md",
     "agents/claude-code/agent/models.json",
     "agents/main/agent/models.json",
+    "core/integration/econ_adapter.js",
     "core/system2/budget_circuit_breaker.js",
     "core/system2/canonical_json.js",
     "core/system2/federation/envelope_v1.js",
@@ -258,6 +294,7 @@
     "tests_unittest/test_governance_auto_ingest.py",
     "tests_unittest/test_regime_detector.py",
     "tests_unittest/test_strategy_blender.py",
+    "tests_unittest/test_teammate_auto_ingest.py",
     "tests_unittest/test_volatility_metrics.py",
     "tools/check_ignored_tracking.py",
     "tools/git_default_branch.py",
