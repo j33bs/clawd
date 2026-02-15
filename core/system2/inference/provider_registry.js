@@ -309,7 +309,11 @@ class ProviderRegistry {
    * @param {object} [options.configOverride] - Override loadFreeComputeConfig()
    */
   constructor(options = {}) {
-    this._env = options.env || process.env;
+    // Fail-closed: never mutate the caller's env object or process.env.
+    // We always operate on a shallow clone ("effective env") so secrets injection
+    // is scoped to this registry instance.
+    const baseEnv = options.env || process.env;
+    this._env = { ...baseEnv };
     this._emitEvent = options.emitEvent || (() => {});
     this.config = options.configOverride || loadFreeComputeConfig(this._env);
     this._secretsBridge = null;

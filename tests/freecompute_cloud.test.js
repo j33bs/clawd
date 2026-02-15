@@ -802,6 +802,32 @@ await testAsync('registry: circuit_open excludes provider from routing until coo
   reg.dispose();
 });
 
+await testAsync('registry: secrets injection is scoped (does not mutate caller env)', async () => {
+  // Patch SecretsBridge injection to avoid keychain and make behavior deterministic.
+  const { SecretsBridge } = require('../core/system2/inference/secrets_bridge');
+  const original = SecretsBridge.prototype.injectRuntimeEnv;
+  try {
+    SecretsBridge.prototype.injectRuntimeEnv = function injectRuntimeEnv(env) {
+      env.OPENCLAW_GROQ_API_KEY = 'x';
+      return { backend: 'test', injected: ['OPENCLAW_GROQ_API_KEY'], skipped: [] };
+    };
+
+    const callerEnv = { ENABLE_FREECOMPUTE_CLOUD: '1', ENABLE_SECRETS_BRIDGE: '1' };
+    const reg = new ProviderRegistry({ env: callerEnv });
+
+    // Caller env should remain unchanged.
+    assert.equal(Object.prototype.hasOwnProperty.call(callerEnv, 'OPENCLAW_GROQ_API_KEY'), false);
+
+    // Registry should have adapter(s) based on injected effective env.
+    const providers = new Set(reg.snapshot().adapters.map((a) => a.provider_id));
+    assert.ok(providers.has('local_vllm'), 'expected local_vllm');
+    assert.ok(providers.has('groq'), 'expected groq (injected key enables adapter)');
+    reg.dispose();
+  } finally {
+    SecretsBridge.prototype.injectRuntimeEnv = original;
+  }
+});
+
 await testAsync('registry: compaction gate does not run under budget', async () => {
   const events = [];
   const reg = new ProviderRegistry({

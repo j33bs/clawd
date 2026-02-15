@@ -25,6 +25,17 @@ run('plugin registers CLI command: secrets', () => {
   assert.ok(registered.some((cmds) => cmds.includes('secrets')), registered);
 });
 
+run('plugin: shouldAutoInjectSecrets only matches runtime commands', () => {
+  const plugin = require('../scripts/openclaw_secrets_plugin');
+  assert.equal(typeof plugin._test?.shouldAutoInjectSecrets, 'function');
+  assert.equal(plugin._test.shouldAutoInjectSecrets(['node', 'openclaw', 'agent']), true);
+  assert.equal(plugin._test.shouldAutoInjectSecrets(['node', 'openclaw', 'gateway']), true);
+  assert.equal(plugin._test.shouldAutoInjectSecrets(['node', 'openclaw', 'daemon']), true);
+  assert.equal(plugin._test.shouldAutoInjectSecrets(['node', 'openclaw', 'dashboard']), true);
+  assert.equal(plugin._test.shouldAutoInjectSecrets(['node', 'openclaw', 'secrets']), false);
+  assert.equal(plugin._test.shouldAutoInjectSecrets(['node', 'openclaw', '--help']), false);
+});
+
 run('secrets cli status prints enablement header (no secrets)', () => {
   const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), 'openclaw-secrets-cli-'));
   const script = path.join(__dirname, '..', 'scripts', 'openclaw_secrets_cli.js');
@@ -45,4 +56,3 @@ run('secrets cli status prints enablement header (no secrets)', () => {
 });
 
 console.log('secrets_cli_plugin tests complete');
-
