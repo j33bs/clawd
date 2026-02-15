@@ -104,7 +104,8 @@ async function main() {
     }
 
     const saved = bridge.setSecret(provider, secret, { passphrase });
-    console.log(`stored: provider=${saved.provider} backend=${saved.backend} fingerprint=${saved.fingerprint}`);
+    // Never print secret values or partial secret tails. Keep output to names only.
+    console.log(`stored: provider=${saved.provider} backend=${saved.backend} envVar=${saved.envVar}`);
     return;
   }
 

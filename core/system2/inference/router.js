@@ -133,8 +133,15 @@ function routeRequest(params) {
 
       // Prefer local
       if (provider.kind === 'local') {
-        score += 100;
-        reasons.push('local_preferred');
+        // Local is an escape hatch. When cloud is enabled, prefer free cloud first.
+        // When cloud is disabled, local should be preferred.
+        if (!cloudEnabled) {
+          score += 100;
+          reasons.push('local_preferred_cloud_disabled');
+        } else {
+          score += 0;
+          reasons.push('local_fallback_cloud_enabled');
+        }
       }
 
       // Paid providers are fallback-only unless no free/local options remain.

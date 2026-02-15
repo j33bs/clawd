@@ -315,7 +315,7 @@ test('router: returns local candidate when cloud disabled but local vLLM enabled
   assert.equal(result.candidates[0].provider_id, 'local_vllm');
 });
 
-test('router: prefers local over external', () => {
+test('router: prefers external free/cloud over local when cloud enabled', () => {
   const result = routeRequest({
     taskClass: 'fast_chat',
     providerHealth: {},
@@ -327,11 +327,9 @@ test('router: prefers local over external', () => {
       providerDenylist: []
     }
   });
-  if (result.candidates.length >= 2) {
-    const localIdx = result.candidates.findIndex((c) => c.provider_id === 'local_vllm');
-    if (localIdx >= 0) {
-      assert.equal(localIdx, 0, 'local_vllm should be first candidate');
-    }
+  const localIdx = result.candidates.findIndex((c) => c.provider_id === 'local_vllm');
+  if (localIdx >= 0) {
+    assert.ok(localIdx > 0, `expected local_vllm to be a fallback when cloud enabled (idx=${localIdx})`);
   }
 });
 
@@ -658,7 +656,7 @@ await testAsync('registry: generation probe failure skips local and falls back t
   reg.dispose();
 });
 
-await testAsync('registry: generation probe ok keeps local preferred even with external configured', async () => {
+await testAsync('registry: prefers external over local when cloud enabled and external configured', async () => {
   const reg = new ProviderRegistry({
     env: { ENABLE_FREECOMPUTE_CLOUD: '1', OPENCLAW_GROQ_API_KEY: 'x' }
   });
@@ -698,7 +696,7 @@ await testAsync('registry: generation probe ok keeps local preferred even with e
   });
 
   assert.ok(result, 'expected non-null result');
-  assert.equal(result.provider_id, 'local_vllm');
+  assert.equal(result.provider_id, 'groq');
   reg.dispose();
 });
 

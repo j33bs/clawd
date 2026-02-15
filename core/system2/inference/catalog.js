@@ -20,23 +20,25 @@ const CATALOG = Object.freeze([
     provider_id: 'local_vllm',
     kind: 'local',
     protocol: 'openai_compatible',
-    enabled_default: false,
+    enabled_default: true,
     base_url: {
-      default: 'http://127.0.0.1:8000/v1',
+      default: 'http://127.0.0.1:11434/v1',
       env_override: 'OPENCLAW_VLLM_BASE_URL'
     },
     auth: {
+      // Ollama's OpenAI-compatible endpoint typically requires no auth, but keep this
+      // bearer_optional so operators can still secure local endpoints if desired.
       type: 'bearer_optional',
       env_var: 'OPENCLAW_VLLM_API_KEY',
       redact_in_logs: true
     },
     models: [
       {
-        model_id: 'AUTO_DISCOVER',
+        model_id: 'qwen2.5:0.5b',
         task_classes: ['fast_chat', 'long_context', 'code', 'batch', 'tool_use'],
-        context_window_hint: null,
+        context_window_hint: 32768,
         tool_support: 'via_adapter',
-        notes: 'Replaced with concrete IDs after first successful /v1/models probe.'
+        notes: 'Ollama-backed local inference (low memory footprint).'
       }
     ],
     constraints: {
