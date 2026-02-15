@@ -64,6 +64,7 @@
     "groq": {
       "baseUrl": "https://api.groq.com/openai/v1",
       "api": "openai-completions",
+      "apiKey": "GROQ_API_KEY",
       "models": [
         {
           "id": "llama-3.3-70b-versatile",
@@ -249,30 +250,6 @@
         }
       ],
       "enabled": "auto"
-    },
-    "groq": {
-      "enabled": "auto",
-      "baseUrl": "https://api.groq.com/openai/v1",
-      "apiKey": "${GROQ_API_KEY}",
-      "api": "openai-completions",
-      "models": [
-        {
-          "id": "llama-3.3-70b-versatile",
-          "name": "Llama 3.3 70B (Groq)",
-          "reasoning": false,
-          "input": [
-            "text"
-          ],
-          "cost": {
-            "input": 0,
-            "output": 0,
-            "cacheRead": 0,
-            "cacheWrite": 0
-          },
-          "contextWindow": 131072,
-          "maxTokens": 8192
-        }
-      ]
     }
   }
 }

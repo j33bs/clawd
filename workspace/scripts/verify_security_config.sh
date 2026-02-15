@@ -14,15 +14,19 @@ def load(path):
 def check_groq(path, provider):
     if not provider:
         return
-    if provider.get('enabled') not in (False, 'false', 'False'):
-        failures.append(f"{path}: groq.enabled must be false")
-    if provider.get('apiKey'):
-        failures.append(f"{path}: groq.apiKey must be empty (no secrets)")
+    # Groq is allowed for the System-2 free ladder, but must never contain key material.
+    # Accept either a missing apiKey field or a reference to the env var name.
+    api_key = provider.get('apiKey')
+    if api_key not in (None, '', 'GROQ_API_KEY'):
+        failures.append(f\"{path}: groq.apiKey must be empty or 'GROQ_API_KEY' (no secrets)\")
 
-# openclaw.json
-root = load('openclaw.json')
-providers = root.get('models', {}).get('providers', {})
-check_groq('openclaw.json', providers.get('groq'))
+# openclaw.json (optional; may not exist in this repo)
+try:
+    root = load('openclaw.json')
+    providers = root.get('models', {}).get('providers', {})
+    check_groq('openclaw.json', providers.get('groq'))
+except FileNotFoundError:
+    pass
 
 # agents/main/agent/models.json
 main = load('agents/main/agent/models.json')

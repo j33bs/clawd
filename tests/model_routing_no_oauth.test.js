@@ -33,6 +33,9 @@ function main() {
   // Local must be no-auth; cloud must be keyable (but no key material committed).
   assert.ok(!Object.prototype.hasOwnProperty.call(providers.ollama || {}, 'apiKey'), 'ollama provider must not require an apiKey in canonical models');
   assert.notStrictEqual((providers.groq || {}).enabled, false, 'groq must not be disabled in canonical models');
+  if (Object.prototype.hasOwnProperty.call(providers.groq || {}, 'apiKey')) {
+    assert.strictEqual((providers.groq || {}).apiKey, 'GROQ_API_KEY', 'groq.apiKey must refer to env var name (no key material)');
+  }
 
   const policyPath = path.join(repoRoot, 'workspace/policy/llm_policy.json');
   const policy = readJson(policyPath);

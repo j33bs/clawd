@@ -58,3 +58,12 @@ print('has_system2_litellm=', 'system2-litellm' in providers)
 PY
 ```
 
+## Gateway Runbook (macOS)
+If the gateway is not installed/loaded:
+
+```bash
+openclaw gateway install
+openclaw gateway start
+openclaw status
+openclaw logs --follow
+```

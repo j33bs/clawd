@@ -1,4 +1,4 @@
-# System-2 Model Routing Repair (No OAuth / Local Floor)
+# System-2 Model Routing Repair (Free Ladder + Mandatory Local Floor)
 
 ## Symptom
 System-2 audit/governance tasks fail with errors like:
@@ -9,6 +9,7 @@ This resets the runtime agent model roster to the repo-canonical list and clears
 
 ```bash
 bash scripts/system2_repair_agent_models.sh
+bash scripts/system2_repair_agent_auth_profiles.sh
 ```
 
 What it does (safe, no secret printing):
@@ -41,8 +42,21 @@ print("bad_provider_keys_count=", len(bad))
 PY
 ```
 
-## Routing Policy (Local Floor)
-`workspace/policy/llm_policy.json` is configured so governance/security/audit intents route local-first (Ollama), with Groq as a fallback. OAuth/OpenAI lanes are disabled and removed from those intent orders.
+## Routing Policy (Free Ladder + Local Floor)
+`workspace/policy/llm_policy.json` is configured so governance/security/audit intents route on a free ladder:
+1. `google-gemini-cli`
+2. `qwen-portal`
+3. `groq`
+4. `ollama` (mandatory local floor, always last)
 
 Cloud use is still possible only if explicitly enabled + keyed, and is out of scope for this doc.
 
+## Gateway Service Runbook (macOS)
+If the gateway is not installed, install and start it:
+
+```bash
+openclaw gateway install
+openclaw gateway start
+openclaw status
+openclaw logs --follow
+```
