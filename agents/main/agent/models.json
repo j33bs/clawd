@@ -40,28 +40,46 @@
       ],
       "apiKey": "qwen-oauth"
     },
-    "anthropic": {
-      "enabled": "auto",
-      "baseUrl": "https://api.anthropic.com/v1",
-      "apiKey": "oauth-claude",
-      "api": "anthropic-messages",
+    "google-gemini-cli": {
+      "api": "google-gemini-cli",
       "models": [
         {
-          "id": "claude-3-opus",
-          "name": "Claude 3 Opus",
+          "id": "gemini-3-pro-preview",
+          "name": "Gemini 3 Pro (Preview)",
           "reasoning": true,
           "input": [
-            "text",
-            "image"
+            "text"
           ],
           "cost": {
-            "input": 15,
-            "output": 75,
-            "cacheRead": 1.5,
-            "cacheWrite": 18.75
+            "input": 0,
+            "output": 0,
+            "cacheRead": 0,
+            "cacheWrite": 0
           },
           "contextWindow": 200000,
-          "maxTokens": 4096
+          "maxTokens": 8192
+        }
+      ]
+    },
+    "groq": {
+      "baseUrl": "https://api.groq.com/openai/v1",
+      "api": "openai-completions",
+      "models": [
+        {
+          "id": "llama-3.3-70b-versatile",
+          "name": "Llama 3.3 70B (Groq)",
+          "reasoning": false,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 0,
+            "output": 0,
+            "cacheRead": 0,
+            "cacheWrite": 0
+          },
+          "contextWindow": 131072,
+          "maxTokens": 8192
         }
       ]
     },
@@ -230,13 +248,12 @@
           "maxTokens": 8192
         }
       ],
-      "apiKey": "ollama",
       "enabled": "auto"
     },
     "groq": {
-      "enabled": false,
+      "enabled": "auto",
       "baseUrl": "https://api.groq.com/openai/v1",
-      "apiKey": "GROQ_API_KEY",
+      "apiKey": "${GROQ_API_KEY}",
       "api": "openai-completions",
       "models": [
         {

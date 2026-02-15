@@ -55,6 +55,20 @@
     }
   },
   "providers": {
+    "google-gemini-cli": {
+      "enabled": true,
+      "paid": false,
+      "tier": "free",
+      "type": "openai_compatible",
+      "baseUrl": "https://generativelanguage.googleapis.com/v1beta/openai",
+      "apiKeyEnv": "GEMINI_API_KEY",
+      "models": [
+        {
+          "id": "gemini-3-pro-preview",
+          "maxInputChars": 4000
+        }
+      ]
+    },
     "ollama": {
       "enabled": true,
       "paid": false,
@@ -88,8 +102,8 @@
         }
       ]
     },
-    "qwen": {
-      "enabled": false,
+    "qwen-portal": {
+      "enabled": true,
       "paid": false,
       "tier": "free",
       "type": "openai_compatible",
@@ -161,8 +175,10 @@
   },
   "routing": {
     "free_order": [
-      "ollama",
-      "groq"
+      "google-gemini-cli",
+      "qwen-portal",
+      "groq",
+      "ollama"
     ],
     "intents": {
       "itc_classify": {
@@ -182,24 +198,30 @@
       },
       "governance": {
         "order": [
-          "ollama",
-          "groq"
+          "google-gemini-cli",
+          "qwen-portal",
+          "groq",
+          "ollama"
         ],
         "allowPaid": false,
         "maxTokensPerRequest": 768
       },
       "security": {
         "order": [
-          "ollama",
-          "groq"
+          "google-gemini-cli",
+          "qwen-portal",
+          "groq",
+          "ollama"
         ],
         "allowPaid": false,
         "maxTokensPerRequest": 768
       },
       "system2_audit": {
         "order": [
-          "ollama",
-          "groq"
+          "google-gemini-cli",
+          "qwen-portal",
+          "groq",
+          "ollama"
         ],
         "allowPaid": false,
         "maxTokensPerRequest": 1024
