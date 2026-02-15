@@ -6,6 +6,35 @@ function readJson(p) {
   return JSON.parse(fs.readFileSync(p, 'utf8'));
 }
 
+function assertNoBannedModelIdPrefixes(jsonObj, label) {
+  const banned = ['openai/', 'openai-codex/'];
+  let found = 0;
+  function walk(x) {
+    if (!x) return;
+    if (typeof x === 'string') {
+      for (const p of banned) {
+        if (x.startsWith(p)) found += 1;
+      }
+      return;
+    }
+    if (Array.isArray(x)) {
+      for (const v of x) walk(v);
+      return;
+    }
+    if (typeof x === 'object') {
+      for (const k of Object.keys(x)) {
+        // Keys can also contain model IDs in some schemas.
+        for (const p of banned) {
+          if (k.startsWith(p)) found += 1;
+        }
+        walk(x[k]);
+      }
+    }
+  }
+  walk(jsonObj);
+  assert.strictEqual(found, 0, `${label}: must not contain model IDs starting with openai/ or openai-codex/`);
+}
+
 function main() {
   const repoRoot = path.resolve(__dirname, '..');
 
@@ -36,12 +65,24 @@ function main() {
   if (Object.prototype.hasOwnProperty.call(providers.groq || {}, 'apiKey')) {
     assert.strictEqual((providers.groq || {}).apiKey, 'GROQ_API_KEY', 'groq.apiKey must refer to env var name (no key material)');
   }
+  assertNoBannedModelIdPrefixes(canonical, 'canonical models');
 
   const policyPath = path.join(repoRoot, 'workspace/policy/llm_policy.json');
+  const policyTxt = fs.readFileSync(policyPath, 'utf8');
+  assert.ok(!policyTxt.includes('system2-litellm'), 'policy must not reference system2-litellm');
   const policy = readJson(policyPath);
   assert.strictEqual(policy.defaults && policy.defaults.preferLocal, true, 'policy.defaults.preferLocal must be true');
   assert.strictEqual(policy.defaults && policy.defaults.allowPaid, false, 'policy.defaults.allowPaid must be false');
   const policyProviders = (policy.providers || {});
+  // OpenAI/Codex lanes must not be enabled (they may exist but must be disabled).
+  for (const k of ['openai_auth', 'openai_api']) {
+    if (Object.prototype.hasOwnProperty.call(policyProviders, k)) {
+      assert.strictEqual(policyProviders[k].enabled, false, `policy.providers.${k}.enabled must be false`);
+    }
+  }
+  for (const k of ['openai-codex', 'openai_codex', 'system2-litellm']) {
+    assert.ok(!Object.prototype.hasOwnProperty.call(policyProviders, k), `policy.providers must not include ${k}`);
+  }
   const ollamaPolicy = policyProviders.ollama || {};
   assert.strictEqual(ollamaPolicy.type, 'ollama', 'policy.providers.ollama.type must be "ollama"');
   assert.ok(!('apiKeyEnv' in ollamaPolicy), 'policy.providers.ollama must not require apiKeyEnv');

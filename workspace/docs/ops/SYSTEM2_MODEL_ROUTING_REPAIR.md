@@ -51,6 +51,14 @@ PY
 
 Cloud use is still possible only if explicitly enabled + keyed, and is out of scope for this doc.
 
+## Acceptance Criteria (Precise)
+- Provider SET after repair (order irrelevant):
+  - `{google-gemini-cli, qwen-portal, groq, ollama}`
+- Routing ORDER (policy):
+  - `["google-gemini-cli","qwen-portal","groq","ollama"]`
+- No `system2-litellm` anywhere in intent routing orders.
+- Ollama must be no-auth (no sentinel `apiKey`, no required API key env var).
+
 ## Gateway Service Runbook (macOS)
 If the gateway is not installed, install and start it:
 

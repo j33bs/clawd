@@ -16,6 +16,7 @@ function main() {
   assert.ok(modelsRepairTxt.includes('openai-codex'), 'models repair script must remove openai-codex lanes');
   assert.ok(modelsRepairTxt.includes('s.startswith'), 'models repair scrub must match model-id prefixes (startswith), not arbitrary substrings');
   assert.ok(!modelsRepairTxt.includes('m in s for m in MARKERS'), 'models repair must not treat MARKERS as generic substrings');
+  assert.ok(!modelsRepairTxt.includes('OLLAMA_API_KEY'), 'models repair script must not inject or depend on OLLAMA_API_KEY');
 
   const authRepairPath = path.join(repoRoot, 'scripts/system2_repair_agent_auth_profiles.sh');
   const authRepairTxt = fs.readFileSync(authRepairPath, 'utf8');
@@ -28,4 +29,3 @@ function main() {
 }
 
 main();
-
