@@ -93,6 +93,15 @@ function classifyProvider(entry, env, cfg) {
 }
 
 async function probeLocalVllm(env) {
+  if (env.PROVIDER_DIAG_NO_PROBES === '1') {
+    return {
+      endpoint_present: false,
+      models_fetch_ok: false,
+      models_count: 0,
+      generation_probe_ok: false,
+      generation_probe_reason: 'skipped'
+    };
+  }
   const entry = getProvider('local_vllm');
   if (!entry) {
     return {
@@ -163,6 +172,7 @@ async function main() {
   lines.push('');
   lines.push('providers:');
 
+  const summaryRows = [];
   const providers = [...CATALOG].sort((a, b) => a.provider_id.localeCompare(b.provider_id));
   for (const p of providers) {
     const auth = p.auth || {};
@@ -172,8 +182,17 @@ async function main() {
       s.eligible = false;
       s.reason = 'generation_probe_failed';
     }
+    const reason = s.eligible ? 'ok' : s.reason;
+    lines.push(`- ${p.provider_id}: configured=${s.configured ? 'yes' : 'no'} enabled=${s.enabled ? 'yes' : 'no'} eligible=${s.eligible ? 'yes' : 'no'} reason=${reason} auth_env_keys=${keys.length > 0 ? keys.join(',') : '(none)'}`);
+    summaryRows.push({ provider_id: p.provider_id, configured: s.configured, enabled: s.enabled, eligible: s.eligible, reason });
+  }
+
+  lines.push('');
+  lines.push('providers_summary:');
+  for (const row of summaryRows) {
+    // Grep-friendly: provider_id at column 0. No auth_env_keys to reduce noise.
     lines.push(
-      `- ${p.provider_id}: configured=${s.configured ? 'yes' : 'no'} enabled=${s.enabled ? 'yes' : 'no'} eligible=${s.eligible ? 'yes' : 'no'} reason=${s.eligible ? 'ok' : s.reason} auth_env_keys=${keys.length > 0 ? keys.join(',') : '(none)'}`
+      `${row.provider_id}: configured=${row.configured ? 'yes' : 'no'} enabled=${row.enabled ? 'yes' : 'no'} eligible=${row.eligible ? 'yes' : 'no'} reason=${row.reason}`
     );
   }
 
