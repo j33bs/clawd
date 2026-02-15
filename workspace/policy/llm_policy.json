@@ -89,7 +89,7 @@
       ]
     },
     "qwen": {
-      "enabled": true,
+      "enabled": false,
       "paid": false,
       "tier": "free",
       "type": "openai_compatible",
@@ -103,14 +103,14 @@
       ]
     },
     "openai_auth": {
-      "enabled": true,
+      "enabled": false,
       "paid": false,
       "tier": "auth",
       "type": "openai_auth",
       "readyEnv": "OPENAI_AUTH_READY"
     },
     "claude_auth": {
-      "enabled": true,
+      "enabled": false,
       "paid": false,
       "tier": "auth",
       "type": "anthropic_auth",
@@ -131,7 +131,7 @@
       ]
     },
     "openai_api": {
-      "enabled": true,
+      "enabled": false,
       "paid": true,
       "tier": "paid",
       "type": "openai_compatible",
@@ -162,8 +162,7 @@
   "routing": {
     "free_order": [
       "ollama",
-      "groq",
-      "qwen"
+      "groq"
     ],
     "intents": {
       "itc_classify": {
@@ -176,30 +175,34 @@
       },
       "coding": {
         "order": [
-          "free",
-          "openai_auth",
-          "claude_auth",
-          "grok_api",
-          "openai_api",
-          "claude_api"
+          "ollama",
+          "groq"
         ],
-        "allowPaid": true
+        "allowPaid": false
       },
       "governance": {
         "order": [
-          "claude_auth",
-          "claude_api"
+          "ollama",
+          "groq"
         ],
-        "allowPaid": true,
+        "allowPaid": false,
         "maxTokensPerRequest": 768
       },
       "security": {
         "order": [
-          "claude_auth",
-          "claude_api"
+          "ollama",
+          "groq"
         ],
-        "allowPaid": true,
+        "allowPaid": false,
         "maxTokensPerRequest": 768
+      },
+      "system2_audit": {
+        "order": [
+          "ollama",
+          "groq"
+        ],
+        "allowPaid": false,
+        "maxTokensPerRequest": 1024
       }
     }
   }
