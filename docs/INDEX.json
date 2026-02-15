@@ -23,7 +23,7 @@
     }
   ],
   "counts": {
-    "total_files": 293
+    "total_files": 327
   },
   "top_level": [
     {
@@ -112,7 +112,7 @@
     },
     {
       "name": "tests",
-      "count": 15
+      "count": 17
     },
     {
       "name": "tests_unittest",
@@ -128,7 +128,7 @@
     },
     {
       "name": "workspace",
-      "count": 156
+      "count": 188
     }
   ],
   "files": [
@@ -244,8 +244,10 @@
     "tests/freecompute_cloud.test.js",
     "tests/freecompute_registry_error_classification.test.js",
     "tests/module_resolution_gate.test.js",
+    "tests/provider_diag_format.test.js",
     "tests/redact_audit_evidence.test.js",
     "tests/secrets_bridge.test.js",
+    "tests/secrets_cli_exec.test.js",
     "tests/secrets_cli_plugin.test.js",
     "tests/system1_ignores_system2_env.test.js",
     "tests/system2_config_resolver.test.js",
@@ -360,6 +362,38 @@
     "workspace/governance/.bak/20260215-110111/SOUL.md",
     "workspace/governance/.bak/20260215-110111/TOOLS.md",
     "workspace/governance/.bak/20260215-110111/USER.md",
+    "workspace/governance/.bak/20260215-111559/AGENTS.md",
+    "workspace/governance/.bak/20260215-111559/BOOTSTRAP.md",
+    "workspace/governance/.bak/20260215-111559/HEARTBEAT.md",
+    "workspace/governance/.bak/20260215-111559/IDENTITY.md",
+    "workspace/governance/.bak/20260215-111559/PRINCIPLES.md",
+    "workspace/governance/.bak/20260215-111559/SOUL.md",
+    "workspace/governance/.bak/20260215-111559/TOOLS.md",
+    "workspace/governance/.bak/20260215-111559/USER.md",
+    "workspace/governance/.bak/20260215-113356/AGENTS.md",
+    "workspace/governance/.bak/20260215-113356/BOOTSTRAP.md",
+    "workspace/governance/.bak/20260215-113356/HEARTBEAT.md",
+    "workspace/governance/.bak/20260215-113356/IDENTITY.md",
+    "workspace/governance/.bak/20260215-113356/PRINCIPLES.md",
+    "workspace/governance/.bak/20260215-113356/SOUL.md",
+    "workspace/governance/.bak/20260215-113356/TOOLS.md",
+    "workspace/governance/.bak/20260215-113356/USER.md",
+    "workspace/governance/.bak/20260215-115219/AGENTS.md",
+    "workspace/governance/.bak/20260215-115219/BOOTSTRAP.md",
+    "workspace/governance/.bak/20260215-115219/HEARTBEAT.md",
+    "workspace/governance/.bak/20260215-115219/IDENTITY.md",
+    "workspace/governance/.bak/20260215-115219/PRINCIPLES.md",
+    "workspace/governance/.bak/20260215-115219/SOUL.md",
+    "workspace/governance/.bak/20260215-115219/TOOLS.md",
+    "workspace/governance/.bak/20260215-115219/USER.md",
+    "workspace/governance/.bak/20260215-142318/AGENTS.md",
+    "workspace/governance/.bak/20260215-142318/BOOTSTRAP.md",
+    "workspace/governance/.bak/20260215-142318/HEARTBEAT.md",
+    "workspace/governance/.bak/20260215-142318/IDENTITY.md",
+    "workspace/governance/.bak/20260215-142318/PRINCIPLES.md",
+    "workspace/governance/.bak/20260215-142318/SOUL.md",
+    "workspace/governance/.bak/20260215-142318/TOOLS.md",
+    "workspace/governance/.bak/20260215-142318/USER.md",
     "workspace/governance/AGENTS.md",
     "workspace/governance/BOOTSTRAP.md",
     "workspace/governance/GOVERNANCE_LOG.md",

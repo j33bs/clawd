@@ -33,6 +33,8 @@ const {
   ProviderAdapter
 } = require('../core/system2/inference');
 
+const { _test: registryTest } = require('../core/system2/inference/provider_registry');
+
 let passed = 0;
 let failed = 0;
 let skipped = 0;
@@ -797,6 +799,227 @@ await testAsync('registry: circuit_open excludes provider from routing until coo
   assert.ok(second);
   assert.equal(second.provider_id, 'local_vllm');
   assert.equal(groqCalls, 0);
+  reg.dispose();
+});
+
+await testAsync('registry: compaction gate does not run under budget', async () => {
+  const events = [];
+  const reg = new ProviderRegistry({
+    env: { ENABLE_FREECOMPUTE_CLOUD: '1', OPENCLAW_GROQ_API_KEY: 'x', GROQ_MAX_CHARS: '2000' },
+    emitEvent: (t, p) => events.push({ t, p })
+  });
+
+  reg._adapters.set('local_vllm', {
+    async generationProbe() {
+      return { ok: true };
+    },
+    async call() {
+      throw new Error('local should not be selected when groq is configured');
+    },
+    async health() {
+      return { ok: true, models: ['stub-model'] };
+    }
+  });
+
+  let seen = null;
+  reg._adapters.set('groq', {
+    async call(params) {
+      seen = params.messages;
+      return {
+        text: 'ok',
+        raw: {},
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, estimatedCostUsd: 0 }
+      };
+    },
+    async health() {
+      return { ok: true, models: ['stub-model'] };
+    }
+  });
+
+  const msg = 'x'.repeat(100);
+  const result = await reg.dispatch({
+    taskClass: 'fast_chat',
+    messages: [{ role: 'user', content: msg }]
+  });
+
+  assert.ok(result);
+  assert.equal(result.provider_id, 'groq');
+  assert.ok(Array.isArray(seen));
+  assert.equal(seen[0].content.length, 100);
+  assert.equal(events.some((e) => e.t === 'freecompute_dispatch_compaction_applied'), false);
+  reg.dispose();
+});
+
+await testAsync('registry: compaction gate compacts preflight when materially over budget', async () => {
+  const events = [];
+  const reg = new ProviderRegistry({
+    env: { ENABLE_FREECOMPUTE_CLOUD: '1', OPENCLAW_GROQ_API_KEY: 'x', GROQ_MAX_CHARS: '1000' },
+    emitEvent: (t, p) => events.push({ t, p })
+  });
+
+  reg._adapters.set('local_vllm', {
+    async generationProbe() {
+      return { ok: true };
+    },
+    async call() {
+      throw new Error('local should not be selected when groq is configured');
+    },
+    async health() {
+      return { ok: true, models: ['stub-model'] };
+    }
+  });
+
+  let seenShape = null;
+  reg._adapters.set('groq', {
+    async call(params) {
+      seenShape = registryTest.estimateRequestShape(params.messages);
+      return {
+        text: 'ok',
+        raw: {},
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, estimatedCostUsd: 0 }
+      };
+    },
+    async health() {
+      return { ok: true, models: ['stub-model'] };
+    }
+  });
+
+  const messages = [
+    { role: 'system', content: 's'.repeat(800) },
+    { role: 'user', content: 'u'.repeat(600) }
+  ];
+  const before = registryTest.estimateRequestShape(messages);
+  assert.ok(before.char_count_total > 1000);
+
+  const result = await reg.dispatch({ taskClass: 'fast_chat', messages });
+  assert.ok(result);
+  assert.equal(result.provider_id, 'groq');
+  assert.ok(seenShape && typeof seenShape.char_count_total === 'number');
+  assert.ok(seenShape.char_count_total <= 1000, `expected compacted <= 1000, got ${seenShape.char_count_total}`);
+
+  const comp = events.find((e) => e.t === 'freecompute_dispatch_compaction_applied');
+  assert.ok(comp, 'expected compaction event');
+  assert.equal(comp.p.trigger, 'preflight');
+  reg.dispose();
+});
+
+await testAsync('registry: 400 context-length triggers one compaction retry (no preflight)', async () => {
+  const events = [];
+  const reg = new ProviderRegistry({
+    env: { ENABLE_FREECOMPUTE_CLOUD: '1', OPENCLAW_GROQ_API_KEY: 'x', GROQ_MAX_CHARS: '1000' },
+    emitEvent: (t, p) => events.push({ t, p })
+  });
+
+  reg._adapters.set('local_vllm', {
+    async generationProbe() {
+      return { ok: true };
+    },
+    async call() {
+      throw new Error('local should not be selected when groq succeeds');
+    },
+    async health() {
+      return { ok: true, models: ['stub-model'] };
+    }
+  });
+
+  let calls = 0;
+  let firstShape = null;
+  let secondShape = null;
+
+  reg._adapters.set('groq', {
+    async call(params) {
+      calls += 1;
+      const s = registryTest.estimateRequestShape(params.messages);
+      if (calls === 1) {
+        firstShape = s;
+        const err = new Error('context length exceeded');
+        err.code = 'PROVIDER_HTTP_ERROR';
+        err.statusCode = 400;
+        throw err;
+      }
+      secondShape = s;
+      return {
+        text: 'ok',
+        raw: {},
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, estimatedCostUsd: 0 }
+      };
+    },
+    async health() {
+      return { ok: true, models: ['stub-model'] };
+    }
+  });
+
+  // Content total ~1000 chars, below the 1.05 preflight margin for max=1000 once overhead is included.
+  const messages = [
+    { role: 'system', content: 's'.repeat(700) },
+    { role: 'user', content: 'u'.repeat(300) }
+  ];
+  const result = await reg.dispatch({ taskClass: 'fast_chat', messages });
+  assert.ok(result);
+  assert.equal(result.provider_id, 'groq');
+  assert.equal(calls, 2);
+  assert.ok(firstShape && secondShape);
+  assert.ok(secondShape.char_count_total < firstShape.char_count_total);
+
+  const comp = events.find((e) => e.t === 'freecompute_dispatch_compaction_applied');
+  assert.ok(comp, 'expected compaction event');
+  assert.equal(comp.p.trigger, 'error_400');
+  reg.dispose();
+});
+
+await testAsync('registry: audit events identify which provider rejects size (groq 400 → local fallback)', async () => {
+  const events = [];
+  const reg = new ProviderRegistry({
+    env: { ENABLE_FREECOMPUTE_CLOUD: '1', OPENCLAW_GROQ_API_KEY: 'x', GROQ_MAX_CHARS: '1000' },
+    emitEvent: (t, p) => events.push({ t, p })
+  });
+
+  reg._adapters.set('local_vllm', {
+    async generationProbe() {
+      return { ok: true };
+    },
+    async call() {
+      return {
+        text: 'ok',
+        raw: {},
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, estimatedCostUsd: 0 }
+      };
+    },
+    async health() {
+      return { ok: true, models: ['stub-model'] };
+    }
+  });
+
+  let groqCalls = 0;
+  reg._adapters.set('groq', {
+    async call() {
+      groqCalls += 1;
+      const err = new Error('Please reduce the length of the messages.');
+      err.code = 'PROVIDER_HTTP_ERROR';
+      err.statusCode = 400;
+      throw err;
+    },
+    async health() {
+      return { ok: true, models: ['stub-model'] };
+    }
+  });
+
+  const result = await reg.dispatch({
+    taskClass: 'fast_chat',
+    // Keep under the 1.05 preflight margin so the retry path is driven by the 400 error.
+    messages: [
+      { role: 'system', content: 's'.repeat(700) },
+      { role: 'user', content: 'u'.repeat(300) }
+    ]
+  });
+
+  assert.ok(result);
+  assert.equal(result.provider_id, 'local_vllm');
+  assert.equal(groqCalls, 2, 'expected groq initial attempt + one compaction retry');
+
+  const groqErr = events.find((e) => e.t === 'freecompute_dispatch_error_shape' && e.p.provider_id === 'groq');
+  assert.ok(groqErr, 'expected groq error shape event');
+  assert.equal(groqErr.p.statusCode, 400);
   reg.dispose();
 });
 
