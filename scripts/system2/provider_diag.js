@@ -13,6 +13,7 @@ const { CATALOG } = require('../../core/system2/inference/catalog');
 const { loadFreeComputeConfig } = require('../../core/system2/inference/config');
 const { getProvider } = require('../../core/system2/inference/catalog');
 const { ProviderAdapter } = require('../../core/system2/inference/provider_adapter');
+const { SecretsBridge } = require('../../core/system2/inference/secrets_bridge');
 
 function isConfigured(entry, env) {
   if (entry && entry.provider_id === 'remote_vllm') {
@@ -136,6 +137,21 @@ async function main() {
   const seen = envKeysSeen(env, freecomputeKeys);
   lines.push(`freecompute_env_keys_seen=${seen.length ? seen.join(',') : '(none)'}`);
   lines.push(`secrets_bridge_enabled=${cfg.secretsBridge && cfg.secretsBridge.enabled ? 'true' : 'false'}`);
+
+  // If the bridge is enabled, inject secrets into this process env so that
+  // configured/eligible checks reflect real runtime behavior. Names only.
+  if (cfg.secretsBridge && cfg.secretsBridge.enabled) {
+    try {
+      const bridge = new SecretsBridge({ env });
+      const injection = bridge.injectRuntimeEnv(env);
+      const injectedKeys = (injection && Array.isArray(injection.injected))
+        ? injection.injected.map((r) => r.envVar).filter(Boolean)
+        : [];
+      lines.push(`secrets_bridge_injected_env_keys=${injectedKeys.length ? injectedKeys.join(',') : '(none)'}`);
+    } catch (_) {
+      lines.push('secrets_bridge_injected_env_keys=(error)');
+    }
+  }
   lines.push('');
 
   const localProbe = await probeLocalVllm(env);

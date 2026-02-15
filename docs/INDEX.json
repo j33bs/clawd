@@ -23,7 +23,7 @@
     }
   ],
   "counts": {
-    "total_files": 285
+    "total_files": 293
   },
   "top_level": [
     {
@@ -128,7 +128,7 @@
     },
     {
       "name": "workspace",
-      "count": 148
+      "count": 156
     }
   ],
   "files": [
@@ -352,6 +352,14 @@
     "workspace/governance/.bak/20260215-095636/SOUL.md",
     "workspace/governance/.bak/20260215-095636/TOOLS.md",
     "workspace/governance/.bak/20260215-095636/USER.md",
+    "workspace/governance/.bak/20260215-110111/AGENTS.md",
+    "workspace/governance/.bak/20260215-110111/BOOTSTRAP.md",
+    "workspace/governance/.bak/20260215-110111/HEARTBEAT.md",
+    "workspace/governance/.bak/20260215-110111/IDENTITY.md",
+    "workspace/governance/.bak/20260215-110111/PRINCIPLES.md",
+    "workspace/governance/.bak/20260215-110111/SOUL.md",
+    "workspace/governance/.bak/20260215-110111/TOOLS.md",
+    "workspace/governance/.bak/20260215-110111/USER.md",
     "workspace/governance/AGENTS.md",
     "workspace/governance/BOOTSTRAP.md",
     "workspace/governance/GOVERNANCE_LOG.md",

@@ -34,11 +34,11 @@ const CATALOG = Object.freeze([
     },
     models: [
       {
-        model_id: 'qwen2.5:0.5b',
+        model_id: 'AUTO_DISCOVER',
         task_classes: ['fast_chat', 'long_context', 'code', 'batch', 'tool_use'],
-        context_window_hint: 32768,
+        context_window_hint: null,
         tool_support: 'via_adapter',
-        notes: 'Ollama-backed local inference (low memory footprint).'
+        notes: 'Local OpenAI-compatible endpoint (Ollama on this Mac). Model resolved via OPENCLAW_VLLM_MODEL or /v1/models.'
       }
     ],
     constraints: {
@@ -197,7 +197,7 @@ const CATALOG = Object.freeze([
     provider_id: 'groq',
     kind: 'external',
     protocol: 'openai_compatible',
-    enabled_default: false,
+    enabled_default: true,
     base_url: {
       default: 'https://api.groq.com/openai/v1',
       env_override: 'OPENCLAW_GROQ_BASE_URL'
@@ -247,7 +247,7 @@ const CATALOG = Object.freeze([
       probe_prompt: 'Reply with: OK',
       probe_max_tokens: 8
     },
-    routing_tags: { prefers: ['low_latency', 'burst_capacity'], avoids: [] },
+    routing_tags: { prefers: ['free_tier', 'low_latency', 'burst_capacity'], avoids: [] },
     evidence: [
       {
         type: 'doc',
