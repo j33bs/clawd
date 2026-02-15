@@ -88,6 +88,12 @@ const plugin = {
           .description('Probe a provider using stored/env secrets (no values).')
           .argument('<provider>', 'Provider id (e.g., groq, qwen, gemini, openrouter, vllm)')
           .action((provider) => runSecretsCli(['test', String(provider)]));
+
+        secrets
+          .command('exec')
+          .description('Run a command with secrets injected into the child env (no values).')
+          .argument('<cmd...>', 'Command to run (use -- to separate openclaw args if needed)')
+          .action((cmd) => runSecretsCli(['exec', '--', ...cmd.map(String)]));
       },
       { commands: ['secrets'] }
     );

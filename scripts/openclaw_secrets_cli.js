@@ -2,11 +2,12 @@
 'use strict';
 
 const readline = require('node:readline/promises');
+const { spawnSync } = require('node:child_process');
 
 const { SecretsBridge } = require('../core/system2/inference/secrets_bridge');
 
 function usage() {
-  console.error('Usage: node scripts/openclaw_secrets_cli.js <set|unset|status|test> [provider]');
+  console.error('Usage: node scripts/openclaw_secrets_cli.js <set|unset|status|test|exec> [provider|-- <cmd...>]');
   process.exit(2);
 }
 
@@ -68,7 +69,7 @@ async function main() {
   const command = args[0];
   const provider = args[1];
 
-  if (!command || !['set', 'unset', 'status', 'test'].includes(command)) {
+  if (!command || !['set', 'unset', 'status', 'test', 'exec'].includes(command)) {
     usage();
   }
 
@@ -126,6 +127,46 @@ async function main() {
     }
     const probe = await bridge.testProvider(provider, { passphrase });
     console.log(`probe: provider=${probe.provider} ok=${probe.ok} code=${probe.code}`);
+    return;
+  }
+
+  if (command === 'exec') {
+    // Run a command with secrets injected into the child environment.
+    // This is an operator convenience to support workflows like:
+    //   ENABLE_SECRETS_BRIDGE=1 openclaw secrets exec -- openclaw agent --local ...
+    //
+    // Safety:
+    // - Never prints secret values.
+    // - Reports injected ENV KEY NAMES only.
+    if (!bridge.config.enabled) {
+      throw new Error('secrets bridge disabled (set ENABLE_SECRETS_BRIDGE=1)');
+    }
+
+    let cmdArgs = args.slice(1);
+    if (cmdArgs[0] === '--') {
+      cmdArgs = cmdArgs.slice(1);
+    }
+    if (cmdArgs.length === 0) {
+      usage();
+    }
+
+    const childEnv = { ...process.env };
+    const injection = bridge.injectRuntimeEnv(childEnv);
+    const injectedKeys = Array.from(new Set((injection.injected || []).map((e) => e.envVar))).sort();
+
+    if (injectedKeys.length > 0) {
+      console.log(`secrets_bridge_injected_env_keys=${injectedKeys.join(',')}`);
+    } else {
+      console.log('secrets_bridge_injected_env_keys=(none)');
+    }
+
+    const res = spawnSync(cmdArgs[0], cmdArgs.slice(1), {
+      env: childEnv,
+      stdio: 'inherit'
+    });
+
+    const status = typeof res.status === 'number' ? res.status : 1;
+    process.exit(status);
   }
 }
 
