@@ -557,6 +557,8 @@ test('registry: enabled but no credentials → no adapters', () => {
   const snap = reg.snapshot();
   // Local vLLM is the escape hatch; it should be present by default when enabled.
   assert.ok(snap.adapters.length === 1 && snap.adapters[0].provider_id === 'local_vllm');
+  // local_vllm uses bearer_optional auth; missing OPENCLAW_VLLM_API_KEY must not block adapter instantiation.
+  assert.equal(Object.prototype.hasOwnProperty.call(reg._env, 'OPENCLAW_VLLM_API_KEY'), false);
   reg.dispose();
 });
 

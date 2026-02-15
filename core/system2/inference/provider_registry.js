@@ -686,11 +686,11 @@ class ProviderRegistry {
       }
 
       // Check if auth credential is available for providers that require it
-      if (entry.auth && entry.auth.type !== 'none' && entry.auth.type !== 'bearer_optional') {
-        if (!hasAuthCredential(entry.auth, this._env)) {
-          // Skip providers without configured credentials
-          continue;
-        }
+      const authType = entry.auth && entry.auth.type;
+      const requiresCredential = Boolean(authType && authType !== 'none' && authType !== 'bearer_optional');
+      if (requiresCredential && !hasAuthCredential(entry.auth, this._env)) {
+        // Skip providers without configured credentials
+        continue;
       }
 
       this._adapters.set(pid, new ProviderAdapter(entry, {

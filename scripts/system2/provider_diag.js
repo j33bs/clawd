@@ -136,7 +136,8 @@ async function probeLocalVllm(env) {
 }
 
 async function main() {
-  const env = process.env;
+  // Secret-safety: never mutate process.env during diagnostics.
+  const env = { ...process.env };
   const cfg = loadFreeComputeConfig(env);
 
   const lines = [];

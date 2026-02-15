@@ -32,42 +32,6 @@ function resolveRepoRoot() {
   return path.resolve(__dirname, '..');
 }
 
-function shouldAutoInjectSecrets(argv) {
-  const args = Array.isArray(argv) ? argv : process.argv;
-  // Node: [node, openclaw.mjs, ...]
-  const sub = String(args[2] || '').trim();
-  return (
-    sub === 'agent' ||
-    sub === 'gateway' ||
-    sub === 'daemon' ||
-    sub === 'dashboard'
-  );
-}
-
-function autoInjectSecretsForRuntime() {
-  if (process.env.OPENCLAW_SYSTEM2_SECRETS_AUTO_INJECT === '0') return;
-  if (process.env.ENABLE_SECRETS_BRIDGE !== '1') return;
-  if (!shouldAutoInjectSecrets(process.argv)) return;
-
-  try {
-    const repoRoot = resolveRepoRoot();
-    // Resolve via repo root so plugin works even when cwd is elsewhere.
-    // eslint-disable-next-line global-require, import/no-dynamic-require
-    const { SecretsBridge } = require(path.join(repoRoot, 'core', 'system2', 'inference', 'secrets_bridge.js'));
-    const bridge = new SecretsBridge({ env: process.env });
-    // Intentionally mutates process.env for this OpenClaw process so provider
-    // selection can see keys without requiring `openclaw secrets exec`.
-    bridge.injectRuntimeEnv(process.env);
-
-    // Local providers shouldn't require credentials, but some OpenClaw runtime
-    // paths treat "missing api key" as a hard failure. Provide a harmless
-    // sentinel so local Ollama can remain a viable fallback.
-    if (!process.env.OLLAMA_API_KEY) process.env.OLLAMA_API_KEY = 'ollama';
-  } catch {
-    // Fail-closed: never block agent startup if secrets injection fails.
-  }
-}
-
 function runSecretsCli(args) {
   const repoRoot = resolveRepoRoot();
   const cliPath = path.join(repoRoot, 'scripts', 'openclaw_secrets_cli.js');
@@ -97,10 +61,6 @@ const plugin = {
     if (!api || typeof api.registerCli !== 'function') {
       throw new Error('plugin api missing registerCli');
     }
-
-    // Best-effort: make runtime commands (agent/gateway) see injected env keys
-    // when ENABLE_SECRETS_BRIDGE=1, without requiring `openclaw secrets exec`.
-    autoInjectSecretsForRuntime();
 
     api.registerCli(
       ({ program }) => {
@@ -142,6 +102,3 @@ const plugin = {
 
 module.exports = plugin;
 module.exports.default = plugin;
-module.exports._test = {
-  shouldAutoInjectSecrets
-};
