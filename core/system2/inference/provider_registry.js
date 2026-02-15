@@ -30,6 +30,7 @@ function classifyDispatchError(err) {
     return 'timeout';
   }
   if (code === 'PROVIDER_HTTP_ERROR' && typeof err.statusCode === 'number') {
+    if (err.statusCode === 429) return 'rate_limit';
     if (err.statusCode === 401 || err.statusCode === 403) return 'auth';
     if (err.statusCode === 400 || err.statusCode === 404) return 'config';
     return 'http_error';
@@ -411,6 +412,12 @@ class ProviderRegistry {
 
     const entry = CATALOG.find((e) => e.provider_id === providerId);
     const threshold = (entry && entry.constraints.circuit_breaker.consecutive_failures_to_open) || 3;
+
+    if (kind === 'rate_limit') {
+      cb.state = CB_STATES.OPEN;
+      cb.openedAt = Date.now();
+      return;
+    }
 
     if (kind === 'timeout') {
       cb.timeoutFailures += 1;

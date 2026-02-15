@@ -700,6 +700,106 @@ await testAsync('registry: prefers external over local when cloud enabled and ex
   reg.dispose();
 });
 
+await testAsync('registry: http 429 opens circuit (rate_limit) and falls back to local', async () => {
+  const reg = new ProviderRegistry({
+    env: { ENABLE_FREECOMPUTE_CLOUD: '1', OPENCLAW_GROQ_API_KEY: 'x' }
+  });
+
+  reg._adapters.set('local_vllm', {
+    async generationProbe() {
+      return { ok: true };
+    },
+    async call() {
+      return {
+        text: 'ok',
+        raw: {},
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, estimatedCostUsd: 0 }
+      };
+    },
+    async health() {
+      return { ok: true, models: ['stub-model'] };
+    }
+  });
+
+  reg._adapters.set('groq', {
+    async call() {
+      const err = new Error('http 429');
+      err.code = 'PROVIDER_HTTP_ERROR';
+      err.statusCode = 429;
+      throw err;
+    },
+    async health() {
+      return { ok: true, models: ['stub-model'] };
+    }
+  });
+
+  const result = await reg.dispatch({
+    taskClass: 'fast_chat',
+    messages: [{ role: 'user', content: 'test' }]
+  });
+
+  assert.ok(result, 'expected non-null result');
+  assert.equal(result.provider_id, 'local_vllm');
+  assert.equal(reg._circuitBreakers.get('groq').state, CB_STATES.OPEN);
+  reg.dispose();
+});
+
+await testAsync('registry: circuit_open excludes provider from routing until cooldown expires', async () => {
+  const reg = new ProviderRegistry({
+    env: { ENABLE_FREECOMPUTE_CLOUD: '1', OPENCLAW_GROQ_API_KEY: 'x' }
+  });
+
+  let groqCalls = 0;
+
+  reg._adapters.set('local_vllm', {
+    async generationProbe() {
+      return { ok: true };
+    },
+    async call() {
+      return {
+        text: 'ok',
+        raw: {},
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, estimatedCostUsd: 0 }
+      };
+    },
+    async health() {
+      return { ok: true, models: ['stub-model'] };
+    }
+  });
+
+  reg._adapters.set('groq', {
+    async call() {
+      groqCalls += 1;
+      const err = new Error('http 429');
+      err.code = 'PROVIDER_HTTP_ERROR';
+      err.statusCode = 429;
+      throw err;
+    },
+    async health() {
+      return { ok: true, models: ['stub-model'] };
+    }
+  });
+
+  // First call opens the circuit.
+  const first = await reg.dispatch({
+    taskClass: 'fast_chat',
+    messages: [{ role: 'user', content: 'test' }]
+  });
+  assert.ok(first);
+  assert.equal(reg._circuitBreakers.get('groq').state, CB_STATES.OPEN);
+
+  // Second call should not attempt groq at all while circuit is open.
+  groqCalls = 0;
+  const second = await reg.dispatch({
+    taskClass: 'fast_chat',
+    messages: [{ role: 'user', content: 'test' }]
+  });
+  assert.ok(second);
+  assert.equal(second.provider_id, 'local_vllm');
+  assert.equal(groqCalls, 0);
+  reg.dispose();
+});
+
 test('registry: explain works when enabled', () => {
   const reg = new ProviderRegistry({
     env: { ENABLE_FREECOMPUTE_CLOUD: '1' }

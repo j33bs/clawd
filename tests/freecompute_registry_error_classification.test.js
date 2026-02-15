@@ -23,7 +23,7 @@ test('classifyDispatchError: timeout', function () {
 test('classifyDispatchError: auth/config/http', function () {
   assert.equal(_test.classifyDispatchError({ code: 'PROVIDER_HTTP_ERROR', statusCode: 401, message: 'http 401' }), 'auth');
   assert.equal(_test.classifyDispatchError({ code: 'PROVIDER_HTTP_ERROR', statusCode: 403, message: 'http 403' }), 'auth');
+  assert.equal(_test.classifyDispatchError({ code: 'PROVIDER_HTTP_ERROR', statusCode: 429, message: 'http 429' }), 'rate_limit');
   assert.equal(_test.classifyDispatchError({ code: 'PROVIDER_HTTP_ERROR', statusCode: 404, message: 'http 404' }), 'config');
   assert.equal(_test.classifyDispatchError({ code: 'PROVIDER_HTTP_ERROR', statusCode: 500, message: 'http 500' }), 'http_error');
 });
-
