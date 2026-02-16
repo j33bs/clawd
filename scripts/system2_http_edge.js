@@ -208,6 +208,7 @@ function createEdgeServer(options = {}) {
       path: env.OPENCLAW_EDGE_AUDIT_PATH,
       rotateBytes: env.OPENCLAW_EDGE_AUDIT_ROTATE_BYTES,
       keep: env.OPENCLAW_EDGE_AUDIT_ROTATE_KEEP,
+      hashChain: env.OPENCLAW_EDGE_AUDIT_HASH_CHAIN,
     });
 
   if (!isLoopbackBind(bindHost)) {
