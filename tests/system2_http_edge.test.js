@@ -481,6 +481,52 @@ async function testHmacSigningAuth() {
   }
 }
 
+async function testHmacModeAllowsBearerFromLoopbackWhenEnabled() {
+  const upstream = http.createServer((req, res) => {
+    if (req.url === '/health') {
+      res.statusCode = 200;
+      res.end('ok\n');
+      return;
+    }
+    res.statusCode = 404;
+    res.end('nope\n');
+  });
+  const upstreamAddr = await listen(upstream);
+
+  const edge = createEdgeServer({
+    env: {
+      OPENCLAW_EDGE_HMAC_KEYS: 'k1:hmac_test_secret',
+      OPENCLAW_EDGE_ALLOW_BEARER_LOOPBACK: '1',
+      OPENCLAW_EDGE_TOKENS: 'userA:edge_token_a',
+      OPENCLAW_EDGE_RATE_PER_MIN: '1000',
+      OPENCLAW_EDGE_BURST: '1000',
+      OPENCLAW_EDGE_UPSTREAM_HOST: upstreamAddr.host,
+      OPENCLAW_EDGE_UPSTREAM_PORT: String(upstreamAddr.port),
+    },
+    bindHost: '127.0.0.1',
+    bindPort: 0,
+    upstreamHost: upstreamAddr.host,
+    upstreamPort: upstreamAddr.port,
+    logFn: () => {},
+    auditSink: { writeLine: () => {} },
+  });
+  const edgeAddr = await listen(edge.server);
+
+  try {
+    const ok = await requestJson({
+      host: edgeAddr.host,
+      port: edgeAddr.port,
+      method: 'GET',
+      path: '/health',
+      headers: { Authorization: 'Bearer edge_token_a' },
+    });
+    assert.equal(ok.statusCode, 200);
+  } finally {
+    await edge.close();
+    await new Promise((resolve) => upstream.close(resolve));
+  }
+}
+
 async function testAuditSinkWritesAndRotates() {
   const upstream = http.createServer((req, res) => {
     res.statusCode = 200;
@@ -552,6 +598,9 @@ async function main() {
 
   await testHmacSigningAuth();
   console.log('PASS HMAC signing auth (replay resistant)');
+
+  await testHmacModeAllowsBearerFromLoopbackWhenEnabled();
+  console.log('PASS HMAC mode can allow loopback Bearer (opt-in)');
 
   await testAuditSinkWritesAndRotates();
   console.log('PASS audit sink writes JSONL and rotates (no secrets)');
