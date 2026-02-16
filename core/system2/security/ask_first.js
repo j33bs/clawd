@@ -61,8 +61,11 @@ function requireApproval(action, ctx, detail = {}) {
   }
 
   // Operator session approval (local-only) is the simplest "yes".
-  if (hasOperatorSessionApproval(detail.env || process.env)) {
-    return { allowed: true, mechanism: 'operator_env' };
+  // The HTTP edge should pass allowOperatorEnv=false to avoid foot-guns.
+  if (detail.allowOperatorEnv !== false) {
+    if (hasOperatorSessionApproval(detail.env || process.env)) {
+      return { allowed: true, mechanism: 'operator_env' };
+    }
   }
 
   // Per-request approval token (edge).
@@ -82,4 +85,3 @@ module.exports = {
   parseApproveTokens,
   requireApproval
 };
-

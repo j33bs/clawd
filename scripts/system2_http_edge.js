@@ -16,10 +16,11 @@
 
 const http = require('node:http');
 const net = require('node:net');
-const { randomUUID } = require('node:crypto');
+const { randomUUID, createHash, createHmac, timingSafeEqual } = require('node:crypto');
 
 const { classifyRequest } = require('../core/system2/security/trust_boundary');
 const { requireApproval, ApprovalRequiredError } = require('../core/system2/security/ask_first');
+const { createAuditSink } = require('../core/system2/security/audit_sink');
 
 function nowUtcIso() {
   return new Date().toISOString();
@@ -43,6 +44,24 @@ function parseTokenMap(raw) {
   return out;
 }
 
+function parseKeyMap(raw) {
+  // Format: "id:secret,id2:secret2"
+  const out = new Map();
+  const s = String(raw || '').trim();
+  if (!s) return out;
+  for (const part of s.split(',')) {
+    const tok = part.trim();
+    if (!tok) continue;
+    const idx = tok.indexOf(':');
+    if (idx <= 0 || idx + 1 >= tok.length) continue;
+    const id = tok.slice(0, idx).trim();
+    const secret = tok.slice(idx + 1).trim();
+    if (!id || !secret) continue;
+    out.set(id, secret);
+  }
+  return out;
+}
+
 function extractBearer(req) {
   const hdr = req.headers && req.headers.authorization;
   if (!hdr) return null;
@@ -55,6 +74,41 @@ function safeHeaderString(value) {
   // Never log auth headers; keep this conservative.
   if (value == null) return '';
   return String(value);
+}
+
+function isLoopbackBind(host) {
+  if (host === '::1') return true;
+  if (host === '127.0.0.1') return true;
+  if (host.startsWith('127.')) return true; // 127/8
+  return false;
+}
+
+function isLoopbackRemote(remoteAddress) {
+  const a = String(remoteAddress || '');
+  if (!a) return false;
+  if (a === '127.0.0.1' || a === '::1') return true;
+  if (a.startsWith('::ffff:127.')) return true;
+  return false;
+}
+
+function sha256Hex(buf) {
+  const b = buf && Buffer.isBuffer(buf) ? buf : Buffer.from(buf || '');
+  return createHash('sha256').update(b).digest('hex');
+}
+
+function hmacHex(secret, msg) {
+  return createHmac('sha256', String(secret)).update(String(msg)).digest('hex');
+}
+
+function safeTimingEqualHex(expectedHex, providedHex) {
+  try {
+    const a = Buffer.from(String(expectedHex || ''), 'hex');
+    const b = Buffer.from(String(providedHex || ''), 'hex');
+    if (a.length !== b.length || a.length === 0) return false;
+    return timingSafeEqual(a, b);
+  } catch (_) {
+    return false;
+  }
 }
 
 class TokenBucket {
@@ -90,13 +144,31 @@ function createEdgeServer(options = {}) {
   const burst = Number(options.burst || env.OPENCLAW_EDGE_BURST || 10);
 
   const tokenMap = parseTokenMap(env.OPENCLAW_EDGE_TOKENS);
+  const hmacKeys = parseKeyMap(env.OPENCLAW_EDGE_HMAC_KEYS);
+  const hmacSkewSec = Number(env.OPENCLAW_EDGE_HMAC_SKEW_SEC || 60);
+  const allowBearerLoopback = String(env.OPENCLAW_EDGE_ALLOW_BEARER_LOOPBACK || '') === '1';
   const upstreamToken = String(env.OPENCLAW_EDGE_UPSTREAM_TOKEN || env.OPENCLAW_GATEWAY_TOKEN || '');
 
   const logFn = typeof options.logFn === 'function' ? options.logFn : (line) => process.stdout.write(line + '\n');
+  const auditSink =
+    options.auditSink ||
+    createAuditSink({
+      path: env.OPENCLAW_EDGE_AUDIT_PATH,
+      rotateBytes: env.OPENCLAW_EDGE_AUDIT_ROTATE_BYTES,
+      keep: env.OPENCLAW_EDGE_AUDIT_ROTATE_KEEP,
+    });
 
-  if (tokenMap.size === 0) {
-    const err = new Error('OPENCLAW_EDGE_TOKENS must be set (label:token,...)');
-    err.code = 'EDGE_NO_TOKENS';
+  if (!isLoopbackBind(bindHost)) {
+    if (String(env.OPENCLAW_EDGE_BIND_ALLOW_NONLOOPBACK || '') !== '1') {
+      const err = new Error('non-loopback bind requires OPENCLAW_EDGE_BIND_ALLOW_NONLOOPBACK=1');
+      err.code = 'EDGE_BIND_NONLOOPBACK_NOT_ALLOWED';
+      throw err;
+    }
+  }
+
+  if (tokenMap.size === 0 && hmacKeys.size === 0) {
+    const err = new Error('must set OPENCLAW_EDGE_TOKENS and/or OPENCLAW_EDGE_HMAC_KEYS');
+    err.code = 'EDGE_NO_AUTH';
     throw err;
   }
 
@@ -121,6 +193,11 @@ function createEdgeServer(options = {}) {
       return;
     }
     logFn(line);
+    try {
+      auditSink.writeLine(line);
+    } catch (_) {
+      // Fail-open on audit sink errors (console audit line already emitted).
+    }
   }
 
   function deny(res, statusCode, code) {
@@ -129,65 +206,78 @@ function createEdgeServer(options = {}) {
     res.end(JSON.stringify({ ok: false, error: code }) + '\n');
   }
 
-  function isBroadHttpRequest(req) {
+  function routePolicy(req) {
     const method = String(req.method || 'GET').toUpperCase();
-    if (method === 'GET' || method === 'HEAD' || method === 'OPTIONS') return false;
-    return true;
+    let pathname = '/';
+    try {
+      // URL constructor requires an origin; any local placeholder is fine.
+      pathname = new URL(String(req.url || '/'), 'http://edge.local').pathname || '/';
+    } catch (_) {}
+
+    if (method === 'GET' && (pathname === '/health' || pathname === '/status')) {
+      return { decision: 'allow', action: 'read_status', pathname };
+    }
+    if (method === 'OPTIONS' && (pathname === '/health' || pathname === '/status' || pathname.startsWith('/rpc/'))) {
+      return { decision: 'allow', action: 'preflight', pathname };
+    }
+    if (method === 'POST' && pathname.startsWith('/rpc/')) {
+      return { decision: 'require_approval', action: 'gateway_rpc', pathname };
+    }
+    return { decision: 'deny', action: 'deny', pathname };
+  }
+
+  function extractHmacHeaders(req) {
+    const tsHdr = req.headers['x-openclaw-timestamp'];
+    const kidHdr = req.headers['x-openclaw-keyid'];
+    const sigHdr = req.headers['x-openclaw-signature'];
+    const ts = Array.isArray(tsHdr) ? tsHdr[0] : tsHdr ? String(tsHdr) : '';
+    const keyId = Array.isArray(kidHdr) ? kidHdr[0] : kidHdr ? String(kidHdr) : '';
+    const sig = Array.isArray(sigHdr) ? sigHdr[0] : sigHdr ? String(sigHdr) : '';
+    return { ts, keyId, sig };
+  }
+
+  function verifyHmac({ req, body }) {
+    const { ts, keyId, sig } = extractHmacHeaders(req);
+    if (!ts || !keyId || !sig) return { ok: false };
+    const secret = hmacKeys.get(String(keyId));
+    if (!secret) return { ok: false };
+
+    const tsNum = Number(ts);
+    if (!Number.isFinite(tsNum)) return { ok: false };
+    const nowSec = Math.floor(Date.now() / 1000);
+    if (Math.abs(nowSec - tsNum) > Math.max(1, hmacSkewSec)) return { ok: false };
+
+    const method = String(req.method || 'GET').toUpperCase();
+    const path = String(req.url || '/');
+    const bodyHash = sha256Hex(body || Buffer.alloc(0));
+    const msg = `${method}\n${path}\n${String(tsNum)}\n${bodyHash}`;
+    const expected = hmacHex(secret, msg);
+    if (!safeTimingEqualHex(expected, sig)) return { ok: false };
+    return { ok: true, identity: String(keyId) };
   }
 
   const server = http.createServer((req, res) => {
     const requestId = randomUUID();
     const started = Date.now();
 
+    const policy = routePolicy(req);
+    if (policy.decision === 'deny') {
+      audit({
+        event_type: 'edge_route_denied',
+        request_id: requestId,
+        route: safeHeaderString(policy.pathname || '/'),
+        method: safeHeaderString(req.method || 'GET'),
+        status: 404
+      });
+      return deny(res, 404, 'not_found');
+    }
+
     const bearer = extractBearer(req);
-    const identity = bearer && tokenMap.has(bearer) ? tokenMap.get(bearer) : null;
-    const ctx = classifyRequest({ source: 'http_edge', identity: identity || undefined });
+    const bearerIdentity = bearer && tokenMap.has(bearer) ? tokenMap.get(bearer) : null;
+    const remoteAddr = req.socket && req.socket.remoteAddress;
+    const isLoopback = isLoopbackRemote(remoteAddr);
 
-    if (!identity) {
-      audit({
-        event_type: 'edge_auth_denied',
-        request_id: requestId,
-        route: safeHeaderString(req.url || '/'),
-        method: safeHeaderString(req.method || 'GET'),
-        status: 401
-      });
-      return deny(res, 401, 'unauthorized');
-    }
-
-    if (!bucketFor(identity).take(1)) {
-      audit({
-        event_type: 'edge_rate_limited',
-        request_id: requestId,
-        identity,
-        route: safeHeaderString(req.url || '/'),
-        method: safeHeaderString(req.method || 'GET'),
-        status: 429
-      });
-      res.setHeader('retry-after', '60');
-      return deny(res, 429, 'rate_limited');
-    }
-
-    const approveHeader = req.headers['x-openclaw-approve'];
-    const approveToken = Array.isArray(approveHeader) ? approveHeader[0] : approveHeader ? String(approveHeader) : '';
-
-    if (isBroadHttpRequest(req)) {
-      try {
-        requireApproval('gateway_rpc_broad', ctx, { approveToken, env });
-      } catch (error) {
-        const status = error && error.code === 'APPROVAL_REQUIRED' ? 403 : 500;
-        audit({
-          event_type: 'edge_approval_denied',
-          request_id: requestId,
-          identity,
-          route: safeHeaderString(req.url || '/'),
-          method: safeHeaderString(req.method || 'GET'),
-          status
-        });
-        return deny(res, status, 'approval_required');
-      }
-    }
-
-    // Buffer body (bounded) to enforce size limits and avoid streaming bodies into logs.
+    // Buffer body (bounded) to enforce size limits and to enable HMAC verification.
     const chunks = [];
     let total = 0;
     let tooLarge = false;
@@ -199,12 +289,11 @@ function createEdgeServer(options = {}) {
       if (total > maxBodyBytes) {
         tooLarge = true;
 
-        // Respond without destroying the underlying socket (avoid client-side hangups).
         audit({
           event_type: 'edge_body_too_large',
           request_id: requestId,
-          identity,
-          route: safeHeaderString(req.url || '/'),
+          identity: bearerIdentity || undefined,
+          route: safeHeaderString(policy.pathname || '/'),
           method: safeHeaderString(req.method || 'GET'),
           status: 413,
           bytes: total
@@ -225,11 +314,90 @@ function createEdgeServer(options = {}) {
     req.on('end', () => {
       if (tooLarge) return;
       const body = chunks.length ? Buffer.concat(chunks) : null;
+
+      // Authenticate: either HMAC (when configured/required) or Bearer (loopback-only option).
+      let identity = null;
+      if (hmacKeys.size > 0) {
+        const verified = verifyHmac({ req, body });
+        if (verified.ok) {
+          identity = verified.identity;
+        } else if (isLoopback && allowBearerLoopback && bearerIdentity) {
+          identity = bearerIdentity;
+        }
+      } else {
+        identity = bearerIdentity;
+      }
+
+      if (!identity) {
+        audit({
+          event_type: 'edge_auth_denied',
+          request_id: requestId,
+          route: safeHeaderString(policy.pathname || '/'),
+          method: safeHeaderString(req.method || 'GET'),
+          status: 401
+        });
+        return deny(res, 401, 'unauthorized');
+      }
+
+      if (!bucketFor(identity).take(1)) {
+        audit({
+          event_type: 'edge_rate_limited',
+          request_id: requestId,
+          identity,
+          route: safeHeaderString(policy.pathname || '/'),
+          method: safeHeaderString(req.method || 'GET'),
+          status: 429
+        });
+        res.setHeader('retry-after', '60');
+        return deny(res, 429, 'rate_limited');
+      }
+
+      const ctx = classifyRequest({ source: 'http_edge', identity: identity || undefined });
+      const approveHeader = req.headers['x-openclaw-approve'];
+      const approveToken = Array.isArray(approveHeader) ? approveHeader[0] : approveHeader ? String(approveHeader) : '';
+
+      if (policy.decision === 'require_approval') {
+        try {
+          requireApproval('gateway_rpc_broad', ctx, { approveToken, env, allowOperatorEnv: false });
+        } catch (error) {
+          const status = error && error.code === 'APPROVAL_REQUIRED' ? 403 : 500;
+          audit({
+            event_type: 'edge_approval_denied',
+            request_id: requestId,
+            identity,
+            route: safeHeaderString(policy.pathname || '/'),
+            method: safeHeaderString(req.method || 'GET'),
+            status
+          });
+          return deny(res, status, 'approval_required');
+        }
+      }
+
+      // OPTIONS requests never proxy upstream.
+      if (String(req.method || 'GET').toUpperCase() === 'OPTIONS') {
+        res.statusCode = 204;
+        res.setHeader('cache-control', 'no-store');
+        res.end();
+        audit({
+          event_type: 'edge_request',
+          request_id: requestId,
+          identity,
+          route: safeHeaderString(policy.pathname || '/'),
+          method: safeHeaderString(req.method || 'GET'),
+          status: 204,
+          latency_ms: Date.now() - started
+        });
+        return;
+      }
+
       const upstreamHeaders = { ...req.headers };
       delete upstreamHeaders.host;
       // Do not forward edge client authorization header.
       delete upstreamHeaders.authorization;
       delete upstreamHeaders['x-openclaw-approve'];
+      delete upstreamHeaders['x-openclaw-keyid'];
+      delete upstreamHeaders['x-openclaw-timestamp'];
+      delete upstreamHeaders['x-openclaw-signature'];
 
       if (upstreamToken) {
         upstreamHeaders.authorization = `Bearer ${upstreamToken}`;
@@ -260,7 +428,7 @@ function createEdgeServer(options = {}) {
               event_type: 'edge_request',
               request_id: requestId,
               identity,
-              route: safeHeaderString(req.url || '/'),
+              route: safeHeaderString(policy.pathname || '/'),
               method: safeHeaderString(req.method || 'GET'),
               status: res.statusCode,
               latency_ms: Date.now() - started
@@ -299,15 +467,50 @@ function createEdgeServer(options = {}) {
     const requestId = randomUUID();
     const started = Date.now();
 
+    let pathname = '/';
+    try {
+      pathname = new URL(String(req.url || '/'), 'http://edge.local').pathname || '/';
+    } catch (_) {}
+
+    if (!pathname.startsWith('/rpc/')) {
+      audit({
+        event_type: 'edge_ws_route_denied',
+        request_id: requestId,
+        route: safeHeaderString(pathname || '/'),
+        status: 404
+      });
+      socket.write('HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\n');
+      socket.destroy();
+      return;
+    }
+
     const bearer = extractBearer(req);
-    const identity = bearer && tokenMap.has(bearer) ? tokenMap.get(bearer) : null;
+    const bearerIdentity = bearer && tokenMap.has(bearer) ? tokenMap.get(bearer) : null;
+    const remoteAddr = req.socket && req.socket.remoteAddress;
+    const isLoopback = isLoopbackRemote(remoteAddr);
+    let identity = null;
+
+    // For websocket upgrades, require approval and authenticate.
+    // In HMAC mode, require HMAC unless loopback+allowBearerLoopback.
+    if (hmacKeys.size > 0) {
+      // WebSocket upgrade requests have no meaningful HTTP body; sign with empty body hash.
+      const verified = verifyHmac({ req, body: Buffer.alloc(0) });
+      if (verified.ok) {
+        identity = verified.identity;
+      } else if (isLoopback && allowBearerLoopback && bearerIdentity) {
+        identity = bearerIdentity;
+      }
+    } else {
+      identity = bearerIdentity;
+    }
+
     const ctx = classifyRequest({ source: 'http_edge', identity: identity || undefined });
 
     if (!identity) {
       audit({
         event_type: 'edge_ws_auth_denied',
         request_id: requestId,
-        route: safeHeaderString(req.url || '/'),
+        route: safeHeaderString(pathname || '/'),
         status: 401
       });
       socket.write('HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n');
@@ -320,7 +523,7 @@ function createEdgeServer(options = {}) {
         event_type: 'edge_ws_rate_limited',
         request_id: requestId,
         identity,
-        route: safeHeaderString(req.url || '/'),
+        route: safeHeaderString(pathname || '/'),
         status: 429
       });
       socket.write('HTTP/1.1 429 Too Many Requests\r\nConnection: close\r\nRetry-After: 60\r\n\r\n');
@@ -332,14 +535,14 @@ function createEdgeServer(options = {}) {
     const approveHeader = req.headers['x-openclaw-approve'];
     const approveToken = Array.isArray(approveHeader) ? approveHeader[0] : approveHeader ? String(approveHeader) : '';
     try {
-      requireApproval('gateway_rpc_broad', ctx, { approveToken, env });
+      requireApproval('gateway_rpc_broad', ctx, { approveToken, env, allowOperatorEnv: false });
     } catch (error) {
       const statusLine = error instanceof ApprovalRequiredError ? 'HTTP/1.1 403 Forbidden' : 'HTTP/1.1 500 Internal Server Error';
       audit({
         event_type: 'edge_ws_approval_denied',
         request_id: requestId,
         identity,
-        route: safeHeaderString(req.url || '/'),
+        route: safeHeaderString(pathname || '/'),
         status: 403,
         latency_ms: Date.now() - started
       });
@@ -384,7 +587,7 @@ function createEdgeServer(options = {}) {
         event_type: 'edge_ws_upstream_error',
         request_id: requestId,
         identity,
-        route: safeHeaderString(req.url || '/'),
+        route: safeHeaderString(pathname || '/'),
         status: 502,
         latency_ms: Date.now() - started
       });
@@ -420,5 +623,6 @@ if (require.main === module) {
 
 module.exports = {
   createEdgeServer,
-  parseTokenMap
+  parseTokenMap,
+  parseKeyMap
 };
