@@ -7,6 +7,7 @@ import json
 import os
 import re
 import shutil
+import stat
 import subprocess
 import sys
 import time
@@ -73,6 +74,14 @@ _KNOWN_GOV_ROOT_STRAYS = (
 _TEAMMATE_ALLOWLIST_PREFIX = "core/integration/"
 _TEAMMATE_ALLOWLIST_EXTS = (".js", ".mjs", ".ts")
 _TEAMMATE_MAX_BYTES = 256 * 1024
+
+# Known non-governance strays that should never live untracked in the repo.
+# Policy: if present as untracked, auto-move them into the operator's home OpenClaw
+# directory (backup-first) so preflight can continue fail-closed on *other* drift.
+_KNOWN_SYSTEM2_STRAYS = (
+    "moltbook_registration_plan.md",
+    ".openclaw/workspace-state.json",
+)
 
 
 def fail(msg, fixes, failures):
@@ -476,6 +485,111 @@ def _auto_ingest_known_gov_root_strays(repo_root: Path) -> Optional[Dict[str, An
     return {"stopped": False, "moved": moved, "backups": backups}
 
 
+def _auto_ingest_known_system2_strays(repo_root: Path) -> Optional[Dict[str, Any]]:
+    """
+    System-2 drift guard helper:
+      - If specific known-untracked files appear (from model/tooling drift),
+        move them out of the repo into ~/.openclaw (backup-first).
+      - Fail closed on non-regular files (symlinks/dirs) to avoid surprise moves.
+
+    This is intentionally narrow (exact paths only) to preserve STOP behavior for
+    unrelated drift.
+    """
+    # Fail-closed filesystem gate: git status may report only the parent directory
+    # as untracked (e.g. "?? .openclaw/"), so always check the exact known paths
+    # directly without relying on status enumeration.
+    for rel in _KNOWN_SYSTEM2_STRAYS:
+        abs_p = repo_root / rel
+        try:
+            st = abs_p.lstat()
+        except FileNotFoundError:
+            continue
+        except Exception:
+            print("STOP (fail-closed: could not lstat known stray path)")
+            print(f"path={rel}")
+            return {"stopped": True, "error": "lstat_failed", "path": rel}
+
+        if stat.S_ISLNK(st.st_mode) or stat.S_ISDIR(st.st_mode):
+            kind = "symlink" if stat.S_ISLNK(st.st_mode) else "dir"
+            print("STOP (fail-closed: known stray path exists as dir/symlink)")
+            print(f"path={rel}")
+            print(f"kind={kind}")
+            return {"stopped": True, "error": "known_stray_non_regular_file", "path": rel, "kind": kind}
+
+    untracked = set(_untracked_paths(repo_root))
+    if not untracked:
+        return None
+
+    targets: List[str] = []
+    for p in _KNOWN_SYSTEM2_STRAYS:
+        if p in untracked:
+            targets.append(p)
+
+    if not targets:
+        return None
+
+    stamp = _ts_suffix()
+    home = Path.home()
+    openclaw_home = (home / ".openclaw").resolve()
+    ingest_dir = openclaw_home / "ingest"
+    openclaw_home.mkdir(parents=True, exist_ok=True)
+    ingest_dir.mkdir(parents=True, exist_ok=True)
+
+    moved: List[Dict[str, str]] = []
+    backups: List[str] = []
+
+    # Validate full set before moving anything (atomicity).
+    for rel in targets:
+        src = repo_root / rel
+        if not src.exists():
+            # Git status said it's untracked; fail closed if it vanished.
+            print("STOP (system2 stray ingest missing expected file)")
+            print(f"path={rel}")
+            return {"stopped": True, "error": "missing_expected_file", "missing": rel}
+        if src.is_symlink() or not src.is_file():
+            print("STOP (system2 stray ingest requires regular files; no symlinks/dirs)")
+            print(f"path={rel}")
+            kind = "symlink" if src.is_symlink() else "non_file"
+            return {"stopped": True, "error": "non_regular_file", "path": rel, "kind": kind}
+
+    for rel in targets:
+        src = repo_root / rel
+        # Destination policy:
+        # - workspace-state.json belongs in ~/.openclaw/
+        # - other docs go under ~/.openclaw/ingest/
+        if rel == ".openclaw/workspace-state.json":
+            dest = openclaw_home / "workspace-state.json"
+        else:
+            dest = ingest_dir / Path(rel).name
+
+        if dest.exists():
+            backup = dest.with_name(dest.name + f".bak-{stamp}")
+            dest.rename(backup)
+            backups.append(str(backup))
+
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(src), str(dest))
+        moved.append({"from": rel, "to": str(dest)})
+
+    # Sanity: ensure these paths are no longer untracked.
+    remaining = set(_untracked_paths(repo_root))
+    still = [p for p in targets if p in remaining]
+    if still:
+        print("FAIL: known strays remain untracked after auto-ingest")
+        for p in still:
+            print(f"- {p}")
+        return {"stopped": True, "error": "post_ingest_untracked_remaining", "moved": moved, "backups": backups}
+
+    print("system2_stray_auto_ingest: ok")
+    print("moved:")
+    for m in moved:
+        print(f"- {m['from']} -> {m['to']}")
+    print("backups:")
+    for b in backups:
+        print(f"- {b}")
+    return {"stopped": False, "moved": moved, "backups": backups}
+
+
 def check_policy(failures):
     data = load_json(POLICY_FILE)
     if not data:
@@ -584,6 +698,10 @@ def check_telegram(failures, warnings):
 def main():
     failures = []
     warnings = []
+
+    sys2_ingest = _auto_ingest_known_system2_strays(BASE_DIR)
+    if sys2_ingest and sys2_ingest.get("stopped"):
+        sys.exit(2)
 
     ingest = _auto_ingest_known_gov_root_strays(BASE_DIR)
     if ingest and ingest.get("stopped"):
