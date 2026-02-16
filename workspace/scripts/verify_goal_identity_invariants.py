@@ -4,6 +4,7 @@ Fail-closed verifier for repo-level security/governance invariants.
 No network. No secret output. Deterministic checks only.
 """
 
+import argparse
 import json
 import subprocess
 import sys
@@ -70,9 +71,60 @@ def walk_strings(obj):
                 yield k
             yield from walk_strings(v)
 
+def warn(msg: str) -> None:
+    print(f"WARN: {msg}", file=sys.stderr)
+
+
+def parse_args(argv):
+    ap = argparse.ArgumentParser(add_help=True)
+    ap.add_argument("--repo-root", default=None, help="override repo root for testing/fixtures")
+    ap.add_argument("--strict", action="store_true", help="treat warnings as failures")
+    return ap.parse_args(argv)
+
+
+def bypass_scan(repo: Path):
+    """
+    Warn-only scan for likely bypass patterns.
+    This is intentionally conservative and not exhaustive.
+    """
+    warnings = []
+
+    # Scan tracked JS/TS in a small, high-risk surface area only.
+    r = git(repo, ["ls-files", "--", "core", "scripts", "workspace/scripts"])
+    if r.returncode != 0:
+        return warnings
+    paths = [p for p in (r.stdout or "").splitlines() if p]
+
+    needles = (
+        "child_process.exec(",
+        "child_process.execSync(",
+        "child_process.spawn(",
+    )
+
+    for rel in paths:
+        p = repo / rel
+        if p.suffix not in (".js", ".mjs", ".cjs", ".ts"):
+            continue
+        try:
+            text = p.read_text(encoding="utf-8", errors="replace")
+        except Exception:
+            continue
+
+        if any(n in text for n in needles):
+            warnings.append(f"bypass_scan child_process use in {rel}")
+
+        # Flag obvious "never log auth headers" violations.
+        for line in text.splitlines():
+            if "console.log" in line and ("Bearer " in line or "authorization" in line.lower()):
+                warnings.append(f"bypass_scan console.log auth-ish line in {rel}")
+                break
+
+    return warnings
+
 
 def main() -> int:
-    repo = Path(__file__).resolve().parents[2]
+    args = parse_args(sys.argv[1:])
+    repo = Path(args.repo_root).resolve() if args.repo_root else Path(__file__).resolve().parents[2]
 
     # Governance anchors must exist and include identity/objective strings.
     contract = repo / "workspace" / "governance" / "SECURITY_GOVERNANCE_CONTRACT.md"
@@ -144,9 +196,17 @@ def main() -> int:
     if removed:
         die("canonical models contains openai/openai-codex model-id prefixes")
 
+    # Warn-only bypass scans (promotable via --strict).
+    warnings = bypass_scan(repo)
+    if warnings:
+        warn("BYPASS SCAN WARNINGS:")
+        for w in warnings:
+            warn(w)
+        if args.strict:
+            die("strict mode: bypass scan warnings present")
+
     return 0
 
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
