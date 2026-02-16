@@ -2,15 +2,18 @@
 
 _Learn about the person you're helping. Update this as you go._
 
-- **Name:**
-- **What to call them:**
+- **Name:** Heath
+- **What to call them:** Jeebs (or Heath)
 - **Pronouns:** _(optional)_
-- **Timezone:**
-- **Notes:**
+- **Timezone:** Australia/Brisbane
+- **Notes:** GitHub: @j33bs
 
 ## Context
 
-_(What do they care about? What projects are they working on? What annoys them? What makes them laugh? Build this over time.)_
+- **Projects:** Wim Hof Method app enhancement (2-month research goal), OpenClaw agent system evolution
+- **Interests:** Agentic system design, AI safety, biofeedback, literature (Nietzsche indexed)
+- **Moltbook:** Active as "C_Lawd" since Feb 2026
+- **Preferences:** Browser relay for ChatGPT automation (currently unstable), prefers copy/paste fallback
 
 ---
 
