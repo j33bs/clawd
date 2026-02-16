@@ -6,6 +6,7 @@
 # - Creates/updates runtime auth-profiles.json in:
 #   - ~/.clawdbot/agents/main/agent/auth-profiles.json
 #   - ~/.clawd/agents/main/agent/auth-profiles.json
+#   - ~/.openclaw/agents/main/agent/auth-profiles.json
 # - Ensures profile stubs exist (env references only where applicable):
 #   - google-gemini-cli:default -> type=api_key, apiKeyEnv=GEMINI_API_KEY
 #   - groq:default            -> type=api_key, apiKeyEnv=GROQ_API_KEY
@@ -18,7 +19,7 @@ set -eu
 
 ts="$(date +%Y%m%d-%H%M%S)"
 
-runtime_agent_dirs="$HOME/.clawdbot/agents/main/agent $HOME/.clawd/agents/main/agent"
+runtime_agent_dirs="$HOME/.clawdbot/agents/main/agent $HOME/.clawd/agents/main/agent $HOME/.openclaw/agents/main/agent"
 
 for agent_dir in $runtime_agent_dirs; do
   mkdir -p "$agent_dir"
@@ -86,18 +87,55 @@ if not isinstance(order, dict):
   order = {}
   j["order"] = order
 
-def ensure_order(provider, pid):
-  cur = order.get(provider)
-  if not isinstance(cur, list):
-    cur = []
+def _list(x):
+  return x if isinstance(x, list) else []
+
+def _uniq(seq):
+  out = []
+  seen = set()
+  for v in seq:
+    if v in seen:
+      continue
+    seen.add(v)
+    out.append(v)
+  return out
+
+def ensure_in_order(provider, pid):
+  cur = _list(order.get(provider))
   if pid not in cur:
-    cur.insert(0, pid)
+    cur.append(pid)
   order[provider] = cur
 
-ensure_order("google-gemini-cli", "google-gemini-cli:default")
-ensure_order("groq", "groq:default")
-ensure_order("qwen-portal", "qwen-portal:default")
-ensure_order("ollama", "ollama:default")
+def prioritize(provider, preferred_ids):
+  cur = _list(order.get(provider))
+  # Keep any existing ids, but move preferred ids to the front in the order provided.
+  pref = [pid for pid in preferred_ids if pid in profiles]
+  rest = [pid for pid in cur if pid not in pref]
+  order[provider] = _uniq(pref + rest)
+
+# Ensure each provider has at least one selectable profile id.
+ensure_in_order("google-gemini-cli", "google-gemini-cli:default")
+ensure_in_order("groq", "groq:default")
+ensure_in_order("qwen-portal", "qwen-portal:default")
+ensure_in_order("ollama", "ollama:default")
+
+# Prefer OAuth Gemini profiles over the env-key fallback, when present.
+gemini_oauth = sorted(
+  [pid for pid, p in profiles.items()
+   if isinstance(p, dict) and p.get("provider") == "google-gemini-cli" and p.get("type") == "oauth"]
+)
+if gemini_oauth:
+  # Keep OAuth-first, then the env fallback.
+  prioritize("google-gemini-cli", gemini_oauth + ["google-gemini-cli:default"])
+else:
+  prioritize("google-gemini-cli", ["google-gemini-cli:default"])
+
+# For local floor, force the no-auth profile first.
+prioritize("ollama", ["ollama:default"])
+
+# Keep single-stub providers stable.
+prioritize("groq", ["groq:default"])
+prioritize("qwen-portal", ["qwen-portal:default"])
 
 path.write_text(json.dumps(j, indent=2, sort_keys=True) + "\n")
 print("\n".join(added))
