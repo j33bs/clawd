@@ -577,6 +577,166 @@ async function testAuditSinkWritesAndRotates() {
   }
 }
 
+async function testTokensAndHmacKeysFilePermissions() {
+  if (process.platform === 'win32') {
+    console.log('SKIP tokens/hmac keys file perms on win32');
+    return;
+  }
+
+  const upstream = http.createServer((req, res) => {
+    res.statusCode = 200;
+    res.end('ok\n');
+  });
+  const upstreamAddr = await listen(upstream);
+
+  const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'openclaw-edge-secrets-'));
+  const tokensPath = path.join(tmpRoot, 'tokens.txt');
+  const keysPath = path.join(tmpRoot, 'keys.txt');
+
+  fs.writeFileSync(tokensPath, 'userA:edge_token_a\n', { encoding: 'utf8' });
+  fs.writeFileSync(keysPath, 'k1:hmac_test_secret\n', { encoding: 'utf8' });
+
+  fs.chmodSync(tokensPath, 0o644);
+  assert.throws(
+    () =>
+      createEdgeServer({
+        env: {
+          OPENCLAW_EDGE_TOKENS_FILE: tokensPath,
+          OPENCLAW_EDGE_UPSTREAM_HOST: upstreamAddr.host,
+          OPENCLAW_EDGE_UPSTREAM_PORT: String(upstreamAddr.port),
+        },
+        bindHost: '127.0.0.1',
+        bindPort: 0,
+        upstreamHost: upstreamAddr.host,
+        upstreamPort: upstreamAddr.port,
+        logFn: () => {},
+        auditSink: { writeLine: () => {} },
+      }),
+    /permissions 0600/i
+  );
+
+  fs.chmodSync(tokensPath, 0o600);
+  const edgeOk = createEdgeServer({
+    env: {
+      OPENCLAW_EDGE_TOKENS_FILE: tokensPath,
+      OPENCLAW_EDGE_RATE_PER_MIN: '1000',
+      OPENCLAW_EDGE_BURST: '1000',
+      OPENCLAW_EDGE_UPSTREAM_HOST: upstreamAddr.host,
+      OPENCLAW_EDGE_UPSTREAM_PORT: String(upstreamAddr.port),
+    },
+    bindHost: '127.0.0.1',
+    bindPort: 0,
+    upstreamHost: upstreamAddr.host,
+    upstreamPort: upstreamAddr.port,
+    logFn: () => {},
+    auditSink: { writeLine: () => {} },
+  });
+  const addr = await listen(edgeOk.server);
+  assert.ok(addr.port > 0);
+  await edgeOk.close();
+
+  fs.chmodSync(keysPath, 0o644);
+  assert.throws(
+    () =>
+      createEdgeServer({
+        env: {
+          OPENCLAW_EDGE_HMAC_KEYS_FILE: keysPath,
+          OPENCLAW_EDGE_UPSTREAM_HOST: upstreamAddr.host,
+          OPENCLAW_EDGE_UPSTREAM_PORT: String(upstreamAddr.port),
+        },
+        bindHost: '127.0.0.1',
+        bindPort: 0,
+        upstreamHost: upstreamAddr.host,
+        upstreamPort: upstreamAddr.port,
+        logFn: () => {},
+        auditSink: { writeLine: () => {} },
+      }),
+    /permissions 0600/i
+  );
+
+  fs.chmodSync(keysPath, 0o600);
+  const edgeOk2 = createEdgeServer({
+    env: {
+      OPENCLAW_EDGE_HMAC_KEYS_FILE: keysPath,
+      OPENCLAW_EDGE_RATE_PER_MIN: '1000',
+      OPENCLAW_EDGE_BURST: '1000',
+      OPENCLAW_EDGE_UPSTREAM_HOST: upstreamAddr.host,
+      OPENCLAW_EDGE_UPSTREAM_PORT: String(upstreamAddr.port),
+    },
+    bindHost: '127.0.0.1',
+    bindPort: 0,
+    upstreamHost: upstreamAddr.host,
+    upstreamPort: upstreamAddr.port,
+    logFn: () => {},
+    auditSink: { writeLine: () => {} },
+  });
+  const addr2 = await listen(edgeOk2.server);
+  assert.ok(addr2.port > 0);
+  await edgeOk2.close();
+
+  await new Promise((resolve) => upstream.close(resolve));
+}
+
+async function testInflightCapsAndTimeoutConfig() {
+  const upstream = http.createServer((req, res) => {
+    if (req.url === '/health') {
+      res.statusCode = 200;
+      res.end('ok\n');
+      return;
+    }
+    res.statusCode = 200;
+    res.end('ok\n');
+  });
+  const upstreamAddr = await listen(upstream);
+
+  const prevNodeEnv = process.env.NODE_ENV;
+  const prevDelay = process.env.OPENCLAW_EDGE_TEST_DELAY_MS;
+  process.env.NODE_ENV = 'test';
+  process.env.OPENCLAW_EDGE_TEST_DELAY_MS = '80';
+
+  const edge = createEdgeServer({
+    env: {
+      OPENCLAW_EDGE_TOKENS: 'userA:edge_token_a',
+      OPENCLAW_EDGE_RATE_PER_MIN: '1000',
+      OPENCLAW_EDGE_BURST: '1000',
+      OPENCLAW_EDGE_MAX_INFLIGHT_GLOBAL: '1',
+      OPENCLAW_EDGE_MAX_INFLIGHT_PER_IDENTITY: '1',
+      OPENCLAW_EDGE_HEADERS_TIMEOUT_MS: '1234',
+      OPENCLAW_EDGE_REQUEST_TIMEOUT_MS: '2345',
+      OPENCLAW_EDGE_UPSTREAM_HOST: upstreamAddr.host,
+      OPENCLAW_EDGE_UPSTREAM_PORT: String(upstreamAddr.port),
+    },
+    bindHost: '127.0.0.1',
+    bindPort: 0,
+    upstreamHost: upstreamAddr.host,
+    upstreamPort: upstreamAddr.port,
+    logFn: () => {},
+    auditSink: { writeLine: () => {} },
+  });
+  const edgeAddr = await listen(edge.server);
+
+  try {
+    assert.equal(edge.server.headersTimeout, 1234);
+    assert.equal(edge.server.requestTimeout, 2345);
+
+    const headers = { Authorization: 'Bearer edge_token_a' };
+    const p1 = requestJson({ host: edgeAddr.host, port: edgeAddr.port, method: 'GET', path: '/health', headers });
+    const p2 = requestJson({ host: edgeAddr.host, port: edgeAddr.port, method: 'GET', path: '/health', headers });
+    const r2 = await p2;
+    assert.equal(r2.statusCode, 429);
+    const r1 = await p1;
+    assert.equal(r1.statusCode, 200);
+  } finally {
+    if (prevNodeEnv == null) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = prevNodeEnv;
+    if (prevDelay == null) delete process.env.OPENCLAW_EDGE_TEST_DELAY_MS;
+    else process.env.OPENCLAW_EDGE_TEST_DELAY_MS = prevDelay;
+
+    await edge.close();
+    await new Promise((resolve) => upstream.close(resolve));
+  }
+}
+
 async function main() {
   await testAuthAndNoSecretLogs();
   console.log('PASS edge rejects missing/invalid auth and does not log secrets');
@@ -604,6 +764,12 @@ async function main() {
 
   await testAuditSinkWritesAndRotates();
   console.log('PASS audit sink writes JSONL and rotates (no secrets)');
+
+  await testTokensAndHmacKeysFilePermissions();
+  console.log('PASS tokens/hmac keys file mode is enforced (0600)');
+
+  await testInflightCapsAndTimeoutConfig();
+  console.log('PASS inflight caps + timeouts are enforced/configured');
 
   console.log('system2_http_edge tests complete');
 }

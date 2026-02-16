@@ -17,6 +17,7 @@
 const http = require('node:http');
 const net = require('node:net');
 const { randomUUID, createHash, createHmac, timingSafeEqual } = require('node:crypto');
+const fs = require('node:fs');
 
 const { classifyRequest } = require('../core/system2/security/trust_boundary');
 const { requireApproval, ApprovalRequiredError } = require('../core/system2/security/ask_first');
@@ -60,6 +61,47 @@ function parseKeyMap(raw) {
     out.set(id, secret);
   }
   return out;
+}
+
+function requireSecretsFile0600(filePath, { strictPerms } = {}) {
+  const p = String(filePath || '').trim();
+  if (!p) return;
+
+  let st;
+  try {
+    st = fs.lstatSync(p);
+  } catch (_) {
+    const err = new Error(`secrets file not found: ${p}`);
+    err.code = 'EDGE_SECRETS_FILE_MISSING';
+    throw err;
+  }
+
+  if (!st.isFile()) {
+    const err = new Error(`secrets file must be a regular file: ${p}`);
+    err.code = 'EDGE_SECRETS_FILE_NOT_REGULAR';
+    throw err;
+  }
+
+  if (typeof st.isSymbolicLink === 'function' && st.isSymbolicLink()) {
+    const err = new Error(`secrets file must not be a symlink: ${p}`);
+    err.code = 'EDGE_SECRETS_FILE_SYMLINK';
+    throw err;
+  }
+
+  if (strictPerms) {
+    const mode = st.mode & 0o777;
+    if (mode !== 0o600) {
+      const err = new Error(`secrets file must have permissions 0600: ${p}`);
+      err.code = 'EDGE_SECRETS_FILE_BAD_MODE';
+      throw err;
+    }
+  }
+}
+
+function readSecretsFile(filePath, { strictPerms } = {}) {
+  const p = String(filePath || '').trim();
+  requireSecretsFile0600(p, { strictPerms });
+  return String(fs.readFileSync(p, 'utf8') || '').trim();
 }
 
 function extractBearer(req) {
@@ -143,11 +185,21 @@ function createEdgeServer(options = {}) {
   const ratePerMinute = Number(options.ratePerMinute || env.OPENCLAW_EDGE_RATE_PER_MIN || 30);
   const burst = Number(options.burst || env.OPENCLAW_EDGE_BURST || 10);
 
-  const tokenMap = parseTokenMap(env.OPENCLAW_EDGE_TOKENS);
-  const hmacKeys = parseKeyMap(env.OPENCLAW_EDGE_HMAC_KEYS);
+  const strictPerms = process.platform !== 'win32';
+  const tokensFile = String(env.OPENCLAW_EDGE_TOKENS_FILE || '').trim();
+  const hmacKeysFile = String(env.OPENCLAW_EDGE_HMAC_KEYS_FILE || '').trim();
+
+  // Prefer file-based secrets to avoid env leakage via process listing.
+  const tokenMap = parseTokenMap(tokensFile ? readSecretsFile(tokensFile, { strictPerms }) : env.OPENCLAW_EDGE_TOKENS);
+  const hmacKeys = parseKeyMap(hmacKeysFile ? readSecretsFile(hmacKeysFile, { strictPerms }) : env.OPENCLAW_EDGE_HMAC_KEYS);
   const hmacSkewSec = Number(env.OPENCLAW_EDGE_HMAC_SKEW_SEC || 60);
   const allowBearerLoopback = String(env.OPENCLAW_EDGE_ALLOW_BEARER_LOOPBACK || '') === '1';
   const upstreamToken = String(env.OPENCLAW_EDGE_UPSTREAM_TOKEN || env.OPENCLAW_GATEWAY_TOKEN || '');
+
+  const maxInflightGlobal = Number(env.OPENCLAW_EDGE_MAX_INFLIGHT_GLOBAL || 32);
+  const maxInflightPerIdentity = Number(env.OPENCLAW_EDGE_MAX_INFLIGHT_PER_IDENTITY || 8);
+  const headersTimeoutMs = Number(env.OPENCLAW_EDGE_HEADERS_TIMEOUT_MS || 5000);
+  const requestTimeoutMs = Number(env.OPENCLAW_EDGE_REQUEST_TIMEOUT_MS || 15000);
 
   const logFn = typeof options.logFn === 'function' ? options.logFn : (line) => process.stdout.write(line + '\n');
   const auditSink =
@@ -173,6 +225,8 @@ function createEdgeServer(options = {}) {
   }
 
   const buckets = new Map(); // identity -> TokenBucket
+  let inflightGlobal = 0;
+  const inflightByIdentity = new Map(); // identity -> count
 
   function bucketFor(identity) {
     if (!buckets.has(identity)) {
@@ -204,6 +258,30 @@ function createEdgeServer(options = {}) {
     res.statusCode = statusCode;
     res.setHeader('content-type', 'application/json; charset=utf-8');
     res.end(JSON.stringify({ ok: false, error: code }) + '\n');
+  }
+
+  function incInflight(identity) {
+    const id = String(identity || 'anonymous');
+    const per = inflightByIdentity.get(id) || 0;
+    if (inflightGlobal + 1 > maxInflightGlobal) return { ok: false, id, scope: 'global' };
+    if (per + 1 > maxInflightPerIdentity) return { ok: false, id, scope: 'identity' };
+    inflightGlobal += 1;
+    inflightByIdentity.set(id, per + 1);
+    return { ok: true, id };
+  }
+
+  function decInflight(id) {
+    if (!id) return;
+    const per = inflightByIdentity.get(id) || 0;
+    if (per <= 1) inflightByIdentity.delete(id);
+    else inflightByIdentity.set(id, per - 1);
+    inflightGlobal = Math.max(0, inflightGlobal - 1);
+  }
+
+  function getTestDelayMs() {
+    if (process.env.NODE_ENV !== 'test') return 0;
+    const ms = Number(process.env.OPENCLAW_EDGE_TEST_DELAY_MS || 0);
+    return Number.isFinite(ms) && ms > 0 ? ms : 0;
   }
 
   function routePolicy(req) {
@@ -339,6 +417,31 @@ function createEdgeServer(options = {}) {
         return deny(res, 401, 'unauthorized');
       }
 
+      const inflight = incInflight(identity);
+      if (!inflight.ok) {
+        audit({
+          event_type: 'edge_busy',
+          request_id: requestId,
+          identity,
+          route: safeHeaderString(policy.pathname || '/'),
+          method: safeHeaderString(req.method || 'GET'),
+          status: 429,
+          scope: inflight.scope
+        });
+        return deny(res, 429, 'busy');
+      }
+
+      const inflightId = inflight.id;
+      let finished = false;
+      function finishOnce() {
+        if (finished) return;
+        finished = true;
+        decInflight(inflightId);
+      }
+      res.on('finish', finishOnce);
+      res.on('close', finishOnce);
+      req.on('aborted', finishOnce);
+
       if (!bucketFor(identity).take(1)) {
         audit({
           event_type: 'edge_rate_limited',
@@ -349,6 +452,7 @@ function createEdgeServer(options = {}) {
           status: 429
         });
         res.setHeader('retry-after', '60');
+        finishOnce();
         return deny(res, 429, 'rate_limited');
       }
 
@@ -369,6 +473,7 @@ function createEdgeServer(options = {}) {
             method: safeHeaderString(req.method || 'GET'),
             status
           });
+          finishOnce();
           return deny(res, status, 'approval_required');
         }
       }
@@ -387,9 +492,19 @@ function createEdgeServer(options = {}) {
           status: 204,
           latency_ms: Date.now() - started
         });
+        finishOnce();
         return;
       }
 
+      const delayMs = getTestDelayMs();
+      if (delayMs > 0) {
+        setTimeout(proxyUpstream, delayMs);
+        return;
+      }
+
+      proxyUpstream();
+
+      function proxyUpstream() {
       const upstreamHeaders = { ...req.headers };
       delete upstreamHeaders.host;
       // Do not forward edge client authorization header.
@@ -433,6 +548,7 @@ function createEdgeServer(options = {}) {
               status: res.statusCode,
               latency_ms: Date.now() - started
             });
+            finishOnce();
           });
         }
       );
@@ -456,12 +572,17 @@ function createEdgeServer(options = {}) {
           status: 502,
           latency_ms: Date.now() - started
         });
+        finishOnce();
       });
 
       if (body) upstreamReq.write(body);
       upstreamReq.end();
+      }
     });
   });
+
+  server.headersTimeout = headersTimeoutMs;
+  server.requestTimeout = requestTimeoutMs;
 
   server.on('upgrade', (req, socket, head) => {
     const requestId = randomUUID();
@@ -518,6 +639,31 @@ function createEdgeServer(options = {}) {
       return;
     }
 
+    const inflight = incInflight(identity);
+    if (!inflight.ok) {
+      audit({
+        event_type: 'edge_ws_busy',
+        request_id: requestId,
+        identity,
+        route: safeHeaderString(pathname || '/'),
+        status: 429,
+        scope: inflight.scope
+      });
+      socket.write('HTTP/1.1 429 Too Many Requests\r\nConnection: close\r\nRetry-After: 60\r\n\r\n');
+      socket.destroy();
+      return;
+    }
+
+    const inflightId = inflight.id;
+    let wsFinished = false;
+    function wsFinishOnce() {
+      if (wsFinished) return;
+      wsFinished = true;
+      decInflight(inflightId);
+    }
+    socket.on('close', wsFinishOnce);
+    socket.on('error', wsFinishOnce);
+
     if (!bucketFor(identity).take(1)) {
       audit({
         event_type: 'edge_ws_rate_limited',
@@ -528,6 +674,7 @@ function createEdgeServer(options = {}) {
       });
       socket.write('HTTP/1.1 429 Too Many Requests\r\nConnection: close\r\nRetry-After: 60\r\n\r\n');
       socket.destroy();
+      wsFinishOnce();
       return;
     }
 
@@ -548,6 +695,7 @@ function createEdgeServer(options = {}) {
       });
       socket.write(statusLine + '\r\nConnection: close\r\n\r\n');
       socket.destroy();
+      wsFinishOnce();
       return;
     }
 
@@ -591,6 +739,7 @@ function createEdgeServer(options = {}) {
         status: 502,
         latency_ms: Date.now() - started
       });
+      wsFinishOnce();
     });
   });
 
