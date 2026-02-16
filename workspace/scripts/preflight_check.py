@@ -61,7 +61,6 @@ ALLOWLIST_EXAMPLE = (
 # auto-ingest them into the operator's governance overlay and sync into the repo.
 _KNOWN_GOV_ROOT_STRAYS = (
     "AGENTS.md",
-    "BOOTSTRAP.md",
     "HEARTBEAT.md",
     "IDENTITY.md",
     "SOUL.md",
@@ -404,57 +403,90 @@ def _auto_ingest_known_gov_root_strays(repo_root: Path) -> Optional[Dict[str, An
       - CLAWD_GOV_OVERLAY_DIR
       - CLAWD_GOV_OVERLAY_SYNC
     """
-    root_untracked = _untracked_repo_root_files(repo_root)
+    root_untracked = set(_untracked_repo_root_files(repo_root))
     if not root_untracked:
         return None
 
-    expected = sorted(_KNOWN_GOV_ROOT_STRAYS)
-    if root_untracked != expected:
-        # Only block on untracked *repo-root* files; ignore deeper paths here.
+    known = set(_KNOWN_GOV_ROOT_STRAYS)
+    known_present = sorted(p for p in known if p in root_untracked)
+    if not known_present:
+        return None
+
+    unexpected = sorted(p for p in root_untracked if p not in known)
+    if unexpected:
         print("STOP (unrelated workspace drift detected)")
         print("untracked_repo_root_files:")
-        for p in root_untracked:
+        for p in sorted(root_untracked):
             print(f"- {p}")
-        return {"stopped": True, "root_untracked": root_untracked}
+        return {"stopped": True, "root_untracked": sorted(root_untracked)}
 
-    overlay_dir = Path(os.environ.get("CLAWD_GOV_OVERLAY_DIR", str(Path.home() / ".clawd_governance_overlay"))).expanduser()
+    overlay_dir = Path(
+        os.environ.get("CLAWD_GOV_OVERLAY_DIR", str(Path.home() / ".clawd_governance_overlay"))
+    ).expanduser()
     sync_script = Path(
         os.environ.get("CLAWD_GOV_OVERLAY_SYNC", str(overlay_dir / "sync_into_repo.sh"))
     ).expanduser()
 
-    overlay_dir.mkdir(parents=True, exist_ok=True)
+    # Fail closed if the governance overlay is unavailable.
+    if not overlay_dir.exists() or not overlay_dir.is_dir():
+        print(f"FAIL: governance overlay missing: {overlay_dir}")
+        print("hint=install/setup ~/.clawd_governance_overlay with sync_into_repo.sh")
+        return {"stopped": True, "error": "overlay_missing", "overlay_dir": str(overlay_dir)}
+    if not sync_script.exists():
+        print(f"FAIL: governance overlay sync script missing: {sync_script}")
+        print("hint=add executable sync_into_repo.sh under the overlay directory")
+        return {"stopped": True, "error": "sync_script_missing", "sync_script": str(sync_script)}
+    if not os.access(sync_script, os.X_OK):
+        print(f"FAIL: governance overlay sync script not executable: {sync_script}")
+        print("hint=chmod +x ~/.clawd_governance_overlay/sync_into_repo.sh")
+        return {"stopped": True, "error": "sync_script_not_executable", "sync_script": str(sync_script)}
 
-    moved: List[str] = []
-    backups: List[str] = []
     stamp = _ts_suffix()
+    quarantine_dir = overlay_dir / "quarantine" / stamp / "repo_root_governance"
+    quarantine_dir.mkdir(parents=True, exist_ok=True)
+    quarantined: List[str] = []
 
-    # Validate the full set before moving anything (atomicity).
-    for name in expected:
+    # Validate file types with lstat (do not follow symlinks).
+    for name in known_present:
         src = repo_root / name
-        if not src.exists():
+        try:
+            st = src.lstat()
+        except FileNotFoundError:
             print("STOP (governance auto-ingest missing expected file)")
             print(f"path={name}")
             return {"stopped": True, "error": "missing_expected_file", "missing": name}
-        if src.is_symlink() or not src.is_file():
+        except Exception:
+            print("STOP (governance auto-ingest could not lstat expected file)")
+            print(f"path={name}")
+            return {"stopped": True, "error": "lstat_failed", "path": name}
+        if stat.S_ISLNK(st.st_mode) or stat.S_ISDIR(st.st_mode):
             print("STOP (governance auto-ingest requires regular files; no symlinks/dirs)")
             print(f"path={name}")
-            kind = "symlink" if src.is_symlink() else "non_file"
+            kind = "symlink" if stat.S_ISLNK(st.st_mode) else "dir"
             return {"stopped": True, "error": "non_regular_file", "path": name, "kind": kind}
+        if not stat.S_ISREG(st.st_mode):
+            print("STOP (governance auto-ingest requires regular files)")
+            print(f"path={name}")
+            return {"stopped": True, "error": "non_regular_file", "path": name, "kind": "non_regular"}
 
-    for name in expected:
+    # Backup-first copy into overlay quarantine; remove source only after size check.
+    for name in known_present:
         src = repo_root / name
-        dest = overlay_dir / name
-        if dest.exists():
-            backup_name = f"{name}.bak-{stamp}"
-            backup = overlay_dir / backup_name
-            dest.rename(backup)
-            backups.append(backup_name)
-        shutil.move(str(src), str(dest))
-        moved.append(name)
+        dest = quarantine_dir / name
+        shutil.copy2(str(src), str(dest))
+        if not dest.exists():
+            print("FAIL: governance auto-ingest backup copy missing")
+            print(f"path={name}")
+            return {"stopped": True, "error": "backup_missing", "path": name}
+        if src.stat().st_size != dest.stat().st_size:
+            print("FAIL: governance auto-ingest backup copy size mismatch")
+            print(f"path={name}")
+            return {"stopped": True, "error": "backup_size_mismatch", "path": name}
+        quarantined.append(name)
 
-    if not sync_script.exists():
-        print(f"FAIL: governance overlay sync script missing: {sync_script}")
-        return {"stopped": True, "error": "sync_script_missing", "moved": moved, "backups": backups}
+    for name in known_present:
+        src = repo_root / name
+        src.unlink()
 
     # Do not stream stdout/stderr (avoid accidental leakage); capture and gate by exit code.
     env = os.environ.copy()
@@ -469,20 +501,20 @@ def _auto_ingest_known_gov_root_strays(repo_root: Path) -> Optional[Dict[str, An
     if proc.returncode != 0:
         print("FAIL: governance overlay sync script failed")
         print(f"exit_code={proc.returncode}")
-        return {"stopped": True, "error": "sync_failed", "moved": moved, "backups": backups}
+        return {"stopped": True, "error": "sync_failed", "quarantine_dir": str(quarantine_dir)}
 
-    # Sanity: ensure repo-root strays are gone.
-    remaining = _untracked_repo_root_files(repo_root)
-    if remaining:
-        print("FAIL: repo-root untracked files remain after auto-ingest")
-        for p in remaining:
+    # Sanity: ensure known repo-root governance strays are gone.
+    remaining_known = sorted(name for name in known if (repo_root / name).exists())
+    if remaining_known:
+        print("FAIL: known repo-root governance files remain after auto-ingest")
+        for p in remaining_known:
             print(f"- {p}")
-        return {"stopped": True, "error": "post_ingest_root_untracked_remaining", "moved": moved, "backups": backups}
+        return {"stopped": True, "error": "post_ingest_known_root_remaining", "remaining": remaining_known}
 
     print("governance_auto_ingest: ok")
-    print(f"moved_files={moved}")
-    print(f"overlay_backups={backups}")
-    return {"stopped": False, "moved": moved, "backups": backups}
+    print(f"quarantined_files={quarantined}")
+    print(f"quarantine_dir={quarantine_dir}")
+    return {"stopped": False, "quarantined": quarantined, "quarantine_dir": str(quarantine_dir)}
 
 
 def _auto_ingest_known_system2_strays(repo_root: Path) -> Optional[Dict[str, Any]]:
