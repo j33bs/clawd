@@ -87,6 +87,12 @@ class HiveMindStore:
                 continue
         return out
 
+    def write_units(self, units: List[Dict[str, Any]]) -> None:
+        self.data_dir.mkdir(parents=True, exist_ok=True)
+        with self.units_path.open("w", encoding="utf-8") as fh:
+            for unit in units:
+                fh.write(json.dumps(unit, ensure_ascii=False) + "\n")
+
     @staticmethod
     def _is_expired(unit: Dict[str, Any]) -> bool:
         expires_at = unit.get("expires_at")
@@ -151,6 +157,7 @@ class HiveMindStore:
 
     def search(self, *, agent_scope: str, query: str, limit: int = 5) -> List[Dict[str, Any]]:
         hits: List[Dict[str, Any]] = []
+        touched_hashes: List[str] = []
         for unit in self.all_units():
             if self._is_expired(unit):
                 continue
@@ -163,8 +170,45 @@ class HiveMindStore:
             item["score"] = score
             item["content"] = redact_for_embedding(str(item.get("content", "")))
             hits.append(item)
+            if item.get("content_hash"):
+                touched_hashes.append(str(item["content_hash"]))
         hits.sort(key=lambda x: (-int(x.get("score", 0)), str(x.get("created_at", ""))), reverse=False)
+        self._record_access(touched_hashes)
         return hits[: max(1, int(limit))]
+
+    def log_event(self, event: str, **detail: Any) -> None:
+        self._log_ingest({"event": event, **detail})
+
+    def read_log(self) -> List[Dict[str, Any]]:
+        if not self.log_path.exists():
+            return []
+        out: List[Dict[str, Any]] = []
+        for line in self.log_path.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                out.append(json.loads(line))
+            except Exception:
+                continue
+        return out
+
+    def _record_access(self, hashes: List[str]) -> None:
+        if not hashes:
+            return
+        target = set(hashes)
+        now = datetime.now(timezone.utc).isoformat()
+        changed = False
+        rows = self.all_units()
+        for row in rows:
+            digest = str(row.get("content_hash", ""))
+            if digest not in target:
+                continue
+            row["access_count"] = int(row.get("access_count", 0)) + 1
+            row["last_accessed_at"] = now
+            changed = True
+        if changed:
+            self.write_units(rows)
 
     def _embed_redacted_text(self, text: str) -> Optional[List[float]]:
         if os.environ.get("HIVEMIND_ENABLE_OLLAMA_EMBEDDINGS", "0") != "1":
