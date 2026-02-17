@@ -40,8 +40,11 @@ class TestGovernanceAutoIngest(unittest.TestCase):
             for name in preflight_check._KNOWN_GOV_ROOT_STRAYS:
                 (repo / name).write_text(f"dummy {name}\n", encoding="utf-8")
 
-            # Seed an existing overlay copy to force a backup for one file.
-            (overlay / "AGENTS.md").write_text("old overlay copy\n", encoding="utf-8")
+            # Known local-only root artifacts should be ignored by auto-ingest.
+            (repo / ".claude" / "worktrees" / "x").mkdir(parents=True, exist_ok=True)
+            (repo / ".claude" / "worktrees" / "x" / "marker.txt").write_text("x\n", encoding="utf-8")
+            (repo / ".openclaw").mkdir(parents=True, exist_ok=True)
+            (repo / ".openclaw" / "workspace-state.json").write_text("{}", encoding="utf-8")
 
             sync = overlay / "sync_into_repo.sh"
             sync.write_text(
@@ -67,15 +70,17 @@ class TestGovernanceAutoIngest(unittest.TestCase):
             self.assertFalse(summary.get("stopped"))
             self.assertTrue((repo / "workspace" / "governance" / ".sync_ran").exists())
 
-            # Repo-root files should be moved out of the repo.
+            # Repo-root governance files should be moved out of the repo.
             for name in preflight_check._KNOWN_GOV_ROOT_STRAYS:
                 self.assertFalse((repo / name).exists())
-                self.assertTrue((overlay / name).exists())
+            quarantine_dir = Path(summary.get("quarantine_dir", ""))
+            self.assertTrue(quarantine_dir.exists())
+            for name in preflight_check._KNOWN_GOV_ROOT_STRAYS:
+                self.assertTrue((quarantine_dir / name).exists())
 
-            # Backup for AGENTS.md should exist (timestamped).
-            backups = summary.get("backups", [])
-            self.assertTrue(any(b.startswith("AGENTS.md.bak-") for b in backups), backups)
-            self.assertTrue(any((overlay / b).exists() for b in backups))
+            # Ignorable local artifacts should remain untouched.
+            self.assertTrue((repo / ".claude" / "worktrees" / "x" / "marker.txt").exists())
+            self.assertTrue((repo / ".openclaw" / "workspace-state.json").exists())
 
     def test_partial_set_of_known_root_strays_stops_no_ingest(self):
         preflight_check = _load_preflight_check_module()

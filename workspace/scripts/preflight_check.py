@@ -68,6 +68,17 @@ _KNOWN_GOV_ROOT_STRAYS = (
     "USER.md",
 )
 
+# Known local-only root artifacts that must not trigger governance auto-ingest.
+# Keep this set narrow and explicit to avoid weakening fail-closed behavior.
+_IGNORABLE_ROOT_UNTRACKED = (
+    ".claude",
+    ".claude/",
+    ".openclaw",
+    ".openclaw/",
+    ".openclaw/workspace-state.json",
+    ".DS_Store",
+)
+
 # Teammate-ingest allowlist (strict, fail-closed).
 # Only these untracked paths are eligible for auto-ingest.
 _TEAMMATE_ALLOWLIST_PREFIX = "core/integration/"
@@ -150,6 +161,20 @@ def _untracked_repo_root_files(repo_root: Path) -> List[str]:
             continue
         out.append(norm)
     return sorted(set(out))
+
+
+def _is_ignorable_root_untracked(rel: str) -> bool:
+    p = rel.replace("\\", "/").strip("/")
+    if not p:
+        return False
+    normalized_allow = {x.replace("\\", "/").strip("/") for x in _IGNORABLE_ROOT_UNTRACKED}
+    if p in normalized_allow:
+        return True
+    if p.startswith(".claude/") and ".claude" in normalized_allow:
+        return True
+    if p.startswith(".openclaw/") and ".openclaw" in normalized_allow:
+        return True
+    return False
 
 
 def _ts_suffix() -> str:
@@ -403,22 +428,51 @@ def _auto_ingest_known_gov_root_strays(repo_root: Path) -> Optional[Dict[str, An
       - CLAWD_GOV_OVERLAY_DIR
       - CLAWD_GOV_OVERLAY_SYNC
     """
-    root_untracked = set(_untracked_repo_root_files(repo_root))
+    root_untracked_raw = set(_untracked_repo_root_files(repo_root))
+    root_untracked = set(p for p in root_untracked_raw if not _is_ignorable_root_untracked(p))
     if not root_untracked:
         return None
 
     known = set(_KNOWN_GOV_ROOT_STRAYS)
-    known_present = sorted(p for p in known if p in root_untracked)
-    if not known_present:
-        return None
 
     unexpected = sorted(p for p in root_untracked if p not in known)
     if unexpected:
         print("STOP (unrelated workspace drift detected)")
-        print("untracked_repo_root_files:")
+        print("untracked_repo_root_files_non_ignorable:")
         for p in sorted(root_untracked):
             print(f"- {p}")
-        return {"stopped": True, "root_untracked": sorted(root_untracked)}
+        return {"stopped": True, "root_untracked": sorted(root_untracked), "unexpected": unexpected}
+
+    known_present = sorted(p for p in known if p in root_untracked)
+    if not known_present:
+        return None
+    if set(known_present) != known:
+        missing = sorted(p for p in known if p not in root_untracked)
+        print("STOP (known governance stray set is partial; exact-set required)")
+        print("known_present:")
+        for p in known_present:
+            print(f"- {p}")
+        print("known_missing:")
+        for p in missing:
+            print(f"- {p}")
+        return {
+            "stopped": True,
+            "error": "known_set_partial",
+            "known_present": known_present,
+            "known_missing": missing,
+        }
+
+    # Fail-closed filesystem gate: detect non-regular known names even when git
+    # status reports directory paths with a trailing slash.
+    for name in known:
+        p = repo_root / name
+        if not p.exists():
+            continue
+        if p.is_symlink() or p.is_dir():
+            kind = "symlink" if p.is_symlink() else "dir"
+            print("STOP (governance auto-ingest requires regular files; no symlinks/dirs)")
+            print(f"path={name}")
+            return {"stopped": True, "error": "non_regular_file", "path": name, "kind": kind}
 
     overlay_dir = Path(
         os.environ.get("CLAWD_GOV_OVERLAY_DIR", str(Path.home() / ".clawd_governance_overlay"))
