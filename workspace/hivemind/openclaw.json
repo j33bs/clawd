@@ -1,0 +1,29 @@
+{
+  "tools": {
+    "memory_query": {
+      "type": "exec",
+      "command": "python",
+      "args": [
+        "scripts/memory_tool.py",
+        "query",
+        "--agent",
+        "{agent}",
+        "--q",
+        "{query}"
+      ]
+    }
+  },
+  "jobs": [
+    {
+      "name": "hivemind-ingest",
+      "schedule": {
+        "kind": "cron",
+        "expr": "30 7 * * *"
+      },
+      "payload": {
+        "kind": "systemEvent",
+        "text": "Run HiveMind MEMORY.md ingest"
+      }
+    }
+  ]
+}
