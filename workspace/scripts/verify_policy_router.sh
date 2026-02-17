@@ -239,11 +239,64 @@ def test_missing_anthropic_key_falls_back_to_local_vllm():
                 os.environ["ANTHROPIC_API_KEY"] = old_key
 
 
+def test_anthropic_missing_key_is_ineligible():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        policy = base_policy()
+        policy["providers"] = {
+            "anthropic": {
+                "enabled": True,
+                "paid": False,
+                "tier": "auth",
+                "type": "anthropic",
+                "apiKeyEnv": "ANTHROPIC_API_KEY",
+                "models": [{"id": "claude-3-5-sonnet"}],
+            },
+        }
+        policy["routing"]["free_order"] = ["anthropic"]
+        policy["routing"]["intents"]["itc_classify"] = {"order": ["free"], "allowPaid": False}
+
+        old_key = os.environ.pop("ANTHROPIC_API_KEY", None)
+        try:
+            router = make_router(tmpdir, policy, {})
+            result = router.execute_with_escalation("itc_classify", {"prompt": "hello"})
+            assert not result["ok"] and result["reason_code"] == "missing_api_key", result
+        finally:
+            if old_key is not None:
+                os.environ["ANTHROPIC_API_KEY"] = old_key
+
+
+def test_local_vllm_assistant_without_api_key_env_is_eligible():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        policy = base_policy()
+        policy["providers"] = {
+            "local_vllm_assistant": {
+                "enabled": True,
+                "paid": False,
+                "tier": "free",
+                "type": "openai_compatible",
+                "baseUrl": "http://127.0.0.1:8001/v1",
+                "auth": {"type": "bearer_optional"},
+                "models": [{"id": "local-assistant"}],
+            },
+        }
+        policy["routing"]["free_order"] = ["local_vllm_assistant"]
+        policy["routing"]["intents"]["itc_classify"] = {"order": ["free"], "allowPaid": False}
+
+        def ok_handler(payload, model_id, ctx):
+            return {"ok": True, "text": "news"}
+
+        router = make_router(tmpdir, policy, {"local_vllm_assistant": ok_handler})
+        result = router.execute_with_escalation("itc_classify", {"prompt": "hello"}, validate_fn=lambda x: "news")
+        assert result["ok"] and result["provider"] == "local_vllm_assistant", result
+
+
 def main():
     test_free_tier_selected()
     test_coding_ladder_order_and_reason_codes()
     test_circuit_breaker()
     test_budget_enforcement_and_token_cap()
+    test_anthropic_missing_key_is_ineligible()
+    test_local_vllm_assistant_without_api_key_env_is_eligible()
     test_missing_anthropic_key_falls_back_to_local_vllm()
     print("ok")
 
