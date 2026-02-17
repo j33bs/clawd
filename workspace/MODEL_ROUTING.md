@@ -265,6 +265,8 @@ Models MAY run in parallel when:
 }
 ```
 
+For node `c_lawd`, keep defaults unchanged and select local vLLM providers explicitly only.
+
 ### Environment Variables (secrets.env)
 
 ```bash

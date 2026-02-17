@@ -59,8 +59,10 @@
       "enabled": true,
       "paid": false,
       "tier": "free",
+      "provider_id": "local_vllm",
       "type": "openai_compatible",
       "baseUrl": "http://127.0.0.1:8001/v1",
+      "model": "local-assistant",
       "models": [
         {
           "id": "local-assistant",
@@ -73,8 +75,10 @@
       "enabled": true,
       "paid": false,
       "tier": "free",
+      "provider_id": "local_vllm",
       "type": "openai_compatible",
       "baseUrl": "http://127.0.0.1:8002/v1",
+      "model": "local-coder",
       "models": [
         {
           "id": "local-coder",
@@ -193,6 +197,15 @@
       "ollama",
       "groq",
       "qwen"
+    ],
+    "rules": [
+      {
+        "name": "coding_prefers_local_vllm_coder",
+        "when": {
+          "intent": "coding"
+        },
+        "provider": "local_vllm_coder"
+      }
     ],
     "intents": {
       "itc_classify": {
