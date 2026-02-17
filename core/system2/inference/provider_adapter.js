@@ -70,6 +70,9 @@ class ProviderAdapter {
       if (this._hc.type === 'openai_compatible' || this.protocol === 'openai_compatible') {
         return await this._healthOpenAI();
       }
+      if (this._hc.type === 'anthropic_messages' || this.protocol === 'anthropic_messages') {
+        return await this._healthAnthropic();
+      }
       if (this.providerId === 'gemini') {
         return await this._healthGemini();
       }
@@ -99,6 +102,8 @@ class ProviderAdapter {
     try {
       if (this.protocol === 'openai_compatible') {
         result = await this._callOpenAI({ messages, model, maxTokens, temperature });
+      } else if (this.protocol === 'anthropic_messages') {
+        result = await this._callAnthropic({ messages, model, maxTokens, temperature });
       } else if (this.providerId === 'gemini') {
         result = await this._callGemini({ messages, model, maxTokens, temperature });
       } else {
@@ -173,6 +178,63 @@ class ProviderAdapter {
         outputTokens: usage.completion_tokens || 0,
         totalTokens: usage.total_tokens || 0,
         estimatedCostUsd: 0 // Free tier; computed upstream if needed
+      }
+    };
+  }
+
+  // ── Anthropic Messages Protocol ────────────────────────────────────
+
+  async _healthAnthropic() {
+    const modelsPath = (this._hc.endpoints && this._hc.endpoints.models) || '/v1/models';
+    const modelsUrl = this.baseUrl.replace(/\/+$/, '') + modelsPath;
+
+    const data = await this._httpGet(modelsUrl, {
+      timeoutMs: (this._hc.timeouts_ms && this._hc.timeouts_ms.read) || 9000
+    });
+
+    const models = Array.isArray(data && data.data)
+      ? data.data.map((m) => m.id).filter(Boolean)
+      : [];
+
+    return { ok: true, models };
+  }
+
+  async _callAnthropic({ messages, model, maxTokens, temperature }) {
+    const messagesPath = (this._hc.endpoints && this._hc.endpoints.messages) || '/v1/messages';
+    const url = this.baseUrl.replace(/\/+$/, '') + messagesPath;
+
+    const mappedMessages = messages.map((m) => ({
+      role: m.role === 'assistant' ? 'assistant' : 'user',
+      content: String(m.content || '')
+    }));
+
+    const body = {
+      model,
+      messages: mappedMessages,
+      max_tokens: maxTokens,
+      temperature
+    };
+
+    const data = await this._httpPost(url, body, {
+      timeoutMs: (this._hc.timeouts_ms && this._hc.timeouts_ms.read) || 30000
+    });
+
+    const content = Array.isArray(data && data.content) ? data.content : [];
+    const text = content
+      .filter((part) => part && part.type === 'text')
+      .map((part) => part.text || '')
+      .join('');
+    const usage = data.usage || {};
+
+    return {
+      text,
+      model: data.model || model,
+      raw: data,
+      usage: {
+        inputTokens: usage.input_tokens || 0,
+        outputTokens: usage.output_tokens || 0,
+        totalTokens: (usage.input_tokens || 0) + (usage.output_tokens || 0),
+        estimatedCostUsd: 0
       }
     };
   }
@@ -254,6 +316,9 @@ class ProviderAdapter {
       headers['HTTP-Referer'] = 'https://github.com/openclaw';
       headers['X-Title'] = 'OpenClaw';
     }
+    if (this.protocol === 'anthropic_messages') {
+      headers['anthropic-version'] = '2023-06-01';
+    }
     return headers;
   }
 
@@ -270,7 +335,10 @@ class ProviderAdapter {
       const parsed = new URL(urlStr);
       const isHttps = parsed.protocol === 'https:';
       const mod = isHttps ? https : http;
-      const headers = this._buildHeaders(options.skipAuth);
+      const headers = {
+        ...this._buildHeaders(options.skipAuth),
+        ...(options.headers || {})
+      };
 
       const payload = body ? JSON.stringify(body) : null;
       if (payload) {

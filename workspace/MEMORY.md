@@ -25,7 +25,7 @@ This is the curated, long-term memory that persists across sessions. This file c
 - [2026-02-06] Delegation model: main handles Telegram, spawns claude-code for coding/governance/evolution work
 - [2026-02-06] Handoff protocol via `workspace/handoffs/` directory for inter-agent task passing
 
-## Architecture
+- [2026-02-17] Agent rebranded: Dessy → Dali (new name, playful surrealist vibe, 🎨 emoji)
 
 ### Multi-Agent System
 - **main** (Dessy): Default agent, Qwen Portal, handles all Telegram messages, simple tasks

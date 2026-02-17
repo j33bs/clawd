@@ -141,6 +141,12 @@ test('getProvider: finds local_vllm', () => {
   assert.equal(p.kind, 'local');
 });
 
+test('getProvider: finds minimax-portal', () => {
+  const p = getProvider('minimax-portal');
+  assert.ok(p);
+  assert.equal(p.protocol, 'anthropic_messages');
+});
+
 test('getProvider: returns null for unknown', () => {
   assert.equal(getProvider('nonexistent'), null);
 });

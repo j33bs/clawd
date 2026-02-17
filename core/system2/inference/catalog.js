@@ -332,6 +332,70 @@ const CATALOG = Object.freeze([
         retrieved_utc: null
       }
     ]
+  },
+
+  {
+    provider_id: 'minimax-portal',
+    kind: 'external',
+    protocol: 'anthropic_messages',
+    enabled_default: false,
+    base_url: {
+      default: 'https://api.minimax.io/anthropic',
+      env_override: 'OPENCLAW_MINIMAX_PORTAL_BASE_URL'
+    },
+    auth: {
+      type: 'api_key',
+      env_var: 'OPENCLAW_MINIMAX_PORTAL_API_KEY',
+      redact_in_logs: true
+    },
+    models: [
+      {
+        model_id: 'MiniMax-M2.5',
+        task_classes: ['fast_chat', 'long_context', 'code', 'tool_use'],
+        context_window_hint: 131072,
+        tool_support: 'via_adapter',
+        notes: 'Portal Anthropic-messages endpoint; verify account model access.'
+      },
+      {
+        model_id: 'MiniMax-M2.1',
+        task_classes: ['fast_chat', 'code', 'batch'],
+        context_window_hint: 131072,
+        tool_support: 'via_adapter',
+        notes: 'Portal Anthropic-messages endpoint; verify account model access.'
+      }
+    ],
+    constraints: {
+      quota: {
+        rpm_default: 10,
+        tpm_default: 100000,
+        rpd_default: 100,
+        tpd_default: 500000,
+        reset_policy: 'provider_defined',
+        operator_override_required: true
+      },
+      backoff: { strategy: 'bounded_exponential', max_retries: 2, cooldown_seconds: 20 },
+      circuit_breaker: {
+        consecutive_failures_to_open: 3,
+        open_seconds: 120,
+        half_open_probe_interval_seconds: 60
+      }
+    },
+    healthcheck: {
+      type: 'anthropic_messages',
+      endpoints: { models: '/v1/models', messages: '/v1/messages' },
+      timeouts_ms: { connect: 1200, read: 9000 },
+      probe_prompt: 'Reply with: OK',
+      probe_max_tokens: 8
+    },
+    routing_tags: { prefers: ['free_tier', 'high_capability'], avoids: [] },
+    evidence: [
+      {
+        type: 'runtime_config',
+        title: 'OpenClaw local provider config (minimax-portal anthropic-messages)',
+        url: 'file://~/.openclaw/openclaw.json',
+        retrieved_utc: null
+      }
+    ]
   }
 ]);
 
