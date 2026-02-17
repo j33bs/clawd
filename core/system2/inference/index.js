@@ -16,6 +16,7 @@ const { SecretsBridge, PROVIDER_ENV_MAP, BACKEND_TYPES, maskSecretFingerprint } 
 const { QuotaLedger } = require('./quota_ledger');
 const { routeRequest, explainRouting } = require('./router');
 const { createVllmProvider, probeVllmServer, vllmStartCommand, buildVllmStatusArtifact } = require('./vllm_provider');
+const { LocalVllmProvider, normalizeBaseUrl } = require('./local_vllm_provider');
 const { ProviderRegistry, CB_STATES } = require('./provider_registry');
 
 module.exports = {
@@ -36,6 +37,7 @@ module.exports = {
   routeRequest, explainRouting,
   // vLLM
   createVllmProvider, probeVllmServer, vllmStartCommand, buildVllmStatusArtifact,
+  LocalVllmProvider, normalizeBaseUrl,
   // Registry
   ProviderRegistry, CB_STATES
 };

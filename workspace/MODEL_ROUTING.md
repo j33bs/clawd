@@ -235,7 +235,31 @@ Models MAY run in parallel when:
         "baseUrl": "${OLLAMA_HOST}",
         "apiKey": "ollama",
         "api": "openai-completions"
+      },
+      "local_vllm_assistant": {
+        "provider_id": "local_vllm",
+        "baseUrl": "http://127.0.0.1:8001/v1",
+        "model": "local-assistant",
+        "api": "openai-completions"
+      },
+      "local_vllm_coder": {
+        "provider_id": "local_vllm",
+        "baseUrl": "http://127.0.0.1:8002/v1",
+        "model": "local-coder",
+        "api": "openai-completions"
       }
+    },
+    "routing": {
+      "default_provider": "local_vllm_assistant",
+      "rules": [
+        {
+          "name": "coding_to_local_vllm_coder",
+          "when": {
+            "task_type": "coding"
+          },
+          "provider": "local_vllm_coder"
+        }
+      ]
     }
   }
 }

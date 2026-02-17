@@ -1,0 +1,88 @@
+#!/usr/bin/env node
+'use strict';
+
+const assert = require('node:assert');
+
+const { LocalVllmProvider, normalizeBaseUrl } = require('../../core/system2/inference/local_vllm_provider');
+
+const tests = [];
+function test(name, fn) {
+  tests.push({ name, fn });
+}
+
+test('healthProbe succeeds against mocked vLLM endpoint and normalizes /v1', async function () {
+  const provider = new LocalVllmProvider({
+    env: { OPENCLAW_VLLM_BASE_URL: 'http://localhost:18888' }
+  });
+  let seenUrl = null;
+  provider._httpRequest = async function (_method, url) {
+    seenUrl = url;
+    return { data: [{ id: 'qwen2.5' }] };
+  };
+  const result = await provider.healthProbe();
+  assert.strictEqual(result.ok, true);
+  assert.deepStrictEqual(result.models, ['qwen2.5']);
+  assert.strictEqual(seenUrl, 'http://localhost:18888/v1/models');
+});
+
+test('healthProbe returns fail-closed result when endpoint is unreachable', async function () {
+  const provider = new LocalVllmProvider({
+    env: { OPENCLAW_VLLM_BASE_URL: 'http://localhost:18888' }
+  });
+  provider._httpRequest = async function () {
+    throw new Error('timeout connecting to local_vllm');
+  };
+  const result = await provider.health();
+  assert.strictEqual(result.ok, false);
+  assert.strictEqual(typeof result.reason, 'string');
+  assert.strictEqual(result.reason, 'timeout connecting to local_vllm');
+});
+
+test('generateChat returns expected output shape from vLLM response', async function () {
+  const provider = new LocalVllmProvider({
+    env: { OPENCLAW_VLLM_BASE_URL: 'http://localhost:18888' }
+  });
+  let seenUrl = null;
+  provider._httpRequest = async function (_method, url) {
+    seenUrl = url;
+    return {
+      model: 'qwen2.5',
+      choices: [{ message: { content: 'hello from vllm' } }],
+      usage: { prompt_tokens: 3, completion_tokens: 4, total_tokens: 7 }
+    };
+  };
+
+  const output = await provider.generateChat({
+    messages: [{ role: 'user', content: 'hi' }],
+    options: { model: 'qwen2.5', maxTokens: 16 }
+  });
+
+  assert.strictEqual(seenUrl, 'http://localhost:18888/v1/chat/completions');
+  assert.strictEqual(output.text, 'hello from vllm');
+  assert.strictEqual(output.model, 'qwen2.5');
+  assert.strictEqual(output.usage.inputTokens, 3);
+  assert.strictEqual(output.usage.outputTokens, 4);
+  assert.strictEqual(output.usage.totalTokens, 7);
+  assert.ok(output.raw);
+});
+
+test('normalizeBaseUrl appends /v1 only when missing', function () {
+  assert.strictEqual(normalizeBaseUrl('http://localhost:18888'), 'http://localhost:18888/v1');
+  assert.strictEqual(normalizeBaseUrl('http://localhost:18888/v1'), 'http://localhost:18888/v1');
+  assert.strictEqual(normalizeBaseUrl('http://localhost:18888/'), 'http://localhost:18888/v1');
+  assert.strictEqual(normalizeBaseUrl('http://localhost:18888/v1/'), 'http://localhost:18888/v1');
+});
+
+async function run() {
+  for (const t of tests) {
+    try {
+      await t.fn();
+      console.log('PASS ' + t.name);
+    } catch (err) {
+      console.error('FAIL ' + t.name + ': ' + err.message);
+      process.exitCode = 1;
+    }
+  }
+}
+
+run();

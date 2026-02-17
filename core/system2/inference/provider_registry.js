@@ -12,6 +12,7 @@
 
 const { CATALOG } = require('./catalog');
 const { ProviderAdapter } = require('./provider_adapter');
+const { LocalVllmProvider } = require('./local_vllm_provider');
 const { loadFreeComputeConfig } = require('./config');
 const { SecretsBridge } = require('./secrets_bridge');
 const { QuotaLedger } = require('./quota_ledger');
@@ -287,10 +288,14 @@ class ProviderRegistry {
         }
       }
 
-      this._adapters.set(pid, new ProviderAdapter(entry, {
-        env: this._env,
-        emitEvent: this._emitEvent
-      }));
+      const adapter = pid === 'local_vllm'
+        ? new LocalVllmProvider({ entry, env: this._env })
+        : new ProviderAdapter(entry, {
+            env: this._env,
+            emitEvent: this._emitEvent
+          });
+
+      this._adapters.set(pid, adapter);
 
       this._circuitBreakers.set(pid, {
         state: CB_STATES.CLOSED,

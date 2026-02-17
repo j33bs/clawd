@@ -55,6 +55,34 @@
     }
   },
   "providers": {
+    "local_vllm_assistant": {
+      "enabled": true,
+      "paid": false,
+      "tier": "free",
+      "type": "openai_compatible",
+      "baseUrl": "http://127.0.0.1:8001/v1",
+      "models": [
+        {
+          "id": "local-assistant",
+          "maxInputChars": 4000,
+          "tier": "large"
+        }
+      ]
+    },
+    "local_vllm_coder": {
+      "enabled": true,
+      "paid": false,
+      "tier": "free",
+      "type": "openai_compatible",
+      "baseUrl": "http://127.0.0.1:8002/v1",
+      "models": [
+        {
+          "id": "local-coder",
+          "maxInputChars": 4000,
+          "tier": "large"
+        }
+      ]
+    },
     "ollama": {
       "enabled": true,
       "paid": false,
@@ -161,6 +189,7 @@
   },
   "routing": {
     "free_order": [
+      "local_vllm_assistant",
       "ollama",
       "groq",
       "qwen"
@@ -176,6 +205,8 @@
       },
       "coding": {
         "order": [
+          "local_vllm_coder",
+          "local_vllm_assistant",
           "free",
           "openai_auth",
           "claude_auth",
