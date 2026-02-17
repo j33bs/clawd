@@ -6,6 +6,7 @@ Policy Router
 
 import json
 import os
+import sys
 import time
 from pathlib import Path
 
@@ -28,10 +29,15 @@ _file_root = _resolve_repo_root(Path(__file__).resolve())
 _cwd_root = _resolve_repo_root(Path.cwd())
 BASE_DIR = Path(_env_root) if _env_root else (_file_root or _cwd_root or Path("C:/Users/heath/.openclaw"))
 POLICY_FILE = BASE_DIR / "workspace" / "policy" / "llm_policy.json"
+POLICY_SCHEMA_FILE = BASE_DIR / "workspace" / "policy" / "llm_policy.schema.json"
 BUDGET_FILE = BASE_DIR / "itc" / "llm_budget.json"
 CIRCUIT_FILE = BASE_DIR / "itc" / "llm_circuit.json"
 EVENT_LOG = BASE_DIR / "itc" / "llm_router_events.jsonl"
 QWEN_AUTH_FILE = BASE_DIR / "agents" / "main" / "agent" / "auth-profiles.json"
+
+
+class PolicyValidationError(Exception):
+    pass
 
 DEFAULT_POLICY = {
     "version": 2,
@@ -200,14 +206,113 @@ def _deep_merge(defaults, incoming):
     return merged
 
 
+def _policy_strict_mode():
+    return os.environ.get("OPENCLAW_POLICY_STRICT", "1") != "0"
+
+
+def _resolve_policy_schema_path(policy_path):
+    local = Path(policy_path).with_name("llm_policy.schema.json")
+    if local.exists():
+        return local
+    return POLICY_SCHEMA_FILE
+
+
+def _load_policy_schema(policy_path):
+    schema_path = _resolve_policy_schema_path(policy_path)
+    if not schema_path.exists():
+        raise PolicyValidationError(f"policy schema missing: {schema_path}")
+    try:
+        schema = json.loads(schema_path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        raise PolicyValidationError(f"policy schema invalid JSON: {schema_path}: {exc}") from exc
+    if not isinstance(schema, dict):
+        raise PolicyValidationError(f"policy schema must be object: {schema_path}")
+    return schema
+
+
+def _type_matches(expected, value):
+    if expected == "object":
+        return isinstance(value, dict)
+    if expected == "array":
+        return isinstance(value, list)
+    if expected == "string":
+        return isinstance(value, str)
+    if expected == "integer":
+        return isinstance(value, int) and not isinstance(value, bool)
+    if expected == "number":
+        return (isinstance(value, int) or isinstance(value, float)) and not isinstance(value, bool)
+    if expected == "boolean":
+        return isinstance(value, bool)
+    if expected == "null":
+        return value is None
+    return True
+
+
+def _validate_with_schema(value, schema, where="$"):
+    expected_type = schema.get("type")
+    if expected_type is not None:
+        if isinstance(expected_type, list):
+            ok = any(_type_matches(t, value) for t in expected_type)
+        else:
+            ok = _type_matches(expected_type, value)
+        if not ok:
+            raise PolicyValidationError(f"{where}: expected type {expected_type}")
+
+    if "enum" in schema and value not in schema["enum"]:
+        raise PolicyValidationError(f"{where}: value not in enum")
+
+    if "minimum" in schema:
+        if not _type_matches("number", value):
+            raise PolicyValidationError(f"{where}: minimum requires numeric value")
+        if value < schema["minimum"]:
+            raise PolicyValidationError(f"{where}: value below minimum {schema['minimum']}")
+
+    if expected_type == "object":
+        props = schema.get("properties", {})
+        required = schema.get("required", [])
+        for key in required:
+            if key not in value:
+                raise PolicyValidationError(f"{where}.{key}: required key missing")
+        additional = schema.get("additionalProperties", True)
+        for key, item in value.items():
+            if key in props:
+                _validate_with_schema(item, props[key], f"{where}.{key}")
+            else:
+                if additional is False:
+                    raise PolicyValidationError(f"{where}.{key}: unknown key")
+                if isinstance(additional, dict):
+                    _validate_with_schema(item, additional, f"{where}.{key}")
+
+    if expected_type == "array":
+        min_items = schema.get("minItems")
+        if isinstance(min_items, int) and len(value) < min_items:
+            raise PolicyValidationError(f"{where}: expected at least {min_items} items")
+        item_schema = schema.get("items")
+        if isinstance(item_schema, dict):
+            for idx, item in enumerate(value):
+                _validate_with_schema(item, item_schema, f"{where}[{idx}]")
+
+
 def load_policy(path=POLICY_FILE):
     policy = DEFAULT_POLICY
     if path.exists():
         try:
             raw = json.loads(path.read_text(encoding="utf-8"))
             policy = _deep_merge(DEFAULT_POLICY, raw)
-        except Exception:
-            log_event("policy_load_fail", {"path": str(path)})
+        except Exception as exc:
+            log_event("policy_load_fail", {"path": str(path), "error": str(exc)})
+            if _policy_strict_mode():
+                raise PolicyValidationError(f"policy JSON invalid: {path}: {exc}") from exc
+            sys.stderr.write(f"WARNING: OPENCLAW_POLICY_STRICT=0; invalid policy JSON ignored: {path}\n")
+            return policy
+        try:
+            schema = _load_policy_schema(path)
+            _validate_with_schema(policy, schema)
+        except PolicyValidationError as exc:
+            log_event("policy_validation_fail", {"path": str(path), "error": str(exc)})
+            if _policy_strict_mode():
+                raise
+            sys.stderr.write(f"WARNING: OPENCLAW_POLICY_STRICT=0; policy validation skipped: {exc}\n")
     return policy
 
 
@@ -855,3 +960,11 @@ class PolicyRouter:
             "reason_code": last_reason or "no_provider_available",
             "attempts": attempts,
         }
+
+
+if __name__ == "__main__":
+    try:
+        load_policy(POLICY_FILE)
+    except PolicyValidationError as exc:
+        sys.stderr.write(f"ERROR: {exc}\n")
+        raise SystemExit(2)
