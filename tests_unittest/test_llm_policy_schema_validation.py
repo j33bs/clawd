@@ -37,8 +37,9 @@ class TestLlmPolicySchemaValidation(unittest.TestCase):
             policy_path = Path(td) / "llm_policy.json"
             policy_path.write_text(json.dumps(bad_policy), encoding="utf-8")
 
-            with self.assertRaises(policy_router.PolicyValidationError):
+            with self.assertRaises(policy_router.PolicyValidationError) as ctx:
                 policy_router.load_policy(policy_path)
+            self.assertIn("dailyTokenBudgte", str(ctx.exception))
 
     def test_invalid_policy_typo_allowed_when_strict_disabled(self):
         policy_router = _load_policy_router_module()
@@ -66,6 +67,58 @@ class TestLlmPolicySchemaValidation(unittest.TestCase):
             intent_budget = loaded.get("budgets", {}).get("intents", {}).get("itc_classify", {})
             self.assertIn("dailyTokenBudget", intent_budget)
             self.assertIn("dailyTokenBudgte", intent_budget)
+
+    def test_provider_unknown_key_fails_closed_by_default(self):
+        policy_router = _load_policy_router_module()
+        policy_router.log_event = lambda *args, **kwargs: None
+
+        bad_policy = {
+            "version": 2,
+            "providers": {
+                "x": {
+                    "enabled": True,
+                    "paid": False,
+                    "tier": "free",
+                    "type": "ollama",
+                    "unknownField": 123
+                }
+            }
+        }
+
+        with tempfile.TemporaryDirectory() as td:
+            policy_path = Path(td) / "llm_policy.json"
+            policy_path.write_text(json.dumps(bad_policy), encoding="utf-8")
+
+            with self.assertRaises(policy_router.PolicyValidationError) as ctx:
+                policy_router.load_policy(policy_path)
+            self.assertIn("unknownField", str(ctx.exception))
+
+    def test_provider_unknown_key_allowed_when_strict_disabled(self):
+        policy_router = _load_policy_router_module()
+        policy_router.log_event = lambda *args, **kwargs: None
+
+        bad_policy = {
+            "version": 2,
+            "providers": {
+                "x": {
+                    "enabled": True,
+                    "paid": False,
+                    "tier": "free",
+                    "type": "ollama",
+                    "unknownField": 123
+                }
+            }
+        }
+
+        with tempfile.TemporaryDirectory() as td:
+            policy_path = Path(td) / "llm_policy.json"
+            policy_path.write_text(json.dumps(bad_policy), encoding="utf-8")
+
+            with unittest.mock.patch.dict(os.environ, {"OPENCLAW_POLICY_STRICT": "0"}, clear=False):
+                loaded = policy_router.load_policy(policy_path)
+
+            provider = loaded.get("providers", {}).get("x", {})
+            self.assertEqual(provider.get("unknownField"), 123)
 
 
 if __name__ == "__main__":

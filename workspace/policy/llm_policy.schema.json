@@ -188,7 +188,7 @@
             }
           }
         },
-        "additionalProperties": true
+        "additionalProperties": false
       }
     },
     "routing": {

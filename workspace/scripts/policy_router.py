@@ -293,12 +293,32 @@ def _validate_with_schema(value, schema, where="$"):
                 _validate_with_schema(item, item_schema, f"{where}[{idx}]")
 
 
+def _raw_policy_schema(schema):
+    if not isinstance(schema, dict):
+        return schema
+    out = dict(schema)
+    expected_type = out.get("type")
+    if expected_type == "object":
+        out.pop("required", None)
+        props = out.get("properties")
+        if isinstance(props, dict):
+            out["properties"] = {k: _raw_policy_schema(v) for k, v in props.items()}
+        additional = out.get("additionalProperties")
+        if isinstance(additional, dict):
+            out["additionalProperties"] = _raw_policy_schema(additional)
+    elif expected_type == "array":
+        items = out.get("items")
+        if isinstance(items, dict):
+            out["items"] = _raw_policy_schema(items)
+    return out
+
+
 def load_policy(path=POLICY_FILE):
     policy = DEFAULT_POLICY
     if path.exists():
+        raw = None
         try:
             raw = json.loads(path.read_text(encoding="utf-8"))
-            policy = _deep_merge(DEFAULT_POLICY, raw)
         except Exception as exc:
             log_event("policy_load_fail", {"path": str(path), "error": str(exc)})
             if _policy_strict_mode():
@@ -307,12 +327,16 @@ def load_policy(path=POLICY_FILE):
             return policy
         try:
             schema = _load_policy_schema(path)
-            _validate_with_schema(policy, schema)
+            _validate_with_schema(raw, _raw_policy_schema(schema), "$raw")
+            policy = _deep_merge(DEFAULT_POLICY, raw)
+            _validate_with_schema(policy, schema, "$policy")
         except PolicyValidationError as exc:
             log_event("policy_validation_fail", {"path": str(path), "error": str(exc)})
             if _policy_strict_mode():
                 raise
             sys.stderr.write(f"WARNING: OPENCLAW_POLICY_STRICT=0; policy validation skipped: {exc}\n")
+            if isinstance(raw, dict):
+                policy = _deep_merge(DEFAULT_POLICY, raw)
     return policy
 
 
