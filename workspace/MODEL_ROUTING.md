@@ -216,6 +216,9 @@ Models MAY run in parallel when:
 
 ```json
 {
+  "node": {
+    "id": "dali"
+  },
   "models": {
     "providers": {
       "qwen-portal": {

@@ -23,6 +23,7 @@ _file_root = _resolve_repo_root(Path(__file__).resolve())
 _cwd_root = _resolve_repo_root(Path.cwd())
 BASE_DIR = Path(_env_root) if _env_root else (_file_root or _cwd_root or Path("C:/Users/heath/.openclaw"))
 POLICY_FILE = BASE_DIR / "workspace" / "policy" / "llm_policy.json"
+SYSTEM_MAP_FILE = BASE_DIR / "workspace" / "policy" / "system_map.json"
 OPENCLAW_FILE = BASE_DIR / "openclaw.json"
 PAIRING = BASE_DIR / "credentials" / "telegram-pairing.json"
 
@@ -66,6 +67,28 @@ def load_json(path):
         return json.loads(path.read_text(encoding="utf-8"))
     except Exception:
         return None
+
+
+def normalize_node_id(raw_value, system_map):
+    if not isinstance(system_map, dict):
+        return "dali"
+    nodes = system_map.get("nodes") or {}
+    default_id = str(system_map.get("default_node_id") or "dali")
+
+    if raw_value is None:
+        return default_id
+
+    needle = str(raw_value).strip().lower()
+    if not needle:
+        return default_id
+
+    for node_id, node_cfg in nodes.items():
+        aliases = node_cfg.get("aliases") if isinstance(node_cfg, dict) else None
+        values = aliases if isinstance(aliases, list) else [node_id]
+        for alias in values:
+            if str(alias).strip().lower() == needle:
+                return node_id
+    return default_id
 
 
 def check_policy(failures):
@@ -173,6 +196,27 @@ def check_telegram(failures, warnings):
     )
 
 
+def check_node_identity(failures, warnings):
+    cfg = load_json(OPENCLAW_FILE) or {}
+    system_map = load_json(SYSTEM_MAP_FILE) or {}
+    default_node_id = str(system_map.get("default_node_id") or "dali")
+
+    node = cfg.get("node") if isinstance(cfg.get("node"), dict) else {}
+    raw_node_id = node.get("id")
+    normalized = normalize_node_id(raw_node_id, system_map)
+
+    if not raw_node_id:
+        warn(
+            f"openclaw.json node.id missing; defaulting to '{default_node_id}' for compatibility",
+            warnings,
+        )
+    elif normalized != str(raw_node_id).strip().lower():
+        warn(
+            f"openclaw.json node.id alias '{raw_node_id}' normalized to '{normalized}'",
+            warnings,
+        )
+
+
 def main():
     failures = []
     warnings = []
@@ -181,6 +225,7 @@ def main():
     policy = check_policy(failures)
     if policy:
         check_router(policy, failures)
+    check_node_identity(failures, warnings)
     check_telegram(failures, warnings)
 
     if warnings:
