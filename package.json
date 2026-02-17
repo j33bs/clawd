@@ -7,6 +7,7 @@
     "gate:module-resolution": "node scripts/module_resolution_gate.js --json",
     "redact:audit-evidence": "node scripts/redact_audit_evidence.js",
     "check:redaction-fixtures": "node scripts/redact_audit_evidence.js --in fixtures/redaction/in --out .tmp/redaction_out --json --dry-run",
+    "lint:legacy-node-names": "node scripts/lint_legacy_node_names.js",
     "system2:snapshot": "node scripts/system2_snapshot_capture.js",
     "system2:evidence": "node scripts/system2_evidence_bundle.js",
     "system2:diff": "node scripts/system2_snapshot_diff.js",
