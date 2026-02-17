@@ -116,12 +116,31 @@
         }
       ]
     },
-    "openai_auth": {
+    "openai_auth_brain": {
       "enabled": false,
       "paid": false,
       "tier": "auth",
       "type": "openai_auth",
-      "readyEnv": "OPENAI_AUTH_READY"
+      "readyEnv": "OPENAI_AUTH_READY",
+      "models": [
+        {
+          "id": "gpt-5.2-chat",
+          "maxInputChars": 6000
+        }
+      ]
+    },
+    "openai_auth_muscle": {
+      "enabled": false,
+      "paid": false,
+      "tier": "auth",
+      "type": "openai_auth",
+      "readyEnv": "OPENAI_AUTH_READY",
+      "models": [
+        {
+          "id": "gpt-5.3-codex",
+          "maxInputChars": 6000
+        }
+      ]
     },
     "claude_auth": {
       "enabled": false,
@@ -191,10 +210,15 @@
       },
       "coding": {
         "order": [
-          "ollama",
-          "groq"
+          "free",
+          "openai_auth_brain",
+          "openai_auth_muscle",
+          "claude_auth",
+          "grok_api",
+          "openai_api",
+          "claude_api"
         ],
-        "allowPaid": false
+        "allowPaid": true
       },
       "governance": {
         "order": [

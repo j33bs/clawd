@@ -92,7 +92,8 @@ def test_coding_ladder_order_and_reason_codes():
         policy = base_policy()
         policy["providers"] = {
             "freeA": {"enabled": True, "paid": False, "tier": "free", "type": "mock", "models": [{"id": "free"}]},
-            "openai_auth": {"enabled": True, "paid": False, "tier": "auth", "type": "mock", "models": [{"id": "oa"}]},
+            "openai_auth_brain": {"enabled": True, "paid": False, "tier": "auth", "type": "mock", "models": [{"id": "oa_brain"}]},
+            "openai_auth_muscle": {"enabled": True, "paid": False, "tier": "auth", "type": "mock", "models": [{"id": "oa_muscle"}]},
             "claude_auth": {"enabled": True, "paid": False, "tier": "auth", "type": "mock", "models": [{"id": "ca"}]},
             "grok_api": {"enabled": True, "paid": True, "tier": "paid", "type": "mock", "models": [{"id": "grok"}]},
             "openai_api": {"enabled": True, "paid": True, "tier": "paid", "type": "mock", "models": [{"id": "oa2"}]},
@@ -100,7 +101,7 @@ def test_coding_ladder_order_and_reason_codes():
         }
         policy["routing"]["free_order"] = ["freeA"]
         policy["routing"]["intents"]["coding"] = {
-            "order": ["free", "openai_auth", "claude_auth", "grok_api", "openai_api", "claude_api"],
+            "order": ["free", "openai_auth_brain", "openai_auth_muscle", "claude_auth", "grok_api", "openai_api", "claude_api"],
             "allowPaid": True,
         }
 
@@ -115,7 +116,8 @@ def test_coding_ladder_order_and_reason_codes():
             policy,
             {
                 "freeA": fail429,
-                "openai_auth": fail429,
+                "openai_auth_brain": fail429,
+                "openai_auth_muscle": fail429,
                 "claude_auth": fail429,
                 "grok_api": ok_handler,
                 "openai_api": ok_handler,

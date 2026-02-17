@@ -18,11 +18,12 @@ Routing, escalation, budgets, and circuit breakers are enforced centrally by the
 
 After the free tier is exhausted or unavailable, coding intents must escalate in this exact order:
 
-1. OpenAI Auth (login, non-API)
-2. Claude Auth (login, non-API)
-3. Grok API
-4. OpenAI API
-5. Claude API
+1. OpenAI Auth Brain (`gpt-5.2-chat`, login/non-API)
+2. OpenAI Auth Muscle (`gpt-5.3-codex`, login/non-API)
+3. Claude Auth (login, non-API)
+4. Grok API
+5. OpenAI API
+6. Claude API
 
 Free tier is always attempted first (local + free APIs).
 
@@ -32,6 +33,8 @@ Free tier is always attempted first (local + free APIs).
 |-------|----------|----------|------|---------|
 | Qwen Coder | Qwen Portal (OAuth) | Primary - basic requests | Free | 128K |
 | Qwen Vision | Qwen Portal (OAuth) | Image understanding | Free | 128K |
+| GPT-5.2 Chat | OpenAI Auth | Tier-2 coding brain pass | Auth | N/A |
+| GPT-5.3 Codex | OpenAI Auth | Tier-2 coding muscle pass | Auth | N/A |
 | Claude 3 Opus | Anthropic API | Complex/coding tasks | Paid | 200K |
 | qwen14b-tools-32k | Ollama (local) | Confidential processing | Free/local | 32K |
 
