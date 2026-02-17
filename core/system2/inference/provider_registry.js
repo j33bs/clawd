@@ -16,6 +16,7 @@ const { loadFreeComputeConfig } = require('./config');
 const { SecretsBridge } = require('./secrets_bridge');
 const { QuotaLedger } = require('./quota_ledger');
 const { routeRequest, explainRouting } = require('./router');
+const { createIntegrityGuard } = require('../security/integrity_guard');
 
 const CB_STATES = Object.freeze({
   CLOSED: 'CLOSED',
@@ -317,6 +318,7 @@ class ProviderRegistry {
     this._emitEvent = options.emitEvent || (() => {});
     this.config = options.configOverride || loadFreeComputeConfig(this._env);
     this._secretsBridge = null;
+    this._integrityGuard = createIntegrityGuard({ env: this._env });
 
     this._adapters = new Map();       // provider_id → ProviderAdapter
     this._health = new Map();         // provider_id → { ok, reason, checkedAt }
@@ -368,6 +370,8 @@ class ProviderRegistry {
     if (!this.config.enabled && !this.config.vllmEnabled) {
       return null;
     }
+
+    this._integrityGuard.enforceRequest(params);
 
     // Refresh local vLLM generation probe (deterministic, cached).
     await this._ensureLocalVllmGenerationProbe();
