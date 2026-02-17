@@ -7,11 +7,22 @@
  * This module does not mutate process.env and must not log secrets.
  */
 
+const path = require('node:path');
+const { decide } = require('./tool_governance');
+
 class ApprovalRequiredError extends Error {
   constructor(message) {
     super(message || 'operator approval required');
     this.name = 'ApprovalRequiredError';
     this.code = 'APPROVAL_REQUIRED';
+  }
+}
+
+class ToolDeniedError extends Error {
+  constructor(message) {
+    super(message || 'tool action denied by governance policy');
+    this.name = 'ToolDeniedError';
+    this.code = 'TOOL_DENIED';
   }
 }
 
@@ -33,31 +44,24 @@ function parseApproveTokens(env = process.env) {
   return out;
 }
 
-function isBroadAction(action) {
-  const a = String(action || '').toLowerCase();
-  if (!a) return true;
-  return (
-    a.includes('outbound_http') ||
-    a.includes('fs_write_outside_repo') ||
-    a.includes('service_control') ||
-    a.includes('write_memory') ||
-    a.includes('write_governance') ||
-    a.includes('spawn_child_process') ||
-    a.includes('gateway_rpc_broad')
-  );
-}
-
 function requireApproval(action, ctx, detail = {}) {
   const trustLevel = (ctx && ctx.trustLevel) || 'untrusted';
+  const repoRoot = detail.repoRoot || path.resolve(__dirname, '..', '..', '..');
 
-  // Trusted contexts are allowed without additional approvals.
-  if (trustLevel === 'trusted') {
-    return { allowed: true, mechanism: 'trusted' };
+  const policy = decide(
+    {
+      action,
+      targetPath: detail.targetPath
+    },
+    { trustLevel },
+    { repoRoot }
+  );
+
+  if (policy.decision === 'allow') {
+    return { allowed: true, mechanism: 'governance_allow', policyRef: policy.policyRef };
   }
-
-  // For untrusted contexts, only broad actions require ask-first.
-  if (!isBroadAction(action)) {
-    return { allowed: true, mechanism: 'untrusted_non_broad' };
+  if (policy.decision === 'deny') {
+    throw new ToolDeniedError(policy.reason);
   }
 
   // Operator session approval (local-only) is the simplest "yes".
@@ -81,6 +85,7 @@ function requireApproval(action, ctx, detail = {}) {
 
 module.exports = {
   ApprovalRequiredError,
+  ToolDeniedError,
   hasOperatorSessionApproval,
   parseApproveTokens,
   requireApproval

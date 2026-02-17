@@ -20,7 +20,7 @@ const { randomUUID, createHash, createHmac, timingSafeEqual } = require('node:cr
 const fs = require('node:fs');
 
 const { classifyRequest } = require('../core/system2/security/trust_boundary');
-const { requireApproval, ApprovalRequiredError } = require('../core/system2/security/ask_first');
+const { requireApproval } = require('../core/system2/security/ask_first');
 const { createAuditSink } = require('../core/system2/security/audit_sink');
 
 function nowUtcIso() {
@@ -151,6 +151,11 @@ function safeTimingEqualHex(expectedHex, providedHex) {
   } catch (_) {
     return false;
   }
+}
+
+function approvalStatusFromError(error) {
+  const code = error && error.code;
+  return (code === 'APPROVAL_REQUIRED' || code === 'TOOL_DENIED') ? 403 : 500;
 }
 
 class TokenBucket {
@@ -465,7 +470,7 @@ function createEdgeServer(options = {}) {
         try {
           requireApproval('gateway_rpc_broad', ctx, { approveToken, env, allowOperatorEnv: false });
         } catch (error) {
-          const status = error && error.code === 'APPROVAL_REQUIRED' ? 403 : 500;
+          const status = approvalStatusFromError(error);
           audit({
             event_type: 'edge_approval_denied',
             request_id: requestId,
@@ -685,7 +690,9 @@ function createEdgeServer(options = {}) {
     try {
       requireApproval('gateway_rpc_broad', ctx, { approveToken, env, allowOperatorEnv: false });
     } catch (error) {
-      const statusLine = error instanceof ApprovalRequiredError ? 'HTTP/1.1 403 Forbidden' : 'HTTP/1.1 500 Internal Server Error';
+      const statusLine = approvalStatusFromError(error) === 403
+        ? 'HTTP/1.1 403 Forbidden'
+        : 'HTTP/1.1 500 Internal Server Error';
       audit({
         event_type: 'edge_ws_approval_denied',
         request_id: requestId,
@@ -774,5 +781,8 @@ if (require.main === module) {
 module.exports = {
   createEdgeServer,
   parseTokenMap,
-  parseKeyMap
+  parseKeyMap,
+  _test: {
+    approvalStatusFromError
+  }
 };
