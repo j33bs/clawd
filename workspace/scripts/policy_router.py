@@ -558,9 +558,11 @@ class PolicyRouter:
                 if not token:
                     return False, err or "missing_token"
             else:
-                api_key = read_env_or_secrets(provider.get("apiKeyEnv", ""))
-                if not api_key:
-                    return False, "missing_api_key"
+                api_key_env = provider.get("apiKeyEnv", "")
+                if api_key_env:
+                    api_key = read_env_or_secrets(api_key_env)
+                    if not api_key:
+                        return False, "missing_api_key"
 
         if ptype == "anthropic":
             api_key = read_env_or_secrets(provider.get("apiKeyEnv", ""))

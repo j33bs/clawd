@@ -194,11 +194,57 @@ def test_budget_enforcement_and_token_cap():
         assert not res_block["ok"] and res_block["reason_code"] == "intent_call_budget_exhausted", res_block
 
 
+def test_missing_anthropic_key_falls_back_to_local_vllm():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        policy = base_policy()
+        policy["providers"] = {
+            "anthropic": {
+                "enabled": True,
+                "paid": False,
+                "tier": "auth",
+                "type": "anthropic",
+                "apiKeyEnv": "ANTHROPIC_API_KEY",
+                "models": [{"id": "claude-3-5-sonnet"}],
+            },
+            "local_vllm_assistant": {
+                "enabled": True,
+                "paid": False,
+                "tier": "free",
+                "type": "openai_compatible",
+                "baseUrl": "http://127.0.0.1:8001/v1",
+                "models": [{"id": "local-assistant"}],
+            },
+        }
+        policy["routing"]["free_order"] = ["anthropic", "local_vllm_assistant"]
+        policy["routing"]["intents"]["itc_classify"] = {"order": ["free"], "allowPaid": False}
+
+        def ok_handler(payload, model_id, ctx):
+            return {"ok": True, "text": "news"}
+
+        old_key = os.environ.pop("ANTHROPIC_API_KEY", None)
+        try:
+            router = make_router(tmpdir, policy, {"local_vllm_assistant": ok_handler})
+            result = router.execute_with_escalation("itc_classify", {"prompt": "hello"}, validate_fn=lambda x: "news")
+            assert result["ok"] and result["provider"] == "local_vllm_assistant", result
+
+            events = Path(tmpdir, "events.jsonl").read_text(encoding="utf-8").splitlines()
+            skips = [json.loads(line) for line in events if '"router_skip"' in line]
+            assert any(
+                e.get("detail", {}).get("provider") == "anthropic"
+                and e.get("detail", {}).get("reason_code") == "missing_api_key"
+                for e in skips
+            ), skips
+        finally:
+            if old_key is not None:
+                os.environ["ANTHROPIC_API_KEY"] = old_key
+
+
 def main():
     test_free_tier_selected()
     test_coding_ladder_order_and_reason_codes()
     test_circuit_breaker()
     test_budget_enforcement_and_token_cap()
+    test_missing_anthropic_key_falls_back_to_local_vllm()
     print("ok")
 
 
