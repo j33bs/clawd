@@ -16,6 +16,16 @@
 const { ProviderAdapter } = require('./provider_adapter');
 const { getProvider } = require('./catalog');
 const { resolveSystem2VllmConfig } = require('./system2_config_resolver');
+const { normalizeNodeId } = require('../../node_identity');
+
+function isSystem2Context(options = {}) {
+  if (options.system2 === true) {
+    return true;
+  }
+  const env = options.env || process.env;
+  const marker = options.nodeId || options.node_id || env.OPENCLAW_NODE_ID;
+  return normalizeNodeId(marker) === 'c_lawd';
+}
 
 /**
  * Create a vLLM provider adapter with discovery.
@@ -31,11 +41,12 @@ function createVllmProvider(options = {}) {
     throw new Error('local_vllm not found in catalog');
   }
 
-  if (options.system2 === true) {
+  if (isSystem2Context(options)) {
     const env = options.env || process.env;
     const cfg = resolveSystem2VllmConfig({
       env,
       emitEvent: options.emitEvent,
+      nodeId: options.nodeId || options.node_id,
       baseUrl: options.baseUrl,
       apiKey: options.apiKey,
       model: options.model,
@@ -78,10 +89,12 @@ async function probeVllmServer(entry, options = {}, { providerFactory } = {}) {
   const baseUrl = options.baseUrl
     || env.OPENCLAW_VLLM_BASE_URL
     || 'http://127.0.0.1:18888/v1';
-  const system2Cfg = options.system2 === true
+  const useSystem2 = isSystem2Context(options)
+  const system2Cfg = useSystem2
     ? resolveSystem2VllmConfig({
         env,
         emitEvent: options.emitEvent,
+        nodeId: options.nodeId || options.node_id,
         baseUrl: options.baseUrl,
         apiKey: options.apiKey,
         model: options.model,
@@ -114,7 +127,7 @@ async function probeVllmServer(entry, options = {}, { providerFactory } = {}) {
     const derivedOptions = {
       env: derivedEnv,
       emitEvent: options.emitEvent,
-      system2: options.system2 === true,
+      system2: useSystem2,
       baseUrl: options.baseUrl,
       apiKey: options.apiKey,
       model: options.model,

@@ -134,6 +134,35 @@ test('probeVllmServer consults SYSTEM2_VLLM_* when system2 is true', async funct
   assert.strictEqual(res.base_url, env.SYSTEM2_VLLM_BASE_URL);
 });
 
+test('probeVllmServer consults SYSTEM2_VLLM_* when nodeId alias resolves to c_lawd', async function () {
+  assert.ok(LOCAL_VLLM_ENTRY, 'local_vllm should exist');
+  const env = {
+    OPENCLAW_VLLM_BASE_URL: 'http://system1.example.invalid/v1',
+    SYSTEM2_VLLM_BASE_URL: 'http://system2.example.invalid/v1'
+  };
+
+  const captured = [];
+  const res = await probeVllmServer(
+    LOCAL_VLLM_ENTRY,
+    { env, nodeId: 'system2' },
+    {
+      providerFactory(entry, derivedOptions) {
+        captured.push({
+          openclaw_base_url: derivedOptions.env && derivedOptions.env.OPENCLAW_VLLM_BASE_URL || null
+        });
+        return {
+          baseUrl: 'unused',
+          async health() { return { ok: true, models: ['m'] }; },
+          async call() { return { text: 'OK' }; }
+        };
+      }
+    }
+  );
+
+  assert.strictEqual(captured[0].openclaw_base_url, env.SYSTEM2_VLLM_BASE_URL);
+  assert.strictEqual(res.base_url, env.SYSTEM2_VLLM_BASE_URL);
+});
+
 async function run() {
   for (const t of tests) {
     try {
@@ -147,4 +176,3 @@ async function run() {
 }
 
 run();
-

@@ -59,6 +59,17 @@ test('prefers SYSTEM2_VLLM_* over OPENCLAW_VLLM_*', function () {
   assert.strictEqual(config.api_key, 'system1-key');
 });
 
+test('uses node alias system-2 for c_lawd routing context', function () {
+  const config = resolveSystem2VllmConfig({
+    nodeId: 'system-2',
+    env: {
+      SYSTEM2_VLLM_BASE_URL: 'http://system2:8888/v1',
+      OPENCLAW_VLLM_BASE_URL: 'http://system1:7777/v1'
+    }
+  });
+  assert.strictEqual(config.base_url, 'http://system2:8888/v1');
+});
+
 test('uses defaults when envs not set', function () {
   const config = resolveSystem2VllmConfig({ env: {} });
   assert.strictEqual(config.base_url, 'http://127.0.0.1:18888/v1');
@@ -99,4 +110,3 @@ test('invalid numeric env yields NaN (no throw)', function () {
   });
   assert.ok(Number.isNaN(config.timeout_ms));
 });
-
