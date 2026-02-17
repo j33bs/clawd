@@ -266,6 +266,7 @@ Models MAY run in parallel when:
 ```
 
 For node `c_lawd`, keep defaults unchanged and select local vLLM providers explicitly only.
+For node `dali`, keep `local_vllm_assistant` as default and prefer `local_vllm_coder` for coding intent/task_type.
 
 ### Environment Variables (secrets.env)
 

@@ -202,7 +202,8 @@
       {
         "name": "coding_prefers_local_vllm_coder",
         "when": {
-          "intent": "coding"
+          "intent": "coding",
+          "task_type": "coding"
         },
         "provider": "local_vllm_coder"
       }
