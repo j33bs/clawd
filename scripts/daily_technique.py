@@ -6,11 +6,11 @@ Curated collection of techniques for daily briefing
 Techniques aligned with: Vitality, Cognition, Flow, Malleability, Agency
 (TACTI(C)-R principles)
 """
+import argparse
 import json
-import random
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 # Curated therapeutic techniques
 TECHNIQUES = [
@@ -354,6 +354,62 @@ TECHNIQUES = [
     }
 ]
 
+TACTICR_STATE_TO_PRINCIPLE = {
+    "high_arousal": "MALLEABILITY",
+    "low_arousal": "VITALITY",
+    "complex_task": "COGNITION",
+    "error_recovery": "REPAIRABLE",
+}
+
+
+def _derive_tacticr_principle_map(technique: Dict) -> List[str]:
+    """Derive TACTI(C)-R principle map for one technique."""
+    principle = str(technique.get("principle", "")).lower()
+    category = str(technique.get("category", "")).lower()
+    name = str(technique.get("name", "")).lower()
+    description = str(technique.get("description", "")).lower()
+
+    mapped = set()
+
+    if principle in {"vitality", "flow"}:
+        mapped.add("VITALITY")
+    if principle in {"cognition", "agency", "tacti"}:
+        mapped.add("COGNITION")
+    if principle == "malleability":
+        mapped.add("MALLEABILITY")
+
+    calming_keywords = (
+        "breathing",
+        "grounding",
+        "self-compassion",
+        "acceptance",
+        "mindful",
+        "calming",
+    )
+    if any(k in name or k in description for k in calming_keywords):
+        mapped.add("MALLEABILITY")
+
+    repair_keywords = (
+        "error",
+        "recovery",
+        "regulation",
+        "panic",
+        "flashback",
+        "shame",
+        "stop",
+    )
+    if any(k in name or k in description for k in repair_keywords) or category in {"cbt", "mindfulness", "rebt"}:
+        mapped.add("REPAIRABLE")
+
+    if not mapped:
+        mapped.add("COGNITION")
+
+    return sorted(mapped)
+
+
+for _technique in TECHNIQUES:
+    _technique["principle_map"] = _derive_tacticr_principle_map(_technique)
+
 
 def get_technique_for_day(date: datetime = None) -> Dict:
     """Get a technique based on the day of year (rotates through)."""
@@ -371,13 +427,56 @@ def get_technique_for_day(date: datetime = None) -> Dict:
 
 def get_technique_by_principle(principle: str) -> List[Dict]:
     """Get techniques filtered by TACTI(C)-R principle."""
-    return [t for t in TECHNIQUES if t.get("principle") == principle]
+    raw = str(principle or "").strip()
+    normalized = raw.lower()
+    mapped = raw.upper()
+    return [
+        t
+        for t in TECHNIQUES
+        if t.get("principle") == normalized or mapped in t.get("principle_map", [])
+    ]
+
+
+def get_technique_for_state(
+    date: Optional[datetime] = None,
+    *,
+    arousal: str = "medium",
+    complex_task: bool = False,
+    recent_errors: int = 0,
+) -> Dict:
+    """Get a deterministic technique recommendation based on runtime state."""
+    if date is None:
+        date = datetime.now(timezone.utc)
+
+    target_principle = None
+    if recent_errors > 0:
+        target_principle = TACTICR_STATE_TO_PRINCIPLE["error_recovery"]
+    elif complex_task:
+        target_principle = TACTICR_STATE_TO_PRINCIPLE["complex_task"]
+    elif str(arousal).lower() == "high":
+        target_principle = TACTICR_STATE_TO_PRINCIPLE["high_arousal"]
+    elif str(arousal).lower() == "low":
+        target_principle = TACTICR_STATE_TO_PRINCIPLE["low_arousal"]
+
+    if target_principle is None:
+        return get_technique_for_day(date)
+
+    candidates = [
+        t for t in TECHNIQUES if target_principle in t.get("principle_map", [])
+    ]
+    if not candidates:
+        return get_technique_for_day(date)
+
+    day_of_year = date.timetuple().tm_yday
+    index = (day_of_year - 1) % len(candidates)
+    return candidates[index]
 
 
 def format_briefing(technique: Dict) -> str:
     """Format technique for daily briefing."""
     benefits = ", ".join(technique.get("benefits", []))
     steps = "\n  ".join(technique.get("how", []))
+    principle_map = ", ".join(technique.get("principle_map", []))
     
     return f"""
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -386,6 +485,7 @@ def format_briefing(technique: Dict) -> str:
 
 📌 **{technique['name']}**
    Category: {technique['category']} | Principle: {technique['principle'].upper()}
+   TACTI(C)-R Map: {principle_map}
    Duration: {technique['duration']}
 
 📖 **What it is:**
@@ -403,9 +503,32 @@ def format_briefing(technique: Dict) -> str:
 
 
 def main():
-    # Today's technique
-    technique = get_technique_for_day()
-    print(format_briefing(technique))
+    parser = argparse.ArgumentParser(description="Daily therapeutic technique selector")
+    parser.add_argument("--arousal", choices=["low", "medium", "high"], default="medium")
+    parser.add_argument("--complex-task", action="store_true")
+    parser.add_argument("--recent-errors", type=int, default=0)
+    parser.add_argument("--json", action="store_true")
+    args = parser.parse_args()
+
+    technique = get_technique_for_state(
+        arousal=args.arousal,
+        complex_task=args.complex_task,
+        recent_errors=max(0, args.recent_errors),
+    )
+
+    if args.json:
+        payload = {
+            "technique": technique["name"],
+            "category": technique["category"],
+            "principle": technique["principle"],
+            "principle_map": technique.get("principle_map", []),
+            "arousal": args.arousal,
+            "complex_task": bool(args.complex_task),
+            "recent_errors": max(0, args.recent_errors),
+        }
+        print(json.dumps(payload, indent=2))
+    else:
+        print(format_briefing(technique))
     
     # Show principle breakdown
     print("\n📊 Principle Distribution:")
