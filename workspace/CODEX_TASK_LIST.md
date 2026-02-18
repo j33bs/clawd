@@ -78,29 +78,22 @@
 - **Verification:** `npx @tobilu/qmd --help` works
 
 ### 11. Index Workspace with QMD
-- **Status:** ⏳ PENDING (requires operator execution)
-- **Commands to run:**
-  ```bash
-  cd /Users/heathyeager/clawd
-  npx @tobilu/qmd collection add . --name clawd
-  npx @tobilu/qmd context add qmd://clawd "OpenClaw agent workspace - routing, memory, governance, hivemind, skills, configs"
-  npx @tobilu/qmd embed
-  ```
-- **Verification:** `npx @tobilu/qmd status` should show indexed documents
+- **Status:** ✅ COMPLETED (by operator)
+- **Evidence:** `npx @tobilu/qmd status` shows:
+  - 120 files indexed
+  - 278 vectors embedded
+  - Collection: clawd
 
 ### 12. Start QMD MCP Daemon
-- **Status:** ⏳ PENDING (requires operator execution)
-- **Commands to run:**
-  ```bash
-  npx @tobilu/qmd mcp --http --daemon
-  ```
+- **Status:** ✅ COMPLETED (by operator)
+- **Evidence:** MCP running (PID 79351)
 - **Verification:** `curl http://localhost:8181/health`
 
 ### 13. Wire Agent to Query QMD
-- **Status:** ⏳ PENDING
-- **Task:** Update agent behavior to auto-query QMD for workspace searches
-- **Pattern:** Similar to HiveMind auto-query, but for fast workspace search
-- **Implementation:** Add QMD query to docs/HIVEMIND_INTEGRATION.md or create docs/QMD_AGENT_INTEGRATION.md
+- **Status:** ✅ COMPLETED
+- **Action:** Updated `docs/HIVEMIND_INTEGRATION.md` with dual-layer architecture
+- **Pattern:** Query QMD first → then HiveMind for scope filtering
+- **Command:** `npx @tobilu/qmd search "<query>" -n 5`
 
 ### 14. Keep HiveMind for Scope/Redaction
 - **Status:** ✅ ARCHITECTURE DECIDED
