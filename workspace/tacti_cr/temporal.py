@@ -8,6 +8,7 @@ from math import exp
 from typing import Dict, List, Optional
 
 from .config import DEFAULT_CONFIG
+from .hivemind_bridge import hivemind_query, hivemind_store
 
 
 @dataclass
@@ -20,9 +21,17 @@ class TemporalEntry:
 
 
 class TemporalMemory:
-    def __init__(self, retention_days: int = DEFAULT_CONFIG.temporal.retention_days):
+    def __init__(
+        self,
+        retention_days: int = DEFAULT_CONFIG.temporal.retention_days,
+        *,
+        agent_scope: str = "main",
+        sync_hivemind: bool = True,
+    ):
         self._entries: List[TemporalEntry] = []
         self._retention_days = retention_days
+        self._agent_scope = agent_scope
+        self._sync_hivemind = sync_hivemind
 
     def store(
         self,
@@ -41,9 +50,27 @@ class TemporalMemory:
             metadata=metadata or {},
         )
         self._entries.append(entry)
+        if self._sync_hivemind:
+            hivemind_store(
+                {
+                    "kind": str((metadata or {}).get("kind", "fact")),
+                    "source": "tacti_cr.temporal",
+                    "agent_scope": str((metadata or {}).get("agent_scope", self._agent_scope)),
+                    "content": content,
+                    "ttl_days": None,
+                }
+            )
         return entry
 
-    def retrieve(self, query: str, limit: int = 5, now: Optional[datetime] = None) -> List[TemporalEntry]:
+    def retrieve(
+        self,
+        query: str,
+        limit: int = 5,
+        now: Optional[datetime] = None,
+        *,
+        include_hivemind: bool = False,
+        hivemind_limit: int = 3,
+    ) -> List[TemporalEntry]:
         now = now or datetime.now(timezone.utc)
         query_terms = set((query or "").lower().split())
 
@@ -58,7 +85,38 @@ class TemporalMemory:
             scored.append((score, entry))
 
         scored.sort(key=lambda item: item[0], reverse=True)
-        return [entry for _, entry in scored[:limit]]
+        local_results = [entry for _, entry in scored[:limit]]
+
+        if not include_hivemind:
+            return local_results
+
+        extra: List[TemporalEntry] = []
+        seen = {e.content for e in local_results}
+        for row in hivemind_query(query, agent=self._agent_scope, limit=hivemind_limit):
+            text = row.content.strip()
+            if not text or text in seen:
+                continue
+            seen.add(text)
+            ts = now
+            try:
+                if row.created_at:
+                    ts = datetime.fromisoformat(row.created_at)
+                    if ts.tzinfo is None:
+                        ts = ts.replace(tzinfo=timezone.utc)
+            except Exception:
+                ts = now
+            extra.append(
+                TemporalEntry(
+                    timestamp=ts,
+                    content=text,
+                    importance=max(0.1, min(1.0, row.score / 10.0)),
+                    decay_rate=DEFAULT_CONFIG.temporal.default_decay_rate,
+                    metadata={"source": row.source, "kind": row.kind, "agent_scope": row.agent_scope},
+                )
+            )
+
+        merged = local_results + extra
+        return merged[: max(1, int(limit))]
 
     def prune_expired(self, now: Optional[datetime] = None, max_age_days: Optional[int] = None) -> int:
         now = now or datetime.now(timezone.utc)

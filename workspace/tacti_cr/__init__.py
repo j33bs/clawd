@@ -9,6 +9,7 @@ from .cross_timescale import (
     MetaDecision,
     ReflexDecision,
 )
+from .hivemind_bridge import MemoryEntry, hivemind_query, hivemind_store
 from .repair import RepairAction, RepairEngine
 from .temporal import TemporalEntry, TemporalMemory
 
@@ -26,6 +27,9 @@ __all__ = [
     "DeliberativeDecision",
     "MetaDecision",
     "ReflexDecision",
+    "MemoryEntry",
+    "hivemind_query",
+    "hivemind_store",
     "RepairAction",
     "RepairEngine",
     "TemporalEntry",
