@@ -4,7 +4,7 @@
  * FreeComputeCloud — Local vLLM Provider
  *
  * Wraps a vLLM OpenAI-compatible server running locally (or on LAN).
- * Primary use: dali local inference offload.
+ * Primary use: System-1 local inference offload.
  *
  * Features:
  *   - /v1/models probe for model discovery
@@ -13,7 +13,7 @@
  *   - Status artifact writer (pid/port/model/timestamp)
  */
 
-const { LocalVllmProvider } = require('./local_vllm_provider');
+const { ProviderAdapter } = require('./provider_adapter');
 const { getProvider } = require('./catalog');
 const { resolveSystem2VllmConfig } = require('./system2_config_resolver');
 const { normalizeNodeId } = require('../../node_identity');
@@ -61,10 +61,10 @@ function createVllmProvider(options = {}) {
     if (cfg.api_key) resolvedEnv.OPENCLAW_VLLM_API_KEY = cfg.api_key;
     if (cfg.model) resolvedEnv.OPENCLAW_VLLM_MODEL = cfg.model;
 
-    return new LocalVllmProvider({ entry, ...options, env: resolvedEnv });
+    return new ProviderAdapter(entry, { ...options, env: resolvedEnv });
   }
 
-  return new LocalVllmProvider({ entry, ...options });
+  return new ProviderAdapter(entry, options);
 }
 
 /**
