@@ -4,6 +4,7 @@ Research Paper Ingestion
 Downloads and indexes research papers for TACTI(C)-R framework
 
 Usage:
+    python3 research_ingest.py --topics-file workspace/research/TOPICS.md --out-dir reports/research [--dry-run]
     python3 research_ingest.py add --url <url> --topic <topic>
     python3 research_ingest.py add --text "<full text>" --topic <topic>
     python3 research_ingest.py list --topic <topic>
@@ -12,23 +13,19 @@ Usage:
 import argparse
 import hashlib
 import json
-import os
 import sys
 import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
-
-# Try to import readability for web scraping
-try:
-    from urllib.request import urlopen
-    from html import unescape
-    HAVE_READABILITY = False  # Keep simple for now
-except ImportError:
-    HAVE_READABILITY = False
+from urllib.error import URLError, HTTPError
+from urllib.parse import urlencode
+from urllib.request import urlopen
+import xml.etree.ElementTree as ET
 
 DATA_DIR = Path(__file__).parent / "data"
 PAPERS_FILE = DATA_DIR / "papers.jsonl"
+ARXIV_API = "https://export.arxiv.org/api/query"
 DATA_DIR.mkdir(exist_ok=True)
 
 if not PAPERS_FILE.exists():
@@ -228,9 +225,190 @@ def cmd_search(args: argparse.Namespace) -> int:
     return 0
 
 
+def normalize_topic(raw: str) -> str:
+    topic = raw.strip().lower().replace("-", "_").replace(" ", "_")
+    topic = re.sub(r"[^a-z0-9_]+", "", topic)
+    topic = re.sub(r"_+", "_", topic).strip("_")
+    return topic
+
+
+def parse_topics_file(path: Path) -> list[str]:
+    if not path.exists():
+        raise FileNotFoundError(f"topics file not found: {path}")
+
+    topics: list[str] = []
+    seen: set[str] = set()
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+
+        table_match = re.match(r"^\|\s*\*\*(?P<topic>[^*|]+)\*\*\s*\|", line)
+        if table_match:
+            normalized = normalize_topic(table_match.group("topic"))
+            if normalized and normalized not in seen:
+                seen.add(normalized)
+                topics.append(normalized)
+            continue
+
+        heading_match = re.match(r"^####\s+(?P<topic>[A-Za-z0-9 _-]+)$", line)
+        if heading_match:
+            normalized = normalize_topic(heading_match.group("topic"))
+            if normalized and normalized not in seen:
+                seen.add(normalized)
+                topics.append(normalized)
+
+    return topics
+
+
+def arxiv_query(topic: str, max_results: int) -> str:
+    query = topic.replace("_", " ")
+    params = urlencode(
+        {
+            "search_query": f'all:"{query}"',
+            "start": 0,
+            "max_results": max_results,
+            "sortBy": "submittedDate",
+            "sortOrder": "descending",
+        }
+    )
+    return f"{ARXIV_API}?{params}"
+
+
+def probe_arxiv_connectivity(timeout: int = 10) -> dict:
+    url = arxiv_query("artificial intelligence", 1)
+    try:
+        with urlopen(url, timeout=timeout) as resp:
+            status = getattr(resp, "status", 200)
+            return {"ok": True, "status": status, "url": url}
+    except (URLError, HTTPError, TimeoutError) as err:
+        return {"ok": False, "error": str(err), "url": url}
+
+
+def fetch_arxiv_entries(topic: str, max_results: int = 1, timeout: int = 20) -> list[dict]:
+    url = arxiv_query(topic, max_results)
+    with urlopen(url, timeout=timeout) as resp:
+        raw = resp.read().decode("utf-8", errors="replace")
+
+    root = ET.fromstring(raw)
+    ns = {"atom": "http://www.w3.org/2005/Atom"}
+    entries: list[dict] = []
+    for entry in root.findall("atom:entry", ns):
+        entry_id = entry.findtext("atom:id", default="", namespaces=ns).strip()
+        title = " ".join(entry.findtext("atom:title", default="", namespaces=ns).split())
+        summary = " ".join(entry.findtext("atom:summary", default="", namespaces=ns).split())
+        updated = entry.findtext("atom:updated", default="", namespaces=ns).strip()
+        if not title or not summary:
+            continue
+        entries.append(
+            {
+                "entry_id": entry_id,
+                "title": title,
+                "summary": summary,
+                "updated": updated,
+                "url": entry_id,
+            }
+        )
+    return entries
+
+
+def ingest_topics(topics_file: Path, out_dir: Path, dry_run: bool = False, max_results: int = 1) -> tuple[int, dict]:
+    topics = parse_topics_file(topics_file)
+    connectivity = probe_arxiv_connectivity()
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    existing_ids: set[str] = set()
+    with open(PAPERS_FILE, "r", encoding="utf-8") as f:
+        for line in f:
+            if not line.strip():
+                continue
+            try:
+                record = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            paper_id = record.get("id")
+            if isinstance(paper_id, str):
+                existing_ids.add(paper_id)
+
+    docs_ingested = 0
+    fetch_errors: list[str] = []
+    fetched_by_topic: dict[str, int] = {}
+
+    if connectivity.get("ok") and not dry_run:
+        for topic in topics:
+            try:
+                entries = fetch_arxiv_entries(topic, max_results=max_results)
+            except Exception as err:  # pragma: no cover - defensive
+                fetch_errors.append(f"{topic}: {err}")
+                continue
+
+            fetched_by_topic[topic] = len(entries)
+            for entry in entries:
+                content = f"{entry['title']}\n\n{entry['summary']}"
+                paper_id = compute_hash(f"{entry['entry_id']}::{content[:1000]}")
+                if paper_id in existing_ids:
+                    continue
+                record = {
+                    "id": paper_id,
+                    "title": entry["title"],
+                    "topic": topic,
+                    "source": "arxiv",
+                    "url": entry["url"],
+                    "content": content[:50000],
+                    "length": len(content),
+                    "added_at": datetime.now(timezone.utc).isoformat(),
+                    "tacti_relevance": 0.6,
+                    "metadata": {
+                        "entry_updated": entry["updated"],
+                    },
+                }
+                with open(PAPERS_FILE, "a", encoding="utf-8") as f:
+                    f.write(json.dumps(record, ensure_ascii=False) + "\n")
+                existing_ids.add(paper_id)
+                docs_ingested += 1
+
+    status = {
+        "topics_file": str(topics_file),
+        "topics_count": len(topics),
+        "topics": topics,
+        "docs_ingested": docs_ingested,
+        "fetched_by_topic": fetched_by_topic,
+        "dry_run": dry_run,
+        "connectivity": connectivity,
+        "errors": fetch_errors,
+        "ts": datetime.now(timezone.utc).isoformat(),
+    }
+    status_path = out_dir / "ingest_status.json"
+    status_path.write_text(json.dumps(status, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+    if not connectivity.get("ok"):
+        return 1, status
+    if fetch_errors:
+        return 1, status
+    return 0, status
+
+
+def cmd_ingest_topics(args: argparse.Namespace) -> int:
+    topics_file = Path(args.topics_file).expanduser()
+    out_dir = Path(args.out_dir).expanduser()
+    code, status = ingest_topics(
+        topics_file=topics_file,
+        out_dir=out_dir,
+        dry_run=bool(args.dry_run),
+        max_results=max(1, int(args.max_results_per_topic)),
+    )
+    print(json.dumps(status, ensure_ascii=False, indent=2))
+    return code
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Research Paper Ingestion for TACTI(C)-R")
-    sub = parser.add_subparsers(dest="cmd", required=True)
+    parser.add_argument("--topics-file", help="Ingest mode: markdown topic file")
+    parser.add_argument("--out-dir", default="reports/research", help="Ingest status output directory")
+    parser.add_argument("--dry-run", action="store_true", help="Ingest mode: enumerate topics + connectivity only")
+    parser.add_argument("--max-results-per-topic", type=int, default=1, help="Ingest mode: arXiv entries per topic")
+
+    sub = parser.add_subparsers(dest="cmd", required=False)
     
     # add
     a = sub.add_parser("add", help="Add a research paper")
@@ -256,7 +434,12 @@ def build_parser() -> argparse.ArgumentParser:
 def main():
     parser = build_parser()
     args = parser.parse_args()
-    return args.func(args)
+    if args.topics_file:
+        return cmd_ingest_topics(args)
+    if hasattr(args, "func"):
+        return args.func(args)
+    parser.print_help()
+    return 2
 
 
 if __name__ == "__main__":

@@ -2,8 +2,12 @@
 # Nightly Build - Autonomous work while you sleep
 # Usage: ./nightly_build.sh [research|health|memory|all]
 
+set -euo pipefail
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CLAWD_DIR="$HOME/clawd"
+RESEARCH_TOPICS_FILE="$CLAWD_DIR/workspace/research/TOPICS.md"
+RESEARCH_OUT_DIR="$CLAWD_DIR/reports/research"
 
 # Activate virtual environment if it exists
 if [ -f "$CLAWD_DIR/.venv/bin/activate" ]; then
@@ -21,23 +25,34 @@ log() {
 
 run_research() {
     log "=== Research Ingest ==="
-    
-    # Check for new papers on TACTI(C)-R topics
-    cd "$CLAWD_DIR/workspace"
-    
-    # Search for recent papers (last 30 days)
-    python3 -c "
-import subprocess
-import json
-from datetime import datetime, timedelta
 
-topics = ['temporal dynamics AI', 'arousal regulation', 'self-modifying systems', 'consciousness']
+    local ingest_cmd=(
+        python3
+        "$CLAWD_DIR/workspace/research/research_ingest.py"
+        --topics-file
+        "$RESEARCH_TOPICS_FILE"
+        --out-dir
+        "$RESEARCH_OUT_DIR"
+    )
+    if [ "${NIGHTLY_BUILD_DRY_RUN:-0}" = "1" ]; then
+        ingest_cmd+=(--dry-run)
+    fi
 
-for topic in topics:
-    print(f'Searching: {topic}')
-" 2>&1 | tee -a "$LOG_FILE"
-    
-    log "Research check complete"
+    mkdir -p "$RESEARCH_OUT_DIR"
+
+    if "${ingest_cmd[@]}" >>"$LOG_FILE" 2>&1; then
+        log "Research ingest complete"
+    else
+        log "⚠️ Research ingest failed"
+        return 1
+    fi
+
+    if [ -f "$RESEARCH_OUT_DIR/ingest_status.json" ]; then
+        log "Ingest status artifact: $RESEARCH_OUT_DIR/ingest_status.json"
+    else
+        log "⚠️ Missing ingest status artifact"
+        return 1
+    fi
 }
 
 run_health() {
