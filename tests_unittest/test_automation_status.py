@@ -165,6 +165,110 @@ class TestAutomationStatus(unittest.TestCase):
             self.assertTrue(report["needs_prune"])
             self.assertEqual(report["line_count"], 200)
 
+    def test_latest_run_uses_job_state_when_jsonl_missing(self):
+        now_ms = int(time.time() * 1000)
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            runs_dir = root / "runs"
+            jobs_file = root / "jobs.json"
+            artifact = root / "latest.json"
+            job_id = "job-state-fallback"
+
+            self._write_json(
+                jobs_file,
+                {
+                    "version": 1,
+                    "jobs": [
+                        {
+                            "id": job_id,
+                            "name": "Daily Morning Briefing",
+                            "state": {
+                                "lastRunAtMs": now_ms - 1000,
+                                "lastStatus": "ok",
+                                "nextRunAtMs": now_ms + 3600000,
+                            },
+                        }
+                    ],
+                },
+            )
+
+            proc = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "latest-run",
+                    "--job-id",
+                    job_id,
+                    "--job-name",
+                    "Daily Morning Briefing",
+                    "--runs-dir",
+                    str(runs_dir),
+                    "--jobs-file",
+                    str(jobs_file),
+                    "--artifact",
+                    str(artifact),
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            report = json.loads(artifact.read_text(encoding="utf-8"))
+            self.assertEqual(report["status"], "ok")
+            self.assertEqual(report.get("source"), "job-state")
+
+    def test_latest_run_enforces_min_run_timestamp(self):
+        now_ms = int(time.time() * 1000)
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            runs_dir = root / "runs"
+            jobs_file = root / "jobs.json"
+            artifact = root / "latest_min.json"
+            job_id = "job-min-threshold"
+
+            self._write_json(
+                jobs_file,
+                {
+                    "version": 1,
+                    "jobs": [
+                        {
+                            "id": job_id,
+                            "name": "Daily Morning Briefing",
+                            "state": {
+                                "lastRunAtMs": now_ms - 120000,
+                                "lastStatus": "ok",
+                            },
+                        }
+                    ],
+                },
+            )
+
+            proc = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "latest-run",
+                    "--job-id",
+                    job_id,
+                    "--job-name",
+                    "Daily Morning Briefing",
+                    "--runs-dir",
+                    str(runs_dir),
+                    "--jobs-file",
+                    str(jobs_file),
+                    "--min-run-at-ms",
+                    str(now_ms - 1000),
+                    "--artifact",
+                    str(artifact),
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(proc.returncode, 1)
+            report = json.loads(artifact.read_text(encoding="utf-8"))
+            self.assertEqual(report["error"], "no-recent-run")
+
 
 if __name__ == "__main__":
     unittest.main()

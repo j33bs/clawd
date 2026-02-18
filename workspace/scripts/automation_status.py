@@ -157,10 +157,63 @@ def _latest_run_payload(job_id: str, job_name: str | None, runs_dir: Path) -> di
     return payload
 
 
+def _latest_state_payload(
+    job_id: str,
+    job_name: str | None,
+    jobs_file: Path,
+    runs_dir: Path,
+) -> dict[str, Any] | None:
+    jobs = load_jobs_store(jobs_file)
+    job = find_job(jobs, job_id, job_name)
+    if not job:
+        return None
+    state = job.get("state")
+    if not isinstance(state, dict):
+        return None
+    run_raw = state.get("lastRunAtMs")
+    if not isinstance(run_raw, (int, float)):
+        return None
+    run_ms = int(run_raw)
+    next_due_raw = state.get("nextRunAtMs")
+    next_due_ms = int(next_due_raw) if isinstance(next_due_raw, (int, float)) else None
+    resolved_name = str(job.get("name", job_name or job_id))
+    return {
+        "job_id": job_id,
+        "job_name": resolved_name,
+        "status": state.get("lastStatus", "unknown"),
+        "error": state.get("lastError"),
+        "summary": state.get("lastSummary"),
+        "run_at_ms": run_ms,
+        "run_at": ms_to_iso(run_ms),
+        "next_due_ms": next_due_ms,
+        "next_due": ms_to_iso(next_due_ms),
+        "run_file": str(runs_dir / f"{job_id}.jsonl"),
+        "invalid_jsonl_lines": 0,
+        "source": "job-state",
+        "ts_ms": utc_now_ms(),
+        "ts": ms_to_iso(utc_now_ms()),
+    }
+
+
 def cmd_latest_run(args: argparse.Namespace) -> int:
     job_id, resolved_name = resolve_job_id_name(args)
     job_name = resolved_name or args.job_name
-    payload = _latest_run_payload(job_id, job_name, resolve_repo_path(args.runs_dir))
+    runs_dir = resolve_repo_path(args.runs_dir)
+    jobs_file = resolve_repo_path(args.jobs_file)
+    payload = _latest_run_payload(job_id, job_name, runs_dir)
+    if payload.get("status") == "missing":
+        state_payload = _latest_state_payload(job_id, job_name, jobs_file, runs_dir)
+        if state_payload is not None:
+            payload = state_payload
+
+    if args.min_run_at_ms is not None:
+        min_run_at_ms = int(args.min_run_at_ms)
+        run_at_ms = payload.get("run_at_ms")
+        if not isinstance(run_at_ms, (int, float)) or int(run_at_ms) < min_run_at_ms:
+            payload["status"] = "missing"
+            payload["error"] = "no-recent-run"
+            payload["min_run_at_ms"] = min_run_at_ms
+
     artifact = resolve_repo_path(args.artifact) if args.artifact else default_status_artifact(job_id)
     write_json(artifact, payload)
     print(json.dumps(payload, ensure_ascii=False))
@@ -356,6 +409,7 @@ def build_parser() -> argparse.ArgumentParser:
     latest.add_argument("--job-name")
     latest.add_argument("--runs-dir", default=str(DEFAULT_RUNS_DIR))
     latest.add_argument("--jobs-file", default=str(DEFAULT_JOBS_FILE))
+    latest.add_argument("--min-run-at-ms", type=int)
     latest.add_argument("--artifact")
     latest.set_defaults(func=cmd_latest_run)
 
