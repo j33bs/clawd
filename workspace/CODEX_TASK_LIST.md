@@ -53,20 +53,20 @@
 - **Output:** `workspace/research/WIM_HOF_AI_ENHANCEMENTS_BRIEF_2026-02-18.md`
 
 ### 9. vLLM Metal Server
-- **Status:** Attempted and diagnosed
-- **Command:** `LOCAL_LLM_BACKEND=vllm_metal VLLM_GPU_UTIL=0.40 bash scripts/system2/run_local_vllm.sh`
-- **Result:** Failed with runtime dependency issue:
-  - `mlx-lm ... missing MambaCache (vllm-metal runtime incompatibility)`
-- **Next fix path:** Reinstall vllm-metal in a clean venv per script guidance.
+- **Status:** Completed (stable launch profile verified)
+- **Working command:** `LOCAL_LLM_BACKEND=vllm_metal VLLM_VENV=$HOME/.venv-vllm-metal OPENCLAW_VLLM_MODEL=Qwen/Qwen2.5-0.5B-Instruct VLLM_MAX_MODEL_LEN=512 bash scripts/system2/run_local_vllm.sh`
+- **Verification:**
+  - `curl -sS --max-time 5 http://127.0.0.1:8000/v1/models`
+  - Result includes `Qwen/Qwen2.5-0.5B-Instruct`
+- **Notes:** Default 3B profile hit Metal OOM on this machine; 0.5B + 512 context is the conservative local profile.
 
-## ⚠️ Still Open
+## ✅ Resolved In This Pass
 
 ### 5. Embedded Agent Tool Call Error
-- **Issue:** `read tool called without path`
-- **Evidence (recent):** `~/.openclaw/logs/gateway.err.log` entries including
-  - `toolCallId=call_function_nwdgv8gl7oup_1 argsType=object`
-- **Current assessment:** Runtime/tool-call payload issue; not linked to a direct in-repo require-path bug.
-- **Next step:** Add payload guard at embedded tool dispatch boundary (requires targeted runtime patch + test fixture reproducer).
+- **Status:** Completed (guard added + covered by test)
+- **Fix:** Added fail-closed RPC payload guard in `scripts/system2_http_edge.js` to reject malformed `read` tool calls missing `args.path`.
+- **Test:** `tests/system2_http_edge.test.js` now verifies malformed `read` payload returns `400`, valid payload passes.
+- **Historic evidence:** `~/.openclaw/logs/gateway.err.log` contains repeated `read tool called without path ... argsType=object` prior to guard.
 
 ---
 

@@ -285,6 +285,63 @@ async function testRpcApprovalRequired() {
   }
 }
 
+async function testRpcMalformedReadPayloadDenied() {
+  const upstream = http.createServer((req, res) => {
+    res.statusCode = 200;
+    res.end('ok\n');
+  });
+  const upstreamAddr = await listen(upstream);
+
+  const edge = createEdgeServer({
+    env: {
+      OPENCLAW_EDGE_TOKENS: 'userA:edge_token_a',
+      OPENCLAW_EDGE_APPROVE_TOKENS: 'ok:approve_token_ok',
+      OPENCLAW_EDGE_RATE_PER_MIN: '1000',
+      OPENCLAW_EDGE_BURST: '1000',
+      OPENCLAW_EDGE_UPSTREAM_HOST: upstreamAddr.host,
+      OPENCLAW_EDGE_UPSTREAM_PORT: String(upstreamAddr.port),
+    },
+    bindHost: '127.0.0.1',
+    bindPort: 0,
+    upstreamHost: upstreamAddr.host,
+    upstreamPort: upstreamAddr.port,
+    logFn: () => {},
+    auditSink: { writeLine: () => {} },
+  });
+  const edgeAddr = await listen(edge.server);
+
+  try {
+    const headers = {
+      Authorization: 'Bearer edge_token_a',
+      'Content-Type': 'application/json',
+      'X-OpenClaw-Approve': 'approve_token_ok',
+    };
+
+    const malformed = await requestJson({
+      host: edgeAddr.host,
+      port: edgeAddr.port,
+      method: 'POST',
+      path: '/rpc/foo',
+      headers,
+      body: Buffer.from(JSON.stringify({ tool: 'read', args: {} }), 'utf8'),
+    });
+    assert.equal(malformed.statusCode, 400);
+
+    const valid = await requestJson({
+      host: edgeAddr.host,
+      port: edgeAddr.port,
+      method: 'POST',
+      path: '/rpc/foo',
+      headers,
+      body: Buffer.from(JSON.stringify({ tool: 'read', args: { path: 'workspace/MEMORY.md' } }), 'utf8'),
+    });
+    assert.equal(valid.statusCode, 200);
+  } finally {
+    await edge.close();
+    await new Promise((resolve) => upstream.close(resolve));
+  }
+}
+
 async function testWsUpgradeApproval() {
   const upstream = http.createServer();
   upstream.on('upgrade', (req, socket) => {
@@ -749,6 +806,9 @@ async function main() {
 
   await testRpcApprovalRequired();
   console.log('PASS rpc routes require approval (fail-closed)');
+
+  await testRpcMalformedReadPayloadDenied();
+  console.log('PASS malformed read tool payloads are denied at edge');
 
   await testWsUpgradeApproval();
   console.log('PASS websocket upgrade requires approval (fail-closed)');

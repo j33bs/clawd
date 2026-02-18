@@ -158,6 +158,64 @@ function approvalStatusFromError(error) {
   return (code === 'APPROVAL_REQUIRED' || code === 'TOOL_DENIED') ? 403 : 500;
 }
 
+function isJsonContentType(req) {
+  const raw = req && req.headers ? req.headers['content-type'] : '';
+  const v = Array.isArray(raw) ? raw[0] : raw;
+  return String(v || '').toLowerCase().includes('application/json');
+}
+
+function normalizeToolArgs(args) {
+  if (args == null) return null;
+  if (typeof args === 'string') {
+    const trimmed = args.trim();
+    if (!trimmed) return null;
+    try {
+      const parsed = JSON.parse(trimmed);
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : null;
+    } catch (_) {
+      return null;
+    }
+  }
+  return (typeof args === 'object' && !Array.isArray(args)) ? args : null;
+}
+
+function detectMalformedReadToolCall(payload) {
+  if (!payload || typeof payload !== 'object') return null;
+
+  const queue = [payload];
+  const seen = new Set();
+  let inspected = 0;
+  while (queue.length > 0 && inspected < 200) {
+    const node = queue.shift();
+    if (!node || typeof node !== 'object') continue;
+    if (seen.has(node)) continue;
+    seen.add(node);
+    inspected += 1;
+
+    if (!Array.isArray(node)) {
+      const rawName = node.tool || node.name || node.method
+        || (node.function && node.function.name)
+        || node.function_name;
+      const toolName = String(rawName || '').trim().toLowerCase();
+      if (toolName === 'read') {
+        const args = normalizeToolArgs(
+          node.args ?? node.arguments ?? node.input ?? node.params
+          ?? (node.function && node.function.arguments)
+        );
+        if (!args || typeof args.path !== 'string' || !args.path.trim()) {
+          return { reason: 'read_requires_non_empty_path' };
+        }
+      }
+    }
+
+    const values = Array.isArray(node) ? node : Object.values(node);
+    for (const value of values) {
+      if (value && typeof value === 'object') queue.push(value);
+    }
+  }
+  return null;
+}
+
 class TokenBucket {
   constructor({ ratePerMinute, burst }) {
     this.ratePerMs = Math.max(0, ratePerMinute) / 60000;
@@ -482,6 +540,32 @@ function createEdgeServer(options = {}) {
           finishOnce();
           return deny(res, status, 'approval_required');
         }
+
+        if (body && isJsonContentType(req)) {
+          let parsed = null;
+          try {
+            parsed = JSON.parse(body.toString('utf8'));
+          } catch (_) {
+            parsed = null;
+          }
+          if (parsed) {
+            const malformed = detectMalformedReadToolCall(parsed);
+            if (malformed) {
+              audit({
+                event_type: 'edge_rpc_payload_denied',
+                request_id: requestId,
+                identity,
+                route: safeHeaderString(policy.pathname || '/'),
+                method: safeHeaderString(req.method || 'GET'),
+                status: 400,
+                reason: malformed.reason,
+                policy_ref: 'tool_governance.rpc_payload.read_requires_path'
+              });
+              finishOnce();
+              return deny(res, 400, 'malformed_rpc_payload');
+            }
+          }
+        }
       }
 
       // OPTIONS requests never proxy upstream.
@@ -783,6 +867,7 @@ module.exports = {
   parseTokenMap,
   parseKeyMap,
   _test: {
-    approvalStatusFromError
+    approvalStatusFromError,
+    detectMalformedReadToolCall
   }
 };
