@@ -26,6 +26,7 @@ function loadFreeComputeConfig(env) {
 
   // Local vLLM is the escape hatch; default-on unless explicitly disabled.
   const vllmEnabled = e.ENABLE_LOCAL_VLLM !== '0';
+  const tactiCrRoutingEnabled = e.OPENCLAW_TACTI_CR_ROUTING === '1';
 
   // ── Per-provider enable/disable ──
   const providerAllowlist = (e.FREECOMPUTE_PROVIDER_ALLOWLIST || '')
@@ -64,6 +65,7 @@ function loadFreeComputeConfig(env) {
   return {
     enabled,
     vllmEnabled,
+    tactiCrRoutingEnabled,
     providerAllowlist,
     providerDenylist,
     globalMaxDailyRequests,

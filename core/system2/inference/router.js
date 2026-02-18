@@ -13,6 +13,33 @@
 
 const { CATALOG } = require('./catalog');
 
+const TIER = Object.freeze({
+  LOW: 'low',
+  MEDIUM: 'medium',
+  HIGH: 'high'
+});
+
+function inferArousalTier(taskInput) {
+  const text = String(taskInput || '');
+  if (!text.trim()) return TIER.MEDIUM;
+  const lower = text.toLowerCase();
+
+  let score = 0;
+  const tokens = text.trim().split(/\s+/).filter(Boolean).length;
+  if (tokens > 40) score += 0.12;
+  if (tokens > 120) score += 0.14;
+  if (tokens > 250) score += 0.18;
+  if ((text.match(/\n/g) || []).length + 1 > 10) score += 0.08;
+  if (text.includes('```') || lower.includes('traceback') || lower.includes('stack trace')) score += 0.14;
+  if (/\b(must|non-negotiable|constraint|gate|fail-closed)\b/.test(lower)) score += 0.10;
+  const keywordHits = (lower.match(/\b(analyze|audit|architecture|debug|failure|incident|security|traceback|regression|integration|routing|verify|cross-timescale)\b/g) || []).length;
+  if (keywordHits > 0) score += Math.min(0.32, keywordHits * 0.05);
+
+  if (score <= 0.33) return TIER.LOW;
+  if (score <= 0.66) return TIER.MEDIUM;
+  return TIER.HIGH;
+}
+
 /**
  * Route a request to the best available provider(s).
  *
@@ -20,6 +47,8 @@ const { CATALOG } = require('./catalog');
  * @param {string} params.taskClass       - One of REQUEST_CLASSES
  * @param {number} [params.contextLength] - Estimated input token count
  * @param {string} [params.latencyTarget] - 'low' | 'medium' | 'high'
+ * @param {string} [params.taskInput]     - Flattened request text for tiering
+ * @param {'low'|'medium'|'high'} [params.recommendedTier] - Precomputed arousal tier
  * @param {object} [params.budget]        - { maxCostUsd, maxTokens }
  * @param {object} params.providerHealth  - { provider_id → { ok: boolean } }
  * @param {object} params.quotaState      - { provider_id → { allowed: boolean, reason? } }
@@ -32,6 +61,8 @@ function routeRequest(params) {
     taskClass,
     contextLength = 0,
     latencyTarget = 'medium',
+    taskInput = '',
+    recommendedTier = null,
     budget = {},
     providerHealth = {},
     quotaState = {},
@@ -41,6 +72,10 @@ function routeRequest(params) {
 
   const cloudEnabled = Boolean(config && config.enabled);
   const localEnabled = Boolean(config && config.vllmEnabled);
+  const tactiCrRoutingEnabled = Boolean(config && config.tactiCrRoutingEnabled);
+  const resolvedTier = tactiCrRoutingEnabled
+    ? (recommendedTier || inferArousalTier(taskInput))
+    : null;
 
   // Cloud/free tiers are gated behind ENABLE_FREECOMPUTE_CLOUD (or alias),
   // but local vLLM remains a safe escape hatch even when cloud is disabled.
@@ -174,6 +209,34 @@ function routeRequest(params) {
         }
       }
 
+      // Optional TACTI(C)-R arousal modulation (default-off).
+      if (resolvedTier === TIER.LOW) {
+        if (provider.kind === 'local') {
+          score += 70;
+          reasons.push('tacti_cr_low_local_preferred');
+        } else {
+          score -= 10;
+          reasons.push('tacti_cr_low_external_penalty');
+        }
+        if (provider.routing_tags.prefers.includes('low_latency') || provider.routing_tags.prefers.includes('fast')) {
+          score += 15;
+          reasons.push('tacti_cr_low_fast_preferred');
+        }
+      } else if (resolvedTier === TIER.HIGH) {
+        if (provider.kind === 'local') {
+          score -= 40;
+          reasons.push('tacti_cr_high_deprioritize_local');
+        }
+        if (provider.routing_tags.prefers.includes('high_capability')) {
+          score += 35;
+          reasons.push('tacti_cr_high_capability');
+        }
+        if ((model.context_window_hint || 0) >= 100000) {
+          score += 20;
+          reasons.push('tacti_cr_high_context_window');
+        }
+      }
+
       scored.push({
         provider_id: pid,
         model_id: model.model_id,
@@ -211,6 +274,9 @@ function routeRequest(params) {
     explanation.push('No eligible providers found for this request');
   } else {
     explanation.push(`Selected ${scored.length} candidate(s), top: ${scored[0].provider_id}/${scored[0].model_id}`);
+    if (resolvedTier) {
+      explanation.push(`TACTI(C)-R tier=${resolvedTier}`);
+    }
   }
 
   return { candidates: scored, explanation };

@@ -211,6 +211,7 @@ test('config: defaults to disabled', () => {
   const cfg = loadFreeComputeConfig({});
   assert.equal(cfg.enabled, false);
   assert.equal(cfg.vllmEnabled, true);
+  assert.equal(cfg.tactiCrRoutingEnabled, false);
 });
 
 test('config: enables with flag', () => {
@@ -402,6 +403,45 @@ test('router: deterministic for same inputs', () => {
     assert.equal(r1.candidates[i].model_id, r2.candidates[i].model_id);
     assert.equal(r1.candidates[i].score, r2.candidates[i].score);
   }
+});
+
+test('router: TACTI(C)-R low tier prefers local/fast when enabled', () => {
+  const result = routeRequest({
+    taskClass: 'fast_chat',
+    taskInput: 'ping status',
+    providerHealth: {},
+    quotaState: {},
+    config: {
+      enabled: true,
+      vllmEnabled: true,
+      tactiCrRoutingEnabled: true,
+      providerAllowlist: [],
+      providerDenylist: []
+    },
+    availableProviderIds: ['local_vllm', 'groq']
+  });
+  assert.ok(result.candidates.length >= 1);
+  assert.equal(result.candidates[0].provider_id, 'local_vllm');
+});
+
+test('router: TACTI(C)-R high tier deprioritizes local when enabled', () => {
+  const complexTask = 'analyze security regression integration architecture debug traceback constraints fail-closed verify routing failure incident '.repeat(20);
+  const result = routeRequest({
+    taskClass: 'code',
+    taskInput: complexTask,
+    providerHealth: {},
+    quotaState: {},
+    config: {
+      enabled: true,
+      vllmEnabled: true,
+      tactiCrRoutingEnabled: true,
+      providerAllowlist: [],
+      providerDenylist: []
+    },
+    availableProviderIds: ['local_vllm', 'groq']
+  });
+  assert.ok(result.candidates.length >= 1);
+  assert.equal(result.candidates[0].provider_id, 'groq');
 });
 
 test('explainRouting: produces string output', () => {

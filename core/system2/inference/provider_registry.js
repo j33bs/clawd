@@ -99,6 +99,34 @@ function estimateRequestShape(messages) {
   return out;
 }
 
+function flattenMessagesForTiering(messages, maxChars = 4000) {
+  if (!Array.isArray(messages) || maxChars <= 0) return '';
+  const parts = [];
+  let total = 0;
+  for (const m of messages) {
+    if (!m || typeof m !== 'object') continue;
+    const role = typeof m.role === 'string' ? m.role : 'unknown';
+    const chunks = [];
+    if (typeof m.content === 'string') {
+      chunks.push(m.content);
+    } else if (Array.isArray(m.content)) {
+      for (const part of m.content) {
+        if (typeof part === 'string') chunks.push(part);
+        else if (part && typeof part === 'object' && typeof part.text === 'string') chunks.push(part.text);
+      }
+    }
+    if (chunks.length === 0) continue;
+    const text = `${role}: ${chunks.join(' ')}`;
+    if (!text.trim()) continue;
+    const remaining = maxChars - total;
+    if (remaining <= 0) break;
+    const slice = text.slice(0, remaining);
+    parts.push(slice);
+    total += slice.length;
+  }
+  return parts.join('\n');
+}
+
 function sanitizeModelIdForEnv(modelId) {
   return String(modelId || '')
     .toUpperCase()
@@ -416,6 +444,7 @@ class ProviderRegistry {
       taskClass: params.taskClass,
       contextLength: params.contextLength,
       latencyTarget: params.latencyTarget,
+      taskInput: flattenMessagesForTiering(params.messages),
       budget: params.budget,
       providerHealth,
       quotaState,
