@@ -1,93 +1,61 @@
-# Memory Integration - HiveMind + QMD
+# HiveMind Integration (QMD + HiveMind)
+
+## Purpose
+This document defines the dual-layer knowledge architecture used in OpenClaw System-2.
 
 ## Dual-Layer Architecture
+| Layer | System | Responsibility | Data Shape |
+|---|---|---|---|
+| Retrieval Layer | QMD | Fast workspace retrieval (keyword + vector + rerank) | Files and document snippets |
+| Memory Layer | HiveMind | Scoped memory with redaction, TTL, and integrity workflows | Knowledge Units (KUs) |
 
-| Layer | System | Purpose |
-|-------|--------|---------|
-| **Fast Search** | QMD | BM25 + vectors + reranking (workspace search) |
-| **Long-term Memory** | HiveMind | Scope, redaction, TTL, contradictions |
+## Routing Contract
+1. Query QMD first for repo/workspace grounding.
+2. Query HiveMind second for long-term decisions, handoffs, and prior context.
+3. Merge results with citations and scope-safe memory output.
 
-## Query Commands
+## Data Flow
+1. Source material is ingested into HiveMind from:
+`/Users/heathyeager/clawd/MEMORY.md`,
+`/Users/heathyeager/clawd/workspace/handoffs/*.md`,
+and git commit metadata.
+2. Content is redacted before persistence/embedding.
+3. KUs are stored with `agent_scope`, `kind`, `source`, and optional `ttl_days`.
+4. Query path enforces agent scope at read-time.
 
-### QMD (Fast Workspace Search)
+## Security Boundaries
+- Redaction before embedding/persistence is mandatory.
+- Agent isolation is mandatory (`main` vs `shared` vs other agent scopes).
+- No external embedding API usage in local-first mode.
+- Ingest and pruning actions are logged in
+`/Users/heathyeager/clawd/workspace/hivemind/ingest.log`.
+
+## Operator Commands
+### QMD
 ```bash
-npx @tobilu/qmd search "<query>" -n 5           # BM25 keyword
-npx @tobilu/qmd vsearch "<query>" -n 5           # Vector semantic
-npx @tobilu/qmd query "<query>" -n 5             # Hybrid + reranking (best)
+npx @tobilu/qmd search "<query>" -n 5
+npx @tobilu/qmd vsearch "<query>" -n 5
+npx @tobilu/qmd query "<query>" -n 5
 ```
 
-### HiveMind (Long-term Memory)
+### HiveMind Query
 ```bash
-cd /Users/heathyeager/clawd && python3 scripts/memory_tool.py query --agent main --q "<SEARCH_QUERY>" --limit 5 --json
+python3 /Users/heathyeager/clawd/scripts/memory_tool.py query --agent main --q "<query>" --limit 5 --json
 ```
 
-## Auto-Query Triggers
-
-**First: QMD** (for any workspace search)
-**Then: HiveMind** (for agent-specific context)
-
-Query when the user's message contains:
-
-### 1. **Technical Debugging**
-- Error messages, stack traces, "all models failed", "404", "429"
-- "Why is X broken?", "X stopped working"
-- Model/provider names + error context (e.g., "Ollama", "Groq", "Telegram")
-
-### 2. **Past Decisions & Context**
-- "What did we decide about...", "Remember when...", "Last time we..."
-- "Why did we...", "What was the reason for..."
-- Configuration questions ("What's our routing setup?")
-
-### 3. **Project References**
-- HiveMind, TACTI(C)-R, Daily Briefing, Moltbook
-- Wim Hof Method app, j33bs/clawd integration
-- System components (router, capabilities, handoffs)
-
-### 4. **Explicit Memory Requests**
-- "Search memory for...", "What does HiveMind say about..."
-- "Find notes on...", "Look up..."
-
-### 5. **Recurring Topics**
-- Ollama configuration, model routing, local vs remote
-- Cron jobs, heartbeats, daily tasks
-- Security, audits, governance
-
-## Response Pattern
-
-When HiveMind returns results:
-
-1. **Check relevance** - Skip if results don't match the query
-2. **Extract key info** - Pull the most relevant facts/decisions
-3. **Cite sources** - Include `Source: <path>` when helpful
-4. **Apply context** - Use memory to inform the response, don't just dump it
-
-## Example
-
-**User:** "Why did we change Ollama to use 127.0.0.1?"
-
-**Auto-Query:** `python3 scripts/memory_tool.py query --agent main --q "Ollama 127.0.0.1 localhost IPv6" --limit 3 --json`
-
-**Response:** "We hit a DNS resolution issue - Node.js was resolving `localhost` to IPv6 (::1) but Ollama only binds to IPv4. The fix was changing the baseUrl from `http://localhost:11434/v1` to `http://127.0.0.1:11434/v1` in the gateway config. This resolved the 'all models failed' errors in the fallback chain."
-
-## Manual Override
-
-You can always query manually:
+### HiveMind Ingest
 ```bash
-cd /Users/heathyeager/clawd && python3 scripts/memory_tool.py query --agent main --q "<your query>" --limit 5
+python3 -m hivemind.cli ingest-memory
+python3 -m hivemind.cli ingest-handoffs
+python3 -m hivemind.cli ingest-commits
 ```
 
-## Ingestion Notes
+## Verification
+- QMD index health: `npx @tobilu/qmd status`
+- HiveMind query works: `python3 /Users/heathyeager/clawd/scripts/memory_tool.py query --agent main --q "routing" --limit 3`
+- Scope enforcement: query from different agents returns isolated results.
 
-HiveMind ingests from:
-- `MEMORY.md` (long-term facts/decisions)
-- `handoffs/*.md` (agent-to-agent context)
-- `git commits` (code changes with messages)
-
-Recent changes may not be indexed yet - run ingestion if needed:
-```bash
-cd /Users/heathyeager/clawd/workspace/hivemind && python3 -m hivemind.ingest.memory_md
-```
-
----
-**Pattern:** Query → Filter → Apply → Cite
-**Goal:** Contextual memory, not data dumping
+## References
+- `/Users/heathyeager/clawd/workspace/hivemind/README.md`
+- `/Users/heathyeager/clawd/workspace/knowledge_base/KB_DESIGN.md`
+- `/Users/heathyeager/clawd/scripts/memory_tool.py`
