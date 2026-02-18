@@ -114,6 +114,8 @@ def cmd_stats(args: argparse.Namespace) -> int:
     
     # QMD stats (via exec)
     import subprocess
+    qmd_files = []
+    qmd_collection_list = ""
     try:
         result = subprocess.run(
             ["npx", "@tobilu/qmd", "status"],
@@ -122,8 +124,30 @@ def cmd_stats(args: argparse.Namespace) -> int:
             timeout=10
         )
         qmd_status = result.stdout
+        ls_result = subprocess.run(
+            ["npx", "@tobilu/qmd", "ls", "-n", "5000"],
+            capture_output=True,
+            text=True,
+            timeout=20
+        )
+        if ls_result.returncode == 0:
+            qmd_files = [
+                line.strip()
+                for line in ls_result.stdout.split("\n")
+                if line.strip() and not line.startswith("qmd://")
+            ]
+        col_result = subprocess.run(
+            ["npx", "@tobilu/qmd", "collection", "list"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if col_result.returncode == 0:
+            qmd_collection_list = col_result.stdout
     except Exception:
         qmd_status = "QMD not available"
+        qmd_files = []
+        qmd_collection_list = ""
     
     print("=" * 40)
     print("📈 KNOWLEDGE BASE STATS")
@@ -136,6 +160,21 @@ def cmd_stats(args: argparse.Namespace) -> int:
     for line in qmd_status.split('\n')[:10]:
         if line.strip():
             print(f"   {line}")
+    research_count = sum(1 for p in qmd_files if "/workspace/research/" in p)
+    if qmd_collection_list:
+        lines = [ln.rstrip() for ln in qmd_collection_list.split("\n")]
+        for idx, ln in enumerate(lines):
+            stripped = ln.strip()
+            if not stripped.startswith("clawd_research"):
+                continue
+            if idx + 2 < len(lines):
+                files_line = lines[idx + 2].strip()
+                if files_line.startswith("Files:"):
+                    try:
+                        research_count += int(files_line.split(":", 1)[1].strip())
+                    except Exception:
+                        pass
+    print(f"   Research docs indexed: {research_count}")
     
     # HiveMind stats
     hive_path = Path(__file__).parents[1] / "hivemind" / "data" / "knowledge_units.jsonl"
