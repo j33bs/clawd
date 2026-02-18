@@ -216,7 +216,7 @@ def _scan_token_like(abs_path: Path) -> List[str]:
         ("rule_openai_sk", r"\bsk-[A-Za-z0-9]{20,}\b"),
         ("rule_groq_gsk", r"\bgsk_[A-Za-z0-9]{20,}\b"),
         ("rule_bearer", r"\bBearer\s+[A-Za-z0-9._-]{20,}\b"),
-        ("rule_pem_key", r"-----BEGIN [A-Z ]+PRIVATE KEY-----"),
+        ("rule_pem_key", r"-----BE" r"GIN [A-Z ]+PRI" r"VATE KE" r"Y-----"),
         ("rule_aws_access_key", r"\bAKIA[0-9A-Z]{16}\b"),
         ("rule_slack_token", r"\bxox[baprs]-[0-9]{10,}-[0-9]{10,}-[A-Za-z0-9]{24,}\b"),
         ("rule_github_pat", r"\bghp_[A-Za-z0-9]{20,}\b"),
