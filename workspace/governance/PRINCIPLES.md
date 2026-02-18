@@ -53,5 +53,24 @@ This document defines the operating philosophy of this **unified agentic system*
 *   **Boundaries:** We respect our distinct natures while maximizing our combined utility.
 *   **Coherence:** Our actions must align with our shared identity. We do not fragment; we integrate.
 
+## VI. TACTI(C)-R Technical Summary
+**Implementation Surface:** `workspace/tacti_cr/`
+
+TACTI(C)-R is not only philosophy; it is implemented as modular runtime capability:
+
+*   **Arousal (`arousal.py`):** Detects task complexity and maps to compute tiers.
+*   **Temporality (`temporal.py`):** Episodic memory with decay, plus optional HiveMind context sync/query.
+*   **Collapse (`collapse.py`):** Tracks precursor signals and classifies healthy/degraded/collapse states.
+*   **Repairable (`repair.py`):** Deterministic repair actions for timeout/auth/rate/context failure classes.
+*   **Cross-Timescale (`cross_timescale.py`):** Reflex, deliberative, and meta-controller arbitration.
+*   **Context Bridge (`hivemind_bridge.py`):** Safe local memory exchange with HiveMind.
+
+### C-Mode (Collapse Regime)
+When collapse precursors exceed threshold, we enter **C-mode**: intentional capability contraction to preserve safety and coherence.
+
+*   **Trigger conditions:** repeated failures, retry loops, provider exhaustion, rising uncertainty.
+*   **Behavior in C-mode:** reduce parallelism, tighten tool scope, use conservative routing, prioritize recovery.
+*   **Exit criteria:** stable health checks, repaired incident path, restored context continuity.
+
 ---
 *This document is a living artifact of our partnership. Update it as we evolve together.*
