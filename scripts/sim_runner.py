@@ -48,6 +48,10 @@ from core_infra.volatility_metrics import compute_volatility
 from core_infra.channel_scoring import load_channel_scores
 from core_infra.strategy_blender import blend_signals
 from core_infra.econ_log import append_jsonl
+try:
+    from workspace.itc.api import get_itc_signal
+except Exception:
+    get_itc_signal = None
 BASE_DIR = REPO_ROOT
 DEFAULT_CONFIG_PATH = REPO_ROOT / "pipelines" / "system1_trading.yaml"
 DEFAULT_FEATURES_CONFIG_PATH = REPO_ROOT / "pipelines" / "system1_trading.features.yaml"
@@ -217,6 +221,21 @@ def load_itc_sentiment():
             buckets.setdefault(hour_ts, []).append(score)
 
     return {k: sum(v) / len(v) for k, v in buckets.items()}
+
+
+def ms_to_utc_iso(ts_ms):
+    return datetime.fromtimestamp(ts_ms / 1000, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def compute_sim_b_tilt(sentiment_score, scale=0.005, max_abs_tilt=0.02):
+    """Bounded sentiment tilt for SIM_B sizing/risk threshold adjustment."""
+    raw = float(sentiment_score) * float(scale)
+    cap = abs(float(max_abs_tilt))
+    if raw > cap:
+        return cap
+    if raw < -cap:
+        return -cap
+    return raw
 
 
 def load_sim_state(sim_dir):
@@ -391,7 +410,7 @@ class Sim:
                     trades.append(t)
 
         elif self.strategy == "itc_sentiment_tilt_long_flat":
-            tilt = sentiment_score * 0.005
+            tilt = compute_sim_b_tilt(sentiment_score)
             adjusted_bullish = (fast - slow) / slow > (-0.001 + tilt) if slow > 0 else False
             confirmed_bull = adjusted_bullish and htf_confirms
 
@@ -473,6 +492,8 @@ def run(sim_filter=None, full=False, config_path=None, features_path=None):
     # HTF confirmation: 1h candles
     candles_1h = load_candles(list(all_symbols), CANDLES_1H)
     sentiment = load_itc_sentiment()
+    itc_artifact_root = REPO_ROOT / "workspace" / "artifacts" / "itc"
+    itc_lookback = os.getenv("OPENCLAW_ITC_LOOKBACK", "8h")
 
     htf_regime = build_htf_regime(candles_1h, list(all_symbols))
 
@@ -519,6 +540,24 @@ def run(sim_filter=None, full=False, config_path=None, features_path=None):
                     # Get sentiment for this hour
                     hour_ts = (bar["ts"] // 3_600_000) * 3_600_000
                     sent = sentiment.get(hour_ts, 0.0)
+                    sentiment_source = "legacy_tagged"
+                    sentiment_reason = "ok_legacy"
+                    if sim.strategy == "itc_sentiment_tilt_long_flat" and get_itc_signal is not None:
+                        selected = get_itc_signal(
+                            ts_utc=ms_to_utc_iso(bar["ts"]),
+                            lookback=itc_lookback,
+                            policy={
+                                "artifacts_root": str(itc_artifact_root),
+                                "run_id": f"sim_{sim.id}",
+                            },
+                        )
+                        if selected.get("reason") == "ok" and selected.get("signal"):
+                            metrics = selected["signal"].get("metrics", {})
+                            sent = float(metrics.get("sentiment", 0.0))
+                            sentiment_source = str(selected["signal"].get("source", "contract"))
+                            sentiment_reason = "ok"
+                        else:
+                            sentiment_reason = str(selected.get("reason", "missing"))
 
                     # Get HTF regime: find the most recent 1h bar at or before this 15m bar
                     htf_bull = None
@@ -531,6 +570,20 @@ def run(sim_filter=None, full=False, config_path=None, features_path=None):
                                 htf_bull = sym_htf[max(earlier)]
 
                     bar_trades = sim.run_bar(symbol, bar, closes, sent, htf_bullish=htf_bull)
+                    if sim.strategy == "itc_sentiment_tilt_long_flat":
+                        _econ_log(f_log, econ_path, {
+                            "ts": ms_to_utc_iso(bar["ts"]),
+                            "sim": sim.id,
+                            "symbol": symbol,
+                            "type": "sim_b_tilt_applied",
+                            "payload": {
+                                "sentiment": float(sent),
+                                "tilt": compute_sim_b_tilt(sent),
+                                "reason": sentiment_reason,
+                                "source": sentiment_source,
+                            },
+                            "meta": {"features": meta_features},
+                        })
                     for t in bar_trades:
                         fout.write(json.dumps(t, ensure_ascii=False) + "\n")
                         trade_count += 1
