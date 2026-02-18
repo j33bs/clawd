@@ -339,6 +339,26 @@ def test_capability_routing_precedence_and_targets():
         assert default_sel["provider"] == "minimax_m25", default_sel
         assert default_sel["model"] == "minimax-portal/MiniMax-M2.5", default_sel
 
+        ordinary_chat_sel = router.select_model(
+            "conversation",
+            {"input_text": "Tell me something interesting about whales."},
+        )
+        assert ordinary_chat_sel["provider"] == "minimax_m25", ordinary_chat_sel
+        assert ordinary_chat_sel["model"] == "minimax-portal/MiniMax-M2.5", ordinary_chat_sel
+        assert ordinary_chat_sel["model"] not in {
+            "gpt-5.2-chat-latest",
+            "gpt-5.3-codex",
+            "gpt-5.3-codex-spark",
+        }, ordinary_chat_sel
+
+        ordinary_explain = router.explain_route(
+            "conversation",
+            {"input_text": "Tell me something interesting about whales."},
+        )
+        assert ordinary_explain["matched_trigger"] == "default", ordinary_explain
+        assert ordinary_explain["reason"] == "default intent routing order", ordinary_explain
+        assert ordinary_explain["chosen"]["provider"] == "minimax_m25", ordinary_explain
+
         chatgpt_sel = router.select_model("conversation", {"input_text": "Please USE ChatGPT for this request"})
         assert chatgpt_sel["provider"] == "openai_gpt52_chat", chatgpt_sel
         assert chatgpt_sel["model"] == "gpt-5.2-chat-latest", chatgpt_sel
