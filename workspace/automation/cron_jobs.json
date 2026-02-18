@@ -1,0 +1,24 @@
+{
+  "jobs": [
+    {
+      "name": "Daily Morning Briefing",
+      "sessionTarget": "main",
+      "wakeMode": "now",
+      "schedule": {
+        "expr": "0 7 * * *",
+        "tz": "Australia/Brisbane"
+      },
+      "command": "⏰ **Daily Briefing Time**\nIt is 7 AM. Please generate the daily briefing for Heath with:\n1. Literature Quote (run scripts/get_daily_quote.js)\n2. Apple Reminders (run remindctl today)\n3. Calendar Events (run workspace/scripts/calendar.sh today)\n4. News Article (web_search)\n5. Agent Goal\n6. Therapeutic Technique (run python3 scripts/daily_technique.py)\n7. Time Management Tip (run python3 workspace/time_management/time_management.py tip)\n8. Self-Care Suggestion (run python3 workspace/time_management/time_management.py self_care)\n\nFormat as a clean, inspiring briefing. Include a section to track which suggestions Heath does/dismissed so we can learn."
+    },
+    {
+      "name": "HiveMind Ingest",
+      "sessionTarget": "isolated",
+      "wakeMode": "now",
+      "schedule": {
+        "expr": "30 7 * * *",
+        "tz": "Australia/Brisbane"
+      },
+      "command": "Run HiveMind ingest pipelines:\n1. PYTHONPATH=workspace/hivemind python3 -m hivemind.ingest.memory_md\n2. PYTHONPATH=workspace/hivemind python3 -m hivemind.ingest.handoffs\n3. PYTHONPATH=workspace/hivemind python3 -m hivemind.ingest.git_commits\n4. Summarize stored/skipped/error counts.\n\nWrite a short ingest note to reports/automation/hivemind_ingest.log."
+    }
+  ]
+}
