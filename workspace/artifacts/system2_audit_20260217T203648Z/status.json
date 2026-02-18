@@ -1,0 +1,46 @@
+{
+  "audit_timestamp": "2026-02-17T20:36:48Z",
+  "repo": {
+    "branch": "claude/adoring-bose",
+    "head": "4a6c0ac32a08b65bc75cf021b90eb9a407b84662",
+    "clean": true
+  },
+  "runtime": {
+    "node": "v25.6.0",
+    "openclaw": "2026.2.14",
+    "python": "3.14.3"
+  },
+  "processes": {
+    "gateway": {"pid": 2317, "state": "running", "ports": [18789, 18792]},
+    "ollama": {"pid": 2321, "state": "running", "port": 11434},
+    "telegram_app": {"pid": 1310, "note": "user Telegram client, not bot process"}
+  },
+  "channels": {
+    "telegram": {
+      "enabled": true,
+      "status_reported": "OK",
+      "bot_username": "@Mbresponderbot",
+      "actual_state": "DEGRADED — getUpdates timing out every ~20min for 8+ hours",
+      "network_errors_24h": 55
+    }
+  },
+  "llm_routing": {
+    "free_order": ["google-gemini-cli", "qwen-portal", "groq", "ollama"],
+    "provider_status": {
+      "google-gemini-cli": {"auth": "BROKEN", "reason": "OAuth tokens expired/missing, no apiKey, no refreshToken"},
+      "qwen-portal": {"auth": "BROKEN", "reason": "OAuth tokens expired/missing, no refreshToken"},
+      "groq": {"auth": "BROKEN", "reason": "No API key in auth-profiles.json"},
+      "ollama": {"auth": "BROKEN", "reason": "Profile 'ollama:default' does not exist in auth-profiles.json"},
+      "anthropic": {"auth": "OK", "reason": "Has credentials but NOT in free_order routing"}
+    },
+    "result": "ALL 4 FREE PROVIDERS HAVE BROKEN AUTH — 100% LLM FAILOVER CASCADE"
+  },
+  "error_summary_24h": {
+    "telegram_network_errors": 55,
+    "rate_limit_errors": 15,
+    "auth_missing_errors": 14,
+    "all_models_failed": 3,
+    "embedded_agent_failed_before_reply": 3
+  },
+  "root_cause": "TWO CONCURRENT FAILURES: (1) All 4 free LLM providers have expired/missing auth credentials, causing 100% model failover. (2) Telegram getUpdates polling is timing out repeatedly (~every 20min for 8+ hours), likely due to stale long-poll connection not recovering after the LLM failures or network interruption."
+}

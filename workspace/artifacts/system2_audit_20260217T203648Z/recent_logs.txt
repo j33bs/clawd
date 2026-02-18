@@ -1,0 +1,58 @@
+# Recent Gateway Logs (redacted)
+# Source: ~/.openclaw/logs/gateway.err.log
+# Last 30 error lines:
+
+2026-02-18T06:56:17.133+10:00 [openclaw] Non-fatal unhandled rejection (continuing): TypeError: fetch failed
+2026-02-18T07:02:30.591+10:00 [openclaw] Non-fatal unhandled rejection (continuing): TypeError: fetch failed
+2026-02-18T07:15:21.846+10:00 [openclaw] Suppressed AbortError: AbortError: This operation was aborted
+2026-02-17T21:31:06.323Z [telegram] network error: Request to 'getUpdates' timed out after 60 seconds; retrying in 30s.
+2026-02-18T07:31:06.325+10:00 [openclaw] Suppressed AbortError: AbortError: This operation was aborted
+2026-02-18T07:54:04.131+10:00 [openclaw] Suppressed AbortError: AbortError: This operation was aborted
+2026-02-17T21:59:43.435Z [telegram] network error: Request to 'getUpdates' timed out after 60 seconds; retrying in 30s.
+2026-02-18T07:59:43.436+10:00 [openclaw] Suppressed AbortError: AbortError: This operation was aborted
+2026-02-18T08:02:09.844+10:00 [openclaw] Suppressed AbortError: AbortError: This operation was aborted
+2026-02-18T08:02:09.944+10:00 [openclaw] Non-fatal unhandled rejection (continuing): TypeError: fetch failed
+2026-02-18T08:02:10.149+10:00 [openclaw] Non-fatal unhandled rejection (continuing): TypeError: fetch failed
+2026-02-18T08:02:10.561+10:00 [openclaw] Non-fatal unhandled rejection (continuing): TypeError: fetch failed
+2026-02-18T08:02:11.371+10:00 [openclaw] Non-fatal unhandled rejection (continuing): TypeError: fetch failed
+2026-02-17T22:17:43.419Z [telegram] network error: Network request for 'getUpdates' failed!; retrying in 30s.
+2026-02-18T08:17:43.423+10:00 [openclaw] Non-fatal unhandled rejection (continuing): TypeError: fetch failed
+2026-02-18T08:18:13.436+10:00 [openclaw] Non-fatal unhandled rejection (continuing): TypeError: fetch failed
+2026-02-18T08:18:13.550+10:00 [openclaw] Non-fatal unhandled rejection (continuing): TypeError: fetch failed
+2026-02-18T08:18:13.759+10:00 [openclaw] Non-fatal unhandled rejection (continuing): TypeError: fetch failed
+2026-02-18T08:18:14.168+10:00 [openclaw] Non-fatal unhandled rejection (continuing): TypeError: fetch failed
+2026-02-18T08:18:14.979+10:00 [openclaw] Non-fatal unhandled rejection (continuing): TypeError: fetch failed
+2026-02-17T22:34:41.312Z [telegram] network error: Network request for 'getUpdates' failed!; retrying in 30s.
+2026-02-18T08:34:41.314+10:00 [openclaw] Non-fatal unhandled rejection (continuing): TypeError: fetch failed
+2026-02-18T08:48:13.123+10:00 [openclaw] Non-fatal unhandled rejection (continuing): TypeError: fetch failed
+2026-02-18T08:48:13.236+10:00 [openclaw] Non-fatal unhandled rejection (continuing): TypeError: fetch failed
+2026-02-18T08:48:13.440+10:00 [openclaw] Non-fatal unhandled rejection (continuing): TypeError: fetch failed
+2026-02-18T08:48:13.848+10:00 [openclaw] Non-fatal unhandled rejection (continuing): TypeError: fetch failed
+2026-02-18T08:48:14.659+10:00 [openclaw] Non-fatal unhandled rejection (continuing): TypeError: fetch failed
+2026-02-18T08:48:16.272+10:00 [openclaw] Non-fatal unhandled rejection (continuing): TypeError: fetch failed
+2026-02-18T08:52:41.519+10:00 [openclaw] Suppressed AbortError: AbortError: This operation was aborted
+2026-02-18T08:53:00.339+10:00 [openclaw] Non-fatal unhandled rejection (continuing): TypeError: fetch failed
+
+# Source: ~/.openclaw/logs/gateway.log
+# Last startup sequence:
+
+2026-02-16T04:53:09.494Z [telegram] [default] starting provider (@Mbresponderbot)
+2026-02-16T04:53:09.505Z [telegram] autoSelectFamily=true (config)
+2026-02-16T23:00:34.783Z [gateway] signal SIGTERM received
+2026-02-16T23:00:34.889Z [gateway] received SIGTERM; shutting down
+2026-02-16T23:09:46.783Z [heartbeat] disabled
+2026-02-16T23:09:46.785Z [gateway] agent model: google-gemini-cli/gemini-3-pro-preview
+2026-02-16T23:09:46.787Z [gateway] listening on ws://127.0.0.1:18789 (PID 2317)
+2026-02-16T23:09:46.788Z [gateway] listening on ws://[::1]:18789
+2026-02-16T23:09:46.790Z [gateway] log file: /tmp/openclaw/openclaw-2026-02-17.log
+2026-02-16T23:09:47.458Z [gateway] update available (latest): v2026.2.15 (current v2026.2.14). Run: openclaw update
+2026-02-16T23:09:48.966Z [telegram] [default] starting provider (@Mbresponderbot)
+2026-02-16T23:09:48.992Z [telegram] autoSelectFamily=true (config)
+2026-02-17T01:49:10.333Z [gateway] signal SIGUSR1 received
+2026-02-17T01:49:10.337Z [gateway] received SIGUSR1; restarting
+2026-02-17T01:49:10.758Z [heartbeat] disabled
+2026-02-17T01:49:10.759Z [gateway] agent model: google-gemini-cli/gemini-3-pro-preview
+2026-02-17T01:49:10.760Z [gateway] listening on ws://127.0.0.1:18789 (PID 2317)
+2026-02-17T01:49:10.761Z [gateway] listening on ws://[::1]:18789
+2026-02-17T01:49:10.762Z [gateway] log file: /tmp/openclaw/openclaw-2026-02-17.log
+2026-02-17T01:49:11.415Z [telegram] [default] starting provider (@Mbresponderbot)

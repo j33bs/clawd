@@ -6,6 +6,7 @@
 - **Author**: C_Lawd (via Heath)
 - **Date**: 2026-02-18
 - **Branch**: `feat/tacti-cr-technical-implementation`
+- **Paper**: `workspace/research/TACTI_CR_Introduction_Paper.docx` (v2.0 - rewritten)
 
 ---
 
@@ -89,23 +90,51 @@ workspace/tacti_cr/
 - Detect task complexity (input length, reasoning requirements)
 - Modulate compute allocation based on arousal state
 - Return recommended model tier (fast/local vs slow/premium)
+- Explicit budgets: token, tool, wall-clock, cost
+- Risk tiers that scale permitted actions
+- Entropy-based triggers ("uncertainty spikes" increase deliberation)
+- De-escalation triggers ("stuck loops" reduce exploration)
 - Interface: `detect_arousal(task_input) -> ArousalState`
 - Interface: `get_compute_allocation(arousal_state) -> ComputePlan`
 
 **2.2 Temporal Memory Module** (`temporal.py`)
 - Store episodic memories with timestamps
-- Implement time-decay (forget old context)
+- Event schema: who/what/why/outcome
+- Time-aware storage: episode IDs, temporal edges
+- Retrieval policies: recency × relevance × provenance
+- "Future buffer" structures: plans/commitments with explicit expiry
 - Support retrieval by recency and relevance
 - Interface: `store(episode)` / `retrieve(query)` / `prune_expired()`
 
-**2.3 Collapse Detection Module** (`collapse.py`)
+**2.3 Cross-Timescale Module** (`cross_timescale.py`)
+- NEW: Hierarchical controller with three layers
+- Reflex policies: linting, validation, guardrails (fast)
+- Deliberative planner: search, synthesis, counterfactual (slow)
+- Monitor/meta-controller: budget, risk, drift
+- Inter-layer contracts: what state may be read/written, at what cadence
+- Interface: `execute_reflex(action)` / `deliberate(goal)` / `govern()`
+
+**2.4 Collapse Detection Module** (`collapse.py`)
 - Monitor for failure patterns (repeated errors, timeout, model drift)
 - Detect "tunnel vision" (narrowed attention)
+- Provenance-aware memory: source attribution and trust scores
+- Drift monitors: performance and distribution shift
+- Circuit breakers: stop conditions on repeated failures
+- Sandbox and least-privilege tool access
 - Alert when approaching collapse threshold
-- Interface: `check_health() -> HealthState` / `detect_collapse_precursors() -> List[Warning]`
+- NEW: **C-Mode (Collapse Regime)** - deliberate capability contraction:
+  - Reduce autonomy, shorten planning horizons
+  - Restrict tools, request human confirmation
+  - Only reversible after repair tests pass
+- Interface: `check_health() -> HealthState` / `detect_collapse_precursors() -> List[Warning]` / `enter_c_mode()` / `exit_c_mode()`
 
-**2.4 Repair Module** (`repair.py`)
+**2.5 Repair Module** (`repair.py`)
 - Implement recovery strategies (retry, fallback, reset)
+- Incident objects: structured failure reports
+- Automated reproduction harnesses
+- Rollback and safe-mode operation
+- Patch pipelines: policy updates, prompt/program changes
+- Postmortem learning: update detectors and runbooks
 - Track error patterns for learning
 - Support graceful degradation
 - Interface: `repair(error) -> RepairAction` / `can_recover(error) -> bool`
@@ -126,13 +155,34 @@ workspace/tacti_cr/
 
 ---
 
+## C-Mode (Collapse Regime) - NEW
+
+TACTI(C)-R introduces an optional deliberate collapse mode:
+
+When the monitor detects:
+- (a) Uncertainty is high
+- (b) Repeated tool failures occur
+- (c) Safety constraints are at risk
+
+The agent enters **C-mode**:
+- Reduce autonomy
+- Shorten planning horizons
+- Restrict tools
+- Request human confirmation or additional data
+
+**Exit condition**: Only after repair tests pass
+
+This transforms collapse from accident to design feature.
+
+---
+
 ## Technical Specifications
 
-### Arousal State
+### Arousal State (from paper v2.0)
 ```python
 class ArousalState(Enum):
     LOW      # Simple task, minimal compute needed
-    MEDIUM   # Moderate complexity
+    MEDIUM   # Moderate complexity  
     HIGH     # Complex reasoning required
     
 @dataclass
@@ -140,19 +190,42 @@ class ComputePlan:
     model_tier: str          # "fast" | "medium" | "premium"
     timeout_multiplier: float # Increase for complex tasks
     context_budget: int      # Token allocation
+    risk_tier: str          # "safe" | "cautious" | "restricted"
+    entropy_trigger: float   # Threshold for uncertainty spike
 ```
 
-### Temporal Memory Entry
+### Temporal Memory Entry (from paper v2.0)
 ```python
 @dataclass
 class TemporalEntry:
     timestamp: datetime
-    content: str
-    importance: float         # 0-1
-    decay_rate: float        # How fast this decays
+    who: str                # Agent/user ID
+    what: str               # Action/observation
+    why: str                # Rationale
+    outcome: str            # Result
+    episode_id: str         # Session/episode identifier
+    importance: float       # 0-1
+    decay_rate: float       # How fast this decays
     
-def retrieve(query: str, limit: int = 5) -> List[TemporalEntry]:
+def retrieve(query: str, limit: int = 5, 
+            recency_weight: float = 0.3,
+            relevance_weight: float = 0.7) -> List[TemporalEntry]:
     """Retrieve relevant memories, considering recency and relevance."""
+```
+
+### Cross-Timescale Layers (NEW)
+```python
+class ReflexLayer:
+    """Fast: linting, validation, guardrails"""
+    def execute(self, action) -> ActionResult
+    
+class DeliberativeLayer:
+    """Slow: search, synthesis, counterfactual"""
+    def plan(self, goal) -> Plan
+    
+class MetaController:
+    """Govern: budget, risk, drift, C-mode transitions"""
+    def govern(self) -> GovernanceDecision
 ```
 
 ### Health State
@@ -163,6 +236,16 @@ class HealthState:
     confidence: float
     warnings: List[str]
     recommended_actions: List[str]
+    c_mode_active: bool      # NEW: C-mode flag
+```
+
+### Collapse Precursors (from paper v2.0)
+```python
+# Leading indicators (measure before failure):
+- error_rate_acceleration: float  # Is error rate speeding up?
+- entropy_spikes: List[datetime] # Unusual uncertainty bursts
+- near_miss_count: int          # Repeated near-failures
+- tool_failure_streak: int      # Consecutive tool errors
 ```
 
 ---
