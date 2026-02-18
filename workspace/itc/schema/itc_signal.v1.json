@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "source": "manual",
+  "ts_utc": "2026-02-18T00:00:00Z",
+  "window": "1d",
+  "metrics": {
+    "risk_on": 0.62,
+    "risk_off": 0.38,
+    "sentiment": 0.24,
+    "regime": "risk_on",
+    "confidence": 0.81
+  },
+  "raw_ref": "workspace/artifacts/itc/raw/2026/02/18/manual_20260218T000000Z_abcd1234.json",
+  "signature": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+}
