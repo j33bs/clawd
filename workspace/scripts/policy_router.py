@@ -6,6 +6,7 @@ Policy Router
 
 import json
 import os
+import re
 import time
 from pathlib import Path
 
@@ -331,6 +332,56 @@ def _truncate_text(text, max_chars):
     return text
 
 
+def _coerce_positive_int(value, fallback):
+    try:
+        parsed = int(value)
+        if parsed > 0:
+            return parsed
+    except Exception:
+        pass
+    return fallback
+
+
+def _contains_phrase(text, phrase):
+    if not text or not phrase:
+        return False
+    escaped = re.escape(phrase).replace(r"\ ", r"\s+")
+    pattern = rf"(?<!\w){escaped}(?!\w)"
+    return re.search(pattern, text, flags=re.IGNORECASE) is not None
+
+
+def _is_subagent_context(context):
+    if not isinstance(context, dict):
+        return False
+    if context.get("subagent") or context.get("is_subagent"):
+        return True
+    for key in ("agent_class", "node_role", "role"):
+        value = str(context.get(key, "")).strip().lower()
+        if value in {"subagent", "worker", "tool", "tool_agent", "child_agent"}:
+            return True
+    return False
+
+
+def _count_bullets(text):
+    if not text:
+        return 0
+    count = 0
+    for line in text.splitlines():
+        s = line.strip()
+        if not s:
+            continue
+        if re.match(r"^[-*+]\s+", s) or re.match(r"^\d+\.\s+", s):
+            count += 1
+    return count
+
+
+def _count_file_paths(text):
+    if not text:
+        return 0
+    pattern = r"(?:[A-Za-z0-9._-]+/)+[A-Za-z0-9._-]+|[A-Za-z0-9._-]+\.[A-Za-z0-9]{1,8}"
+    return len(set(re.findall(pattern, text)))
+
+
 def build_chat_payload(prompt, temperature=0.0, max_tokens=256):
     return {
         "messages": [{"role": "user", "content": prompt}],
@@ -516,7 +567,10 @@ class PolicyRouter:
         self.run_counts = {}
 
     def _intent_cfg(self, intent):
-        return self.policy.get("routing", {}).get("intents", {}).get(intent, {})
+        intents = self.policy.get("routing", {}).get("intents", {})
+        if intent in intents:
+            return intents.get(intent, {})
+        return intents.get("conversation", {})
 
     def _provider_cfg(self, name):
         return self.policy.get("providers", {}).get(name, {})
@@ -551,6 +605,146 @@ class PolicyRouter:
         if models:
             return int(models[0].get("maxInputChars", 0))
         return 0
+
+    def _provider_context_window_tokens(self, name):
+        provider = self._provider_cfg(name)
+        capabilities = provider.get("capabilities", {}) if isinstance(provider, dict) else {}
+        manual = _coerce_positive_int(capabilities.get("context_window_tokens"), 0)
+        env_key = capabilities.get("context_window_env")
+        if env_key:
+            env_value = _coerce_positive_int(os.environ.get(env_key), 0)
+            if env_value:
+                return env_value
+        return manual
+
+    def _capability_cfg(self):
+        return self.policy.get("routing", {}).get("capability_router", {})
+
+    def _capability_decision(self, context_metadata, payload_text=""):
+        cfg = self._capability_cfg()
+        if cfg.get("enabled") is False:
+            return None
+
+        context_metadata = context_metadata or {}
+        text = "\n".join(
+            t for t in [str(context_metadata.get("input_text", "")), str(payload_text or "")] if t
+        )
+
+        explicit = cfg.get("explicitTriggers", {})
+        apply_to_subagents = bool(cfg.get("explicitApplyToSubagents", False))
+        subagent = _is_subagent_context(context_metadata)
+
+        if not subagent or apply_to_subagents:
+            for phrase, provider in explicit.items():
+                if _contains_phrase(text, phrase):
+                    return {
+                        "trigger": "explicit_phrase",
+                        "matched": phrase,
+                        "provider": provider,
+                        "reason": f'explicit trigger "{phrase}"',
+                    }
+
+        if subagent:
+            provider = cfg.get("subagentProvider")
+            if provider:
+                return {
+                    "trigger": "subagent_default",
+                    "matched": "subagent=true",
+                    "provider": provider,
+                    "reason": "subagent primary uses local provider",
+                }
+
+        lower = text.lower()
+        reasoning_keywords = [
+            "plan",
+            "design",
+            "architecture",
+            "evaluate options",
+            "trade-offs",
+            "step-by-step",
+            "derive",
+            "prove",
+            "formalize",
+        ]
+        code_keywords = [
+            "write code",
+            "implement",
+            "patch",
+            "diff",
+            "tests",
+            "refactor",
+            "typescript",
+            "javascript",
+            "python",
+            "ci",
+            "github actions",
+            "```",
+        ]
+        tool_keywords = [
+            "run commands",
+            "audit",
+            "regression",
+            "fix failing tests",
+        ]
+
+        has_reasoning = any(keyword in lower for keyword in reasoning_keywords)
+        has_code = any(keyword in lower for keyword in code_keywords)
+        has_tool_ops = any(keyword in lower for keyword in tool_keywords)
+
+        min_bullets = _coerce_positive_int(cfg.get("structureComplexityMinBullets"), 3)
+        min_paths = _coerce_positive_int(cfg.get("structureComplexityMinPaths"), 2)
+        bullets = _count_bullets(text)
+        file_paths = _count_file_paths(text)
+        structure_complex = bullets >= min_bullets or file_paths >= min_paths
+        complex_task = has_reasoning or has_code or has_tool_ops or structure_complex
+
+        if has_code:
+            small_by_ctx = context_metadata.get("expected_change_size") in {"small", "tiny"}
+            loc_hint = _coerce_positive_int(context_metadata.get("expected_loc"), 0)
+            small_by_loc = 0 < loc_hint <= 50
+            tests_requested = "tests" in lower or "test " in lower
+            small_by_shape = file_paths <= 1 and bullets < min_bullets and not tests_requested
+            if small_by_ctx or small_by_loc or small_by_shape:
+                provider = cfg.get("smallCodeProvider")
+                if provider:
+                    return {
+                        "trigger": "complexity_small_code",
+                        "matched": "code+small_change",
+                        "provider": provider,
+                        "reason": "small self-contained coding task",
+                    }
+            provider = cfg.get("codeProvider")
+            if provider:
+                return {
+                    "trigger": "complexity_code",
+                    "matched": "code_generation_markers",
+                    "provider": provider,
+                    "reason": "code generation task",
+                }
+
+        if has_reasoning or (complex_task and not has_code):
+            provider = cfg.get("reasoningProvider")
+            if provider:
+                return {
+                    "trigger": "complexity_reasoning",
+                    "matched": "reasoning_or_structure_markers",
+                    "provider": provider,
+                    "reason": "complex reasoning/planning task",
+                }
+
+        return None
+
+    def _ordered_providers(self, intent_cfg, context_metadata, payload_text=""):
+        base_order = _resolve_order(intent_cfg, self.policy)
+        decision = self._capability_decision(context_metadata, payload_text)
+        if not decision:
+            return base_order, None
+        preferred = decision.get("provider")
+        if preferred:
+            order = [preferred] + [name for name in base_order if name != preferred]
+        else:
+            order = base_order
+        return order, decision
 
     def _provider_available(self, name, intent_cfg):
         provider = self._provider_cfg(name)
@@ -654,7 +848,7 @@ class PolicyRouter:
 
     def select_model(self, intent, context_metadata=None):
         intent_cfg = self._intent_cfg(intent)
-        order = _resolve_order(intent_cfg, self.policy)
+        order, _decision = self._ordered_providers(intent_cfg, context_metadata or {})
         for name in order:
             ok, reason = self._provider_available(name, intent_cfg)
             if not ok:
@@ -683,12 +877,71 @@ class PolicyRouter:
             "reasons": reasons,
         }
 
+    def explain_route(self, intent, context_metadata=None, payload=None):
+        context_metadata = context_metadata or {}
+        payload_text = _extract_text_from_payload(payload or {})
+        intent_cfg = self._intent_cfg(intent)
+        base_order = _resolve_order(intent_cfg, self.policy)
+        order, decision = self._ordered_providers(intent_cfg, context_metadata, payload_text)
+
+        chosen = None
+        unavailable = {}
+        for name in order:
+            ok, reason = self._provider_available(name, intent_cfg)
+            if ok:
+                chosen = {
+                    "provider": name,
+                    "model": self._provider_model(name, intent_cfg, context_metadata),
+                }
+                break
+            unavailable[name] = reason
+
+        local_context_tokens = self._provider_context_window_tokens("local_vllm_assistant")
+        return {
+            "intent": intent,
+            "matched_trigger": (decision or {}).get("trigger") or "default",
+            "matched_detail": (decision or {}).get("matched") or "none",
+            "reason": (decision or {}).get("reason") or "default intent routing order",
+            "base_order": base_order,
+            "evaluated_order": order,
+            "chosen": chosen,
+            "unavailable": unavailable,
+            "fallback_candidates": [name for name in order if not chosen or name != chosen.get("provider")],
+            "local_context_window_tokens": local_context_tokens,
+        }
+
     def execute_with_escalation(self, intent, payload, context_metadata=None, validate_fn=None):
         intent_cfg = self._intent_cfg(intent)
-        order = _resolve_order(intent_cfg, self.policy)
         attempts = 0
         last_reason = None
         context_metadata = context_metadata or {}
+        payload_text = _extract_text_from_payload(payload)
+        order, decision = self._ordered_providers(intent_cfg, context_metadata, payload_text)
+        route_explain = self.explain_route(intent, context_metadata=context_metadata, payload=payload)
+        if decision:
+            log_event(
+                "router_route_selected",
+                {
+                    "intent": intent,
+                    "trigger": decision.get("trigger"),
+                    "matched": decision.get("matched"),
+                    "preferred_provider": decision.get("provider"),
+                    "reason": decision.get("reason"),
+                    "fallback_candidates": route_explain.get("fallback_candidates", []),
+                },
+                self.event_log,
+            )
+        else:
+            log_event(
+                "router_route_selected",
+                {
+                    "intent": intent,
+                    "trigger": "default",
+                    "preferred_provider": None,
+                    "fallback_candidates": route_explain.get("fallback_candidates", []),
+                },
+                self.event_log,
+            )
 
         max_per_run = int(self.policy.get("budgets", {}).get("intents", {}).get(intent, {}).get("maxCallsPerRun", 0))
         self.run_counts.setdefault(intent, 0)

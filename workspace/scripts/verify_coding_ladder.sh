@@ -14,7 +14,7 @@ if not path.exists():
 data = json.loads(path.read_text(encoding='utf-8'))
 routing = data.get('routing', {}).get('intents', {})
 order = routing.get('coding', {}).get('order', [])
-expected = ["free", "openai_auth", "claude_auth", "grok_api", "openai_api", "claude_api"]
+expected = ["local_vllm_coder", "local_vllm_assistant", "free", "openai_auth", "claude_auth", "grok_api", "openai_api", "claude_api"]
 if order != expected:
     print(f'FAIL: coding ladder mismatch: {order} != {expected}')
     sys.exit(1)

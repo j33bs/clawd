@@ -63,11 +63,89 @@
       "type": "openai_compatible",
       "baseUrl": "http://127.0.0.1:8001/v1",
       "model": "local-assistant",
+      "capabilities": {
+        "context_window_tokens": 16384,
+        "context_window_env": "LOCAL_ASSISTANT_CONTEXT_WINDOW_TOKENS"
+      },
       "models": [
         {
           "id": "local-assistant",
           "maxInputChars": 4000,
           "tier": "large"
+        }
+      ]
+    },
+    "minimax_m25_lightning": {
+      "enabled": true,
+      "paid": false,
+      "tier": "free",
+      "type": "openai_compatible",
+      "baseUrl": "https://api.minimax.chat/v1",
+      "auth": {
+        "type": "bearer_optional"
+      },
+      "models": [
+        {
+          "id": "minimax-portal/MiniMax-M2.5-Lightning",
+          "maxInputChars": 4000
+        }
+      ]
+    },
+    "minimax_m25": {
+      "enabled": true,
+      "paid": false,
+      "tier": "free",
+      "type": "openai_compatible",
+      "baseUrl": "https://api.minimax.chat/v1",
+      "auth": {
+        "type": "bearer_optional"
+      },
+      "models": [
+        {
+          "id": "minimax-portal/MiniMax-M2.5",
+          "maxInputChars": 6000
+        }
+      ]
+    },
+    "openai_gpt52_chat": {
+      "enabled": true,
+      "paid": true,
+      "tier": "paid",
+      "type": "openai_compatible",
+      "baseUrl": "https://api.openai.com/v1",
+      "apiKeyEnv": "OPENAI_API_KEY",
+      "models": [
+        {
+          "id": "gpt-5.2-chat-latest",
+          "maxInputChars": 6000
+        }
+      ]
+    },
+    "openai_gpt53_codex": {
+      "enabled": true,
+      "paid": true,
+      "tier": "paid",
+      "type": "openai_compatible",
+      "baseUrl": "https://api.openai.com/v1",
+      "apiKeyEnv": "OPENAI_API_KEY",
+      "models": [
+        {
+          "id": "gpt-5.3-codex",
+          "maxInputChars": 6000
+        }
+      ]
+    },
+    "openai_gpt53_codex_spark": {
+      "enabled": true,
+      "paid": true,
+      "tier": "paid",
+      "type": "openai_compatible",
+      "baseUrl": "https://api.openai.com/v1",
+      "apiKeyEnv": "OPENAI_API_KEY",
+      "models": [
+        {
+          "id": "gpt-5.3-codex-spark",
+          "maxInputChars": 6000
         }
       ]
     },
@@ -245,7 +323,31 @@
         ],
         "allowPaid": true,
         "maxTokensPerRequest": 768
+      },
+      "conversation": {
+        "order": [
+          "minimax_m25",
+          "minimax_m25_lightning",
+          "local_vllm_assistant",
+          "openai_gpt52_chat",
+          "openai_gpt53_codex",
+          "openai_gpt53_codex_spark"
+        ],
+        "allowPaid": true
       }
+    },
+    "capability_router": {
+      "enabled": true,
+      "structureComplexityMinBullets": 3,
+      "structureComplexityMinPaths": 2,
+      "explicitTriggers": {
+        "use chatgpt": "openai_gpt52_chat",
+        "use codex": "openai_gpt53_codex"
+      },
+      "subagentProvider": "local_vllm_assistant",
+      "reasoningProvider": "openai_gpt52_chat",
+      "codeProvider": "openai_gpt53_codex",
+      "smallCodeProvider": "openai_gpt53_codex_spark"
     }
   }
 }
