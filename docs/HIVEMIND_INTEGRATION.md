@@ -1,16 +1,32 @@
-# HiveMind Integration - Auto-Query Pattern
+# Memory Integration - HiveMind + QMD
 
-## Overview
-C_Lawd auto-queries HiveMind via `exec` when relevant topics are detected. This provides contextual long-term memory without requiring config changes or vector embeddings.
+## Dual-Layer Architecture
 
-## Query Command
+| Layer | System | Purpose |
+|-------|--------|---------|
+| **Fast Search** | QMD | BM25 + vectors + reranking (workspace search) |
+| **Long-term Memory** | HiveMind | Scope, redaction, TTL, contradictions |
+
+## Query Commands
+
+### QMD (Fast Workspace Search)
+```bash
+npx @tobilu/qmd search "<query>" -n 5           # BM25 keyword
+npx @tobilu/qmd vsearch "<query>" -n 5           # Vector semantic
+npx @tobilu/qmd query "<query>" -n 5             # Hybrid + reranking (best)
+```
+
+### HiveMind (Long-term Memory)
 ```bash
 cd /Users/heathyeager/clawd && python3 scripts/memory_tool.py query --agent main --q "<SEARCH_QUERY>" --limit 5 --json
 ```
 
 ## Auto-Query Triggers
 
-Query HiveMind when the user's message contains:
+**First: QMD** (for any workspace search)
+**Then: HiveMind** (for agent-specific context)
+
+Query when the user's message contains:
 
 ### 1. **Technical Debugging**
 - Error messages, stack traces, "all models failed", "404", "429"
