@@ -236,7 +236,6 @@
     "groq": {
       "enabled": false,
       "baseUrl": "https://api.groq.com/openai/v1",
-      "apiKey": "GROQ_API_KEY",
       "api": "openai-completions",
       "models": [
         {
