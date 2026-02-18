@@ -11,9 +11,12 @@ import sys
 from pathlib import Path
 
 
-REPO_ROOT_GOV_FILES = (
-    "AGENTS.md",
+REPO_ROOT_GOV_FILES_FORBIDDEN = (
     "BOOTSTRAP.md",
+)
+
+REPO_ROOT_GOV_FILES_MUST_MATCH_CANONICAL = (
+    "AGENTS.md",
     "HEARTBEAT.md",
     "IDENTITY.md",
     "SOUL.md",
@@ -136,13 +139,28 @@ def main() -> int:
     for p in (contract, anchor):
         assert_required_strings(p, ("C_Lawd", "TACTI(C)-R", "System Regulation"))
 
-    # Repo-root governance files must not exist on disk (tracked or untracked).
-    for name in REPO_ROOT_GOV_FILES:
+    # Repo-root bootstrap must not exist on disk (tracked or untracked).
+    for name in REPO_ROOT_GOV_FILES_FORBIDDEN:
         if (repo / name).exists():
             die(f"repo-root governance file present: {name}")
         r = git(repo, ["ls-files", "--", name])
         if r.returncode == 0 and (r.stdout or "").strip():
             die(f"repo-root governance file tracked: {name}")
+
+    # Known root governance docs are permitted only when they are exact copies
+    # of canonical governance files under workspace/governance/.
+    for name in REPO_ROOT_GOV_FILES_MUST_MATCH_CANONICAL:
+        root_path = repo / name
+        if not root_path.exists():
+            continue
+        r = git(repo, ["ls-files", "--", name])
+        if r.returncode != 0 or not (r.stdout or "").strip():
+            die(f"repo-root governance file untracked: {name}")
+        canonical_path = repo / "workspace" / "governance" / name
+        if not canonical_path.exists():
+            die(f"missing canonical governance file: {canonical_path}")
+        if root_path.read_bytes() != canonical_path.read_bytes():
+            die(f"repo-root governance file diverges from canonical: {name}")
 
     # Policy routing invariants.
     policy_path = repo / "workspace" / "policy" / "llm_policy.json"
