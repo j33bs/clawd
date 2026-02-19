@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -14,16 +15,90 @@ if str(HIVEMIND_ROOT) not in sys.path:
 from hivemind.models import KnowledgeUnit
 from hivemind.redaction import redact_for_embedding
 from hivemind.store import HiveMindStore
+from hivemind.dynamics_pipeline import TactiDynamicsPipeline
 from hivemind.intelligence.contradictions import detect_contradictions
 from hivemind.intelligence.pruning import prune_expired_and_stale
 from hivemind.intelligence.suggestions import generate_suggestions
 from hivemind.intelligence.summaries import generate_cross_agent_summary
+
+DYNAMICS_STATE_PATH = REPO_ROOT / "workspace" / "hivemind" / "data" / "tacti_dynamics_snapshot.json"
+
+
+def _any_dynamics_enabled() -> bool:
+    for key in (
+        "ENABLE_MURMURATION",
+        "ENABLE_RESERVOIR",
+        "ENABLE_PHYSARUM_ROUTER",
+        "ENABLE_TRAIL_MEMORY",
+    ):
+        value = str(os.environ.get(key, "0")).strip().lower()
+        if value in {"1", "true", "yes", "on"}:
+            return True
+    return False
+
+
+def _load_dynamics_pipeline(agent: str, rows: list[dict]) -> TactiDynamicsPipeline:
+    candidates = {"main", "claude-code", "codex", str(agent)}
+    for row in rows:
+        scope = str(row.get("agent_scope", "")).strip()
+        if scope and scope != "shared":
+            candidates.add(scope)
+    if DYNAMICS_STATE_PATH.exists():
+        try:
+            payload = json.loads(DYNAMICS_STATE_PATH.read_text(encoding="utf-8"))
+            pipeline = TactiDynamicsPipeline.load(payload)
+            if str(agent) not in pipeline.agent_ids:
+                pipeline.agent_ids = sorted(set(pipeline.agent_ids).union(candidates))
+            return pipeline
+        except Exception:
+            pass
+    return TactiDynamicsPipeline(agent_ids=sorted(candidates), seed=13)
+
+
+def _save_dynamics_pipeline(pipeline: TactiDynamicsPipeline) -> None:
+    DYNAMICS_STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    DYNAMICS_STATE_PATH.write_text(json.dumps(pipeline.snapshot(), indent=2) + "\n", encoding="utf-8")
 
 
 def cmd_query(args: argparse.Namespace) -> int:
     store = HiveMindStore()
     rows = store.search(agent_scope=args.agent, query=args.q, limit=args.limit)
     store.log_event("query", agent=args.agent, query=args.q, limit=args.limit)
+
+    dynamics_report = None
+    if _any_dynamics_enabled():
+        pipeline = _load_dynamics_pipeline(args.agent, rows)
+        plan = pipeline.plan_consult_order(
+            source_agent=args.agent,
+            target_intent="memory_query",
+            context_text=args.q,
+            candidate_agents=[str(x) for x in pipeline.agent_ids if str(x) != str(args.agent)],
+            n_paths=3,
+        )
+        consult_order = plan.get("consult_order", [])
+        rank = {agent: idx for idx, agent in enumerate(consult_order)}
+        rows.sort(key=lambda row: (rank.get(str(row.get("agent_scope", "")), 999), -int(row.get("score", 0))))
+        reward = float(rows[0].get("score", 0)) / 5.0 if rows else -0.2
+        top_path = plan.get("paths", [[args.agent]])[0]
+        pipeline.observe_outcome(
+            source_agent=args.agent,
+            path=[str(x) for x in top_path],
+            success=bool(rows),
+            latency=0.0,
+            tokens=float(len(args.q.split())),
+            reward=reward,
+            context_text=args.q,
+        )
+        _save_dynamics_pipeline(pipeline)
+        store.log_event("dynamics_query_plan", agent=args.agent, order=consult_order, reward=reward)
+        dynamics_report = {
+            "consult_order": consult_order,
+            "paths": plan.get("paths", []),
+            "scores": plan.get("scores", {}),
+            "trail_bias": plan.get("trail_bias", {}),
+            "reservoir": plan.get("reservoir", {}),
+        }
+
     payload = []
     for row in rows:
         payload.append(
@@ -39,7 +114,10 @@ def cmd_query(args: argparse.Namespace) -> int:
         )
 
     if args.json:
-        print(json.dumps({"results": payload}, ensure_ascii=False, indent=2))
+        out = {"results": payload}
+        if dynamics_report is not None:
+            out["dynamics"] = dynamics_report
+        print(json.dumps(out, ensure_ascii=False, indent=2))
         return 0
 
     for item in payload:
