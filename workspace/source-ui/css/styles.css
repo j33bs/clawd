@@ -636,6 +636,61 @@ input, select, textarea {
     color: var(--text-secondary);
 }
 
+/* ===== Quick Actions ===== */
+.quick-actions-strip {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-sm);
+    margin-bottom: var(--space-lg);
+    padding: var(--space-md);
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-lg);
+}
+
+.quick-action-btn {
+    padding: 8px 12px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-default);
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    font-size: var(--text-sm);
+    transition: all var(--transition-fast);
+}
+
+.quick-action-btn:hover {
+    border-color: var(--accent-primary);
+    background: var(--bg-hover);
+}
+
+.quick-action-query {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+}
+
+.quick-action-query input {
+    min-width: 180px;
+    padding: 8px 10px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-subtle);
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    font-size: var(--text-sm);
+}
+
+.quick-action-query input:focus {
+    outline: none;
+    border-color: var(--accent-primary);
+}
+
+.quick-action-feedback {
+    margin-left: auto;
+    color: var(--text-secondary);
+    font-size: var(--text-sm);
+}
+
 /* ===== Stats Grid ===== */
 .stats-grid {
     display: grid;
@@ -2141,6 +2196,19 @@ input, select, textarea {
 }
 
 @media (max-width: 768px) {
+    .quick-action-feedback {
+        width: 100%;
+        margin-left: 0;
+    }
+
+    .quick-action-query {
+        width: 100%;
+    }
+
+    .quick-action-query input {
+        flex: 1;
+    }
+
     .status-strip-grid {
         grid-template-columns: 1fr;
     }

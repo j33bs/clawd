@@ -242,9 +242,98 @@ function initTactiDashboard() {
         });
     });
 
+    initQuickActions();
+
     Object.keys(TACTI_PANEL_ENDPOINTS).forEach((panelKey) => {
         refreshTactiPanel(panelKey, false);
     });
+}
+
+function setQuickActionFeedback(message, isError = false) {
+    const el = $('#quick-action-feedback');
+    if (!el) return;
+    el.textContent = message;
+    el.style.color = isError ? 'var(--danger)' : 'var(--text-secondary)';
+}
+
+function initQuickActions() {
+    $('#qa-run-dream')?.addEventListener('click', runDreamConsolidationAction);
+    $('#qa-query-stigmergy')?.addEventListener('click', queryStigmergyAction);
+    $('#qa-view-immune')?.addEventListener('click', () => refreshTactiPanel('immune', true));
+    $('#qa-trigger-trail')?.addEventListener('click', triggerTrailAction);
+    $('#qa-refresh-peer')?.addEventListener('click', () => refreshTactiPanel('peer-graph', true));
+    $('#qa-stig-query')?.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') {
+            event.preventDefault();
+            queryStigmergyAction();
+        }
+    });
+}
+
+async function runDreamConsolidationAction() {
+    setQuickActionFeedback('Running dream consolidation...');
+    try {
+        const payload = await fetchContract('/api/tacti/dream/run', {
+            method: 'POST',
+            body: JSON.stringify({})
+        });
+        if (!payload || payload.ok !== true) {
+            throw new Error(payload?.error?.message || 'run failed');
+        }
+        await refreshTactiPanel('dream', false);
+        setQuickActionFeedback('Dream consolidation completed');
+        Toast.success('Dream consolidation completed');
+    } catch (error) {
+        setQuickActionFeedback(`Dream run failed: ${error.message}`, true);
+        Toast.error('Dream consolidation failed');
+    }
+}
+
+async function queryStigmergyAction() {
+    const query = ($('#qa-stig-query')?.value || '').trim();
+    setQuickActionFeedback(query ? `Querying stigmergy: ${query}` : 'Querying stigmergy...');
+    try {
+        const payload = await fetchContract('/api/hivemind/stigmergy/query', {
+            method: 'POST',
+            body: JSON.stringify({ query })
+        });
+        if (!payload || payload.ok !== true) {
+            throw new Error(payload?.error?.message || 'query failed');
+        }
+        const matches = Array.isArray(payload.data?.matches) ? payload.data.matches : [];
+        renderPanelDetails('stigmergy', matches.slice(0, 5).map((row) => `${row.topic} · ${row.effective_intensity}`));
+        renderPanelError('stigmergy', null);
+        updatePanelTimestamp('stigmergy', payload.ts);
+        setQuickActionFeedback(`Stigmergy matches: ${matches.length}`);
+        Toast.success('Stigmergy query complete');
+    } catch (error) {
+        setQuickActionFeedback(`Stigmergy query failed: ${error.message}`, true);
+        Toast.error('Stigmergy query failed');
+    }
+}
+
+async function triggerTrailAction() {
+    const queryText = ($('#qa-stig-query')?.value || '').trim();
+    const text = queryText ? `manual trail: ${queryText}` : 'manual trail trigger';
+    setQuickActionFeedback('Triggering memory trail...');
+    try {
+        const payload = await fetchContract('/api/hivemind/trails/trigger', {
+            method: 'POST',
+            body: JSON.stringify({
+                text,
+                tags: ['source-ui', 'manual-trigger']
+            })
+        });
+        if (!payload || payload.ok !== true) {
+            throw new Error(payload?.error?.message || 'trail trigger failed');
+        }
+        await refreshTactiPanel('trails', false);
+        setQuickActionFeedback(`Trail created: ${payload.data?.trail_id || 'ok'}`);
+        Toast.success('Memory trail triggered');
+    } catch (error) {
+        setQuickActionFeedback(`Trail trigger failed: ${error.message}`, true);
+        Toast.error('Trail trigger failed');
+    }
 }
 
 function panelMetric(label, value) {
