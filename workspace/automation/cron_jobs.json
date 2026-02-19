@@ -1,0 +1,52 @@
+{
+  "tools": {
+    "daily_quote": {
+      "type": "exec",
+      "command": "node",
+      "args": [
+        "scripts/get_daily_quote.js"
+      ]
+    },
+    "daily_technique": {
+      "type": "exec",
+      "command": "python3",
+      "args": [
+        "scripts/daily_technique.py",
+        "--format",
+        "briefing"
+      ]
+    }
+  },
+  "jobs": [
+    {
+      "name": "Daily Morning Briefing",
+      "sessionTarget": "main",
+      "wakeMode": "now",
+      "schedule": {
+        "expr": "0 7 * * *",
+        "tz": "Australia/Brisbane"
+      },
+      "command": "⏰ **Daily Briefing Time**\nIt is 7 AM. Please generate the daily briefing for Heath with:\n1. Literature Quote (run node scripts/get_daily_quote.js)\n2. Therapeutic Technique (run python3 scripts/daily_technique.py --format briefing)\n3. Behavioral Prime paragraph (derived from the selected technique)\n4. Apple Reminders (run remindctl today)\n5. Calendar Events (run workspace/scripts/calendar.sh today)\n6. News Article (web_search)\n7. Agent Goal\n8. Time Management Tip (run python3 workspace/time_management/time_management.py tip)\n9. Self-Care Suggestion (run python3 workspace/time_management/time_management.py self_care)\n\nFormat as a clean, inspiring briefing. Include a section to track which suggestions Heath does/dismissed so we can learn."
+    },
+    {
+      "name": "HiveMind Ingest",
+      "sessionTarget": "isolated",
+      "wakeMode": "now",
+      "schedule": {
+        "expr": "30 7 * * *",
+        "tz": "Australia/Brisbane"
+      },
+      "command": "Run HiveMind ingest pipelines:\n1. PYTHONPATH=workspace/hivemind python3 -m hivemind.ingest.memory_md\n2. PYTHONPATH=workspace/hivemind python3 -m hivemind.ingest.handoffs\n3. PYTHONPATH=workspace/hivemind python3 -m hivemind.ingest.git_commits\n4. Summarize stored/skipped/error counts.\n\nWrite a short ingest note to reports/automation/hivemind_ingest.log."
+    },
+    {
+      "name": "Session Pattern Analysis",
+      "sessionTarget": "isolated",
+      "wakeMode": "now",
+      "schedule": {
+        "expr": "0 9 * * 5",
+        "tz": "Australia/Brisbane"
+      },
+      "command": "Run weekly session pattern analysis and write report:\nnode scripts/analyze_session_patterns.js --output reports/health/session-patterns-latest.md"
+    }
+  ]
+}

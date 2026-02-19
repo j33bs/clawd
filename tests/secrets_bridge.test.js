@@ -69,9 +69,31 @@ test('injectRuntimeEnv respects operator override and injects missing', function
   const target = { ...env };
   const result = bridge.injectRuntimeEnv(target);
   assert.equal(target.OPENCLAW_GROQ_API_KEY, 'gsk_injected');
+  assert.equal(target.GROQ_API_KEY, 'gsk_injected');
   assert.equal(target.OPENCLAW_GEMINI_API_KEY, 'operator-override');
   assert.ok(result.injected.some((item) => item.provider === 'groq'));
   assert.ok(result.skipped.some((item) => item.provider === 'gemini' && item.reason === 'operator_override'));
+});
+
+test('injectRuntimeEnv propagates GROQ_API_KEY operator override to OPENCLAW_GROQ_API_KEY', function () {
+  const env = {
+    ENABLE_SECRETS_BRIDGE: '1',
+    GROQ_API_KEY: 'operator-override'
+  };
+  const bridge = new SecretsBridge({
+    env,
+    backendAdapter: {
+      get() {
+        return 'gsk_injected';
+      }
+    }
+  });
+
+  const target = { ...env };
+  const result = bridge.injectRuntimeEnv(target);
+  assert.equal(target.GROQ_API_KEY, 'operator-override');
+  assert.equal(target.OPENCLAW_GROQ_API_KEY, 'operator-override');
+  assert.ok(result.skipped.some((item) => item.provider === 'groq' && item.reason === 'operator_override'));
 });
 
 test('config includes secrets bridge governance knobs', function () {

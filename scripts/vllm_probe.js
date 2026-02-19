@@ -29,7 +29,7 @@ async function main() {
     console.log('=== vLLM Start Command (dry-run) ===\n');
     console.log(vllmStartCommand({
       model: process.env.OPENCLAW_VLLM_MODEL || '<MODEL_NAME>',
-      port: Number(process.env.OPENCLAW_VLLM_PORT || 18888),
+      port: Number(process.env.OPENCLAW_VLLM_PORT || 8000),
       apiKey: Boolean(process.env.OPENCLAW_VLLM_API_KEY)
     }));
     console.log('\n(No execution performed. Set env vars and run manually.)');
@@ -47,13 +47,19 @@ async function main() {
     console.log(`Healthy:       ${result.healthy}`);
     console.log(`Models:        ${result.models.length > 0 ? result.models.join(', ') : '(none)'}`);
     console.log(`Inference OK:  ${result.inference_ok}`);
+    if (typeof result.generation_probe_ok === 'boolean') {
+      console.log(`Gen Probe OK:  ${result.generation_probe_ok}`);
+      if (result.generation_probe_reason) {
+        console.log(`Gen Probe:     ${result.generation_probe_reason}`);
+      }
+    }
     if (result.error) {
       console.log(`Error:         ${result.error}`);
     }
     console.log(`Timestamp:     ${result.ts}`);
   }
 
-  process.exit(result.healthy ? 0 : 1);
+  process.exit(result.healthy && result.generation_probe_ok ? 0 : 1);
 }
 
 main().catch((err) => {

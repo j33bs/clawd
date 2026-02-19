@@ -33,6 +33,8 @@ const {
   ProviderAdapter
 } = require('../core/system2/inference');
 
+const { _test: registryTest } = require('../core/system2/inference/provider_registry');
+
 let passed = 0;
 let failed = 0;
 let skipped = 0;
@@ -214,11 +216,17 @@ console.log('── Config + Redaction ──');
 test('config: defaults to disabled', () => {
   const cfg = loadFreeComputeConfig({});
   assert.equal(cfg.enabled, false);
-  assert.equal(cfg.vllmEnabled, false);
+  assert.equal(cfg.vllmEnabled, true);
+  assert.equal(cfg.tactiCrRoutingEnabled, false);
 });
 
 test('config: enables with flag', () => {
   const cfg = loadFreeComputeConfig({ ENABLE_FREECOMPUTE_CLOUD: '1' });
+  assert.equal(cfg.enabled, true);
+});
+
+test('config: enables with alias flag', () => {
+  const cfg = loadFreeComputeConfig({ ENABLE_FREECOMPUTE: '1' });
   assert.equal(cfg.enabled, true);
 });
 
@@ -293,13 +301,30 @@ test('router: returns empty when disabled', () => {
     taskClass: 'fast_chat',
     providerHealth: {},
     quotaState: {},
-    config: { enabled: false }
+    config: { enabled: false, vllmEnabled: false }
   });
   assert.equal(result.candidates.length, 0);
   assert.ok(result.explanation.some((e) => e.includes('disabled')));
 });
 
-test('router: prefers local over external', () => {
+test('router: returns local candidate when cloud disabled but local vLLM enabled', () => {
+  const result = routeRequest({
+    taskClass: 'fast_chat',
+    providerHealth: {},
+    quotaState: {},
+    config: {
+      enabled: false,
+      vllmEnabled: true,
+      providerAllowlist: [],
+      providerDenylist: []
+    },
+    availableProviderIds: ['local_vllm']
+  });
+  assert.ok(result.candidates.length >= 1);
+  assert.equal(result.candidates[0].provider_id, 'local_vllm');
+});
+
+test('router: prefers external free/cloud over local when cloud enabled', () => {
   const result = routeRequest({
     taskClass: 'fast_chat',
     providerHealth: {},
@@ -311,11 +336,9 @@ test('router: prefers local over external', () => {
       providerDenylist: []
     }
   });
-  if (result.candidates.length >= 2) {
-    const localIdx = result.candidates.findIndex((c) => c.provider_id === 'local_vllm');
-    if (localIdx >= 0) {
-      assert.equal(localIdx, 0, 'local_vllm should be first candidate');
-    }
+  const localIdx = result.candidates.findIndex((c) => c.provider_id === 'local_vllm');
+  if (localIdx >= 0) {
+    assert.ok(localIdx > 0, `expected local_vllm to be a fallback when cloud enabled (idx=${localIdx})`);
   }
 });
 
@@ -386,6 +409,45 @@ test('router: deterministic for same inputs', () => {
     assert.equal(r1.candidates[i].model_id, r2.candidates[i].model_id);
     assert.equal(r1.candidates[i].score, r2.candidates[i].score);
   }
+});
+
+test('router: TACTI(C)-R low tier prefers local/fast when enabled', () => {
+  const result = routeRequest({
+    taskClass: 'fast_chat',
+    taskInput: 'ping status',
+    providerHealth: {},
+    quotaState: {},
+    config: {
+      enabled: true,
+      vllmEnabled: true,
+      tactiCrRoutingEnabled: true,
+      providerAllowlist: [],
+      providerDenylist: []
+    },
+    availableProviderIds: ['local_vllm', 'groq']
+  });
+  assert.ok(result.candidates.length >= 1);
+  assert.equal(result.candidates[0].provider_id, 'local_vllm');
+});
+
+test('router: TACTI(C)-R high tier deprioritizes local when enabled', () => {
+  const complexTask = 'analyze security regression integration architecture debug traceback constraints fail-closed verify routing failure incident '.repeat(20);
+  const result = routeRequest({
+    taskClass: 'code',
+    taskInput: complexTask,
+    providerHealth: {},
+    quotaState: {},
+    config: {
+      enabled: true,
+      vllmEnabled: true,
+      tactiCrRoutingEnabled: true,
+      providerAllowlist: [],
+      providerDenylist: []
+    },
+    availableProviderIds: ['local_vllm', 'groq']
+  });
+  assert.ok(result.candidates.length >= 1);
+  assert.equal(result.candidates[0].provider_id, 'groq');
 });
 
 test('explainRouting: produces string output', () => {
@@ -497,10 +559,10 @@ test('ledger: disk persistence (write)', () => {
 console.log('── vLLM Utilities ──');
 
 test('vllmStartCommand: produces valid command', () => {
-  const cmd = vllmStartCommand({ model: 'Qwen/Qwen2.5-7B', port: 18888 });
+  const cmd = vllmStartCommand({ model: 'Qwen/Qwen2.5-7B', port: 8000 });
   assert.ok(cmd.includes('vllm.entrypoints'));
   assert.ok(cmd.includes('Qwen/Qwen2.5-7B'));
-  assert.ok(cmd.includes('18888'));
+  assert.ok(cmd.includes('8000'));
   assert.ok(!cmd.includes('$OPENCLAW_VLLM_API_KEY')); // No key when not requested
 });
 
@@ -527,7 +589,8 @@ test('registry: disabled by default', () => {
   assert.equal(reg.config.enabled, false);
   const snap = reg.snapshot();
   assert.equal(snap.enabled, false);
-  assert.equal(snap.adapters.length, 0);
+  // Even when cloud/free tiers are disabled, local vLLM remains an escape hatch.
+  assert.ok(snap.adapters.length === 1 && snap.adapters[0].provider_id === 'local_vllm');
   reg.dispose();
 });
 
@@ -538,18 +601,499 @@ test('registry: enabled but no credentials → no adapters', () => {
   assert.equal(reg.config.enabled, true);
   // No API keys set, so external providers with required auth are skipped
   const snap = reg.snapshot();
-  // Only local_vllm would be eligible if ENABLE_LOCAL_VLLM=1
-  assert.ok(snap.adapters.length === 0 || snap.adapters.every((a) => a.provider_id === 'local_vllm'));
+  // Local vLLM is the escape hatch; it should be present by default when enabled.
+  assert.ok(snap.adapters.length === 1 && snap.adapters[0].provider_id === 'local_vllm');
+  // local_vllm uses bearer_optional auth; missing OPENCLAW_VLLM_API_KEY must not block adapter instantiation.
+  assert.equal(Object.prototype.hasOwnProperty.call(reg._env, 'OPENCLAW_VLLM_API_KEY'), false);
   reg.dispose();
 });
 
 await testAsync('registry: dispatch returns null when disabled', async () => {
   const reg = new ProviderRegistry({ env: {} });
+
+  // Replace the real adapter to avoid network. Keep provider_id key intact so routing selects it.
+  reg._adapters.set('local_vllm', {
+    async call() {
+      return {
+        text: 'ok',
+        raw: {},
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, estimatedCostUsd: 0 }
+      };
+    },
+    async health() {
+      return { ok: true, models: ['stub-model'] };
+    }
+  });
+
   const result = await reg.dispatch({
     taskClass: 'fast_chat',
     messages: [{ role: 'user', content: 'test' }]
   });
-  assert.equal(result, null);
+  assert.ok(result, 'expected non-null result');
+  assert.equal(result.provider_id, 'local_vllm');
+  reg.dispose();
+});
+
+await testAsync('registry: dispatch uses local_vllm when it is the only eligible adapter', async () => {
+  const reg = new ProviderRegistry({
+    env: { ENABLE_FREECOMPUTE_CLOUD: '1' }
+  });
+
+  // Replace the real adapter to avoid network. Keep provider_id key intact so routing selects it.
+  reg._adapters.set('local_vllm', {
+    async generationProbe() {
+      return { ok: true };
+    },
+    async call() {
+      return {
+        text: 'ok',
+        raw: {},
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, estimatedCostUsd: 0 }
+      };
+    },
+    async health() {
+      return { ok: true, models: ['stub-model'] };
+    }
+  });
+
+  const result = await reg.dispatch({
+    taskClass: 'fast_chat',
+    messages: [{ role: 'user', content: 'test' }]
+  });
+
+  assert.ok(result, 'expected non-null result');
+  assert.equal(result.provider_id, 'local_vllm');
+  reg.dispose();
+});
+
+await testAsync('registry: generation probe failure skips local and falls back to configured external', async () => {
+  const reg = new ProviderRegistry({
+    env: { ENABLE_FREECOMPUTE_CLOUD: '1', OPENCLAW_GROQ_API_KEY: 'x' }
+  });
+
+  reg._adapters.set('local_vllm', {
+    async generationProbe() {
+      return { ok: false, reason: 'timeout' };
+    },
+    async call() {
+      throw new Error('local should not be called when generation probe fails');
+    },
+    async health() {
+      return { ok: true, models: ['stub-model'] };
+    }
+  });
+
+  reg._adapters.set('groq', {
+    async call() {
+      return {
+        text: 'ok',
+        raw: {},
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, estimatedCostUsd: 0 }
+      };
+    },
+    async health() {
+      return { ok: true, models: ['stub-model'] };
+    }
+  });
+
+  const result = await reg.dispatch({
+    taskClass: 'fast_chat',
+    messages: [{ role: 'user', content: 'test' }]
+  });
+
+  assert.ok(result, 'expected non-null result');
+  assert.equal(result.provider_id, 'groq');
+  reg.dispose();
+});
+
+await testAsync('registry: prefers external over local when cloud enabled and external configured', async () => {
+  const reg = new ProviderRegistry({
+    env: { ENABLE_FREECOMPUTE_CLOUD: '1', OPENCLAW_GROQ_API_KEY: 'x' }
+  });
+
+  reg._adapters.set('local_vllm', {
+    async generationProbe() {
+      return { ok: true };
+    },
+    async call() {
+      return {
+        text: 'ok',
+        raw: {},
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, estimatedCostUsd: 0 }
+      };
+    },
+    async health() {
+      return { ok: true, models: ['stub-model'] };
+    }
+  });
+
+  reg._adapters.set('groq', {
+    async call() {
+      return {
+        text: 'ok',
+        raw: {},
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, estimatedCostUsd: 0 }
+      };
+    },
+    async health() {
+      return { ok: true, models: ['stub-model'] };
+    }
+  });
+
+  const result = await reg.dispatch({
+    taskClass: 'fast_chat',
+    messages: [{ role: 'user', content: 'test' }]
+  });
+
+  assert.ok(result, 'expected non-null result');
+  assert.equal(result.provider_id, 'groq');
+  reg.dispose();
+});
+
+await testAsync('registry: http 429 opens circuit (rate_limit) and falls back to local', async () => {
+  const reg = new ProviderRegistry({
+    env: { ENABLE_FREECOMPUTE_CLOUD: '1', OPENCLAW_GROQ_API_KEY: 'x' }
+  });
+
+  reg._adapters.set('local_vllm', {
+    async generationProbe() {
+      return { ok: true };
+    },
+    async call() {
+      return {
+        text: 'ok',
+        raw: {},
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, estimatedCostUsd: 0 }
+      };
+    },
+    async health() {
+      return { ok: true, models: ['stub-model'] };
+    }
+  });
+
+  reg._adapters.set('groq', {
+    async call() {
+      const err = new Error('http 429');
+      err.code = 'PROVIDER_HTTP_ERROR';
+      err.statusCode = 429;
+      throw err;
+    },
+    async health() {
+      return { ok: true, models: ['stub-model'] };
+    }
+  });
+
+  const result = await reg.dispatch({
+    taskClass: 'fast_chat',
+    messages: [{ role: 'user', content: 'test' }]
+  });
+
+  assert.ok(result, 'expected non-null result');
+  assert.equal(result.provider_id, 'local_vllm');
+  assert.equal(reg._circuitBreakers.get('groq').state, CB_STATES.OPEN);
+  reg.dispose();
+});
+
+await testAsync('registry: circuit_open excludes provider from routing until cooldown expires', async () => {
+  const reg = new ProviderRegistry({
+    env: { ENABLE_FREECOMPUTE_CLOUD: '1', OPENCLAW_GROQ_API_KEY: 'x' }
+  });
+
+  let groqCalls = 0;
+
+  reg._adapters.set('local_vllm', {
+    async generationProbe() {
+      return { ok: true };
+    },
+    async call() {
+      return {
+        text: 'ok',
+        raw: {},
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, estimatedCostUsd: 0 }
+      };
+    },
+    async health() {
+      return { ok: true, models: ['stub-model'] };
+    }
+  });
+
+  reg._adapters.set('groq', {
+    async call() {
+      groqCalls += 1;
+      const err = new Error('http 429');
+      err.code = 'PROVIDER_HTTP_ERROR';
+      err.statusCode = 429;
+      throw err;
+    },
+    async health() {
+      return { ok: true, models: ['stub-model'] };
+    }
+  });
+
+  // First call opens the circuit.
+  const first = await reg.dispatch({
+    taskClass: 'fast_chat',
+    messages: [{ role: 'user', content: 'test' }]
+  });
+  assert.ok(first);
+  assert.equal(reg._circuitBreakers.get('groq').state, CB_STATES.OPEN);
+
+  // Second call should not attempt groq at all while circuit is open.
+  groqCalls = 0;
+  const second = await reg.dispatch({
+    taskClass: 'fast_chat',
+    messages: [{ role: 'user', content: 'test' }]
+  });
+  assert.ok(second);
+  assert.equal(second.provider_id, 'local_vllm');
+  assert.equal(groqCalls, 0);
+  reg.dispose();
+});
+
+await testAsync('registry: secrets injection is scoped (does not mutate caller env)', async () => {
+  // Patch SecretsBridge injection to avoid keychain and make behavior deterministic.
+  const { SecretsBridge } = require('../core/system2/inference/secrets_bridge');
+  const original = SecretsBridge.prototype.injectRuntimeEnv;
+  try {
+    SecretsBridge.prototype.injectRuntimeEnv = function injectRuntimeEnv(env) {
+      env.OPENCLAW_GROQ_API_KEY = 'x';
+      return { backend: 'test', injected: ['OPENCLAW_GROQ_API_KEY'], skipped: [] };
+    };
+
+    const callerEnv = { ENABLE_FREECOMPUTE_CLOUD: '1', ENABLE_SECRETS_BRIDGE: '1' };
+    const reg = new ProviderRegistry({ env: callerEnv });
+
+    // Caller env should remain unchanged.
+    assert.equal(Object.prototype.hasOwnProperty.call(callerEnv, 'OPENCLAW_GROQ_API_KEY'), false);
+
+    // Registry should have adapter(s) based on injected effective env.
+    const providers = new Set(reg.snapshot().adapters.map((a) => a.provider_id));
+    assert.ok(providers.has('local_vllm'), 'expected local_vllm');
+    assert.ok(providers.has('groq'), 'expected groq (injected key enables adapter)');
+    reg.dispose();
+  } finally {
+    SecretsBridge.prototype.injectRuntimeEnv = original;
+  }
+});
+
+await testAsync('registry: compaction gate does not run under budget', async () => {
+  const events = [];
+  const reg = new ProviderRegistry({
+    env: { ENABLE_FREECOMPUTE_CLOUD: '1', OPENCLAW_GROQ_API_KEY: 'x', GROQ_MAX_CHARS: '2000' },
+    emitEvent: (t, p) => events.push({ t, p })
+  });
+
+  reg._adapters.set('local_vllm', {
+    async generationProbe() {
+      return { ok: true };
+    },
+    async call() {
+      throw new Error('local should not be selected when groq is configured');
+    },
+    async health() {
+      return { ok: true, models: ['stub-model'] };
+    }
+  });
+
+  let seen = null;
+  reg._adapters.set('groq', {
+    async call(params) {
+      seen = params.messages;
+      return {
+        text: 'ok',
+        raw: {},
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, estimatedCostUsd: 0 }
+      };
+    },
+    async health() {
+      return { ok: true, models: ['stub-model'] };
+    }
+  });
+
+  const msg = 'x'.repeat(100);
+  const result = await reg.dispatch({
+    taskClass: 'fast_chat',
+    messages: [{ role: 'user', content: msg }]
+  });
+
+  assert.ok(result);
+  assert.equal(result.provider_id, 'groq');
+  assert.ok(Array.isArray(seen));
+  assert.equal(seen[0].content.length, 100);
+  assert.equal(events.some((e) => e.t === 'freecompute_dispatch_compaction_applied'), false);
+  reg.dispose();
+});
+
+await testAsync('registry: compaction gate compacts preflight when materially over budget', async () => {
+  const events = [];
+  const reg = new ProviderRegistry({
+    env: { ENABLE_FREECOMPUTE_CLOUD: '1', OPENCLAW_GROQ_API_KEY: 'x', GROQ_MAX_CHARS: '1000' },
+    emitEvent: (t, p) => events.push({ t, p })
+  });
+
+  reg._adapters.set('local_vllm', {
+    async generationProbe() {
+      return { ok: true };
+    },
+    async call() {
+      throw new Error('local should not be selected when groq is configured');
+    },
+    async health() {
+      return { ok: true, models: ['stub-model'] };
+    }
+  });
+
+  let seenShape = null;
+  reg._adapters.set('groq', {
+    async call(params) {
+      seenShape = registryTest.estimateRequestShape(params.messages);
+      return {
+        text: 'ok',
+        raw: {},
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, estimatedCostUsd: 0 }
+      };
+    },
+    async health() {
+      return { ok: true, models: ['stub-model'] };
+    }
+  });
+
+  const messages = [
+    { role: 'system', content: 's'.repeat(800) },
+    { role: 'user', content: 'u'.repeat(600) }
+  ];
+  const before = registryTest.estimateRequestShape(messages);
+  assert.ok(before.char_count_total > 1000);
+
+  const result = await reg.dispatch({ taskClass: 'fast_chat', messages });
+  assert.ok(result);
+  assert.equal(result.provider_id, 'groq');
+  assert.ok(seenShape && typeof seenShape.char_count_total === 'number');
+  assert.ok(seenShape.char_count_total <= 1000, `expected compacted <= 1000, got ${seenShape.char_count_total}`);
+
+  const comp = events.find((e) => e.t === 'freecompute_dispatch_compaction_applied');
+  assert.ok(comp, 'expected compaction event');
+  assert.equal(comp.p.trigger, 'preflight');
+  reg.dispose();
+});
+
+await testAsync('registry: 400 context-length triggers one compaction retry (no preflight)', async () => {
+  const events = [];
+  const reg = new ProviderRegistry({
+    env: { ENABLE_FREECOMPUTE_CLOUD: '1', OPENCLAW_GROQ_API_KEY: 'x', GROQ_MAX_CHARS: '1000' },
+    emitEvent: (t, p) => events.push({ t, p })
+  });
+
+  reg._adapters.set('local_vllm', {
+    async generationProbe() {
+      return { ok: true };
+    },
+    async call() {
+      throw new Error('local should not be selected when groq succeeds');
+    },
+    async health() {
+      return { ok: true, models: ['stub-model'] };
+    }
+  });
+
+  let calls = 0;
+  let firstShape = null;
+  let secondShape = null;
+
+  reg._adapters.set('groq', {
+    async call(params) {
+      calls += 1;
+      const s = registryTest.estimateRequestShape(params.messages);
+      if (calls === 1) {
+        firstShape = s;
+        const err = new Error('context length exceeded');
+        err.code = 'PROVIDER_HTTP_ERROR';
+        err.statusCode = 400;
+        throw err;
+      }
+      secondShape = s;
+      return {
+        text: 'ok',
+        raw: {},
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, estimatedCostUsd: 0 }
+      };
+    },
+    async health() {
+      return { ok: true, models: ['stub-model'] };
+    }
+  });
+
+  // Content total ~1000 chars, below the 1.05 preflight margin for max=1000 once overhead is included.
+  const messages = [
+    { role: 'system', content: 's'.repeat(700) },
+    { role: 'user', content: 'u'.repeat(300) }
+  ];
+  const result = await reg.dispatch({ taskClass: 'fast_chat', messages });
+  assert.ok(result);
+  assert.equal(result.provider_id, 'groq');
+  assert.equal(calls, 2);
+  assert.ok(firstShape && secondShape);
+  assert.ok(secondShape.char_count_total < firstShape.char_count_total);
+
+  const comp = events.find((e) => e.t === 'freecompute_dispatch_compaction_applied');
+  assert.ok(comp, 'expected compaction event');
+  assert.equal(comp.p.trigger, 'error_400');
+  reg.dispose();
+});
+
+await testAsync('registry: audit events identify which provider rejects size (groq 400 → local fallback)', async () => {
+  const events = [];
+  const reg = new ProviderRegistry({
+    env: { ENABLE_FREECOMPUTE_CLOUD: '1', OPENCLAW_GROQ_API_KEY: 'x', GROQ_MAX_CHARS: '1000' },
+    emitEvent: (t, p) => events.push({ t, p })
+  });
+
+  reg._adapters.set('local_vllm', {
+    async generationProbe() {
+      return { ok: true };
+    },
+    async call() {
+      return {
+        text: 'ok',
+        raw: {},
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, estimatedCostUsd: 0 }
+      };
+    },
+    async health() {
+      return { ok: true, models: ['stub-model'] };
+    }
+  });
+
+  let groqCalls = 0;
+  reg._adapters.set('groq', {
+    async call() {
+      groqCalls += 1;
+      const err = new Error('Please reduce the length of the messages.');
+      err.code = 'PROVIDER_HTTP_ERROR';
+      err.statusCode = 400;
+      throw err;
+    },
+    async health() {
+      return { ok: true, models: ['stub-model'] };
+    }
+  });
+
+  const result = await reg.dispatch({
+    taskClass: 'fast_chat',
+    // Keep under the 1.05 preflight margin so the retry path is driven by the 400 error.
+    messages: [
+      { role: 'system', content: 's'.repeat(700) },
+      { role: 'user', content: 'u'.repeat(300) }
+    ]
+  });
+
+  assert.ok(result);
+  assert.equal(result.provider_id, 'local_vllm');
+  assert.equal(groqCalls, 2, 'expected groq initial attempt + one compaction retry');
+
+  const groqErr = events.find((e) => e.t === 'freecompute_dispatch_error_shape' && e.p.provider_id === 'groq');
+  assert.ok(groqErr, 'expected groq error shape event');
+  assert.equal(groqErr.p.statusCode, 400);
   reg.dispose();
 });
 
@@ -597,6 +1141,63 @@ test('adapter: does not expose auth token', () => {
   });
   const json = JSON.stringify(adapter);
   assert.ok(!json.includes('gsk_secret_test_key'), 'auth token leaked in serialization');
+});
+
+test('adapter: uses healthcheck chat timeout override when present', async () => {
+  const http = require('node:http');
+  const { EventEmitter } = require('node:events');
+
+  const originalRequest = http.request;
+  try {
+    let observedTimeout = null;
+    http.request = (options, cb) => {
+      observedTimeout = options && options.timeout;
+
+      const res = new EventEmitter();
+      res.statusCode = 200;
+
+      // Emit a minimal OpenAI-compatible response.
+      process.nextTick(() => {
+        cb(res);
+        res.emit('data', JSON.stringify({
+          model: 'stub',
+          choices: [{ message: { content: 'ok' } }],
+          usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 }
+        }));
+        res.emit('end');
+      });
+
+      const req = new EventEmitter();
+      req.write = () => {};
+      req.end = () => {};
+      req.destroy = () => {};
+      return req;
+    };
+
+    const entry = {
+      provider_id: 'test_openai_like',
+      kind: 'external',
+      protocol: 'openai_compatible',
+      enabled_default: false,
+      base_url: { default: 'http://example.invalid/v1', env_override: 'TEST_BASE_URL' },
+      auth: { type: 'none', env_var: null, redact_in_logs: true },
+      models: [{ model_id: 'stub-model', task_classes: ['fast_chat'], context_window_hint: null, tool_support: 'via_adapter' }],
+      constraints: { quota: { rpm_default: 1, rpd_default: 1, tpm_default: 1, tpd_default: 1 }, backoff: {}, circuit_breaker: {} },
+      healthcheck: { type: 'openai_compatible', endpoints: { models: '/models', chat: '/chat/completions' }, timeouts_ms: { chat: 12345 } },
+      routing_tags: { prefers: [], avoids: [] }
+    };
+
+    const adapter = new ProviderAdapter(entry, { env: {} });
+    const result = await adapter.call({
+      messages: [{ role: 'user', content: 'test' }],
+      metadata: { model: 'stub-model', maxTokens: 8, temperature: 0 }
+    });
+
+    assert.equal(result.text, 'ok');
+    assert.equal(observedTimeout, 12345);
+  } finally {
+    http.request = originalRequest;
+  }
 });
 
 // ════════════════════════════════════════════════════════════════════

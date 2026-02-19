@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "files": [
+    {
+      "role": "constitution",
+      "path": "workspace/CONSTITUTION.md",
+      "sha256": "fc273615390e1458d4ddec4f04d99b6c789bd1b1f70248947ced580fe375000d"
+    },
+    {
+      "role": "goals",
+      "path": "workspace/GOALS.md",
+      "sha256": "cf49ee08a9b3d1659b2cd46273a5b611c82c91e5bc96297a7aef9055b02198cf"
+    },
+    {
+      "role": "identity",
+      "path": "workspace/governance/IDENTITY.md",
+      "sha256": "1379f924cf4b4d6d0a306ecc2544a913dab706a1325fcf8eb9b267686ee8551c"
+    },
+    {
+      "role": "soul",
+      "path": "workspace/governance/SOUL.md",
+      "sha256": "95c467f710183b2c0397c29ec4ef886bb723671a39ee767dc4d59165f723b68f"
+    },
+    {
+      "role": "user",
+      "path": "workspace/governance/USER.md",
+      "sha256": "178a5807bd2e6ace25b80a366f0f7d8d3f354a47f577c4ab0092397456b8738f"
+    }
+  ]
+}

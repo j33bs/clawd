@@ -1,0 +1,14 @@
+# HiveMind runtime artifacts
+/data/
+ingest.log
+suggestions_state.json
+review_queue.json
+prune.log
+/archive/
+/digests/
+
+# Python cache
+__pycache__/
+hivemind/__pycache__/
+hivemind/ingest/__pycache__/
+hivemind/intelligence/__pycache__/

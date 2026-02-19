@@ -1,0 +1,10 @@
+{
+  "id": "openclaw_secrets_plugin",
+  "name": "Secrets CLI (System-2)",
+  "description": "Expose the System-2 secrets bridge as `openclaw secrets ...` (linked plugin).",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {}
+  }
+}

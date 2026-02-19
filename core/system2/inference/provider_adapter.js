@@ -44,10 +44,15 @@ class ProviderAdapter {
       || catalogEntry.base_url.default;
 
     // Resolve auth — non-enumerable so it never leaks via JSON.stringify
+    const authEnvVar = (catalogEntry.auth && catalogEntry.auth.env_var) || null;
+    const authAliasEnvVars = (catalogEntry.auth && Array.isArray(catalogEntry.auth.alias_env_vars))
+      ? catalogEntry.auth.alias_env_vars
+      : [];
+    const resolvedAuthToken = authEnvVar
+      ? (this._env[authEnvVar] || authAliasEnvVars.map((k) => this._env[k]).find((v) => !!v) || null)
+      : null;
     Object.defineProperty(this, '_authToken', {
-      value: (catalogEntry.auth && catalogEntry.auth.env_var)
-        ? (this._env[catalogEntry.auth.env_var] || null)
-        : null,
+      value: resolvedAuthToken,
       writable: true,
       enumerable: false,
       configurable: false
@@ -56,6 +61,21 @@ class ProviderAdapter {
     // Resolve model ID (first concrete model or AUTO_DISCOVER)
     const firstModel = catalogEntry.models[0];
     this._defaultModelId = firstModel ? firstModel.model_id : null;
+
+    // If this provider uses AUTO_DISCOVER, prefer operator-configured model env vars.
+    // This avoids accidentally calling /chat/completions with model=AUTO_DISCOVER.
+    if (this._defaultModelId === 'AUTO_DISCOVER') {
+      const env = this._env || {};
+      if (this.providerId === 'local_vllm' && env.OPENCLAW_VLLM_MODEL) {
+        this._defaultModelId = env.OPENCLAW_VLLM_MODEL;
+      }
+      if (this.providerId === 'remote_vllm' && env.OPENCLAW_REMOTE_VLLM_MODEL) {
+        this._defaultModelId = env.OPENCLAW_REMOTE_VLLM_MODEL;
+      }
+    }
+
+    // Cache for model discovery (best-effort).
+    this._discoveredModels = [];
 
     // Healthcheck config
     this._hc = catalogEntry.healthcheck || {};
@@ -91,10 +111,14 @@ class ProviderAdapter {
    * @returns {Promise<{ text: string, raw: object, usage: object }>}
    */
   async call({ messages = [], metadata = {} }) {
-    const model = metadata.model || this._defaultModelId;
+    let model = metadata.model || this._defaultModelId;
     const maxTokens = metadata.maxTokens || metadata.max_tokens || 4096;
     const temperature = typeof metadata.temperature === 'number'
       ? metadata.temperature : 0.7;
+
+    if (!model || model === 'AUTO_DISCOVER') {
+      model = await this._resolveAutoModel();
+    }
 
     const startMs = Date.now();
     let result;
@@ -133,6 +157,58 @@ class ProviderAdapter {
     return result;
   }
 
+  /**
+   * Deterministic "generation probe" (tiny request, short timeout).
+   *
+   * This is intentionally separate from health(), since /health and /models can
+   * remain responsive while generation endpoints wedge/hang.
+   *
+   * @param {object} [options]
+   * @param {string} [options.model]      - Optional model override
+   * @param {string} [options.prompt]     - Prompt for /completions
+   * @param {number} [options.timeoutMs]  - Hard timeout for probe
+   * @returns {Promise<{ ok: boolean, reason?: string }>}
+   */
+  async generationProbe(options = {}) {
+    if (this.protocol !== 'openai_compatible') {
+      return { ok: false, reason: 'unsupported_protocol' };
+    }
+
+    const timeoutMs = typeof options.timeoutMs === 'number' ? options.timeoutMs : 5000;
+    const prompt = typeof options.prompt === 'string' ? options.prompt : 'OK\n';
+
+    let model = options.model || this._defaultModelId;
+    if (!model || model === 'AUTO_DISCOVER') {
+      model = await this._resolveAutoModel();
+    }
+
+    const url = this.baseUrl.replace(/\/+$/, '') + '/completions';
+    const body = {
+      model,
+      prompt,
+      max_tokens: 1,
+      temperature: 0,
+      stream: false
+    };
+
+    try {
+      const data = await this._httpPost(url, body, { timeoutMs });
+      // OpenAI-compatible completions: choices[0].text is the primary field.
+      const choice = (data && data.choices && data.choices[0]) || null;
+      const text = choice && typeof choice.text === 'string' ? choice.text : null;
+      if (text === null) {
+        return { ok: false, reason: 'parse_error' };
+      }
+      return { ok: true };
+    } catch (err) {
+      if (err && err.code === 'PROVIDER_TIMEOUT') return { ok: false, reason: 'timeout' };
+      if (err && err.code === 'PROVIDER_HTTP_ERROR') return { ok: false, reason: `http_${err.statusCode || 'error'}` };
+      const msg = String((err && err.message) || '');
+      if (/invalid JSON/i.test(msg)) return { ok: false, reason: 'parse_error' };
+      return { ok: false, reason: 'unknown' };
+    }
+  }
+
   // ── OpenAI-Compatible Protocol ──────────────────────────────────────
 
   async _healthOpenAI() {
@@ -147,7 +223,34 @@ class ProviderAdapter {
       ? data.data.map((m) => m.id).filter(Boolean)
       : [];
 
+    if (models.length > 0) {
+      this._discoveredModels = models;
+    }
     return { ok: true, models };
+  }
+
+  async _resolveAutoModel() {
+    const env = this._env || {};
+    // Operator overrides first.
+    if (this.providerId === 'local_vllm' && env.OPENCLAW_VLLM_MODEL) return env.OPENCLAW_VLLM_MODEL;
+    if (this.providerId === 'remote_vllm' && env.OPENCLAW_REMOTE_VLLM_MODEL) return env.OPENCLAW_REMOTE_VLLM_MODEL;
+
+    // If we already discovered models, use the first deterministically.
+    if (Array.isArray(this._discoveredModels) && this._discoveredModels.length > 0) {
+      return this._discoveredModels[0];
+    }
+
+    // Best-effort discovery via /models.
+    const h = await this.health();
+    const models = (h && Array.isArray(h.models)) ? h.models : [];
+    if (models.length > 0) {
+      this._discoveredModels = models;
+      return models[0];
+    }
+
+    const err = new Error(`no models available for provider ${this.providerId}`);
+    err.code = 'PROVIDER_NO_MODELS';
+    throw err;
   }
 
   async _callOpenAI({ messages, model, maxTokens, temperature }) {
@@ -162,7 +265,8 @@ class ProviderAdapter {
     };
 
     const data = await this._httpPost(chatUrl, body, {
-      timeoutMs: (this._hc.timeouts_ms && this._hc.timeouts_ms.read) || 30000
+      // Some local providers can take 60s+ for cold-start inference; allow per-provider chat timeout override.
+      timeoutMs: (this._hc.timeouts_ms && this._hc.timeouts_ms.chat) || 30000
     });
 
     const choice = (data.choices && data.choices[0]) || {};
@@ -356,6 +460,13 @@ class ProviderAdapter {
         let data = '';
         res.on('data', (chunk) => { data += chunk; });
         res.on('end', () => {
+          if (res.statusCode < 200 || res.statusCode >= 300) {
+            const err = new Error(`http ${res.statusCode} from ${this.providerId}`);
+            err.code = 'PROVIDER_HTTP_ERROR';
+            err.statusCode = res.statusCode;
+            reject(err);
+            return;
+          }
           try {
             resolve(JSON.parse(data));
           } catch (_) {
@@ -366,7 +477,9 @@ class ProviderAdapter {
 
       req.on('timeout', () => {
         req.destroy();
-        reject(new Error(`timeout connecting to ${this.providerId}`));
+        const err = new Error(`timeout connecting to ${this.providerId}`);
+        err.code = 'PROVIDER_TIMEOUT';
+        reject(err);
       });
       req.on('error', (err) => reject(err));
 

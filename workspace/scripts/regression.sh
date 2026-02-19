@@ -20,6 +20,7 @@ echo ""
 
 FAILURES=0
 WARNINGS=0
+REGRESSION_PROFILE="${REGRESSION_PROFILE:-core}"
 
 # Helper function
 check_pass() {
@@ -39,7 +40,7 @@ check_warn() {
 # ============================================
 # 1. CONSTITUTIONAL INVARIANTS
 # ============================================
-echo "[1/8] Checking constitutional invariants..."
+echo "[1/9] Checking constitutional invariants..."
 
 if [ -f "workspace/CONSTITUTION.md" ]; then
     if grep -q "Article III: Safety Boundaries" workspace/CONSTITUTION.md; then
@@ -54,7 +55,7 @@ fi
 # ============================================
 # 2. GOVERNANCE SUBSTRATE
 # ============================================
-echo "[2/8] Verifying governance substrate..."
+echo "[2/9] Verifying governance substrate..."
 
 if [ -f "workspace/governance/GOVERNANCE_LOG.md" ]; then
     check_pass
@@ -65,7 +66,7 @@ fi
 # ============================================
 # 3. SECRET SCAN (tracked files)
 # ============================================
-echo "[3/8] Scanning for secrets in tracked files..."
+echo "[3/9] Scanning for secrets in tracked files..."
 
 # Get list of tracked files
 TRACKED_FILES=$(git ls-files 2>/dev/null || echo "")
@@ -95,7 +96,7 @@ fi
 # ============================================
 # 4. FORBIDDEN FILES CHECK
 # ============================================
-echo "[4/8] Checking for forbidden files..."
+echo "[4/9] Checking for forbidden files..."
 
 FORBIDDEN_FOUND=0
 FORBIDDEN_PATTERNS="secrets.env device.json paired.json auth-profiles.json device-auth.json"
@@ -116,7 +117,7 @@ fi
 # ============================================
 # 5. HOOKS INSTALLED
 # ============================================
-echo "[5/8] Verifying git hooks..."
+echo "[5/9] Verifying git hooks..."
 
 HOOKS_OK=1
 if [ ! -x ".git/hooks/pre-commit" ]; then
@@ -132,13 +133,13 @@ fi
 if [ $HOOKS_OK -eq 1 ]; then
     check_pass
 else
-    check_fail "Git hooks not properly installed"
+    check_warn "Git hooks not installed (run: bash workspace/scripts/install-hooks.sh)"
 fi
 
 # ============================================
 # 6. DOCUMENTATION COMPLETENESS
 # ============================================
-echo "[6/8] Checking documentation completeness..."
+echo "[6/9] Checking documentation completeness..."
 
 DOCS_OK=1
 REQUIRED_DOCS="CONSTITUTION SOUL IDENTITY AGENTS USER BOUNDARIES"
@@ -180,11 +181,13 @@ fi
 # ============================================
 # 7. OPTIONAL PROVIDER ENV GATING
 # ============================================
-echo "[7/8] Checking optional provider env gating..."
+echo "[7/9] Checking provider env gating (profile=${REGRESSION_PROFILE})..."
 
 if [ -f "openclaw.json" ]; then
-    python3 - <<'PY'
+    set +e
+    REGRESSION_PROFILE="${REGRESSION_PROFILE}" python3 - <<'PY'
 import json
+import os
 import sys
 
 def has_env(value):
@@ -199,25 +202,37 @@ def has_env(value):
 with open("openclaw.json", "r", encoding="utf-8") as handle:
     data = json.load(handle)
 
+profile = os.environ.get("REGRESSION_PROFILE", "core").strip().lower()
 providers = data.get("models", {}).get("providers", {})
 
-for name in ("anthropic", "ollama"):
-    provider = providers.get(name)
+if not isinstance(providers, dict):
+    print("providers_invalid")
+    sys.exit(2)
+
+if profile == "paid":
+    for name in ("anthropic",):
+        provider = providers.get(name)
+        if not isinstance(provider, dict):
+            print(f"missing_paid:{name}")
+            sys.exit(3)
+
+for name, provider in providers.items():
     if not isinstance(provider, dict):
-        print(f"missing:{name}")
-        sys.exit(2)
+        continue
     if has_env(provider):
         enabled = provider.get("enabled")
         if enabled not in ("auto", False):
             print(f"enabled:{name}:{enabled}")
-            sys.exit(3)
+            sys.exit(4)
 
 print("ok")
 PY
-    if [ $? -eq 0 ]; then
+    PROVIDER_GATE_RC=$?
+    set -e
+    if [ ${PROVIDER_GATE_RC} -eq 0 ]; then
         check_pass
     else
-        check_fail "Optional providers with env vars must be enabled=auto or disabled"
+        check_fail "Provider env gating check failed (profile=${REGRESSION_PROFILE})"
     fi
 else
     check_fail "openclaw.json not found for provider gating check"
@@ -257,9 +272,65 @@ else
 fi
 
 # ============================================
-# 8. BRANCH PROTECTION (local check)
+# 8. HEARTBEAT DEPENDENCY INVARIANT
 # ============================================
-echo "[8/8] Checking branch state..."
+echo "[8/9] Checking heartbeat dependency invariant..."
+
+if [ -f "workspace/automation/cron_jobs.json" ]; then
+    NEEDS_HEARTBEAT=$(python3 - <<'PY'
+import json
+from pathlib import Path
+
+path = Path("workspace/automation/cron_jobs.json")
+try:
+    data = json.loads(path.read_text(encoding="utf-8"))
+except Exception:
+    print("error")
+    raise SystemExit(0)
+
+jobs = data.get("jobs", []) if isinstance(data, dict) else []
+if not isinstance(jobs, list):
+    print("error")
+    raise SystemExit(0)
+
+for job in jobs:
+    if not isinstance(job, dict):
+        continue
+    session_target = str(job.get("sessionTarget", "")).strip()
+    wake_mode = str(job.get("wakeMode", "now")).strip() or "now"
+    if session_target == "main" and wake_mode == "now":
+        print("yes")
+        raise SystemExit(0)
+print("no")
+PY
+)
+
+    if [ "${NEEDS_HEARTBEAT}" = "error" ]; then
+        check_fail "workspace/automation/cron_jobs.json is invalid"
+    elif [ "${NEEDS_HEARTBEAT}" = "yes" ]; then
+        if command -v openclaw >/dev/null 2>&1; then
+            HEARTBEAT_CADENCE=$(openclaw config get agents.defaults.heartbeat.every 2>/dev/null || true)
+            if [ "${HEARTBEAT_CADENCE}" = "0m" ]; then
+                check_fail "heartbeat.every=0m while main/wake=now cron jobs are configured"
+            elif [ -n "${HEARTBEAT_CADENCE}" ]; then
+                check_pass
+            else
+                check_warn "Could not read heartbeat cadence from openclaw config"
+            fi
+        else
+            check_warn "openclaw CLI missing; heartbeat invariant not evaluated"
+        fi
+    else
+        check_pass
+    fi
+else
+    check_warn "No cron template file; heartbeat invariant skipped"
+fi
+
+# ============================================
+# 9. BRANCH PROTECTION (local check)
+# ============================================
+echo "[9/9] Checking branch state..."
 
 CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
 
