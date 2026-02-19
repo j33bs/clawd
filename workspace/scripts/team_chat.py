@@ -11,6 +11,51 @@ from pathlib import Path
 from typing import Any
 
 from team_chat_adapters import build_adapters
+import subprocess
+
+
+def auto_commit_changes(repo_root: Path, session_id: str, cycle: int) -> str | None:
+    """Auto-commit changes after accepted patch. Returns commit SHA or None."""
+    try:
+        # Check for changes
+        result = subprocess.run(
+            ["git", "status", "--porcelain"],
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
+        if not result.stdout.strip():
+            return None  # No changes to commit
+        
+        # Stage all changes
+        subprocess.run(["git", "add", "-A"], cwd=repo_root, capture_output=True, timeout=30)
+        
+        # Create commit message
+        msg = f"teamchat({session_id}): cycle {cycle} accepted patch"
+        
+        # Commit
+        result = subprocess.run(
+            ["git", "commit", "-m", msg],
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
+        
+        if result.returncode == 0:
+            # Get commit SHA
+            sha_result = subprocess.run(
+                ["git", "rev-parse", "HEAD"],
+                cwd=repo_root,
+                capture_output=True,
+                text=True,
+                timeout=10
+            )
+            return sha_result.stdout.strip()[:8]
+    except Exception as e:
+        print(f"Auto-commit failed: {e}")
+    return None
 
 
 def utc_now() -> str:
@@ -88,6 +133,14 @@ def log_event(
     )
 
 
+def check_resumable(state: dict[str, Any]) -> bool:
+    """Check if session is resumable (not stopped/accepted/completed)."""
+    status = state.get("status", "")
+    if status.startswith("stopped:") or status in {"accepted", "request_input"}:
+        return False
+    return True
+
+
 def run(args: argparse.Namespace) -> int:
     repo_root = Path(__file__).resolve().parents[2]
     base_dir = Path(args.output_root) if args.output_root else (repo_root / "workspace" / "teamchat")
@@ -97,30 +150,56 @@ def run(args: argparse.Namespace) -> int:
     summary_file = base_dir / "summaries" / f"{session_id}.md"
     state_file = base_dir / "state" / f"{session_id}.json"
 
-    default_state = {
-        "session_id": session_id,
-        "created_at": utc_now(),
-        "updated_at": utc_now(),
-        "live": bool(args.live),
-        "task": args.task,
-        "status": "running",
-        "cycle": 0,
-        "queue": [],
-        "accepted_reports": 0,
-        "consecutive_failures": 0,
-        "max_cycles": int(args.max_cycles),
-        "max_commands_per_cycle": int(args.max_commands_per_cycle),
-        "max_consecutive_failures": int(args.max_consecutive_failures),
-    }
-    state = load_state(state_file, default_state)
+    # Check for existing session to resume
+    resuming = False
+    if state_file.exists() and not args.force:
+        existing_state = load_state(state_file, {})
+        if existing_state.get("session_id") == session_id and check_resumable(existing_state):
+            if args.resume or args.task is None:
+                print(f"Resuming session {session_id} (cycle {existing_state.get('cycle', 0)}, status: {existing_state.get('status')})")
+                resuming = True
+
+    if resuming:
+        state = load_state(state_file, {})
+        # Override some args if provided
+        if args.live is not None:
+            state["live"] = bool(args.live)
+        if args.max_cycles:
+            state["max_cycles"] = int(args.max_cycles)
+        if args.max_consecutive_failures:
+            state["max_consecutive_failures"] = int(args.max_consecutive_failures)
+    else:
+        # Defaults for new sessions
+        max_cycles = int(args.max_cycles) if args.max_cycles else 3
+        max_consecutive_failures = int(args.max_consecutive_failures) if args.max_consecutive_failures else 2
+        default_state = {
+            "session_id": session_id,
+            "created_at": utc_now(),
+            "updated_at": utc_now(),
+            "live": bool(args.live),
+            "task": args.task,
+            "status": "running",
+            "cycle": 0,
+            "queue": [],
+            "accepted_reports": 0,
+            "consecutive_failures": 0,
+            "max_cycles": max_cycles,
+            "max_commands_per_cycle": int(args.max_commands_per_cycle),
+            "max_consecutive_failures": max_consecutive_failures,
+        }
+        state = load_state(state_file, default_state)
+
+    # Build adapters (both for new and resumed sessions)
     planner, coder = build_adapters(
-        live=bool(args.live),
+        live=bool(state.get("live", False)),
         repo_root=repo_root,
         max_commands_per_cycle=int(args.max_commands_per_cycle),
         extra_allowlist=args.allow_cmd,
     )
 
-    log_event(
+    # Log session_start only for new sessions (not resumes)
+    if not resuming:
+        log_event(
         sessions_file,
         session_id=session_id,
         cycle=int(state["cycle"]),
@@ -150,7 +229,8 @@ def run(args: argparse.Namespace) -> int:
         cycle = int(state["cycle"])
 
         if not state["queue"]:
-            plan_result = planner.plan(args.task, state)
+            task = state.get("task") or args.task
+            plan_result = planner.plan(task, state)
             if not plan_result.ok:
                 state["consecutive_failures"] = int(state["consecutive_failures"]) + 1
                 log_event(
@@ -251,6 +331,11 @@ def run(args: argparse.Namespace) -> int:
             state["accepted_reports"] = int(state["accepted_reports"]) + 1
             state["consecutive_failures"] = 0
             state["status"] = "accepted"
+            
+            # Auto-commit changes after acceptance
+            commit_sha = auto_commit_changes(repo_root, session_id, state.get("cycle", 0))
+            if commit_sha:
+                state["last_commit"] = commit_sha
         elif decision == "request_input":
             state["status"] = "request_input"
             state["consecutive_failures"] = 0
@@ -310,14 +395,16 @@ def run(args: argparse.Namespace) -> int:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run TeamChat planner+coder loop")
-    parser.add_argument("--task", required=True, help="Top-level task for planner")
+    parser.add_argument("--task", default=None, help="Top-level task for planner (not needed if resuming)")
     parser.add_argument("--session-id", default="", help="Session id (default: UTC timestamp)")
     parser.add_argument("--output-root", default="", help="Output root (default: workspace/teamchat)")
-    parser.add_argument("--max-cycles", type=int, default=3)
+    parser.add_argument("--max-cycles", type=int, default=0, help="Max cycles (0 = keep existing)")
     parser.add_argument("--max-commands-per-cycle", type=int, default=4)
-    parser.add_argument("--max-consecutive-failures", type=int, default=2)
+    parser.add_argument("--max-consecutive-failures", type=int, default=0, help="0 = keep existing")
     parser.add_argument("--allow-cmd", action="append", default=[], help="Extra allowlist regex for live coder commands")
-    parser.add_argument("--live", action="store_true", help="Enable live adapters using PolicyRouter")
+    parser.add_argument("--live", nargs="?", default=None, const=True, help="Enable live adapters (use --live or --live=1)")
+    parser.add_argument("--resume", action="store_true", help="Resume existing session if available")
+    parser.add_argument("--force", action="store_true", help="Force new session even if one exists")
     args = parser.parse_args()
     return run(args)
 
