@@ -47,12 +47,14 @@ try:
     from tacti_cr.expression import compute_expression
     from tacti_cr.collapse import emit_recommendation as collapse_emit_recommendation
     from tacti_cr.valence import routing_bias as tacti_routing_bias
+    from tacti_cr.events import emit as tacti_emit
 except Exception:  # pragma: no cover - optional integration
     ArousalOscillator = None
     tacti_enabled = None
     compute_expression = None
     collapse_emit_recommendation = None
     tacti_routing_bias = None
+    tacti_emit = None
 
 DEFAULT_POLICY = {
     "version": 2,
@@ -287,6 +289,12 @@ def log_event(event_type, detail=None, path=EVENT_LOG):
 
 
 def _tacti_event(event_type, detail):
+    if callable(tacti_emit):
+        try:
+            tacti_emit(str(event_type), detail if isinstance(detail, dict) else {"detail": detail})
+            return
+        except Exception:
+            pass
     log_event(event_type, detail=detail, path=TACTI_EVENT_LOG)
 
 

@@ -24,6 +24,10 @@ try:
 except Exception:  # pragma: no cover
     temporal_reset_event = None
 try:
+    from tacti_cr.events import emit as tacti_emit
+except Exception:  # pragma: no cover
+    tacti_emit = None
+try:
     from tacti_cr.mirror import update_from_event as mirror_update_from_event
 except Exception:  # pragma: no cover
     mirror_update_from_event = None
@@ -252,6 +256,15 @@ def log_event(
         session_path,
         row,
     )
+    if callable(tacti_emit):
+        try:
+            tacti_emit(
+                f"tacti_cr.team_chat.{event_type}",
+                {"actor": actor, "cycle": cycle, "data": data, "route": route or {}},
+                session_id=session_id,
+            )
+        except Exception:
+            pass
     if callable(mirror_update_from_event) and actor not in {"system"}:
         try:
             mirror_update_from_event(actor, row, repo_root=Path(__file__).resolve().parents[2])

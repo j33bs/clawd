@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from .config import is_enabled
+from .events import emit
 
 
 @dataclass
@@ -72,6 +73,10 @@ def update_from_event(agent: str, event: dict[str, Any], *, repo_root: Path | No
 
     state["updated_at"] = _utc()
     path.write_text(json.dumps(state, indent=2) + "\n", encoding="utf-8")
+    emit(
+        "tacti_cr.mirror.updated",
+        {"agent": agent, "event_type": event_type, "events": state.get("events", 0), "path": str(path)},
+    )
     return {"ok": True, "path": str(path)}
 
 

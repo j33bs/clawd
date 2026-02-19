@@ -5,11 +5,11 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from math import exp
-import json
 from pathlib import Path
 from typing import Dict, List, Optional
 
 from .config import DEFAULT_CONFIG
+from .events import emit
 from .hivemind_bridge import hivemind_query, hivemind_store
 from .temporal_watchdog import temporal_reset_event
 
@@ -65,10 +65,11 @@ class TemporalMemory:
             )
         drift = temporal_reset_event(content, now=entry.timestamp)
         if drift:
-            path = Path(__file__).resolve().parents[2] / "workspace" / "state" / "temporal" / "watchdog_events.jsonl"
-            path.parent.mkdir(parents=True, exist_ok=True)
-            with path.open("a", encoding="utf-8") as f:
-                f.write(json.dumps(drift, ensure_ascii=True) + "\n")
+            emit(
+                "tacti_cr.temporal.drift_detected",
+                {"agent_scope": self._agent_scope, "drift": drift},
+                now=entry.timestamp,
+            )
         return entry
 
     def retrieve(

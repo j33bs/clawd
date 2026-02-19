@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from .config import get_float, is_enabled
+from .events import emit
 
 
 def _state_path(agent: str, repo_root: Path | None = None) -> Path:
@@ -71,6 +72,7 @@ def update_valence(agent: str, outcome: dict[str, Any], *, repo_root: Path | Non
     value = max(-1.0, min(1.0, value + delta))
     payload = {"agent": agent, "valence": value, "updated_at": dt_now.isoformat().replace("+00:00", "Z")}
     _save(_state_path(agent, repo_root=repo_root), payload)
+    emit("tacti_cr.valence.updated", {"agent": agent, "valence": value, "delta": delta}, now=dt_now)
     return {"ok": True, "valence": value}
 
 

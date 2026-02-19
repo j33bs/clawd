@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from .config import get_float, get_int, is_enabled
+from .events import emit
 
 
 def _utc_now() -> str:
@@ -115,6 +116,7 @@ def assess_content(repo_root: Path, content: str) -> dict[str, Any]:
 
     if quarantine:
         _append(paths["quarantine"], {**row, "content": content})
+        emit("tacti_cr.semantic_immune.quarantined", {k: row[k] for k in ("content_hash", "score", "threshold", "reason")})
         return {"ok": True, "quarantined": True, **row}
 
     # update healthy distribution
@@ -125,6 +127,10 @@ def assess_content(repo_root: Path, content: str) -> dict[str, Any]:
     distances.append(score)
     stats.update({"count": new_count, "centroid": centroid, "distances": distances[-400:]})
     _save_stats(paths["stats"], stats)
+    emit(
+        "tacti_cr.semantic_immune.accepted",
+        {k: row[k] for k in ("content_hash", "score", "threshold", "reason")},
+    )
     return {"ok": True, "quarantined": False, **row}
 
 
@@ -156,6 +162,7 @@ def approve_quarantine(repo_root: Path, content_hash: str) -> dict[str, Any]:
         return {"ok": False, "reason": "not_found", "content_hash": target}
 
     _append(paths["approvals"], {"ts": _utc_now(), "content_hash": target, "approved": True})
+    emit("tacti_cr.semantic_immune.approved", {"content_hash": target})
     assess_content(repo_root, str(approved.get("content", "")))
     return {"ok": True, "content_hash": target}
 
