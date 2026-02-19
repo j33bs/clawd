@@ -33,6 +33,14 @@
     --gradient-accent: linear-gradient(135deg, #6366f1, #8b5cf6);
     --gradient-success: linear-gradient(135deg, #10b981, #34d399);
     --gradient-danger: linear-gradient(135deg, #ef4444, #f87171);
+    --gradient-identity: linear-gradient(135deg, #5b6cff, #b34cf7 52%, #f8b957);
+    
+    /* TACTI(C)-R categories */
+    --cat-arousal: #d24a4a;
+    --cat-temporality: #3f79d9;
+    --cat-cross-timescale: #8f5ad9;
+    --cat-malleability: #3ea76e;
+    --cat-agency: #d2a63a;
     
     /* Spacing */
     --space-xs: 4px;
@@ -176,6 +184,7 @@ input, select, textarea {
 .sidebar-header {
     padding: var(--space-lg);
     border-bottom: 1px solid var(--border-subtle);
+    background: linear-gradient(180deg, rgba(99, 102, 241, 0.08) 0%, rgba(18, 18, 26, 0) 78%);
 }
 
 .logo {
@@ -187,7 +196,7 @@ input, select, textarea {
 .logo-icon {
     width: 40px;
     height: 40px;
-    background: var(--gradient-accent);
+    background: var(--gradient-identity);
     border-radius: var(--radius-md);
     display: flex;
     align-items: center;
@@ -196,14 +205,76 @@ input, select, textarea {
     box-shadow: var(--shadow-md);
 }
 
+.logo-copy {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+}
+
 .logo-text {
-    font-size: var(--text-xl);
+    font-size: 20px;
     font-weight: 700;
-    letter-spacing: -0.5px;
-    background: var(--gradient-accent);
+    letter-spacing: -0.4px;
+    background: var(--gradient-identity);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
+}
+
+.logo-subtext {
+    font-size: 10px;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+    color: var(--text-tertiary);
+    font-family: var(--font-mono);
+}
+
+.tacti-principles {
+    margin-top: var(--space-md);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.category-badge {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.4px;
+    text-transform: uppercase;
+    border: 1px solid transparent;
+    border-radius: var(--radius-full);
+    padding: 2px 8px;
+    background: rgba(255, 255, 255, 0.04);
+}
+
+.category-arousal {
+    color: var(--cat-arousal);
+    border-color: rgba(210, 74, 74, 0.35);
+}
+
+.category-temporality {
+    color: var(--cat-temporality);
+    border-color: rgba(63, 121, 217, 0.35);
+}
+
+.category-cross-timescale {
+    color: var(--cat-cross-timescale);
+    border-color: rgba(143, 90, 217, 0.35);
+}
+
+.category-malleability {
+    color: var(--cat-malleability);
+    border-color: rgba(62, 167, 110, 0.35);
+}
+
+.category-agency {
+    color: var(--cat-agency);
+    border-color: rgba(210, 166, 58, 0.35);
+}
+
+.tacti-header {
+    border-bottom: 1px solid rgba(99, 102, 241, 0.22);
+    background: linear-gradient(180deg, rgba(99, 102, 241, 0.08) 0%, rgba(18, 18, 26, 0) 100%);
 }
 
 .sidebar-nav {
