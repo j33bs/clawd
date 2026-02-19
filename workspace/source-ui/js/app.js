@@ -6,6 +6,10 @@
 // Application state
 let currentView = 'dashboard';
 let refreshInterval = null;
+let statusRefreshInterval = null;
+
+// Local selector helpers
+const $ = (selector, context = document) => context.querySelector(selector);
 
 // Initialize application
 function initApp() {
@@ -24,6 +28,7 @@ function initApp() {
     initNotifications();
     initSettings();
     initKeyboardShortcuts();
+    initTactiStatus();
     
     // Start data refresh
     startDataRefresh();
@@ -127,6 +132,93 @@ function initViews() {
     // Schedule navigation
     $('#prev-week')?.addEventListener('click', () => navigateWeek(-1));
     $('#next-week')?.addEventListener('click', () => navigateWeek(1));
+}
+
+function initTactiStatus() {
+    $('#refresh-status-btn')?.addEventListener('click', () => refreshTactiStatus(true));
+    refreshTactiStatus(false);
+
+    if (statusRefreshInterval) {
+        clearInterval(statusRefreshInterval);
+    }
+    statusRefreshInterval = setInterval(() => refreshTactiStatus(false), 20000);
+}
+
+async function fetchContract(endpoint, options = {}) {
+    const response = await fetch(endpoint, {
+        headers: { 'Content-Type': 'application/json' },
+        ...options
+    });
+    const payload = await response.json();
+    return payload;
+}
+
+function setStatusTile(id, health, value, meta) {
+    const tile = $(id);
+    if (!tile) return;
+    tile.dataset.health = health;
+    const valueEl = tile.querySelector('[data-status-field=\"value\"]');
+    const metaEl = tile.querySelector('[data-status-field=\"meta\"]');
+    if (valueEl) valueEl.textContent = value;
+    if (metaEl) metaEl.textContent = meta;
+}
+
+async function refreshTactiStatus(showToast) {
+    try {
+        const payload = await fetchContract('/api/status');
+        if (!payload || payload.ok !== true || !payload.data) {
+            const reason = payload?.error?.message || 'status unavailable';
+            throw new Error(reason);
+        }
+
+        const data = payload.data;
+        const qmd = data.qmd || {};
+        const kb = data.knowledge_base_sync || {};
+        const cron = data.cron || {};
+        const memory = data.memory || {};
+
+        const qmdReachable = !!qmd.reachable;
+        const qmdValue = qmdReachable ? 'Reachable' : 'Unreachable';
+        const qmdMeta = qmdReachable
+            ? `latency ${qmd.latency_ms ?? '--'} ms`
+            : (qmd.reason || 'probe failed');
+        setStatusTile('#status-qmd', qmdReachable ? 'ok' : 'bad', qmdValue, qmdMeta);
+
+        const kbStatus = kb.status || 'unknown';
+        const kbHealth = kbStatus === 'ok' ? 'ok' : (kbStatus === 'stale' ? 'warn' : 'bad');
+        const kbValue = kbStatus.toUpperCase();
+        const kbMeta = kb.last_sync
+            ? `${Utils.formatTime(kb.last_sync)} (${kb.age_minutes ?? '--'}m)`
+            : (kb.reason || 'no sync marker');
+        setStatusTile('#status-kb', kbHealth, kbValue, kbMeta);
+
+        const cronStatus = cron.status || 'unknown';
+        const cronHealth = cronStatus === 'ok' ? 'ok' : (cronStatus === 'stale' ? 'warn' : 'bad');
+        const cronValue = cronStatus.toUpperCase();
+        const cronMeta = cron.latest_artifact_ts
+            ? `${Utils.formatTime(cron.latest_artifact_ts)} | jobs ${cron.template_jobs ?? '--'}`
+            : (cron.reason || 'no cron artifact');
+        setStatusTile('#status-cron', cronHealth, cronValue, cronMeta);
+
+        const processMb = typeof memory.process_rss_mb === 'number' ? memory.process_rss_mb.toFixed(1) : '--';
+        const usedPct = typeof memory.system_used_pct === 'number' ? `${memory.system_used_pct.toFixed(1)}%` : 'n/a';
+        const memHealth = typeof memory.system_used_pct === 'number'
+            ? (memory.system_used_pct > 90 ? 'bad' : memory.system_used_pct > 80 ? 'warn' : 'ok')
+            : 'warn';
+        setStatusTile('#status-memory', memHealth, `${processMb} MB`, `system ${usedPct}`);
+
+        if (showToast) {
+            Toast.success('Status refreshed');
+        }
+    } catch (error) {
+        setStatusTile('#status-qmd', 'bad', 'ERROR', 'status endpoint unavailable');
+        setStatusTile('#status-kb', 'bad', 'ERROR', 'status endpoint unavailable');
+        setStatusTile('#status-cron', 'bad', 'ERROR', 'status endpoint unavailable');
+        setStatusTile('#status-memory', 'bad', 'ERROR', 'status endpoint unavailable');
+        if (showToast) {
+            Toast.error(`Status refresh failed: ${error.message}`);
+        }
+    }
 }
 
 function renderAll() {

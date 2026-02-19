@@ -197,6 +197,34 @@
             <div class="content-area" id="content-area">
                 <!-- Dashboard View -->
                 <div class="view active" id="view-dashboard">
+                    <div class="tacti-status-strip" id="tacti-status-strip">
+                        <div class="status-strip-header">
+                            <h2 class="status-strip-title">System Status</h2>
+                            <button class="btn-text" id="refresh-status-btn">Refresh</button>
+                        </div>
+                        <div class="status-strip-grid">
+                            <div class="status-tile" id="status-qmd">
+                                <span class="status-tile-label">QMD (8181)</span>
+                                <span class="status-tile-value" data-status-field="value">--</span>
+                                <span class="status-tile-meta" data-status-field="meta">--</span>
+                            </div>
+                            <div class="status-tile" id="status-kb">
+                                <span class="status-tile-label">Knowledge Sync</span>
+                                <span class="status-tile-value" data-status-field="value">--</span>
+                                <span class="status-tile-meta" data-status-field="meta">--</span>
+                            </div>
+                            <div class="status-tile" id="status-cron">
+                                <span class="status-tile-label">Cron Health</span>
+                                <span class="status-tile-value" data-status-field="value">--</span>
+                                <span class="status-tile-meta" data-status-field="meta">--</span>
+                            </div>
+                            <div class="status-tile" id="status-memory">
+                                <span class="status-tile-label">Memory</span>
+                                <span class="status-tile-value" data-status-field="value">--</span>
+                                <span class="status-tile-meta" data-status-field="meta">--</span>
+                            </div>
+                        </div>
+                    </div>
                     <div class="stats-grid">
                         <div class="stat-card">
                             <div class="stat-header">
