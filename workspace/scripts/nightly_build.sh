@@ -119,8 +119,12 @@ run_memory() {
     
     # Count lines in MEMORY.md
     if [ -f "$CLAWD_DIR/MEMORY.md" ]; then
+        memory_warn_lines="${NIGHTLY_MEMORY_WARN_LINES:-180}"
         lines=$(wc -l < "$CLAWD_DIR/MEMORY.md")
         log "MEMORY.md: $lines lines"
+        if [ "$lines" -gt "$memory_warn_lines" ]; then
+            log "⚠️ MEMORY.md exceeds 180 lines — prune recommended (oldest entries first)"
+        fi
     fi
     
     log "Memory prune complete"
