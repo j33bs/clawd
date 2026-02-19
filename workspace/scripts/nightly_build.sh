@@ -5,7 +5,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CLAWD_DIR="$HOME/clawd"
+CLAWD_DIR="${CLAWD_DIR:-$HOME/clawd}"
 RESEARCH_TOPICS_FILE="$CLAWD_DIR/workspace/research/TOPICS.md"
 RESEARCH_OUT_DIR="$CLAWD_DIR/reports/research"
 OPENCLAW_BIN="${OPENCLAW_BIN:-$(command -v openclaw 2>/dev/null || echo "$HOME/.npm-global/bin/openclaw")}"
@@ -22,6 +22,50 @@ LOG_FILE="$LOG_DIR/$(date +%Y-%m-%d).log"
 
 log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOG_FILE"
+}
+
+sanitize_doctor_output() {
+    sed -E 's/(([A-Za-z0-9_.-]*((KEY|TOKEN|SECRET|PASS|PASSWORD))[A-Za-z0-9_.-]*)[[:space:]]*[:=][[:space:]]*)[^[:space:]]+/\1[REDACTED]/Ig'
+}
+
+run_openclaw_config_preflight() {
+    local config_source doctor_output doctor_sanitized
+    local doctor_status=0
+    local invalid_config=0
+
+    if [ -n "${OPENCLAW_CONFIG_PATH:-}" ]; then
+        config_source="$OPENCLAW_CONFIG_PATH"
+        log "OpenClaw config source: $config_source (OPENCLAW_CONFIG_PATH override)"
+    else
+        config_source="$HOME/.openclaw/openclaw.json"
+        log "OpenClaw config source: $config_source (default)"
+    fi
+
+    doctor_output="$("$OPENCLAW_BIN" doctor --non-interactive --no-workspace-suggestions 2>&1)" || doctor_status=$?
+    doctor_sanitized="$(printf '%s\n' "$doctor_output" | sanitize_doctor_output)"
+    printf '%s\n' "$doctor_sanitized" >>"$LOG_FILE"
+
+    if printf '%s\n' "$doctor_output" | grep -Eiq 'Invalid config at .*openclaw\.json|plugin path not found|plugin not found'; then
+        invalid_config=1
+    fi
+
+    if [ "$invalid_config" -eq 1 ]; then
+        log "OpenClaw config invalid (likely ~/.openclaw/openclaw.json). Run: openclaw doctor --fix"
+        log "OpenClaw doctor diagnostics (last 20 lines):"
+        while IFS= read -r line; do
+            [ -n "$line" ] && log "  $line"
+        done < <(printf '%s\n' "$doctor_sanitized" | tail -n 20)
+        return 1
+    fi
+
+    if [ "$doctor_status" -ne 0 ]; then
+        log "⚠️ OpenClaw doctor returned non-zero during preflight (continuing; no config-invalid signature detected)"
+        while IFS= read -r line; do
+            [ -n "$line" ] && log "  $line"
+        done < <(printf '%s\n' "$doctor_sanitized" | tail -n 20)
+    else
+        log "✅ OpenClaw config preflight: OK"
+    fi
 }
 
 run_research() {
@@ -58,6 +102,8 @@ run_research() {
 
 run_health() {
     log "=== System Health ==="
+
+    run_openclaw_config_preflight
     
     # Check Gateway
     if "$OPENCLAW_BIN" status 2>&1 | grep -q "running"; then
