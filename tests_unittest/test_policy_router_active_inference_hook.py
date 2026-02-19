@@ -31,7 +31,7 @@ class TestPolicyRouterActiveInferenceHook(unittest.TestCase):
 
             env = {
                 "ENABLE_ACTIVE_INFERENCE": "1",
-                "GROQ_API_KEY": "dummy-test-key",
+                "GROQ_API_KEY": "test-key",
             }
             with patch.dict(os.environ, env, clear=False):
                 with patch.object(policy_router, "ACTIVE_INFERENCE_STATE_PATH", ai_state):
