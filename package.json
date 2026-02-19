@@ -16,6 +16,7 @@
     "secrets": "node scripts/openclaw_secrets_cli.js"
   },
   "dependencies": {
-    "@lancedb/lancedb": "^0.26.2"
+    "@lancedb/lancedb": "^0.26.2",
+    "claude": "^0.1.1"
   }
 }

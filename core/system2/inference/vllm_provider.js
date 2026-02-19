@@ -14,6 +14,7 @@
  */
 
 const { LocalVllmProvider } = require('./local_vllm_provider');
+const { ProviderAdapter } = require('./provider_adapter');
 const { getProvider } = require('./catalog');
 const { resolveSystem2VllmConfig } = require('./system2_config_resolver');
 const { normalizeNodeId } = require('../../node_identity');
@@ -89,7 +90,7 @@ async function probeVllmServer(entry, options = {}, { providerFactory } = {}) {
   const baseUrl = options.baseUrl
     || env.OPENCLAW_VLLM_BASE_URL
     || 'http://127.0.0.1:18888/v1';
-  const useSystem2 = isSystem2Context(options)
+  const useSystem2 = isSystem2Context(options);
   const system2Cfg = useSystem2
     ? resolveSystem2VllmConfig({
         env,

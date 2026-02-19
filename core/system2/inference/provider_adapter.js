@@ -353,9 +353,15 @@ class ProviderAdapter {
         headers,
         timeout: options.timeoutMs || 30000
       }, (res) => {
-        let data = '';
-        res.on('data', (chunk) => { data += chunk; });
+        const chunks = [];
+        res.on('data', (chunk) => { chunks.push(chunk); });
         res.on('end', () => {
+          const data = Buffer.concat(chunks).toString('utf8');
+          if (res.statusCode >= 300) {
+            return reject(new Error(
+              `HTTP ${res.statusCode} from ${this.providerId}: ${data.slice(0, 200)}`
+            ));
+          }
           try {
             resolve(JSON.parse(data));
           } catch (_) {

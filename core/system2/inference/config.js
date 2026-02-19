@@ -30,29 +30,29 @@ function loadFreeComputeConfig(env) {
     .split(',').map((s) => s.trim()).filter(Boolean);
 
   // ── Global caps ──
-  const globalMaxDailyRequests = Number(e.FREECOMPUTE_MAX_DAILY_REQUESTS || 200);
-  const globalMaxRpm = Number(e.FREECOMPUTE_MAX_RPM || 30);
-  const globalMaxDailyTokens = Number(e.FREECOMPUTE_MAX_DAILY_TOKENS || 2000000);
+  const globalMaxDailyRequests = _posInt(e.FREECOMPUTE_MAX_DAILY_REQUESTS, 200);
+  const globalMaxRpm = _posInt(e.FREECOMPUTE_MAX_RPM, 30);
+  const globalMaxDailyTokens = _posInt(e.FREECOMPUTE_MAX_DAILY_TOKENS, 2000000);
 
   // ── Circuit breaker thresholds ──
-  const cbConsecutiveFailures = Number(e.FREECOMPUTE_CB_FAILURES || 3);
-  const cbOpenSeconds = Number(e.FREECOMPUTE_CB_OPEN_SECONDS || 120);
-  const cbHalfOpenProbeSeconds = Number(e.FREECOMPUTE_CB_PROBE_SECONDS || 60);
-  const cbTimeoutMs = Number(e.FREECOMPUTE_CB_TIMEOUT_MS || 30000);
+  const cbConsecutiveFailures = _posInt(e.FREECOMPUTE_CB_FAILURES, 3);
+  const cbOpenSeconds = _posInt(e.FREECOMPUTE_CB_OPEN_SECONDS, 120);
+  const cbHalfOpenProbeSeconds = _posInt(e.FREECOMPUTE_CB_PROBE_SECONDS, 60);
+  const cbTimeoutMs = _posInt(e.FREECOMPUTE_CB_TIMEOUT_MS, 30000);
 
   // ── Per-task-class caps (conservative defaults) ──
   const taskClassCaps = {};
   for (const tc of Object.values(REQUEST_CLASSES)) {
     const prefix = `FREECOMPUTE_${tc.toUpperCase()}`;
     taskClassCaps[tc] = {
-      maxExternalFreeRpm: Number(e[`${prefix}_MAX_RPM`] || _defaultRpmForClass(tc)),
-      maxRetries: Number(e[`${prefix}_MAX_RETRIES`] || _defaultRetriesForClass(tc))
+      maxExternalFreeRpm: _posInt(e[`${prefix}_MAX_RPM`], _defaultRpmForClass(tc)),
+      maxRetries: _posInt(e[`${prefix}_MAX_RETRIES`], _defaultRetriesForClass(tc))
     };
   }
 
   // ── Ledger config ──
   const ledgerPath = e.FREECOMPUTE_LEDGER_PATH || '.tmp/quota-ledger';
-  const ledgerResetHour = Number(e.FREECOMPUTE_LEDGER_RESET_HOUR || 0); // 0 = midnight UTC
+  const ledgerResetHour = _boundedInt(e.FREECOMPUTE_LEDGER_RESET_HOUR, 0, 0, 23); // 0 = midnight UTC
 
   return {
     enabled,
@@ -80,6 +80,16 @@ function loadFreeComputeConfig(env) {
       uiLocalhostOnly: e.SECRETS_UI_LOCALHOST_ONLY !== '0'
     }
   };
+}
+
+function _posInt(val, defaultVal) {
+  const n = Number(val);
+  return (Number.isFinite(n) && n >= 1) ? Math.floor(n) : defaultVal;
+}
+
+function _boundedInt(val, defaultVal, min, max) {
+  const n = Number(val);
+  return (Number.isFinite(n) && n >= min && n <= max) ? Math.floor(n) : defaultVal;
 }
 
 function _defaultRpmForClass(tc) {
