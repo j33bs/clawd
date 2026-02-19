@@ -1,0 +1,517 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Source | OpenClaw Control Center</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <div id="app">
+        <!-- Sidebar -->
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <div class="logo">
+                    <div class="logo-icon">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                            <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            <path d="M2 17L12 22L22 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            <path d="M2 12L12 17L22 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                    </div>
+                    <span class="logo-text">Source</span>
+                </div>
+            </div>
+
+            <nav class="sidebar-nav">
+                <div class="nav-section">
+                    <div class="nav-section-title">Overview</div>
+                    <a class="nav-item active" data-view="dashboard">
+                        <span class="nav-icon">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <rect x="3" y="3" width="7" height="7" rx="1"/>
+                                <rect x="14" y="3" width="7" height="7" rx="1"/>
+                                <rect x="3" y="14" width="7" height="7" rx="1"/>
+                                <rect x="14" y="14" width="7" height="7" rx="1"/>
+                            </svg>
+                        </span>
+                        Dashboard
+                    </a>
+                    <a class="nav-item" data-view="tasks">
+                        <span class="nav-icon">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M9 11L12 14L22 4"/>
+                                <path d="M21 12V19C21 20.1 20.1 21 19 21H5C3.9 21 3 20.1 3 19V5C3 3.9 3.9 3 5 3H16"/>
+                            </svg>
+                        </span>
+                        Tasks
+                        <span class="nav-badge" id="task-badge">0</span>
+                    </a>
+                    <a class="nav-item" data-view="agents">
+                        <span class="nav-icon">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="3"/>
+                                <path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/>
+                            </svg>
+                        </span>
+                        Agents
+                    </a>
+                    <a class="nav-item" data-view="schedule">
+                        <span class="nav-icon">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <rect x="3" y="4" width="18" height="18" rx="2"/>
+                                <line x1="16" y1="2" x2="16" y2="6"/>
+                                <line x1="8" y1="2" x2="8" y2="6"/>
+                                <line x1="3" y1="10" x2="21" y2="10"/>
+                            </svg>
+                        </span>
+                        Schedule
+                    </a>
+                </div>
+
+                <div class="nav-section">
+                    <div class="nav-section-title">System</div>
+                    <a class="nav-item" data-view="health">
+                        <span class="nav-icon">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M22 12H18L15 21L9 3L6 12H2"/>
+                            </svg>
+                        </span>
+                        Health
+                    </a>
+                    <a class="nav-item" data-view="logs">
+                        <span class="nav-icon">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                                <polyline points="14,2 14,8 20,8"/>
+                                <line x1="16" y1="13" x2="8" y2="13"/>
+                                <line x1="16" y1="17" x2="8" y2="17"/>
+                            </svg>
+                        </span>
+                        Logs
+                    </a>
+                    <a class="nav-item" data-view="settings">
+                        <span class="nav-icon">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="3"/>
+                                <path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/>
+                            </svg>
+                        </span>
+                        Settings
+                    </a>
+                </div>
+
+                <div class="nav-section nav-section-bottom">
+                    <div class="nav-section-title">Quick Actions</div>
+                    <a class="nav-item" id="quick-restart">
+                        <span class="nav-icon">↻</span>
+                        Restart Gateway
+                    </a>
+                    <a class="nav-item" id="quick-health">
+                        <span class="nav-icon">♥</span>
+                        Run Health Check
+                    </a>
+                </div>
+            </nav>
+
+            <div class="sidebar-footer">
+                <div class="system-status">
+                    <div class="status-indicator" id="gateway-status"></div>
+                    <span id="gateway-status-text">Connecting...</span>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content" id="main-content">
+            <!-- Header -->
+            <header class="main-header">
+                <div class="header-left">
+                    <button class="menu-toggle" id="menu-toggle">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="3" y1="12" x2="21" y2="12"/>
+                            <line x1="3" y1="6" x2="21" y2="6"/>
+                            <line x1="3" y1="18" x2="21" y2="18"/>
+                        </svg>
+                    </button>
+                    <h1 class="page-title" id="page-title">Dashboard</h1>
+                </div>
+                <div class="header-center">
+                    <div class="search-box" id="search-box">
+                        <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="11" cy="11" r="8"/>
+                            <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                        </svg>
+                        <input type="text" placeholder="Search tasks, agents, commands... (⌘K)" id="global-search">
+                        <kbd>⌘K</kbd>
+                    </div>
+                </div>
+                <div class="header-right">
+                    <button class="header-btn" id="notifications-btn" title="Notifications">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+                            <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+                        </svg>
+                        <span class="notification-dot" id="notification-dot"></span>
+                    </button>
+                    <button class="header-btn" id="theme-toggle" title="Toggle theme">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="5"/>
+                            <line x1="12" y1="1" x2="12" y2="3"/>
+                            <line x1="12" y1="21" x2="12" y2="23"/>
+                            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
+                            <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+                            <line x1="1" y1="12" x2="3" y2="12"/>
+                            <line x1="21" y1="12" x2="23" y2="12"/>
+                            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
+                            <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+                        </svg>
+                    </button>
+                    <button class="header-btn btn-primary" id="new-task-btn">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="12" y1="5" x2="12" y2="19"/>
+                            <line x1="5" y1="12" x2="19" y2="12"/>
+                        </svg>
+                        New Task
+                    </button>
+                </div>
+            </header>
+
+            <!-- Views -->
+            <div class="content-area" id="content-area">
+                <!-- Dashboard View -->
+                <div class="view active" id="view-dashboard">
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <div class="stat-header">
+                                <span class="stat-label">Active Agents</span>
+                                <div class="stat-icon agents-icon"></div>
+                            </div>
+                            <div class="stat-value" id="stat-agents">--</div>
+                            <div class="stat-change" id="stat-agents-change">--</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-header">
+                                <span class="stat-label">Tasks Today</span>
+                                <div class="stat-icon tasks-icon"></div>
+                            </div>
+                            <div class="stat-value" id="stat-tasks">--</div>
+                            <div class="stat-change positive" id="stat-tasks-change">--</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-header">
+                                <span class="stat-label">Scheduled Jobs</span>
+                                <div class="stat-icon schedule-icon"></div>
+                            </div>
+                            <div class="stat-value" id="stat-schedule">--</div>
+                            <div class="stat-change" id="stat-schedule-change">--</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-header">
+                                <span class="stat-label">System Uptime</span>
+                                <div class="stat-icon uptime-icon"></div>
+                            </div>
+                            <div class="stat-value" id="stat-uptime">--</div>
+                            <div class="stat-change positive">99.9%</div>
+                        </div>
+                    </div>
+
+                    <div class="dashboard-grid">
+                        <div class="dashboard-section agents-section">
+                            <div class="section-header">
+                                <h2>Active Agents</h2>
+                                <button class="btn-text" onclick="navigateTo('agents')">View All →</button>
+                            </div>
+                            <div class="agents-list" id="dashboard-agents"></div>
+                        </div>
+
+                        <div class="dashboard-section activity-section">
+                            <div class="section-header">
+                                <h2>Recent Activity</h2>
+                            </div>
+                            <div class="activity-feed" id="activity-feed"></div>
+                        </div>
+                    </div>
+
+                    <div class="dashboard-section health-section">
+                        <div class="section-header">
+                            <h2>System Health</h2>
+                            <button class="btn-text" onclick="navigateTo('health')">Details →</button>
+                        </div>
+                        <div class="health-grid" id="health-grid"></div>
+                    </div>
+                </div>
+
+                <!-- Tasks View -->
+                <div class="view" id="view-tasks">
+                    <div class="tasks-header">
+                        <div class="tasks-filters">
+                            <button class="filter-btn active" data-filter="all">All</button>
+                            <button class="filter-btn" data-filter="backlog">Backlog</button>
+                            <button class="filter-btn" data-filter="in_progress">In Progress</button>
+                            <button class="filter-btn" data-filter="review">Review</button>
+                            <button class="filter-btn" data-filter="done">Done</button>
+                        </div>
+                    </div>
+                    <div class="kanban-board" id="kanban-board">
+                        <div class="kanban-column" data-status="backlog">
+                            <div class="column-header">
+                                <span class="column-title">Backlog</span>
+                                <span class="column-count" id="count-backlog">0</span>
+                            </div>
+                            <div class="column-tasks" id="tasks-backlog"></div>
+                        </div>
+                        <div class="kanban-column" data-status="in_progress">
+                            <div class="column-header">
+                                <span class="column-title">In Progress</span>
+                                <span class="column-count" id="count-in_progress">0</span>
+                            </div>
+                            <div class="column-tasks" id="tasks-in_progress"></div>
+                        </div>
+                        <div class="kanban-column" data-status="review">
+                            <div class="column-header">
+                                <span class="column-title">Review</span>
+                                <span class="column-count" id="count-review">0</span>
+                            </div>
+                            <div class="column-tasks" id="tasks-review"></div>
+                        </div>
+                        <div class="kanban-column" data-status="done">
+                            <div class="column-header">
+                                <span class="column-title">Done</span>
+                                <span class="column-count" id="count-done">0</span>
+                            </div>
+                            <div class="column-tasks" id="tasks-done"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Agents View -->
+                <div class="view" id="view-agents">
+                    <div class="agents-grid-full" id="agents-grid-full"></div>
+                </div>
+
+                <!-- Schedule View -->
+                <div class="view" id="view-schedule">
+                    <div class="schedule-header">
+                        <div class="schedule-nav">
+                            <button class="schedule-nav-btn" id="prev-week">←</button>
+                            <span class="schedule-title" id="schedule-title">This Week</span>
+                            <button class="schedule-nav-btn" id="next-week">→</button>
+                        </div>
+                        <button class="btn-primary" id="add-schedule-btn">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <line x1="12" y1="5" x2="12" y2="19"/>
+                                <line x1="5" y1="12" x2="19" y2="12"/>
+                            </svg>
+                            Add Schedule
+                        </button>
+                    </div>
+                    <div class="schedule-grid" id="schedule-grid"></div>
+                    <div class="schedule-list">
+                        <h3>All Scheduled Jobs</h3>
+                        <div class="jobs-list" id="jobs-list"></div>
+                    </div>
+                </div>
+
+                <!-- Health View -->
+                <div class="view" id="view-health">
+                    <div class="health-metrics">
+                        <div class="metric-card">
+                            <div class="metric-header">
+                                <span class="metric-label">CPU Usage</span>
+                                <span class="metric-status" id="cpu-status">--</span>
+                            </div>
+                            <div class="metric-value" id="metric-cpu">--%</div>
+                            <div class="metric-bar">
+                                <div class="metric-bar-fill" id="cpu-bar" style="width: 0%"></div>
+                            </div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-header">
+                                <span class="metric-label">Memory</span>
+                                <span class="metric-status" id="mem-status">--</span>
+                            </div>
+                            <div class="metric-value" id="metric-mem">--%</div>
+                            <div class="metric-bar">
+                                <div class="metric-bar-fill" id="mem-bar" style="width: 0%"></div>
+                            </div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-header">
+                                <span class="metric-label">Disk</span>
+                                <span class="metric-status" id="disk-status">--</span>
+                            </div>
+                            <div class="metric-value" id="metric-disk">--%</div>
+                            <div class="metric-bar">
+                                <div class="metric-bar-fill" id="disk-bar" style="width: 0%"></div>
+                            </div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-header">
+                                <span class="metric-label">GPU (VLLM)</span>
+                                <span class="metric-status" id="gpu-status">--</span>
+                            </div>
+                            <div class="metric-value" id="metric-gpu">--</div>
+                            <div class="metric-bar">
+                                <div class="metric-bar-fill" id="gpu-bar" style="width: 0%"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="health-components">
+                        <h3>Component Status</h3>
+                        <div class="components-grid" id="components-grid"></div>
+                    </div>
+                </div>
+
+                <!-- Logs View -->
+                <div class="view" id="view-logs">
+                    <div class="logs-header">
+                        <div class="logs-filters">
+                            <select id="log-level-filter">
+                                <option value="all">All Levels</option>
+                                <option value="info">Info</option>
+                                <option value="warn">Warning</option>
+                                <option value="error">Error</option>
+                            </select>
+                        </div>
+                        <button class="btn" id="refresh-logs">Refresh</button>
+                    </div>
+                    <div class="logs-list" id="logs-list"></div>
+                </div>
+
+                <!-- Settings View -->
+                <div class="view" id="view-settings">
+                    <div class="settings-section">
+                        <h3>General</h3>
+                        <div class="setting-item">
+                            <div class="setting-info">
+                                <span class="setting-label">Theme</span>
+                                <span class="setting-desc">Choose your preferred color scheme</span>
+                            </div>
+                            <select id="setting-theme" class="setting-control">
+                                <option value="dark">Dark</option>
+                                <option value="light">Light</option>
+                                <option value="system">System</option>
+                            </select>
+                        </div>
+                        <div class="setting-item">
+                            <div class="setting-info">
+                                <span class="setting-label">Auto-refresh</span>
+                                <span class="setting-desc">Refresh data automatically</span>
+                            </div>
+                            <label class="toggle">
+                                <input type="checkbox" id="setting-autorefresh" checked>
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+                        <div class="setting-item">
+                            <div class="setting-info">
+                                <span class="setting-label">Refresh Interval</span>
+                                <span class="setting-desc">How often to fetch new data</span>
+                            </div>
+                            <select id="setting-refresh-interval" class="setting-control">
+                                <option value="5000">5 seconds</option>
+                                <option value="10000" selected>10 seconds</option>
+                                <option value="30000">30 seconds</option>
+                                <option value="60000">1 minute</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="settings-section">
+                        <h3>Notifications</h3>
+                        <div class="setting-item">
+                            <div class="setting-info">
+                                <span class="setting-label">Desktop Notifications</span>
+                                <span class="setting-desc">Show system notifications</span>
+                            </div>
+                            <label class="toggle">
+                                <input type="checkbox" id="setting-desktop-notif">
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+                        <div class="setting-item">
+                            <div class="setting-info">
+                                <span class="setting-label">Sound Alerts</span>
+                                <span class="setting-desc">Play sound for alerts</span>
+                            </div>
+                            <label class="toggle">
+                                <input type="checkbox" id="setting-sound">
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+                    </div>
+                    <div class="settings-section">
+                        <h3>Load Balancing</h3>
+                        <div class="setting-item">
+                            <div class="setting-info">
+                                <span class="setting-label">Enable Fallback</span>
+                                <span class="setting-desc">Route to ChatGPT when MiniMax is overloaded</span>
+                            </div>
+                            <label class="toggle">
+                                <input type="checkbox" id="setting-fallback" checked>
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+                        <div class="setting-item">
+                            <div class="setting-info">
+                                <span class="setting-label">Max Queue Depth</span>
+                                <span class="setting-desc">Trigger fallback when queue exceeds this</span>
+                            </div>
+                            <input type="number" id="setting-max-queue" class="setting-control" value="5" min="1" max="100">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- Notifications Panel -->
+        <div class="notifications-panel" id="notifications-panel">
+            <div class="notifications-header">
+                <h3>Notifications</h3>
+                <button class="btn-text" id="clear-notifications">Clear All</button>
+            </div>
+            <div class="notifications-list" id="notifications-list"></div>
+        </div>
+
+        <!-- Command Palette -->
+        <div class="command-palette" id="command-palette">
+            <div class="command-palette-overlay"></div>
+            <div class="command-palette-content">
+                <div class="command-input-wrapper">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="11" cy="11" r="8"/>
+                        <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                    </svg>
+                    <input type="text" id="command-input" placeholder="Type a command or search...">
+                    <kbd>ESC</kbd>
+                </div>
+                <div class="command-results" id="command-results"></div>
+            </div>
+        </div>
+
+        <!-- Modal -->
+        <div class="modal-overlay" id="modal-overlay">
+            <div class="modal" id="modal">
+                <div class="modal-header">
+                    <h2 class="modal-title" id="modal-title">Modal Title</h2>
+                    <button class="modal-close" id="modal-close">×</button>
+                </div>
+                <div class="modal-body" id="modal-body"></div>
+                <div class="modal-footer" id="modal-footer"></div>
+            </div>
+        </div>
+
+        <!-- Toast Container -->
+        <div class="toast-container" id="toast-container"></div>
+    </div>
+
+    <script src="js/store.js"></script>
+    <script src="js/api.js"></script>
+    <script src="js/utils.js"></script>
+    <script src="js/components.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>
