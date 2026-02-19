@@ -2,6 +2,12 @@
 
 from .models import KnowledgeUnit
 from .peer_graph import PeerGraph
+from .reservoir import Reservoir
 from .store import HiveMindStore
 
-__all__ = ["KnowledgeUnit", "HiveMindStore", "PeerGraph"]
+__all__ = [
+    "KnowledgeUnit",
+    "HiveMindStore",
+    "PeerGraph",
+    "Reservoir",
+]
