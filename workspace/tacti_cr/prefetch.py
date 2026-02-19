@@ -84,10 +84,12 @@ def prefetch_context(token_stream: str, query_fn, *, repo_root: Path | None = No
         return {"ok": False, "reason": "prefetch_disabled", "topics": []}
     cache = PrefetchCache(repo_root=repo_root)
     topics = predict_topics(token_stream, top_k=cache.depth())
+    emit("tacti_cr.prefetch.predicted_topics", {"topics": topics, "depth": cache.depth()})
     docs = []
     for topic in topics:
         docs.extend(query_fn(topic))
     cache.record_prefetch("|".join(topics), docs)
+    emit("tacti_cr.prefetch.cache_put", {"topics": topics, "docs_count": len(docs)})
     return {"ok": True, "topics": topics, "docs": docs}
 
 

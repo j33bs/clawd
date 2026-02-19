@@ -86,7 +86,14 @@ class StigmergyMap:
             item["effective_intensity"] = round(self._effective(row, now_dt), 6)
             scored.append(item)
         scored.sort(key=lambda x: (-float(x.get("effective_intensity", 0.0)), str(x.get("topic", ""))))
-        return scored[: max(1, int(top_n))]
+        out = scored[: max(1, int(top_n))]
+        if callable(tacti_emit):
+            tacti_emit(
+                "tacti_cr.stigmergy.query",
+                {"top_n": int(top_n), "returned": len(out)},
+                now=now_dt,
+            )
+        return out
 
     def suggest_avoid_topics(self, now: datetime | None = None, threshold: float = 0.75) -> list[str]:
         marks = self.query_marks(now=now, top_n=100)
