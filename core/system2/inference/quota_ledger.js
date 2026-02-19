@@ -153,12 +153,16 @@ class QuotaLedger {
   }
 
   _shouldResetDay(dayStart, now) {
-    const startDate = new Date(dayStart);
+    // Find the most recent reset boundary (resetHour UTC) before 'now'
     const nowDate = new Date(now);
-    // Simple: if UTC date has changed
-    return startDate.getUTCDate() !== nowDate.getUTCDate()
-      || startDate.getUTCMonth() !== nowDate.getUTCMonth()
-      || startDate.getUTCFullYear() !== nowDate.getUTCFullYear();
+    const todayBoundary = Date.UTC(
+      nowDate.getUTCFullYear(),
+      nowDate.getUTCMonth(),
+      nowDate.getUTCDate(),
+      this.resetHour, 0, 0, 0
+    );
+    const lastReset = todayBoundary <= now ? todayBoundary : todayBoundary - 86400000;
+    return dayStart < lastReset;
   }
 
   _appendEntry(providerId, entry) {
@@ -167,8 +171,9 @@ class QuotaLedger {
       const dateStr = new Date().toISOString().slice(0, 10);
       const file = path.join(this.ledgerPath, `ledger-${dateStr}.jsonl`);
       fs.appendFileSync(file, JSON.stringify(entry) + '\n', 'utf8');
-    } catch (_) {
+    } catch (err) {
       // Best-effort; do not crash on ledger write failure
+      console.error(`[quota_ledger] write failed: ${err.message}`);
     }
   }
 }
