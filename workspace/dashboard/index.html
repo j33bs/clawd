@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OpenClaw Control Center</title>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0d1117;
+            --bg-secondary: #161b22;
+            --bg-tertiary: #21262d;
+            --border: #30363d;
+            --text-primary: #e6edf3;
+            --text-secondary: #8b949e;
+            --text-muted: #6e7681;
+            --accent: #58a6ff;
+            --accent-hover: #79c0ff;
+            --success: #3fb950;
+            --warning: #d29922;
+            --danger: #f85149;
+            --purple: #a371f7;
+            --cyan: #39c5cf;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Inter', -apple-system, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+        .app { display: grid; grid-template-columns: 260px 1fr 300px; grid-template-rows: 56px 1fr; min-height: 100vh; }
+        
+        /* Header */
+        .header { grid-column: 1 / -1; background: var(--bg-secondary); border-bottom: 1px solid var(--border); display: flex; align-items: center; padding: 0 20px; gap: 20px; }
+        .logo { font-family: 'JetBrains Mono', monospace; font-weight: 600; font-size: 16px; color: var(--accent); display: flex; align-items: center; gap: 8px; }
+        .logo-icon { width: 28px; height: 28px; background: linear-gradient(135deg, var(--accent), var(--purple)); border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 14px; }
+        .search { flex: 1; max-width: 480px; }
+        .search input { width: 100%; background: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px 8px 36px; color: var(--text-primary); font-size: 14px; outline: none; }
+        .search input:focus { border-color: var(--accent); }
+        .search-wrapper { position: relative; }
+        .search-icon { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text-muted); }
+        .header-actions { display: flex; gap: 8px; margin-left: auto; }
+        .btn { padding: 6px 12px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg-tertiary); color: var(--text-primary); font-size: 13px; cursor: pointer; display: flex; align-items: center; gap: 6px; transition: all 0.2s; }
+        .btn:hover { background: var(--bg-secondary); border-color: var(--text-muted); }
+        .btn-primary { background: var(--accent); border-color: var(--accent); color: #000; }
+        .btn-primary:hover { background: var(--accent-hover); }
+        .btn-icon { padding: 8px; }
+        
+        /* Sidebar */
+        .sidebar { background: var(--bg-secondary); border-right: 1px solid var(--border); padding: 16px 0; overflow-y: auto; }
+        .nav-section { margin-bottom: 24px; }
+        .nav-title { padding: 0 16px; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--text-muted); margin-bottom: 8px; letter-spacing: 0.5px; }
+        .nav-item { display: flex; align-items: center; gap: 10px; padding: 10px 16px; color: var(--text-secondary); text-decoration: none; font-size: 14px; cursor: pointer; transition: all 0.15s; border-left: 2px solid transparent; }
+        .nav-item:hover { background: var(--bg-tertiary); color: var(--text-primary); }
+        .nav-item.active { background: var(--bg-tertiary); color: var(--accent); border-left-color: var(--accent); }
+        .nav-icon { width: 18px; text-align: center; }
+        .nav-badge { margin-left: auto; background: var(--danger); color: #fff; font-size: 11px; padding: 2px 6px; border-radius: 10px; font-weight: 600; }
+        
+        /* Main */
+        .main { padding: 24px; overflow-y: auto; background: var(--bg-primary); }
+        .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
+        .page-title { font-size: 24px; font-weight: 600; }
+        .page-subtitle { color: var(--text-secondary); font-size: 14px; margin-top: 4px; }
+        
+        /* Stats */
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 24px; }
+        .stat-card { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 12px; padding: 20px; }
+        .stat-card:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,0.3); }
+        .stat-label { font-size: 13px; color: var(--text-secondary); margin-bottom: 8px; }
+        .stat-value { font-size: 28px; font-weight: 700; font-family: 'JetBrains Mono', monospace; }
+        .stat-change { font-size: 12px; margin-top: 8px; }
+        .stat-change.positive { color: var(--success); }
+        
+        /* Tasks */
+        .panel { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+        .panel-header { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+        .panel-title { font-size: 16px; font-weight: 600; }
+        .task-list { max-height: 400px; overflow-y: auto; }
+        .task-item { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 12px; cursor: grab; }
+        .task-item:hover { background: var(--bg-tertiary); }
+        .task-drag { color: var(--text-muted); cursor: grab; }
+        .task-priority { width: 4px; height: 32px; border-radius: 2px; }
+        .priority-high { background: var(--danger); }
+        .priority-medium { background: var(--warning); }
+        .priority-low { background: var(--success); }
+        .task-content { flex: 1; }
+        .task-title { font-size: 14px; font-weight: 500; margin-bottom: 4px; }
+        .task-meta { font-size: 12px; color: var(--text-secondary); }
+        .task-status { padding: 4px 10px; border-radius: 12px; font-size: 11px; font-weight: 600; text-transform: uppercase; }
+        .status-pending { background: var(--bg-tertiary); color: var(--text-secondary); }
+        .status-running { background: rgba(88, 166, 255, 0.15); color: var(--accent); }
+        .status-completed { background: rgba(63, 185, 80, 0.15); color: var(--success); }
+        .status-failed { background: rgba(248, 81, 73, 0.15); color: var(--danger); }
+        
+        /* Agents */
+        .agents-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+        .agent-card { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 12px; padding: 20px; }
+        .agent-header { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+        .agent-avatar { width: 40px; height: 40px; border-radius: 10px; background: linear-gradient(135deg, var(--accent), var(--purple)); display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 16px; }
+        .agent-info { flex: 1; }
+        .agent-name { font-weight: 600; font-size: 15px; }
+        .agent-model { font-size: 12px; color: var(--text-secondary); font-family: 'JetBrains Mono', monospace; }
+        .agent-status { width: 10px; height: 10px; border-radius: 50%; }
+        .agent-status.idle { background: var(--text-muted); }
+        .agent-status.working { background: var(--success); animation: pulse 2s infinite; }
+        .agent-status.error { background: var(--danger); }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        .agent-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 16px; }
+        .agent-stat { text-align: center; }
+        .agent-stat-value { font-size: 18px; font-weight: 600; font-family: 'JetBrains Mono', monospace; }
+        .agent-stat-label { font-size: 11px; color: var(--text-muted); }
+        .agent-progress { height: 6px; background: var(--bg-tertiary); border-radius: 3px; overflow: hidden; margin-bottom: 12px; }
+        .agent-progress-bar { height: 100%; background: linear-gradient(90deg, var(--accent), var(--purple)); border-radius: 3px; }
+        .agent-task { font-size: 13px; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .agent-actions { display: flex; gap: 8px; margin-top: 16px; }
+        .agent-btn { flex: 1; padding: 8px; border-radius: 6px; border: 1px solid var(--border); background: transparent; color: var(--text-secondary); font-size: 12px; cursor: pointer; }
+        .agent-btn:hover { background: var(--bg-tertiary); color: var(--text-primary); }
+        .agent-btn.danger:hover { border-color: var(--danger); color: var(--danger); }
+        
+        /* Right Panel */
+        .right-panel { background: var(--bg-secondary); border-left: 1px solid var(--border); padding: 20px; overflow-y: auto; }
+        .activity-feed { margin-bottom: 24px; }
+        .activity-item { display: flex; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--border); }
+        .activity-item:last-child { border-bottom: none; }
+        .activity-icon { width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0; }
+        .activity-icon.success { background: rgba(63, 185, 80, 0.15); }
+        .activity-icon.error { background: rgba(248, 81, 73, 0.15); }
+        .activity-icon.info { background: rgba(88, 166, 255,); }
+        .activity-content { flex 0.15: 1; }
+        .activity-text { font-size: 13px; line-height: 1.4; }
+        .activity-time { font-size: 11px; color: var(--text-muted); margin-top: 4px; }
+        
+        /* Health */
+        .health-item { display: flex; align-items: center; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid var(--border); }
+        .health-item:last-child { border-bottom: none; }
+        .health-label { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+        .health-indicator { width: 8px; height: 8px; border-radius: 50%; }
+        .health-indicator.healthy { background: var(--success); }
+        .health-indicator.warning { background: var(--warning); }
+        .health-indicator.error { background: var(--danger); }
+        .health-value { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--text-secondary); }
+        
+        /* Schedule */
+        .schedule-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 1px; background: var(--border); border-radius: 8px; overflow: hidden; }
+        .schedule-day { background: var(--bg-secondary); min-height: 100px; padding: 8px; }
+        .schedule-day-header { font-size: 11px; color: var(--text-muted); text-align: center; margin-bottom: 8px; }
+        .schedule-event { background: var(--accent); color: #000; font-size: 10px; padding: 4px 6px; border-radius: 4px; margin-bottom: 4px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        
+        /* Modals */
+        .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); display: none; align-items: center; justify-content: center; z-index: 1500; }
+        .modal-overlay.visible { display: flex; }
+        .modal { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 16px; width: 480px; }
+        .modal-header { padding: 20px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+        .modal-title { font-size: 18px; font-weight: 600; }
+        .modal-close { background: none; border: none; color: var(--text-muted); font-size: 20px; cursor: pointer; }
+        .modal-body { padding: 20px; }
+        .modal-footer { padding: 16px 20px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 10px; }
+        .form-group { margin-bottom: 16px; }
+        .form-label { display: block; font-size: 13px; font-weight: 500; margin-bottom: 6px; }
+        .form-input, .form-select, .form-textarea { width: 100%; background: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; color: var(--text-primary); font-size: 14px; outline: none; }
+        .form-input:focus, .form-select:focus, .form-textarea:focus { border-color: var(--accent); }
+        .form-textarea { min-height: 100px; resize: vertical; }
+        
+        /* Command Palette */
+        .command-palette { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); display: none; align-items: flex-start; justify-content: center; padding-top: 100px; z-index: 2000; }
+        .command-palette.visible { display: flex; }
+        .command-input { width: 560px; background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 12px; padding: 20px; box-shadow: 0 20px 60px rgba(0,0,0,0.5); }
+        .command-input input { width: 100%; background: transparent; border: none; color: var(--text-primary); font-size: 18px; outline: none; }
+        
+        /* Notifications */
+        .notifications { position: fixed; bottom: 20px; right: 20px; width: 360px; z-index: 1000; }
+        .notification { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 10px; padding: 16px; margin-bottom: 10px; box-shadow: 0 8px 32px rgba(0,0,0,0.4); animation: slideIn 0.3s ease; }
+        @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+        
+        /* Scrollbar */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: var(--bg-primary); }
+        ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+        
+        @media (max-width: 1200px) { .app { grid-template-columns: 1fr 280px; } .right-panel { display: none; } }
+        @media (max-width: 800px) { .app { grid-template-columns: 1fr; } .sidebar { display: none; } }
+    </style>
+</head>
+<body>
+    <div class="app">
+        <header class="header">
+            <div class="logo"><div class="logo-icon">⚡</div>OpenClaw</div>
+            <div class="search"><div class="search-wrapper"><span class="search-icon">🔍</span><input type="text" placeholder="Search tasks, agents... (⌘K)" id="globalSearch"></div></div>
+            <div class="header-actions">
+                <button class="btn btn-icon" onclick="showNotification('No new notifications')">🔔</button>
+                <button class="btn btn-primary" onclick="showNewTaskModal()">+ New Task</button>
+            </div>
+        </header>
+
+        <nav class="sidebar">
+            <div class="nav-section">
+                <div class="nav-title">Overview</div>
+                <a class="nav-item active" data-page="dashboard"><span class="nav-icon">📊</span>Dashboard</a>
+                <a class="nav-item" data-page="tasks"><span class="nav-icon">✓</span>Tasks<span class="nav-badge">3</span></a>
+                <a class="nav-item" data-page="agents"><span class="nav-icon">🤖</span>Agents</a>
+                <a class="nav-item" data-page="schedule"><span class="nav-icon">📅</span>Schedule</a>
+            </div>
+            <div class="nav-section">
+                <div class="nav-title">System</div>
+                <a class="nav-item" data-page="health"><span class="nav-icon">💚</span>Health</a>
+                <a class="nav-item" data-page="logs"><span class="nav-icon">📜</span>Logs</a>
+            </div>
+        </nav>
+
+        <main class="main">
+            <div class="page" id="page-dashboard">
+                <div class="page-header">
+                    <div><h1 class="page-title">Dashboard</h1><p class="page-subtitle">System overview and agent status</p></div>
+                    <button class="btn" onclick="refreshAll()">🔄 Refresh</button>
+                </div>
+                <div class="stats-grid">
+                    <div class="stat-card"><div class="stat-label">Active Agents</div><div class="stat-value" id="statAgents">2</div><div class="stat-change positive">Running</div></div>
+                    <div class="stat-card"><div class="stat-label">Tasks Today</div><div class="stat-value" id="statTasks">12</div><div class="stat-change positive">↑ 5 completed</div></div>
+                    <div class="stat-card"><div class="stat-label">Scheduled Jobs</div><div class="stat-value" id="statSchedule">4</div><div class="stat-change">Next in 2h</div></div>
+                    <div class="stat-card"><div class="stat-label">Uptime</div><div class="stat-value">7d</div><div class="stat-change">99.9%</div></div>
+                </div>
+                <h2 style="margin-bottom:16px;font-size:18px;">Active Agents</h2>
+                <div class="agents-grid" id="agentsGrid"></div>
+            </div>
+
+            <div class="page" id="page-tasks" style="display:none">
+                <div class="page-header"><div><h1 class="page-title">Tasks</h1><p class="page-subtitle">Drag to reorder • Click to view</p></div><button class="btn btn-primary" onclick="showNewTaskModal()">+ New Task</button></div>
+                <div class="panel"><div class="panel-header"><span class="panel-title">Task Queue</span></div><div class="task-list" id="taskList"></div></div>
+            </div>
+
+            <div class="page" id="page-agents" style="display:none">
+                <div class="page-header"><div><h1 class="page-title">Agents</h1><p class="page-subtitle">Monitor and control</p></div></div>
+                <div class="agents-grid" id="agentsGridFull"></div>
+            </div>
+
+            <div class="page" id="page-schedule" style="display:none">
+                <div class="page-header"><div><h1 class="page-title">Schedule</h1><p class="page-subtitle">Cron jobs and scheduled tasks</p></div><button class="btn btn-primary" onclick="showNotification('Schedule modal coming soon')">+ Add</button></div>
+                <div class="schedule-grid" id="scheduleGrid"></div>
+                <div class="panel" style="margin-top:24px"><div class="panel-header"><span class="panel-title">All Scheduled Jobs</span></div><div class="task-list" id="scheduleList"></div></div>
+            </div>
+
+            <div class="page" id="page-health" style="display:none">
+                <div class="page-header"><div><h1 class="page-title">System Health</h1><p class="page-subtitle">Real-time metrics</p></div><button class="btn" onclick="runHealthCheck()">🔄 Run Check</button></div>
+                <div class="stats-grid">
+                    <div class="stat-card"><div class="stat-label">CPU</div><div class="stat-value" id="cpuUsage">--%</div></div>
+                    <div class="stat-card"><div class="stat-label">Memory</div><div class="stat-value" id="memUsage">--%</div></div>
+                    <div class="stat-card"><div class="stat-label">Disk</div><div class="stat-value" id="diskUsage">--%</div></div>
+                    <div class="stat-card"><div class="stat-label">VLLM</div><div class="stat-value" id="gpuUsage">--</div></div>
+                </div>
+                <div class="panel"><div class="panel-header"><span class="panel-title">Component Status</span></div><div style="padding:8px 20px" id="healthList"></div></div>
+            </div>
+
+            <div class="page" id="page-logs" style="display:none">
+                <div class="page-header"><div><h1 class="page-title">Logs</h1><p class="page-subtitle">Recent system events</p></div></div>
+                <div class="panel"><div class="task-list" id="logsList"></div></div>
+            </div>
+        </main>
+
+        <aside class="right-panel">
+            <div class="activity-feed"><h3 style="font-size:14px;margin-bottom:16px;">Recent Activity</h3><div id="activityList"></div></div>
+            <div><h3 style="font-size:14px;margin-bottom:16px;">System Status</h3><div id="systemStatus"></div></div>
+        </aside>
+    </div>
+
+    <div class="command-palette" id="commandPalette"><div class="command-input"><input type="text" placeholder="Type a command..." id="commandInput"></div></div>
+
+    <div class="modal-overlay" id="newTaskModal">
+        <div class="modal">
+            <div class="modal-header"><span class="modal-title">Create Task</span><button class="modal-close" onclick="closeModal()">×</button></div>
+            <div class="modal-body">
+                <div class="form-group"><label class="form-label">Task Name</label><input type="text" class="form-input" id="taskName" placeholder="Enter task"></div>
+                <div class="form-group"><label class="form-label">Description</label><textarea class="form-textarea" id="taskDesc" placeholder="Describe..."></textarea></div>
+                <div class="form-group"><label class="form-label">Priority</label><select class="form-select" id="taskPriority"><option value="low">Low</option><option value="medium" selected>Medium</option><option value="high">High</option></select></div>
+            </div>
+            <div class="modal-footer"><button class="btn" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="createTask()">Create</button></div>
+        </div>
+    </div>
+
+    <div class="notifications" id="notifications"></div>
+
+    <script>
+        // Data
+        let tasks = [
+            { id: 1, title: 'Review PR #142 - Auth fix', priority: 'high', status: 'running', agent: 'coder', time: '2m ago' },
+            { id: 2, title: 'Run security audit', priority: 'medium', status: 'pending', agent: 'system', time: '5m ago' },
+            { id: 3, title: 'Update documentation', priority: 'low', status: 'pending', agent: 'planner', time: '10m ago' },
+            { id: 4, title: 'Fix memory leak', priority: 'high', status: 'completed', agent: 'coder', time: '1h ago' },
+            { id: 5, title: 'Deploy to prod', priority: 'high', status: 'failed', agent: 'system', time: '2h ago' },
+        ];
+
+        let agents = [
+            { id: 'planner', name: 'Planner', model: 'MiniMax-M2.5', status: 'idle', tasks: 12, cycles: 156 },
+            { id: 'coder', name: 'Coder', model: 'Codex', status: 'working', task: 'Reviewing PR', progress: 65 },
+            { id: 'health', name: 'Health Monitor', model: 'MiniMax-M2.5', status: 'idle', tasks: 8, cycles: 24 },
+            { id: 'memory', name: 'Memory Agent', model: 'MiniMax-M2.5', status: 'working', task: 'Indexing', progress: 30 },
+        ];
+
+        let schedule = [
+            { name: 'Daily Health Check', cron: '0 9 * * *', next: '9:00 AM' },
+            { name: 'Security Audit', cron: '0 9 * * 1', next: 'Mon 9:00 AM' },
+            { name: 'Memory Cleanup', cron: '0 0 * * *', next: '12:00 AM' },
+            { name: 'Git Auto-commit', cron: '*/15 * * * *', next: 'Every 15min' },
+        ];
+
+        let health = [
+            { name: 'Gateway', status: 'healthy', value: 'Running' },
+            { name: 'VLLM', status: 'healthy', value: 'Online' },
+            { name: 'Telegram', status: 'healthy', value: 'Connected' },
+            { name: 'Memory', status: 'warning', value: 'Low' },
+        ];
+
+        // Render functions
+        function renderAgents() {
+            const html = agents.map(a => `
+                <div class="agent-card">
+                    <div class="agent-header">
+                        <div class="agent-avatar">${a.name[0]}</div>
+                        <div class="agent-info"><div class="agent-name">${a.name}</div><div class="agent-model">${a.model}</div></div>
+                        <div class="agent-status ${a.status}"></div>
+                    </div>
+                    <div class="agent-stats">
+                        <div class="agent-stat"><div class="agent-stat-value">${a.tasks}</div><div class="agent-stat-label">Tasks</div></div>
+                        <div class="agent-stat"><div class="agent-stat-value">${a.cycles}</div><div class="agent-stat-label">Cycles</div></div>
+                        <div class="agent-stat"><div class="agent-stat-value">${a.status === 'working' ? a.progress + '%' : '--'}</div><div class="agent-stat-label">Progress</div></div>
+                    </div>
+                    ${a.status === 'working' ? `<div class="agent-progress"><div class="agent-progress-bar" style="width:${a.progress}%"></div></div><div class="agent-task">${a.task}</div>` : ''}
+                    <div class="agent-actions">
+                        <button class="agent-btn" onclick="showNotification('Pausing ${a.name}...')">⏸ Pause</button>
+                        <button class="agent-btn danger" onclick="showNotification('Stopping ${a.name}...')">⏹ Stop</button>
+                    </div>
+                </div>
+            `).join('');
+            document.getElementById('agentsGrid').innerHTML = html;
+            document.getElementById('agentsGridFull').innerHTML = html;
+        }
+
+        function renderTasks() {
+            const html = tasks.map(t => `
+                <div class="task-item" draggable="true" ondragstart="dragStart(event)" ondragover="dragOver(event)" ondrop="drop(event)">
+                    <span class="task-drag">⋮⋮</span>
+                    <div class="task-priority priority-${t.priority}"></div>
+                    <div class="task-content"><div class="task-title">${t.title}</div><div class="task-meta">${t.agent} • ${t.time}</div></div>
+                    <span class="task-status status-${t.status}">${t.status}</span>
+                </div>
+            `).join('');
+            document.getElementById('taskList').innerHTML = html;
+        }
+
+        function renderSchedule() {
+            const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+            let html = days.map(d => `<div class="schedule-day"><div class="schedule-day-header">${d}</div></div>`).join('');
+            document.getElementById('scheduleGrid').innerHTML = html;
+            
+            document.getElementById('scheduleList').innerHTML = schedule.map(s => `
+                <div class="task-item">
+                    <div class="task-content"><div class="task-title">${s.name}</div><div class="task-meta">${s.cron}</div></div>
+                    <span class="task-status status-pending">${s.next}</span>
+                </div>
+            `).join('');
+        }
+
+        function renderHealth() {
+            document.getElementById('healthList').innerHTML = health.map(h => `
+                <div class="health-item">
+                    <div class="health-label"><div class="health-indicator ${h.status}"></div>${h.name}</div>
+                    <div class="health-value">${h.value}</div>
+                </div>
+            `).join('');
+        }
+
+        function renderActivity() {
+            const activities = [
+                { icon: 'success', text: 'Task completed: Fix memory leak', time: '2m ago' },
+                { icon: 'error', text: 'Deploy failed: Connection timeout', time: '1h ago' },
+                { icon: 'info', text: 'Health check passed', time: '2h ago' },
+                { icon: 'success', text: 'Agent started: Planner', time: '3h ago' },
+            ];
+            document.getElementById('activityList').innerHTML = activities.map(a => `
+                <div class="activity-item">
+                    <div class="activity-icon ${a.icon}">${a.icon === 'success' ? '✓' : a.icon === 'error' ? '!' : 'i'}</div>
+                    <div class="activity-content"><div class="activity-text">${a.text}</div><div class="activity-time">${a.time}</div></div>
+                </div>
+            `).join('');
+        }
+
+        function renderSystemStatus() {
+            document.getElementById('systemStatus').innerHTML = health.map(h => `
+                <div class="health-item">
+                    <div class="health-label"><div class="health-indicator ${h.status}"></div>${h.name}</div>
+                    <div class="health-value">${h.value}</div>
+                </div>
+            `).join('');
+        }
+
+        // Navigation
+        document.querySelectorAll('.nav-item[data-page]').forEach(item => {
+            item.addEventListener('click', () => {
+                document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
+                item.classList.add('active');
+                document.querySelectorAll('.page').forEach(p => p.style.display = 'none');
+                document.getElementById('page-' + item.dataset.page).style.display = 'block';
+            });
+        });
+
+        // Drag and drop
+        let draggedItem = null;
+        function dragStart(e) { draggedItem = e.target; e.target.style.opacity = '0.5'; }
+        function dragOver(e) { e.preventDefault(); }
+        function drop(e) {
+            e.preventDefault();
+            draggedItem.style.opacity = '1';
+            // Reorder logic would go here
+        }
+
+        // Modals
+        function showNewTaskModal() { document.getElementById('newTaskModal').classList.add('visible'); }
+        function closeModal() { document.querySelectorAll('.modal-overlay').forEach(m => m.classList.remove('visible')); }
+        function createTask() {
+            const title = document.getElementById('taskName').value;
+            if (title) {
+                tasks.unshift({ id: Date.now(), title, priority: document.getElementById('taskPriority').value, status: 'pending', agent: 'manual', time: 'Just now' });
+                renderTasks();
+                closeModal();
+                showNotification('Task created: ' + title);
+            }
+        }
+
+        // Notifications
+        function showNotification(msg) {
+            const div = document.createElement('div');
+            div.className = 'notification';
+            div.innerHTML = `<div class="notification-title">OpenClaw</div><div class="notification-body">${msg}</div>`;
+            document.getElementById('notifications').appendChild(div);
+            setTimeout(() => div.remove(), 4000);
+        }
+
+        // Command palette
+        document.getElementById('globalSearch').addEventListener('focus', (e) => { if(e.key === "Escape") document.getElementById("commandPalette").classList.remove("visible"); });
+        
+        // Keyboard shortcut
+        document.addEventListener("keydown", (e) => {
+            if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+                e.preventDefault();
+                document.getElementById("commandPalette").classList.add("visible");
+                document.getElementById("commandInput").focus();
+            }
+        });
+
+        // Refresh
+        function refreshAll() { renderAgents(); renderTasks(); renderHealth(); renderActivity(); showNotification("Dashboard refreshed"); }
+        function runHealthCheck() { showNotification("Running health check..."); setTimeout(() => { renderHealth(); showNotification("Health check complete"); }, 1500); }
+
+        // Init
+        renderAgents(); renderTasks(); renderSchedule(); renderHealth(); renderActivity(); renderSystemStatus();
+    </script>
+</body>
+</html>

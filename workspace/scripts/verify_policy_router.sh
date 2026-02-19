@@ -292,6 +292,115 @@ def test_local_vllm_assistant_without_api_key_env_is_eligible():
         assert result["ok"] and result["provider"] == "local_vllm_assistant", result
 
 
+def test_capability_routing_precedence_and_targets():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        policy = base_policy()
+        policy["providers"] = {
+            "minimax_m25": {"enabled": True, "paid": False, "tier": "free", "type": "mock", "models": [{"id": "minimax-portal/MiniMax-M2.5"}]},
+            "minimax_m25_lightning": {"enabled": True, "paid": False, "tier": "free", "type": "mock", "models": [{"id": "minimax-portal/MiniMax-M2.5-Lightning"}]},
+            "openai_gpt52_chat": {"enabled": True, "paid": False, "tier": "auth", "type": "mock", "models": [{"id": "gpt-5.2-chat-latest"}]},
+            "openai_gpt53_codex": {"enabled": True, "paid": False, "tier": "auth", "type": "mock", "models": [{"id": "gpt-5.3-codex"}]},
+            "openai_gpt53_codex_spark": {"enabled": True, "paid": False, "tier": "auth", "type": "mock", "models": [{"id": "gpt-5.3-codex-spark"}]},
+            "local_vllm_assistant": {
+                "enabled": True,
+                "paid": False,
+                "tier": "free",
+                "type": "mock",
+                "capabilities": {"context_window_tokens": 16384},
+                "models": [{"id": "vllm/local-assistant"}],
+            },
+        }
+        policy["routing"]["intents"]["conversation"] = {
+            "order": [
+                "minimax_m25",
+                "minimax_m25_lightning",
+                "local_vllm_assistant",
+                "openai_gpt52_chat",
+                "openai_gpt53_codex",
+                "openai_gpt53_codex_spark",
+            ],
+            "allowPaid": True,
+        }
+        policy["routing"]["capability_router"] = {
+            "enabled": True,
+            "structureComplexityMinBullets": 3,
+            "structureComplexityMinPaths": 2,
+            "explicitTriggers": {
+                "use chatgpt": "openai_gpt52_chat",
+                "use codex": "openai_gpt53_codex",
+            },
+            "subagentProvider": "local_vllm_assistant",
+            "reasoningProvider": "openai_gpt52_chat",
+            "codeProvider": "openai_gpt53_codex",
+            "smallCodeProvider": "openai_gpt53_codex_spark",
+        }
+
+        router = make_router(tmpdir, policy, {})
+
+        default_sel = router.select_model("conversation", {"input_text": "hello there"})
+        assert default_sel["provider"] == "minimax_m25", default_sel
+        assert default_sel["model"] == "minimax-portal/MiniMax-M2.5", default_sel
+
+        ordinary_chat_sel = router.select_model(
+            "conversation",
+            {"input_text": "Tell me something interesting about whales."},
+        )
+        assert ordinary_chat_sel["provider"] == "minimax_m25", ordinary_chat_sel
+        assert ordinary_chat_sel["model"] == "minimax-portal/MiniMax-M2.5", ordinary_chat_sel
+        assert ordinary_chat_sel["model"] not in {
+            "gpt-5.2-chat-latest",
+            "gpt-5.3-codex",
+            "gpt-5.3-codex-spark",
+        }, ordinary_chat_sel
+
+        ordinary_explain = router.explain_route(
+            "conversation",
+            {"input_text": "Tell me something interesting about whales."},
+        )
+        assert ordinary_explain["matched_trigger"] == "default", ordinary_explain
+        assert ordinary_explain["reason"] == "default intent routing order", ordinary_explain
+        assert ordinary_explain["chosen"]["provider"] == "minimax_m25", ordinary_explain
+
+        chatgpt_sel = router.select_model("conversation", {"input_text": "Please USE ChatGPT for this request"})
+        assert chatgpt_sel["provider"] == "openai_gpt52_chat", chatgpt_sel
+        assert chatgpt_sel["model"] == "gpt-5.2-chat-latest", chatgpt_sel
+
+        codex_sel = router.select_model("conversation", {"input_text": "use codex and patch this module"})
+        assert codex_sel["provider"] == "openai_gpt53_codex", codex_sel
+        assert codex_sel["model"] == "gpt-5.3-codex", codex_sel
+
+        subagent_sel = router.select_model(
+            "conversation",
+            {"input_text": "use chatgpt", "is_subagent": True, "agent_class": "subagent"},
+        )
+        assert subagent_sel["provider"] == "local_vllm_assistant", subagent_sel
+        assert subagent_sel["model"] == "vllm/local-assistant", subagent_sel
+
+        reasoning_sel = router.select_model(
+            "conversation",
+            {"input_text": "Plan the architecture and evaluate options with trade-offs"},
+        )
+        assert reasoning_sel["provider"] == "openai_gpt52_chat", reasoning_sel
+
+        code_sel = router.select_model(
+            "conversation",
+            {"input_text": "Write code in Python to implement the API and add tests across two files: src/app.py tests/test_app.py"},
+        )
+        assert code_sel["provider"] == "openai_gpt53_codex", code_sel
+
+        spark_sel = router.select_model(
+            "conversation",
+            {"input_text": "Implement a tiny patch in src/app.py", "expected_change_size": "small"},
+        )
+        assert spark_sel["provider"] == "openai_gpt53_codex_spark", spark_sel
+        assert spark_sel["model"] == "gpt-5.3-codex-spark", spark_sel
+
+        explain = router.explain_route("conversation", {"input_text": "please use codex now"})
+        assert explain["matched_trigger"] == "explicit_phrase", explain
+        assert explain["chosen"]["provider"] == "openai_gpt53_codex", explain
+        assert explain["local_context_window_tokens"] == 16384, explain
+
+
 def main():
     test_free_tier_selected()
     test_coding_ladder_order_and_reason_codes()
@@ -300,6 +409,7 @@ def main():
     test_anthropic_missing_key_is_ineligible()
     test_local_vllm_assistant_without_api_key_env_is_eligible()
     test_missing_anthropic_key_falls_back_to_local_vllm()
+    test_capability_routing_precedence_and_targets()
     print("ok")
 
 

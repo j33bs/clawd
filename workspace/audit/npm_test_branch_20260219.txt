@@ -1,0 +1,124 @@
+
+> openclaw@0.0.0 test
+> node scripts/run_tests.js
+
+RUN python3  -m unittest discover -s tests_unittest -p test_*.py
+.....................
+----------------------------------------------------------------------
+Ran 21 tests in 0.015s
+
+OK
+RUN node tests/budget_circuit_breaker.test.js
+PASS starts in closed state with zero usage
+PASS records usage and decrements remaining
+PASS trips on token cap exceeded
+PASS trips on call cap exceeded
+PASS rejects usage when open
+PASS canProceed returns false when open
+PASS canProceed returns false when estimate exceeds remaining
+PASS reset restores closed state
+PASS reset with new caps
+budget_circuit_breaker tests complete
+RUN node tests/freecompute_cloud.test.js
+
+── Schema Validation ──
+── Catalog Queries ──
+── Config + Redaction ──
+── Router ──
+── Quota Ledger ──
+── vLLM Utilities ──
+── Provider Registry ──
+── Provider Adapter ──
+── Integration Tests ──
+
+════════════════════════════════════════════
+FreeComputeCloud Tests: 55 passed, 0 failed, 3 skipped
+════════════════════════════════════════════
+
+RUN node tests/lint_legacy_node_names.test.js
+PASS parseAddedLegacyMentions finds newly added System-1 references
+PASS lintLegacyNames ignores files with legacy header notice
+RUN node tests/module_resolution_gate.test.js
+PASS returns zero findings when relative require resolves
+PASS reports finding when relative require target is missing
+module_resolution_gate tests complete
+RUN node tests/node_identity.test.js
+PASS loads system map with expected defaults
+PASS normalizes system1/system-1 aliases to dali
+PASS normalizes system2/system-2 aliases to c_lawd
+PASS resolves workspace and memory roots from alias
+RUN node tests/providers/local_vllm_provider.test.js
+PASS healthProbe succeeds against mocked vLLM endpoint and normalizes /v1
+PASS healthProbe returns fail-closed result when endpoint is unreachable
+PASS generateChat returns expected output shape from vLLM response
+PASS normalizeBaseUrl appends /v1 only when missing
+RUN node tests/redact_audit_evidence.test.js
+PASS idempotent: applying rules twice yields same result
+PASS JSON validity preserved after redaction
+PASS no /Users/ or heathyeager remains after redaction
+PASS repo root path replaced correctly
+PASS openclaw config path replaced correctly
+PASS generic home path replaced correctly
+PASS ls -la line replaced correctly
+PASS standalone username replaced
+PASS timestamps, hashes, exit codes not redacted
+PASS placeholders are not themselves redactable patterns
+FAIL CLI redacts synthetic fixtures and writes output bundle: CLI should emit JSON summary
+FAIL CLI dry-run emits summary and does not write output files: Unexpected end of JSON input
+RUN node tests/secrets_bridge.test.js
+PASS provider mapping exposes required env vars
+PASS maskSecretFingerprint never returns raw secret value
+PASS bridge serialization does not expose env secret values
+PASS injectRuntimeEnv respects operator override and injects missing
+PASS config includes secrets bridge governance knobs
+PASS redaction covers mapped secret env vars
+PASS auto backend detection is platform deterministic
+PASS file backend requires explicit opt-in
+RUN node tests/system1_ignores_system2_env.test.js
+PASS createVllmProvider ignores SYSTEM2_VLLM_* when system2 is false
+PASS probeVllmServer ignores SYSTEM2_VLLM_* when system2 is false
+PASS probeVllmServer consults SYSTEM2_VLLM_* when system2 is true
+PASS probeVllmServer consults SYSTEM2_VLLM_* when nodeId alias resolves to c_lawd
+RUN node tests/system2_config_resolver.test.js
+PASS resolves with explicit args (highest precedence)
+PASS falls back to SYSTEM2_VLLM_* env vars
+PASS falls back to OPENCLAW_VLLM_* env vars
+PASS prefers SYSTEM2_VLLM_* over OPENCLAW_VLLM_*
+PASS uses node alias system-2 for c_lawd routing context
+PASS uses defaults when envs not set
+PASS emits diagnostic events (keys only)
+PASS resolves numeric config deterministically
+PASS invalid numeric env yields NaN (no throw)
+RUN node tests/system2_evidence_bundle.test.js
+PASS buildEvidenceBundle captures raw, writes redacted output, and emits manifest
+PASS buildEvidenceBundle preserves fail-closed snapshot status
+RUN node tests/system2_experiment.test.js
+FAIL no-change fixture yields INCONCLUSIVE: CLI failed (3): 
+FAIL improvement fixture yields KEEP: CLI failed (3): 
+FAIL regression fixture yields REVERT: CLI failed (3): 
+PASS auth preset script maps to calibrated fail-on path
+FAIL calibrated auth fail-on yields REVERT on regression fixture: CLI failed (3): 
+PASS failing subprocess writes UNAVAILABLE report and exits 3
+RUN node tests/system2_federation_observability_contract.test.js
+PASS FederatedEnvelopeV1 fixture validates (strict)
+PASS FederatedEnvelopeV1 rejects invalid schema (fail-closed)
+PASS System2EventV1 fixture validates
+PASS JSONL sink contract is deterministic (exact line match)
+PASS redaction-at-write is deterministic and idempotent
+PASS gating: disabled emitter is a no-op
+PASS gating: enabled emitter appends a redacted event
+PASS emitter does not throw on sink error by default (strict=false)
+PASS emitter fails closed on sink error when strict=true
+RUN node tests/system2_snapshot_capture.test.js
+PASS captureSnapshot writes stable files and summary shape
+PASS captureSnapshot fail-closed with partial outputs when command fails
+RUN node tests/system2_snapshot_diff.test.js
+FAIL JSON output is stable and ignores timestamp fields by default: Unexpected end of JSON input
+FAIL ignore list suppresses expected diff paths and exits 0: Unexpected end of JSON input
+FAIL fail-on marks regressions and exits 2: Unexpected end of JSON input
+FAIL human output includes summary counts and regression marker: human output should include counts
+PASS computeDiff supports deterministic dotpath flattening
+RUN node tests/system2_snapshot_observability_seam.test.js
+PASS OFF: system2.observability.enabled=false emits nothing and writes no JSONL
+PASS ON: system2.observability.enabled=true writes exactly one deterministic JSONL line
+FAILURES: 3/17
