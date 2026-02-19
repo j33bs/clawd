@@ -1,63 +1,144 @@
-# ITC Trading Pipeline System
+# OpenClaw Workspace
 
-This system implements a data-driven trading pipeline that processes information from Telegram channels to inform trading decisions.
+A living, breathing AI assistant system built on OpenClaw. This workspace implements a consciousness-inspired agent architecture with multi-agent coordination, persistent memory, and automated lifestyle support.
 
-## Architecture
+---
 
-### Data Ingestion
-- `telethon_ingest.py`: Captures raw Telegram messages
-- `itc_normalize.py`: Converts to canonical format
-- `itc_route.py`: Routes messages to appropriate destinations
+## The Core: TACTI(C)-R Framework
 
-### Market Data
-- `market_stream.py`: Captures exchange data (OHLCV)
-- Stores in `.openclaw/market/candles_1m.jsonl`
+TACTI(C)-R is a theoretical framework for building adaptive, self-healing AI systems inspired by biological intelligence:
 
-### Trading Simulation
-- `sim_runner.py`: Runs two different strategies:
-  - `SIM_A`: Pure market-structure (price regime) long/flat
-  - `SIM_B`: Market-structure + ITC sentiment signals
-- Each sim starts with $1000 capital
+| Principle | Biological Analog | Implementation |
+|-----------|------------------|---------------|
+| **AROUSAL** | Surprise minimization (Active Inference) | Drive signals that push system toward coherence |
+| **TEMPORALITY** | Reservoir Computing | Memory in dynamics, echo-state networks |
+| **CROSS-TIMESCALE** | Murmuration (starling flocks) | Fast local decisions + slow global coherence |
+| **MALLEABILITY** | Slime Mold (Physarum) | Rewiring based on feedback, explore→prune→consolidate |
+| **AGENCY** | Emergent agency | Self-healing, repairable, autonomous |
 
-### Governance
-- Daily loss limit: 3%
-- Max drawdown kill: 15%
-- Max trades per day: 30
+> **Core Insight:** Intelligence emerges from distributed dynamics, not centralized processing. The "mind" is a field, not a particle.
 
-### Reporting
-- `daily_rollup.py`: Generates daily performance metrics
-- Ledger stored in `.openclaw/economics/economics.log`
+---
+
+## HiveMind: Multi-Agent Coordination
+
+Located in `workspace/hivemind/`, HiveMind implements the TACTI(C)-R principles:
+
+- **`peer_graph.py`** — Murmuration-style sparse peer connections (each agent tracks ~7 neighbors)
+- **`physarum_router.py`** — Slime mold routing with conductance-based path selection and automatic pruning
+- **`reservoir.py`** — Echo-state reservoir computing for temporal pattern processing
+- **`trails.py`** — External memory with decay and reinforcement (like slime trails)
+- **`dynamics_pipeline.py`** — Integrates all components under feature flags
+
+### Feature Flags
+```bash
+ENABLE_MURMURATION=1      # Sparse peer connections
+ENABLE_RESERVOIR=1        # Echo-state dynamics
+ENABLE_PHYSARUM_ROUTER=1  # Adaptive routing
+ENABLE_TRAIL_MEMORY=1     # External memory trails
+```
+
+---
+
+## Subsystems
+
+### 📚 Knowledge Base
+- QMD-powered semantic search
+- `workspace/knowledge_base/`
+- Indexes all workspace markdown files
+
+### 🧪 Research Engine
+- Paper ingestion and synthesis
+- `workspace/research/`
+- Command: `python workspace/research/research_ingest.py`
+
+### 📊 Daily Briefing
+- Automated morning summaries
+- Therapeutic techniques, quotes, calendar, reminders
+- Cron-scheduled at 7 AM Brisbane time
+
+### 🎙️ Voice Memory Stream
+- Transcribes voice notes via Whisper
+- Summarizes and files for later recall
+- Media stored in `.openclaw/media/inbound/`
+
+### ⏰ Scheduled Tasks (Cron)
+| Job | Schedule | Purpose |
+|-----|----------|---------|
+| Daily Briefing | 7 AM daily | Morning summary |
+| Hoffman Watch | Mon 8 AM | Monitor for new papers |
+| Dream Big Focus | Fri 10 AM | Weekly creative session |
+
+---
 
 ## File Structure
 
 ```
-.openclaw/
-├── itc/
-│   ├── raw/               # Raw Telegram data
-│   └── canon/             # Canonical format
-├── market/                # Market data (candles, funding)
-├── sim/
-│   ├── SIM_A/             # Strategy A files
-│   └── SIM_B/             # Strategy B files
-├── economics/             # Performance ledger
-├── secrets/               # API keys, session data
-├── pipelines/             # Configuration files
-└── scripts/               # Pipeline scripts
+clawd/
+├── workspace/
+│   ├── hivemind/         # Multi-agent coordination
+│   ├── tacti_cr/         # TACTI(C)-R core modules
+│   ├── knowledge_base/   # QMD search index
+│   ├── research/         # Paper synthesis
+│   ├── memory/           # Daily logs
+│   ├── governance/       # Policies, heartbeat, logs
+│   ├── time_management/  # Tips, self-care
+│   ├── scripts/          # Automation scripts
+│   └── CODEX_*.md        # Codex task lists
+├── scripts/              # Utility scripts
+├── docs/                 # OpenClaw documentation
+├── memory/               # Session memory
+├── agents/               # Agent configurations
+└── .openclaw/            # OpenClaw runtime
 ```
 
-## Usage
+---
 
-1. Configure your Telegram API credentials in `.openclaw/secrets/`
-2. Start the ingestion: `python scripts/telethon_ingest.py`
-3. Start market data collection: `python scripts/market_stream.py`
-4. Run simulations: `python scripts/sim_runner.py`
-5. Generate reports: `python scripts/daily_rollup.py`
+## Commands
 
-## Governance Constraints
+```bash
+# Research
+python workspace/research/research_ingest.py list
+python workspace/research/research_ingest.py add <url>
+python workspace/research/research_ingest.py search <query>
 
-The system enforces strict governance rules:
-- No parameter changes during the month-long evaluation period
-- Automatic halting when drawdown or daily loss limits are reached
-- Trade frequency limits to prevent overtrading
+# Knowledge Base
+python workspace/knowledge_base/kb.py sync
+python workspace/knowledge_base/kb.py search <query>
 
-These constraints ensure a fair evaluation of the trading strategies.
+# Time Management
+python workspace/time_management/time_management.py tip
+python workspace/time_management/time_management.py self_care
+
+# Daily Technique
+python scripts/daily_technique.py --format briefing
+```
+
+---
+
+## Model Routing
+
+Configured in `workspace/MODEL_ROUTING.md`:
+- **BASIC** queries → Local Qwen (Ollama)
+- **NON_BASIC** → Claude (remote)
+
+---
+
+## Governance
+
+- **Heartbeat** — Periodic health checks (MEMORY size, KB sync, daemon status)
+- **Boundaries** — `workspace/BOUNDARIES.md`
+- **Constitution** — `workspace/CONSTITUTION.md`
+- **Audit Logs** — `workspace/audit/`
+
+---
+
+## Credits
+
+Built on [OpenClaw](https://github.com/openclaw/openclaw) — the extensible AI assistant framework.
+
+TACTI(C)-R framework inspired by:
+- Karl Friston's Free Energy Principle
+- Toshiya K. Nakagaki's Physarum research
+- Reservoir Computing (Jaeger, 2001)
+- Starling murmuration dynamics
