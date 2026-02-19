@@ -5,9 +5,10 @@ Wants=openclaw-gateway.service
 
 [Service]
 Type=simple
-User=jeebs
+User=root
+Group=root
 WorkingDirectory=/home/jeebs/src/clawd/workspace/source-ui
-ExecStart=/usr/bin/python3 /home/jeebs/src/clawd/workspace/source-ui/app.py --host 127.0.0.1 --port 18990
+ExecStart=/home/jeebs/src/clawd/workspace/source-ui/app.py --host 0.0.0.0 --port 18990
 Restart=always
 RestartSec=10
 
