@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -74,6 +75,51 @@ def auto_commit_changes(repo_root: Path, session_id: str, cycle: int) -> str | N
     except Exception as e:
         print(f"Auto-commit failed: {e}")
     return None
+
+
+def _parse_bool(value: Any, default: bool = False) -> bool:
+    if value is None:
+        return bool(default)
+    if isinstance(value, bool):
+        return value
+    text = str(value).strip().lower()
+    if text in {"1", "true", "yes", "on"}:
+        return True
+    if text in {"0", "false", "no", "off"}:
+        return False
+    return bool(default)
+
+
+def _current_branch(repo_root: Path) -> str:
+    try:
+        proc = subprocess.run(
+            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+        branch = (proc.stdout or "").strip()
+        if not branch:
+            return "unknown"
+        return branch
+    except Exception:
+        return "unknown"
+
+
+def _guard_controls(branch: str, requested_auto_commit: bool, requested_accept_patches: bool) -> dict[str, Any]:
+    protected = branch in {"main", "master"}
+    final_auto = False if protected else bool(requested_auto_commit)
+    final_accept = False if protected else bool(requested_accept_patches)
+    return {
+        "branch": branch,
+        "protected_branch": protected,
+        "requested_auto_commit": bool(requested_auto_commit),
+        "requested_accept_patches": bool(requested_accept_patches),
+        "final_auto_commit": final_auto,
+        "final_accept_patches": final_accept,
+    }
 
 
 def utc_now() -> str:
@@ -225,6 +271,18 @@ def run(args: argparse.Namespace) -> int:
         extra_allowlist=args.allow_cmd,
     )
 
+    requested_auto_commit = _parse_bool(
+        args.auto_commit if args.auto_commit is not None else os.environ.get("TEAMCHAT_AUTO_COMMIT", "1"),
+        default=True,
+    )
+    requested_accept_patches = _parse_bool(
+        args.accept_patches if args.accept_patches is not None else os.environ.get("TEAMCHAT_ACCEPT_PATCHES", "1"),
+        default=True,
+    )
+    guard = _guard_controls(_current_branch(repo_root), requested_auto_commit, requested_accept_patches)
+    auto_commit_enabled = bool(guard["final_auto_commit"])
+    accept_patches_enabled = bool(guard["final_accept_patches"])
+
     # Log session_start only for new sessions (not resumes)
     if not resuming:
         log_event(
@@ -244,6 +302,16 @@ def run(args: argparse.Namespace) -> int:
         },
         route=None,
     )
+        if guard["protected_branch"]:
+            log_event(
+                sessions_file,
+                session_id=session_id,
+                cycle=int(state["cycle"]),
+                actor="system",
+                event_type="teamchat.guard.protected_branch",
+                data=guard,
+                route=None,
+            )
 
     while True:
         if int(state["cycle"]) >= int(state["max_cycles"]):
@@ -383,6 +451,17 @@ def run(args: argparse.Namespace) -> int:
             continue
 
         decision = str(review_result.data.get("decision") or "revise")
+        if decision == "accept" and not accept_patches_enabled:
+            log_event(
+                sessions_file,
+                session_id=session_id,
+                cycle=cycle,
+                actor="system",
+                event_type="teamchat.guard.accept_patch_blocked",
+                data={"decision": decision, "accept_patches_enabled": False},
+                route=None,
+            )
+            decision = "request_input"
         if decision == "accept":
             state["accepted_reports"] = int(state["accepted_reports"]) + 1
             state["consecutive_failures"] = 0
@@ -392,7 +471,7 @@ def run(args: argparse.Namespace) -> int:
                 valence_update("coder", {"success": True}, repo_root=repo_root)
             
             # Auto-commit changes after acceptance
-            commit_sha = auto_commit_changes(repo_root, session_id, state.get("cycle", 0))
+            commit_sha = auto_commit_changes(repo_root, session_id, state.get("cycle", 0)) if auto_commit_enabled else None
             if commit_sha:
                 state["last_commit"] = commit_sha
         elif decision == "request_input":
@@ -467,6 +546,8 @@ def main() -> int:
     parser.add_argument("--max-consecutive-failures", type=int, default=0, help="0 = keep existing")
     parser.add_argument("--allow-cmd", action="append", default=[], help="Extra allowlist regex for live coder commands")
     parser.add_argument("--live", nargs="?", default=None, const=True, help="Enable live adapters (use --live or --live=1)")
+    parser.add_argument("--auto-commit", default=None, help="Enable/disable auto commit (1/0)")
+    parser.add_argument("--accept-patches", default=None, help="Enable/disable planner accept pathway (1/0)")
     parser.add_argument("--resume", action="store_true", help="Resume existing session if available")
     parser.add_argument("--force", action="store_true", help="Force new session even if one exists")
     args = parser.parse_args()
