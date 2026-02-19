@@ -134,3 +134,7 @@ workspace/operator_transfer_brief.md
 # Run artifacts (do not commit)
 economics/
 completions/
+
+# Runtime state/logs (never commit)
+workspace/state/
+workspace/state/**/*.jsonl
