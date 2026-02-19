@@ -135,3 +135,13 @@ Optional assertions:
 ```bash
 bash workspace/scripts/verify_tacti_cr_events.sh --min-count tacti_cr.team_chat.session_start=1
 ```
+
+## Novel-10 Fixture Verification
+
+Run deterministic fixture coverage for Novel-10 features:
+
+```bash
+bash workspace/scripts/verify_tacti_cr_novel10_fixture.sh
+```
+
+This runs an offline fixture harness that enables all Novel-10 flags, drives minimal paths, and asserts required event types against `workspace/tacti_cr/novel10_contract.py`.
