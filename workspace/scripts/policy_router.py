@@ -34,6 +34,16 @@ BUDGET_FILE = BASE_DIR / "itc" / "llm_budget.json"
 CIRCUIT_FILE = BASE_DIR / "itc" / "llm_circuit.json"
 EVENT_LOG = BASE_DIR / "itc" / "llm_router_events.jsonl"
 QWEN_AUTH_FILE = BASE_DIR / "agents" / "main" / "agent" / "auth-profiles.json"
+ACTIVE_INFERENCE_STATE_PATH = BASE_DIR / "workspace" / "hivemind" / "data" / "active_inference_state.json"
+
+HIVEMIND_ROOT = BASE_DIR / "workspace" / "hivemind"
+if HIVEMIND_ROOT.exists() and str(HIVEMIND_ROOT) not in sys.path:
+    sys.path.insert(0, str(HIVEMIND_ROOT))
+
+try:
+    from hivemind.active_inference import PreferenceModel
+except Exception:  # pragma: no cover - optional dependency hook
+    PreferenceModel = None
 
 
 class PolicyValidationError(Exception):
@@ -208,6 +218,15 @@ def _deep_merge(defaults, incoming):
 
 def _policy_strict_mode():
     return os.environ.get("OPENCLAW_POLICY_STRICT", "1") != "0"
+
+
+def _active_inference_enabled():
+    return os.environ.get("ENABLE_ACTIVE_INFERENCE", "0").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
 
 
 def _resolve_policy_schema_path(policy_path):
@@ -627,6 +646,9 @@ class PolicyRouter:
         self.circuit_state = load_circuit_state(circuit_path)
         self.handlers = handlers or {}
         self.run_counts = {}
+        self.active_inference_model = None
+        if _active_inference_enabled() and PreferenceModel is not None:
+            self.active_inference_model = PreferenceModel.load_path(Path(ACTIVE_INFERENCE_STATE_PATH))
 
     def _intent_cfg(self, intent):
         return self.policy.get("routing", {}).get("intents", {}).get(intent, {})
@@ -792,12 +814,41 @@ class PolicyRouter:
             "reasons": reasons,
         }
 
+    def _predict_preferences(self, context_metadata):
+        if not self.active_inference_model:
+            return None
+        params, confidence = self.active_inference_model.predict(context_metadata or {})
+        return {"preference_params": params, "confidence": confidence}
+
+    def _update_preferences(self, context_metadata, observed_outcome):
+        if not self.active_inference_model:
+            return None
+        feedback = {}
+        if isinstance(context_metadata, dict):
+            raw_feedback = context_metadata.get("feedback", {})
+            if isinstance(raw_feedback, dict):
+                feedback = raw_feedback
+        result = self.active_inference_model.update(feedback, observed_outcome or {})
+        self.active_inference_model.save_path(Path(ACTIVE_INFERENCE_STATE_PATH))
+        return result
+
     def execute_with_escalation(self, intent, payload, context_metadata=None, validate_fn=None):
         intent_cfg = self._intent_cfg(intent)
         order = _resolve_order(intent_cfg, self.policy)
         attempts = 0
         last_reason = None
-        context_metadata = context_metadata or {}
+        context_metadata = dict(context_metadata or {})
+        ai_prediction = self._predict_preferences(context_metadata)
+        if ai_prediction is not None:
+            context_metadata["active_inference"] = ai_prediction
+            log_event(
+                "active_inference_predict",
+                {
+                    "intent": intent,
+                    "confidence": ai_prediction.get("confidence"),
+                },
+                self.event_log,
+            )
 
         max_per_run = int(self.policy.get("budgets", {}).get("intents", {}).get(intent, {}).get("maxCallsPerRun", 0))
         self.run_counts.setdefault(intent, 0)
@@ -891,6 +942,15 @@ class PolicyRouter:
                 cfg = self.policy.get("defaults", {}).get("circuitBreaker", {})
                 if reason_code in cfg.get("failOn", []):
                     self._record_failure(circuit_key, reason_code)
+                self._update_preferences(
+                    context_metadata,
+                    {
+                        "verbosity_score": 0.2,
+                        "format_score": 0.2,
+                        "tool_score": 0.4,
+                        "correction_score": 0.2,
+                    },
+                )
                 log_event(
                     "router_attempt",
                     {
@@ -949,6 +1009,31 @@ class PolicyRouter:
                     continue
 
             self._record_success(circuit_key)
+            out_tokens = estimate_tokens(text_out)
+            in_tokens = max(1, estimate_tokens(_extract_text_from_payload(payload)))
+            verbosity_ratio = max(0.0, min(1.0, out_tokens / max(1, in_tokens * 2)))
+            format_score = 0.8 if ("\n" in text_out or "- " in text_out) else 0.45
+            tool_score = 0.8 if bool(context_metadata.get("requires_tools")) else 0.55
+            correction_score = 0.9 if result.get("ok") else 0.3
+            ai_update = self._update_preferences(
+                context_metadata,
+                {
+                    "verbosity_score": verbosity_ratio,
+                    "format_score": format_score,
+                    "tool_score": tool_score,
+                    "correction_score": correction_score,
+                },
+            )
+            if ai_update is not None:
+                log_event(
+                    "active_inference_update",
+                    {
+                        "intent": intent,
+                        "prediction_error": ai_update.get("prediction_error"),
+                        "interactions": ai_update.get("interactions"),
+                    },
+                    self.event_log,
+                )
             log_event(
                 "router_success",
                 {
