@@ -19,3 +19,6 @@
 - [HB-PR-04] KB sync freshness reminder
   - Compare latest workspace markdown mtime vs `workspace/knowledge_base/data/last_sync.txt`.
   - If workspace files are newer, remind to run `python3 workspace/knowledge_base/kb.py sync`.
+
+- [HB-PR-05] Repeated request inefficiency capture
+  - If Heath repeats the same request 3+ times in a session, append an entry to `workspace/governance/inefficiency_log.md`.

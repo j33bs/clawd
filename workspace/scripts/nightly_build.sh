@@ -126,7 +126,51 @@ run_memory() {
             log "⚠️ MEMORY.md exceeds 180 lines — prune recommended (oldest entries first)"
         fi
     fi
-    
+
+    inefficiency_log="$CLAWD_DIR/workspace/governance/inefficiency_log.md"
+    if [ -f "$inefficiency_log" ]; then
+        stale_open="$(python3 - "$inefficiency_log" <<'PY'
+import datetime
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+now = datetime.date.today()
+stale = []
+for raw in path.read_text(encoding="utf-8", errors="ignore").splitlines():
+    line = raw.strip()
+    if not line.startswith("|"):
+        continue
+    if "Date" in line and "Status" in line:
+        continue
+    if line.startswith("|---"):
+        continue
+    parts = [p.strip() for p in line.strip("|").split("|")]
+    if len(parts) < 5:
+        continue
+    date_text, pattern, _, _, status = parts[:5]
+    if "open" not in status.lower():
+        continue
+    try:
+        d = datetime.date.fromisoformat(date_text)
+    except Exception:
+        continue
+    if (now - d).days > 7:
+        stale.append(f"{date_text}: {pattern}")
+if stale:
+    print("\n".join(stale))
+PY
+)"
+        if [ -n "$stale_open" ]; then
+            log "⚠️ Inefficiency log has stale open entries (>7 days):"
+            while IFS= read -r line; do
+                [ -n "$line" ] && log "  - $line"
+            done <<< "$stale_open"
+        else
+            log "No stale open inefficiency entries"
+        fi
+    fi
+
     log "Memory prune complete"
 }
 
