@@ -37,6 +37,16 @@
         "tz": "Australia/Brisbane"
       },
       "command": "Run HiveMind ingest pipelines:\n1. PYTHONPATH=workspace/hivemind python3 -m hivemind.ingest.memory_md\n2. PYTHONPATH=workspace/hivemind python3 -m hivemind.ingest.handoffs\n3. PYTHONPATH=workspace/hivemind python3 -m hivemind.ingest.git_commits\n4. Summarize stored/skipped/error counts.\n\nWrite a short ingest note to reports/automation/hivemind_ingest.log."
+    },
+    {
+      "name": "Session Pattern Analysis",
+      "sessionTarget": "isolated",
+      "wakeMode": "now",
+      "schedule": {
+        "expr": "0 9 * * 5",
+        "tz": "Australia/Brisbane"
+      },
+      "command": "Run weekly session pattern analysis and write report:\nnode scripts/analyze_session_patterns.js --output reports/health/session-patterns-latest.md"
     }
   ]
 }

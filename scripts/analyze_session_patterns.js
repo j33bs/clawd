@@ -125,17 +125,18 @@ function renderReport({ dateKey, scannedFiles, findings }) {
   return `${lines.join('\n')}\n`;
 }
 
-function writePatternReport({ repoRoot, dateKey, result }) {
-  const reportsDir = path.join(repoRoot, 'workspace', 'reports');
-  fs.mkdirSync(reportsDir, { recursive: true });
-  const outPath = path.join(reportsDir, `session-patterns-${dateKey}.md`);
+function writePatternReport({ repoRoot, dateKey, result, outPath }) {
+  const targetPath = outPath
+    ? (path.isAbsolute(outPath) ? outPath : path.join(repoRoot, outPath))
+    : path.join(repoRoot, 'workspace', 'reports', `session-patterns-${dateKey}.md`);
+  fs.mkdirSync(path.dirname(targetPath), { recursive: true });
   const report = renderReport({
     dateKey,
     scannedFiles: result.scannedFiles,
     findings: result.findings
   });
-  fs.writeFileSync(outPath, report, 'utf8');
-  return outPath;
+  fs.writeFileSync(targetPath, report, 'utf8');
+  return targetPath;
 }
 
 function parseArgs(argv) {
@@ -147,6 +148,9 @@ function parseArgs(argv) {
       i += 1;
     } else if (a === '--memory-dir' && argv[i + 1]) {
       out.memoryDir = argv[i + 1];
+      i += 1;
+    } else if (a === '--output' && argv[i + 1]) {
+      out.output = argv[i + 1];
       i += 1;
     }
   }
@@ -161,7 +165,7 @@ function main() {
     ? path.resolve(args.memoryDir)
     : path.join(repoRoot, 'workspace', 'memory');
   const result = analyzeSessions({ memoryDir });
-  const outPath = writePatternReport({ repoRoot, dateKey, result });
+  const outPath = writePatternReport({ repoRoot, dateKey, result, outPath: args.output });
   process.stdout.write(`${path.relative(repoRoot, outPath)}\n`);
 }
 
