@@ -108,17 +108,73 @@ def _current_branch(repo_root: Path) -> str:
         return "unknown"
 
 
-def _guard_controls(branch: str, requested_auto_commit: bool, requested_accept_patches: bool) -> dict[str, Any]:
+def _repo_is_dirty(repo_root: Path) -> bool:
+    try:
+        proc = subprocess.run(
+            ["git", "status", "--porcelain"],
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+        return bool((proc.stdout or "").strip())
+    except Exception:
+        return False
+
+
+def _guard_controls(
+    branch: str,
+    requested_auto_commit: bool,
+    requested_accept_patches: bool,
+    requested_commit_arm: str,
+    allow_dirty: bool,
+    repo_dirty: bool,
+) -> dict[str, Any]:
     protected = branch in {"main", "master"}
-    final_auto = False if protected else bool(requested_auto_commit)
-    final_accept = False if protected else bool(requested_accept_patches)
+    arm_ok = str(requested_commit_arm or "").strip() == "I_UNDERSTAND"
+    requested_auto = bool(requested_auto_commit)
+    requested_accept = bool(requested_accept_patches)
+    requested_commit_enabled = requested_auto and requested_accept
+
+    final_auto = requested_auto
+    final_accept = requested_accept
+    commit_not_armed = False
+    dirty_tree_blocked = False
+    commit_not_armed_reason = ""
+
+    if protected:
+        final_auto = False
+        final_accept = False
+    elif not (requested_commit_enabled and arm_ok):
+        final_auto = False
+        final_accept = False
+        if requested_auto or requested_accept:
+            commit_not_armed = True
+            if not arm_ok:
+                commit_not_armed_reason = "missing_or_invalid_commit_arm"
+            else:
+                commit_not_armed_reason = "requires_auto_commit_and_accept_patches"
+
+    if final_auto and repo_dirty and not allow_dirty:
+        final_auto = False
+        dirty_tree_blocked = True
+
     return {
         "branch": branch,
         "protected_branch": protected,
-        "requested_auto_commit": bool(requested_auto_commit),
-        "requested_accept_patches": bool(requested_accept_patches),
+        "repo_dirty": bool(repo_dirty),
+        "allow_dirty": bool(allow_dirty),
+        "requested_auto_commit": requested_auto,
+        "requested_accept_patches": requested_accept,
+        "requested_commit_arm": str(requested_commit_arm or ""),
+        "arm_ok": arm_ok,
+        "requested_commit_enabled": requested_commit_enabled,
         "final_auto_commit": final_auto,
         "final_accept_patches": final_accept,
+        "commit_not_armed": commit_not_armed,
+        "commit_not_armed_reason": commit_not_armed_reason,
+        "dirty_tree_blocked": dirty_tree_blocked,
     }
 
 
@@ -279,7 +335,16 @@ def run(args: argparse.Namespace) -> int:
         args.accept_patches if args.accept_patches is not None else os.environ.get("TEAMCHAT_ACCEPT_PATCHES", "1"),
         default=True,
     )
-    guard = _guard_controls(_current_branch(repo_root), requested_auto_commit, requested_accept_patches)
+    requested_commit_arm = os.environ.get("TEAMCHAT_COMMIT_ARM", "")
+    allow_dirty = _parse_bool(os.environ.get("TEAMCHAT_ALLOW_DIRTY", "0"), default=False)
+    guard = _guard_controls(
+        _current_branch(repo_root),
+        requested_auto_commit,
+        requested_accept_patches,
+        requested_commit_arm,
+        allow_dirty,
+        _repo_is_dirty(repo_root),
+    )
     auto_commit_enabled = bool(guard["final_auto_commit"])
     accept_patches_enabled = bool(guard["final_accept_patches"])
 
@@ -310,6 +375,43 @@ def run(args: argparse.Namespace) -> int:
                 actor="system",
                 event_type="teamchat.guard.protected_branch",
                 data=guard,
+                route=None,
+            )
+        if guard["commit_not_armed"]:
+            log_event(
+                sessions_file,
+                session_id=session_id,
+                cycle=int(state["cycle"]),
+                actor="system",
+                event_type="teamchat.guard.commit_not_armed",
+                data={
+                    "reason": guard["commit_not_armed_reason"],
+                    "requested_auto_commit": guard["requested_auto_commit"],
+                    "requested_accept_patches": guard["requested_accept_patches"],
+                    "requested_commit_arm": guard["requested_commit_arm"],
+                    "final_auto_commit": guard["final_auto_commit"],
+                    "final_accept_patches": guard["final_accept_patches"],
+                    "branch": guard["branch"],
+                },
+                route=None,
+            )
+        if guard["dirty_tree_blocked"]:
+            log_event(
+                sessions_file,
+                session_id=session_id,
+                cycle=int(state["cycle"]),
+                actor="system",
+                event_type="teamchat.guard.dirty_tree",
+                data={
+                    "reason": "dirty_tree_requires_TEAMCHAT_ALLOW_DIRTY=1",
+                    "requested_auto_commit": guard["requested_auto_commit"],
+                    "requested_accept_patches": guard["requested_accept_patches"],
+                    "final_auto_commit": guard["final_auto_commit"],
+                    "final_accept_patches": guard["final_accept_patches"],
+                    "repo_dirty": guard["repo_dirty"],
+                    "allow_dirty": guard["allow_dirty"],
+                    "branch": guard["branch"],
+                },
                 route=None,
             )
 

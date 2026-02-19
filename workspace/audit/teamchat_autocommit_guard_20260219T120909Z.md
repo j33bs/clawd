@@ -134,3 +134,15 @@ d873b8c fix(teamchat): block auto-commit on protected branches and verifier runs
 ## Explicit Outcome
 
 Runtime state is not committed. Verification scripts cannot auto-commit or auto-accept patches. TeamChat protected-branch guard is enforced.
+
+## Addendum: Two-Key Arming + Dirty-Tree Gate
+
+Timestamp (UTC): 2026-02-19T12:28:54Z
+
+- Auto-commit now requires all of: `TEAMCHAT_AUTO_COMMIT=1`, `TEAMCHAT_ACCEPT_PATCHES=1`, `TEAMCHAT_COMMIT_ARM=I_UNDERSTAND`, and non-protected branch.
+- If repository is dirty at run start, auto-commit is disabled unless `TEAMCHAT_ALLOW_DIRTY=1`.
+- Structured events emitted when blocked:
+  - `teamchat.guard.commit_not_armed`
+  - `teamchat.guard.dirty_tree`
+- Deterministic guard tests updated and passing via:
+  - `python3 -m unittest tests_unittest.test_team_chat_guard`

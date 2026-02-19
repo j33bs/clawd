@@ -22,17 +22,40 @@ def _load_team_chat_module():
 class TestTeamChatGuard(unittest.TestCase):
     def test_protected_branch_forces_disable(self):
         team_chat = _load_team_chat_module()
-        out = team_chat._guard_controls("main", True, True)
+        out = team_chat._guard_controls("main", True, True, "I_UNDERSTAND", False, False)
         self.assertTrue(out["protected_branch"])
         self.assertFalse(out["final_auto_commit"])
         self.assertFalse(out["final_accept_patches"])
 
-    def test_feature_branch_respects_requested_flags(self):
+    def test_auto_commit_disabled_when_commit_arm_missing(self):
         team_chat = _load_team_chat_module()
-        out = team_chat._guard_controls("feature/x", True, False)
+        out = team_chat._guard_controls("feature/x", True, True, "", False, False)
         self.assertFalse(out["protected_branch"])
-        self.assertTrue(out["final_auto_commit"])
+        self.assertTrue(out["commit_not_armed"])
+        self.assertFalse(out["final_auto_commit"])
         self.assertFalse(out["final_accept_patches"])
+
+    def test_auto_commit_enabled_when_armed_on_feature_branch(self):
+        team_chat = _load_team_chat_module()
+        out = team_chat._guard_controls("feature/x", True, True, "I_UNDERSTAND", False, False)
+        self.assertFalse(out["protected_branch"])
+        self.assertFalse(out["commit_not_armed"])
+        self.assertTrue(out["final_auto_commit"])
+        self.assertTrue(out["final_accept_patches"])
+
+    def test_dirty_tree_blocks_auto_commit_without_allow_dirty(self):
+        team_chat = _load_team_chat_module()
+        out = team_chat._guard_controls("feature/x", True, True, "I_UNDERSTAND", False, True)
+        self.assertTrue(out["dirty_tree_blocked"])
+        self.assertFalse(out["final_auto_commit"])
+        self.assertTrue(out["final_accept_patches"])
+
+    def test_dirty_tree_allows_auto_commit_with_allow_dirty(self):
+        team_chat = _load_team_chat_module()
+        out = team_chat._guard_controls("feature/x", True, True, "I_UNDERSTAND", True, True)
+        self.assertFalse(out["dirty_tree_blocked"])
+        self.assertTrue(out["final_auto_commit"])
+        self.assertTrue(out["final_accept_patches"])
 
 
 if __name__ == "__main__":
