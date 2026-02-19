@@ -3,6 +3,7 @@
 from .models import KnowledgeUnit
 from .peer_graph import PeerGraph
 from .reservoir import Reservoir
+from .physarum_router import PhysarumRouter
 from .store import HiveMindStore
 
 __all__ = [
@@ -10,4 +11,5 @@ __all__ = [
     "HiveMindStore",
     "PeerGraph",
     "Reservoir",
+    "PhysarumRouter",
 ]
