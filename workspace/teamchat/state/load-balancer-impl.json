@@ -1,0 +1,15 @@
+{
+  "session_id": "load-balancer-impl",
+  "created_at": "2026-02-19T11:10:26Z",
+  "updated_at": "2026-02-19T11:10:26Z",
+  "live": true,
+  "task": "Implement a concurrent message handling system with ChatGPT fallback.\n\nWhen MiniMax is overwhelmed (too many concurrent messages), spawn a ChatGPT subagent to handle the overflow. The system should:\n\n1. Monitor message queue depth and response latency\n2. Detect when MiniMax is overwhelmed (configurable threshold)\n3. Automatically spawn a ChatGPT subagent to handle overflow messages\n4. Ensure messages are answered in order (coordinate between MiniMax and ChatGPT)\n5. Log all fallback events for auditing\n\nCreate:\n- workspace/scripts/message_load_balancer.py: Main module with LoadBalancer class\n- Has method check_load() that returns true if overloaded\n- Has method route_message() that decides MiniMax vs ChatGPT subagent\n- Spawns subagent via OpenClaw's sessions_spawn when needed\n\nThe subagent should use model: openai-codex/gpt-5.3-codex or similar with the openai-codex:default auth profile.\n\nMake it configurable via environment variables:\n- MAX_QUEUE_DEPTH (default 5)\n- MAX_LATENCY_MS (default 30000)\n- ENABLE_FALLBACK (default true)",
+  "status": "stopped:repeated_failures",
+  "cycle": 2,
+  "queue": [],
+  "accepted_reports": 0,
+  "consecutive_failures": 2,
+  "max_cycles": 3,
+  "max_commands_per_cycle": 4,
+  "max_consecutive_failures": 2
+}
