@@ -9,9 +9,27 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+import sys
 
 from team_chat_adapters import build_adapters
 import subprocess
+
+WORKSPACE_ROOT = Path(__file__).resolve().parents[1]
+if str(WORKSPACE_ROOT) not in sys.path:
+    sys.path.insert(0, str(WORKSPACE_ROOT))
+
+try:
+    from tacti_cr.temporal_watchdog import temporal_reset_event
+except Exception:  # pragma: no cover
+    temporal_reset_event = None
+try:
+    from tacti_cr.mirror import update_from_event as mirror_update_from_event
+except Exception:  # pragma: no cover
+    mirror_update_from_event = None
+try:
+    from tacti_cr.valence import update_valence as valence_update
+except Exception:  # pragma: no cover
+    valence_update = None
 
 
 def auto_commit_changes(repo_root: Path, session_id: str, cycle: int) -> str | None:
@@ -119,18 +137,24 @@ def log_event(
     data: dict[str, Any],
     route: dict[str, Any] | None = None,
 ) -> None:
+    row = {
+        "ts": utc_now(),
+        "session_id": session_id,
+        "cycle": cycle,
+        "actor": actor,
+        "event": event_type,
+        "data": data,
+        "meta": {"route": route or {}},
+    }
     append_jsonl(
         session_path,
-        {
-            "ts": utc_now(),
-            "session_id": session_id,
-            "cycle": cycle,
-            "actor": actor,
-            "event": event_type,
-            "data": data,
-            "meta": {"route": route or {}},
-        },
+        row,
     )
+    if callable(mirror_update_from_event) and actor not in {"system"}:
+        try:
+            mirror_update_from_event(actor, row, repo_root=Path(__file__).resolve().parents[2])
+        except Exception:
+            pass
 
 
 def check_resumable(state: dict[str, Any]) -> bool:
@@ -314,6 +338,34 @@ def run(args: argparse.Namespace) -> int:
             route=coder_result.route,
         )
 
+        if callable(temporal_reset_event):
+            drift = temporal_reset_event(json.dumps(patch_report, ensure_ascii=True))
+            if drift:
+                log_event(
+                    sessions_file,
+                    session_id=session_id,
+                    cycle=cycle,
+                    actor="system",
+                    event_type="temporal_reset",
+                    data=drift,
+                    route=None,
+                )
+                state["queue"].insert(
+                    0,
+                    {
+                        "id": f"reanchor-{cycle}",
+                        "title": "Temporal re-anchor",
+                        "goal": "Re-read today's memory and temporal beacon before continuing",
+                        "commands": ["python3 workspace/scripts/temporal_beacon_update.py"],
+                        "tests": [],
+                        "notes": "Inserted by temporal watchdog",
+                    },
+                )
+                state["consecutive_failures"] = int(state.get("consecutive_failures", 0)) + 1
+                save_state(state_file, state)
+                write_summary(summary_file, state)
+                continue
+
         review_result = planner.review(patch_report, state)
         if not review_result.ok:
             state["consecutive_failures"] = int(state["consecutive_failures"]) + 1
@@ -335,6 +387,9 @@ def run(args: argparse.Namespace) -> int:
             state["accepted_reports"] = int(state["accepted_reports"]) + 1
             state["consecutive_failures"] = 0
             state["status"] = "accepted"
+            if callable(valence_update):
+                valence_update("planner", {"success": True}, repo_root=repo_root)
+                valence_update("coder", {"success": True}, repo_root=repo_root)
             
             # Auto-commit changes after acceptance
             commit_sha = auto_commit_changes(repo_root, session_id, state.get("cycle", 0))
@@ -343,11 +398,16 @@ def run(args: argparse.Namespace) -> int:
         elif decision == "request_input":
             state["status"] = "request_input"
             state["consecutive_failures"] = 0
+            if callable(valence_update):
+                valence_update("planner", {"failed": True, "retry_loops": 1}, repo_root=repo_root)
         else:
             next_orders = review_result.data.get("next_work_orders", [])
             if next_orders:
                 state["queue"].extend(next_orders)
             state["consecutive_failures"] = int(state["consecutive_failures"]) + 1
+            if callable(valence_update):
+                valence_update("planner", {"failed": True, "retry_loops": 1}, repo_root=repo_root)
+                valence_update("coder", {"failed": True}, repo_root=repo_root)
 
         log_event(
             sessions_file,

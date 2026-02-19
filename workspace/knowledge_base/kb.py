@@ -21,6 +21,11 @@ from agentic.intent import classify_intent
 from agentic.retrieve import multi_step_retrieve
 from agentic.synthesize import synthesize_response
 
+try:
+    from tacti_cr.prefetch import prefetch_context
+except Exception:  # pragma: no cover
+    prefetch_context = None
+
 DATA_DIR = Path(__file__).parent / "data"
 DATA_DIR.mkdir(exist_ok=True)
 
@@ -28,6 +33,16 @@ DATA_DIR.mkdir(exist_ok=True)
 def cmd_query(args: argparse.Namespace) -> int:
     """Agentic RAG query - the main entry point."""
     query = args.query
+
+    if callable(prefetch_context):
+        try:
+            prefetch_context(
+                query,
+                lambda topic: [f"graph:{topic}"],
+                repo_root=Path(__file__).resolve().parents[2],
+            )
+        except Exception:
+            pass
     
     # Step 1: Classify intent
     intent = classify_intent(query)

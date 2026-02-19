@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from collections import deque
 from dataclasses import dataclass
+from datetime import datetime, timezone
+import json
+from pathlib import Path
 from typing import Deque, List
 
 from .config import DEFAULT_CONFIG
@@ -78,3 +81,19 @@ class CollapseDetector:
             warnings=warnings,
             recommended_actions=[],
         )
+
+
+def emit_recommendation(action: str, detail: dict | None = None, *, repo_root: Path | None = None) -> dict:
+    """Append advisory recommendation for collapse subsystem consumers."""
+    root = Path(repo_root or Path(__file__).resolve().parents[2])
+    out = root / "workspace" / "state" / "tacti_cr" / "collapse_recommendations.jsonl"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    row = {
+        "ts": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        "action": str(action),
+        "detail": detail or {},
+        "advisory": True,
+    }
+    with out.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(row, ensure_ascii=True) + "\n")
+    return {"ok": True, "path": str(out), "row": row}

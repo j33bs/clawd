@@ -7,7 +7,9 @@ Policy Router
 import json
 import os
 import re
+import sys
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 
 try:
@@ -33,6 +35,24 @@ BUDGET_FILE = BASE_DIR / "itc" / "llm_budget.json"
 CIRCUIT_FILE = BASE_DIR / "itc" / "llm_circuit.json"
 EVENT_LOG = BASE_DIR / "itc" / "llm_router_events.jsonl"
 QWEN_AUTH_FILE = BASE_DIR / "agents" / "main" / "agent" / "auth-profiles.json"
+TACTI_EVENT_LOG = BASE_DIR / "workspace" / "state" / "tacti_cr" / "events.jsonl"
+
+TACTI_ROOT = BASE_DIR / "workspace"
+if str(TACTI_ROOT) not in sys.path:
+    sys.path.insert(0, str(TACTI_ROOT))
+
+try:
+    from tacti_cr.arousal_oscillator import ArousalOscillator
+    from tacti_cr.config import is_enabled as tacti_enabled
+    from tacti_cr.expression import compute_expression
+    from tacti_cr.collapse import emit_recommendation as collapse_emit_recommendation
+    from tacti_cr.valence import routing_bias as tacti_routing_bias
+except Exception:  # pragma: no cover - optional integration
+    ArousalOscillator = None
+    tacti_enabled = None
+    compute_expression = None
+    collapse_emit_recommendation = None
+    tacti_routing_bias = None
 
 DEFAULT_POLICY = {
     "version": 2,
@@ -264,6 +284,10 @@ def log_event(event_type, detail=None, path=EVENT_LOG):
             f.write(json.dumps(entry, ensure_ascii=False) + "\n")
     except Exception:
         pass
+
+
+def _tacti_event(event_type, detail):
+    log_event(event_type, detail=detail, path=TACTI_EVENT_LOG)
 
 
 def read_env_or_secrets(key_name):
@@ -837,6 +861,66 @@ class PolicyRouter:
             return False, "tier_token_budget_exhausted"
         return True, None
 
+    def _tacti_runtime_controls(self, intent, intent_cfg, context_metadata):
+        controls = {
+            "enabled": False,
+            "multiplier": 1.0,
+            "suppress_heavy": False,
+            "expression": {},
+            "prefer_local": False,
+            "tighten_budget": False,
+        }
+        if not callable(tacti_enabled):
+            return controls
+        if not tacti_enabled("master"):
+            return controls
+
+        controls["enabled"] = True
+        now_ts = int(time.time())
+        now_local = time.localtime(now_ts)
+
+        if callable(compute_expression):
+            expression = compute_expression(
+                now=datetime.fromtimestamp(now_ts, tz=timezone.utc),
+                context={
+                    "budget_remaining": 1.0,
+                    "local_available": True,
+                    "hour": int(now_local.tm_hour),
+                    "valence": float((context_metadata or {}).get("valence", 0.0)),
+                    "arousal": 1.0,
+                },
+            )
+            controls["expression"] = expression
+            _tacti_event(
+                "tacti_cr.expression_profile",
+                {"intent": intent, "profile": expression},
+            )
+
+        if callable(tacti_routing_bias):
+            agent_id = str((context_metadata or {}).get("agent_id", "main"))
+            bias = tacti_routing_bias(agent_id, repo_root=BASE_DIR)
+            controls["prefer_local"] = bool(bias.get("prefer_local"))
+            controls["tighten_budget"] = bool(bias.get("tighten_budget"))
+            _tacti_event("tacti_cr.valence_bias", {"intent": intent, "agent_id": agent_id, "bias": bias})
+
+        if tacti_enabled("arousal_osc") and ArousalOscillator is not None:
+            osc = ArousalOscillator(repo_root=BASE_DIR)
+            explain = osc.explain(datetime.fromtimestamp(now_ts, tz=timezone.utc))
+            controls["multiplier"] = float(explain.get("multiplier", 1.0))
+            controls["suppress_heavy"] = bool(osc.should_suppress_heavy_escalation())
+            _tacti_event(
+                "tacti_cr.arousal_multiplier",
+                {"intent": intent, "multiplier": controls["multiplier"], "explain": explain},
+            )
+            if controls["multiplier"] > 0.9 and callable(collapse_emit_recommendation):
+                collapse_emit_recommendation(
+                    "preemptive_load_shed",
+                    detail={"intent": intent, "multiplier": controls["multiplier"], "advisory": True},
+                    repo_root=BASE_DIR,
+                )
+
+        return controls
+
     def _budget_consume(self, intent, tier, est_tokens):
         intent_state = self.budget_state.setdefault("intents", {}).setdefault(intent, {"calls": 0, "tokens": 0})
         tier_state = self.budget_state.setdefault("tiers", {}).setdefault(tier, {"calls": 0, "tokens": 0})
@@ -915,6 +999,7 @@ class PolicyRouter:
         attempts = 0
         last_reason = None
         context_metadata = context_metadata or {}
+        tacti_controls = self._tacti_runtime_controls(intent, intent_cfg, context_metadata)
         payload_text = _extract_text_from_payload(payload)
         order, decision = self._ordered_providers(intent_cfg, context_metadata, payload_text)
         route_explain = self.explain_route(intent, context_metadata=context_metadata, payload=payload)
@@ -964,6 +1049,26 @@ class PolicyRouter:
             model_id = self._provider_model(name, intent_cfg, context_metadata)
             circuit_key = _circuit_key(name, model_id)
 
+            if tacti_controls.get("suppress_heavy"):
+                is_heavy = tier in {"paid", "auth"} or str(name).startswith(("openai_", "claude_", "grok_"))
+                if is_heavy:
+                    last_reason = "tacti_cr_arousal_suppress_heavy"
+                    log_event(
+                        "router_skip",
+                        {"intent": intent, "provider": name, "reason_code": last_reason},
+                        self.event_log,
+                    )
+                    continue
+            if tacti_controls.get("prefer_local"):
+                if str(name).startswith(("openai_", "claude_", "grok_")):
+                    last_reason = "tacti_cr_valence_prefer_local"
+                    log_event(
+                        "router_skip",
+                        {"intent": intent, "provider": name, "reason_code": last_reason},
+                        self.event_log,
+                    )
+                    continue
+
             if self._circuit_open(circuit_key, now):
                 last_reason = "circuit_open"
                 log_event("router_skip", {"intent": intent, "provider": name, "reason_code": "circuit_open"}, self.event_log)
@@ -995,7 +1100,13 @@ class PolicyRouter:
                     self.event_log,
                 )
                 continue
-            allowed, reason = self._budget_allows(intent, tier, est_tokens)
+            effective_tokens = est_tokens
+            if tacti_controls.get("enabled"):
+                multiplier = max(0.0, min(1.0, float(tacti_controls.get("multiplier", 1.0))))
+                effective_tokens = max(1, int(round(est_tokens / max(multiplier, 0.05))))
+                if tacti_controls.get("tighten_budget"):
+                    effective_tokens = max(1, int(round(effective_tokens * 1.25)))
+            allowed, reason = self._budget_allows(intent, tier, effective_tokens)
             if not allowed:
                 last_reason = reason
                 log_event("router_skip", {"intent": intent, "provider": name, "reason_code": reason}, self.event_log)
@@ -1003,7 +1114,7 @@ class PolicyRouter:
 
             attempts += 1
             self.run_counts[intent] += 1
-            self._budget_consume(intent, tier, est_tokens)
+            self._budget_consume(intent, tier, effective_tokens)
 
             # handler dispatch
             handler = self.handlers.get(name)

@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import sys
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -12,6 +13,14 @@ from typing import Any, Dict, Iterable, List, Optional
 
 from .models import KnowledgeUnit
 from .redaction import redact_for_embedding
+
+TACTI_WORKSPACE = Path(__file__).resolve().parents[2]
+if str(TACTI_WORKSPACE) not in sys.path:
+    sys.path.insert(0, str(TACTI_WORKSPACE))
+try:
+    from tacti_cr.semantic_immune import assess_content
+except Exception:  # pragma: no cover
+    assess_content = None
 
 DEFAULT_BASE_DIR = Path(__file__).resolve().parents[1]
 DEFAULT_OLLAMA_EMBED_URL = "http://127.0.0.1:11434/api/embeddings"
@@ -126,6 +135,25 @@ class HiveMindStore:
 
     def put(self, ku: KnowledgeUnit, content: str) -> Dict[str, Any]:
         redacted = redact_for_embedding(content)
+        if callable(assess_content):
+            immune = assess_content(self.base_dir.parents[1], redacted)
+            if immune.get("quarantined"):
+                self._log_ingest(
+                    {
+                        "event": "ingest_quarantine_semantic_immune",
+                        "kind": ku.kind,
+                        "source": ku.source,
+                        "agent_scope": ku.agent_scope,
+                        "content_hash": immune.get("content_hash"),
+                        "score": immune.get("score"),
+                        "threshold": immune.get("threshold"),
+                    }
+                )
+                return {
+                    "stored": False,
+                    "reason": "semantic_quarantine",
+                    "content_hash": immune.get("content_hash"),
+                }
         digest = self.content_hash(redacted)
         known = self._load_hashes()
         if digest in known:

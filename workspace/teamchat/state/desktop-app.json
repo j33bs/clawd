@@ -1,0 +1,15 @@
+{
+  "session_id": "desktop-app",
+  "created_at": "2026-02-19T11:49:38Z",
+  "updated_at": "2026-02-19T11:50:08Z",
+  "live": true,
+  "task": "Create a standalone Ubuntu desktop app wrapper for Source UI.\n\nSource UI is already running as a web service at localhost:18990. Create a simple Ubuntu desktop application that:\n\n1. Uses WebView (PyWebView or python-pywebview) to display the Source UI\n2. Has window controls (minimize, maximize, close)\n3. Runs the Python backend automatically\n4. Shows in system tray\n5. Has app icon and title 'Source'\n\nCreate:\n- workspace/source-ui/app_launcher.py: Python script that starts the web server and opens a webview window\n- Or use Electron for a proper .deb package\n\nThe app should:\n- Start the Source UI backend on launch\n- Display the web interface in a native window\n- Have proper window decorations\n- Handle quit gracefully (stop backend)",
+  "status": "stopped:repeated_failures",
+  "cycle": 2,
+  "queue": [],
+  "accepted_reports": 0,
+  "consecutive_failures": 2,
+  "max_cycles": 3,
+  "max_commands_per_cycle": 4,
+  "max_consecutive_failures": 2
+}

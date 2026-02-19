@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "features": [
+    {
+      "feature_name": "arousal_osc",
+      "activation_conditions": {"budget_remaining_min": 0.05},
+      "suppression_conditions": {},
+      "priority": 10
+    },
+    {
+      "feature_name": "dream_consolidation",
+      "activation_conditions": {"time_of_day": {"start": 0, "end": 6}},
+      "suppression_conditions": {"local_available": false},
+      "priority": 20
+    },
+    {
+      "feature_name": "semantic_immune",
+      "activation_conditions": {},
+      "suppression_conditions": {},
+      "priority": 30
+    },
+    {
+      "feature_name": "prefetch",
+      "activation_conditions": {"valence_min": -0.2},
+      "suppression_conditions": {},
+      "priority": 40
+    },
+    {
+      "feature_name": "mirror",
+      "activation_conditions": {},
+      "suppression_conditions": {},
+      "priority": 50
+    }
+  ]
+}
