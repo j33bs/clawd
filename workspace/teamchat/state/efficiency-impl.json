@@ -1,0 +1,15 @@
+{
+  "session_id": "efficiency-impl",
+  "created_at": "2026-02-19T11:55:22Z",
+  "updated_at": "2026-02-19T11:55:37Z",
+  "live": true,
+  "task": "Implement multi-chat response system with ChatGPT fallback and efficiency optimizations.\n\n1. **Multi-Chat Response System**:\n   - The message_load_balancer.py already exists at workspace/scripts/message_load_balancer.py\n   - Integrate it into the OpenClaw message handling flow\n   - When MiniMax is overloaded (queue depth > 5 or latency > 30s), spawn a ChatGPT subagent via OpenClaw sessions_spawn\n   - Use model: openai-codex/gpt-5.3-codex with openai-codex:default auth\n   - Each message should be replied to directly using replyTo with the message_id from the inbound context\n\n2. **Efficiency Optimizations**:\n   - Add prompt caching: Put static system instructions at the top of prompts so API caches them\n   - Add model tiering: Simple queries \u2192 fast/cheap model, complex \u2192 main model\n   - Add context summarization: Summarize old conversation history instead of sending full context\n   - Implement streaming for responses\n\n3. **Telegram Reply Integration**:\n   - Ensure all replies use replyTo parameter with the incoming message_id\n   - This makes replies appear as threads under the original message\n\nCreate the integration at workspace/scripts/message_handler.py that:\n- Loads the message_load_balancer\n- Checks load on each message\n- Routes to appropriate agent (MiniMax or ChatGPT)\n- Uses replyTo for Telegram replies\n\nThis is for the OpenClaw gateway running at localhost:18789.",
+  "status": "stopped:repeated_failures",
+  "cycle": 2,
+  "queue": [],
+  "accepted_reports": 0,
+  "consecutive_failures": 2,
+  "max_cycles": 5,
+  "max_commands_per_cycle": 4,
+  "max_consecutive_failures": 2
+}

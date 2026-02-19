@@ -25,6 +25,13 @@ npm start
 - System tray integration
 - Auto-starts backend
 - Menu bar with shortcuts
+- Trails heatmap backend endpoint: `GET /api/trails/heatmap`
+
+## Trails heatmap panel
+
+- Backend helper: `workspace/source-ui/api/trails.py`
+- Panel loader stub: `workspace/source-ui/panels/trails_heatmap.js`
+- Enable via `SOURCE_UI_HEATMAP=1` (default OFF under TACTI(C)-R master governance)
 
 ## Building a .deb package
 

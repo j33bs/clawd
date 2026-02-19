@@ -18,6 +18,11 @@ from http.server import HTTPServer, SimpleHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 import socketserver
 
+try:
+    from api.trails import trails_heatmap_payload
+except Exception:  # pragma: no cover
+    trails_heatmap_payload = None
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -261,6 +266,12 @@ class SourceUIHandler(SimpleHTTPRequestHandler):
             data = self.state.health_metrics
         elif path == 'logs':
             data = self.state.logs
+        elif path == 'trails/heatmap':
+            if trails_heatmap_payload is None:
+                data = {'error': 'trails_heatmap_unavailable'}
+            else:
+                repo_root = Path(__file__).resolve().parents[2]
+                data = trails_heatmap_payload(repo_root, top_n=20)
         else:
             data = {'error': 'Not found'}
         

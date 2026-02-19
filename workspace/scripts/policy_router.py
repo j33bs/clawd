@@ -891,6 +891,11 @@ class PolicyRouter:
                 },
             )
             controls["expression"] = expression
+            suppressed = set(expression.get("suppressed_features", []))
+            reasons = expression.get("reasons", {})
+            global_reasons = reasons.get("_global", []) if isinstance(reasons, dict) else []
+            if "arousal_osc" in suppressed or "negative_valence_guard" in global_reasons:
+                controls["suppress_heavy"] = True
             _tacti_event(
                 "tacti_cr.expression_profile",
                 {"intent": intent, "profile": expression},

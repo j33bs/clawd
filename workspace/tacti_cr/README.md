@@ -76,3 +76,39 @@ Run all TACTI(C)-R tests:
 ```bash
 python3 -m unittest discover -s tests_unittest -p 'test_tacti_cr*.py' -v
 ```
+
+## Novel-10 feature flags (default OFF)
+
+- `TACTI_CR_ENABLE=1` (master gate)
+- `TACTI_CR_AROUSAL_OSC=1`
+- `TACTI_CR_DREAM_CONSOLIDATION=1`
+- `TACTI_CR_SEMANTIC_IMMUNE=1`
+- `TACTI_CR_STIGMERGY=1`
+- `TACTI_CR_EXPRESSION_ROUTER=1`
+- `TACTI_CR_PREFETCH=1`
+- `TACTI_CR_MIRROR=1`
+- `TACTI_CR_VALENCE=1`
+- `TACTI_CR_TEMPORAL_WATCHDOG=1`
+- `SOURCE_UI_HEATMAP=1`
+
+All integrations check master + sub-feature flags.
+
+## Runbook
+
+Run full deterministic verification:
+
+```bash
+bash workspace/scripts/verify_tacti_cr_novel_10.sh
+```
+
+Run explicit dream consolidation (no auto-cron install):
+
+```bash
+bash workspace/scripts/dream_consolidation.sh 2026-02-19
+```
+
+Update temporal beacon manually:
+
+```bash
+python3 workspace/scripts/temporal_beacon_update.py
+```

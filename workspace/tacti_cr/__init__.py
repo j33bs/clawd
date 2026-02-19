@@ -16,6 +16,14 @@ from .curiosity import epistemic_value
 from .active_inference_agent import ActiveInferenceAgent
 from .repair import RepairAction, RepairEngine
 from .temporal import TemporalEntry, TemporalMemory
+from .arousal_oscillator import ArousalOscillator
+from .expression import compute_expression
+from .dream_consolidation import run_consolidation
+from .semantic_immune import assess_content, approve_quarantine
+from .mirror import update_from_event, behavioral_fingerprint
+from .valence import current_valence, update_valence, routing_bias
+from .prefetch import PrefetchCache, predict_topics, prefetch_context
+from .temporal_watchdog import update_beacon, detect_temporal_drift, temporal_reset_event
 
 __all__ = [
     "ArousalLevel",
@@ -44,4 +52,20 @@ __all__ = [
     "RepairEngine",
     "TemporalEntry",
     "TemporalMemory",
+    "ArousalOscillator",
+    "compute_expression",
+    "run_consolidation",
+    "assess_content",
+    "approve_quarantine",
+    "update_from_event",
+    "behavioral_fingerprint",
+    "current_valence",
+    "update_valence",
+    "routing_bias",
+    "PrefetchCache",
+    "predict_topics",
+    "prefetch_context",
+    "update_beacon",
+    "detect_temporal_drift",
+    "temporal_reset_event",
 ]
