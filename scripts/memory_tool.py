@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import sys
 from pathlib import Path
 
@@ -16,6 +15,11 @@ from hivemind.models import KnowledgeUnit
 from hivemind.redaction import redact_for_embedding
 from hivemind.store import HiveMindStore
 from hivemind.dynamics_pipeline import TactiDynamicsPipeline
+from hivemind.integrations.main_flow_hook import (
+    dynamics_flags_enabled,
+    resolve_agent_ids,
+    stable_seed,
+)
 from hivemind.intelligence.contradictions import detect_contradictions
 from hivemind.intelligence.pruning import prune_expired_and_stale
 from hivemind.intelligence.suggestions import generate_suggestions
@@ -25,34 +29,33 @@ DYNAMICS_STATE_PATH = REPO_ROOT / "workspace" / "hivemind" / "data" / "tacti_dyn
 
 
 def _any_dynamics_enabled() -> bool:
-    for key in (
-        "ENABLE_MURMURATION",
-        "ENABLE_RESERVOIR",
-        "ENABLE_PHYSARUM_ROUTER",
-        "ENABLE_TRAIL_MEMORY",
-    ):
-        value = str(os.environ.get(key, "0")).strip().lower()
-        if value in {"1", "true", "yes", "on"}:
-            return True
-    return False
+    return dynamics_flags_enabled()
 
 
 def _load_dynamics_pipeline(agent: str, rows: list[dict]) -> TactiDynamicsPipeline:
-    candidates = {"main", "claude-code", "codex", str(agent)}
+    candidates = {str(agent)}
     for row in rows:
         scope = str(row.get("agent_scope", "")).strip()
         if scope and scope != "shared":
             candidates.add(scope)
+    resolved = resolve_agent_ids(
+        context={"intent": "memory_query", "source_agent": str(agent)},
+        candidates=sorted(candidates),
+    )
+    if str(agent) not in resolved:
+        resolved.append(str(agent))
+    resolved = sorted(dict.fromkeys(str(x) for x in resolved if str(x).strip()))
+    seed = stable_seed(resolved, session_id=f"memory:{agent}")
+
     if DYNAMICS_STATE_PATH.exists():
         try:
             payload = json.loads(DYNAMICS_STATE_PATH.read_text(encoding="utf-8"))
             pipeline = TactiDynamicsPipeline.load(payload)
-            if str(agent) not in pipeline.agent_ids:
-                pipeline.agent_ids = sorted(set(pipeline.agent_ids).union(candidates))
-            return pipeline
+            if sorted(dict.fromkeys(str(x) for x in pipeline.agent_ids)) == resolved:
+                return pipeline
         except Exception:
             pass
-    return TactiDynamicsPipeline(agent_ids=sorted(candidates), seed=13)
+    return TactiDynamicsPipeline(agent_ids=resolved, seed=seed)
 
 
 def _save_dynamics_pipeline(pipeline: TactiDynamicsPipeline) -> None:

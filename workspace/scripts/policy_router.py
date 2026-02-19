@@ -42,8 +42,18 @@ if HIVEMIND_ROOT.exists() and str(HIVEMIND_ROOT) not in sys.path:
 
 try:
     from hivemind.active_inference import PreferenceModel
+    from hivemind.flags import is_enabled as hivemind_flag_enabled
+    from hivemind.integrations.main_flow_hook import (
+        dynamics_flags_enabled as tacti_dynamics_enabled,
+        tacti_enhance_plan,
+        tacti_record_outcome,
+    )
 except Exception:  # pragma: no cover - optional dependency hook
     PreferenceModel = None
+    hivemind_flag_enabled = None
+    tacti_dynamics_enabled = None
+    tacti_enhance_plan = None
+    tacti_record_outcome = None
 
 
 class PolicyValidationError(Exception):
@@ -221,12 +231,9 @@ def _policy_strict_mode():
 
 
 def _active_inference_enabled():
-    return os.environ.get("ENABLE_ACTIVE_INFERENCE", "0").strip().lower() in {
-        "1",
-        "true",
-        "yes",
-        "on",
-    }
+    if hivemind_flag_enabled is not None:
+        return bool(hivemind_flag_enabled("ENABLE_ACTIVE_INFERENCE"))
+    return os.environ.get("ENABLE_ACTIVE_INFERENCE", "0").strip().lower() in {"1", "true", "yes", "on"}
 
 
 def _resolve_policy_schema_path(policy_path):
@@ -838,6 +845,15 @@ class PolicyRouter:
         attempts = 0
         last_reason = None
         context_metadata = dict(context_metadata or {})
+        route_source_agent = str(context_metadata.get("agent_id", "router")).strip() or "router"
+        route_context = {
+            "intent": intent,
+            "source_agent": route_source_agent,
+            "session_id": str(context_metadata.get("session_id", "")).strip(),
+            "input_text": _extract_text_from_payload(payload),
+        }
+        tacti_annotations = None
+
         ai_prediction = self._predict_preferences(context_metadata)
         if ai_prediction is not None:
             context_metadata["active_inference"] = ai_prediction
@@ -850,9 +866,73 @@ class PolicyRouter:
                 self.event_log,
             )
 
+        if tacti_enhance_plan is not None and tacti_dynamics_enabled is not None and tacti_dynamics_enabled():
+            original_order = list(order)
+            try:
+                order, tacti_annotations = tacti_enhance_plan(route_context, order, policy=self.policy)
+                if isinstance(tacti_annotations, dict) and tacti_annotations.get("enabled"):
+                    log_event(
+                        "tacti_routing_plan",
+                        {
+                            "intent": intent,
+                            "source_agent": route_source_agent,
+                            "before_order": original_order,
+                            "after_order": order,
+                            "applied": bool(tacti_annotations.get("applied")),
+                            "agent_ids": tacti_annotations.get("agent_ids", []),
+                        },
+                        self.event_log,
+                    )
+            except Exception as exc:
+                order = original_order
+                tacti_annotations = {"enabled": False, "reason": "tacti_hook_error"}
+                log_event(
+                    "tacti_routing_plan_error",
+                    {
+                        "intent": intent,
+                        "error": type(exc).__name__,
+                    },
+                    self.event_log,
+                )
+
         max_per_run = int(self.policy.get("budgets", {}).get("intents", {}).get(intent, {}).get("maxCallsPerRun", 0))
         self.run_counts.setdefault(intent, 0)
         now = int(time.time())
+
+        def _record_tacti(success, provider, reward, latency, tokens):
+            if tacti_record_outcome is None or tacti_dynamics_enabled is None or not tacti_dynamics_enabled():
+                return
+            try:
+                outcome = tacti_record_outcome(
+                    context=route_context,
+                    path=[route_source_agent, str(provider)],
+                    success=bool(success),
+                    latency=float(latency),
+                    tokens=float(tokens),
+                    reward=float(reward),
+                    policy=self.policy,
+                )
+                if isinstance(outcome, dict) and outcome.get("enabled"):
+                    log_event(
+                        "tacti_routing_outcome",
+                        {
+                            "intent": intent,
+                            "provider": str(provider),
+                            "success": bool(success),
+                            "reward": float(reward),
+                        },
+                        self.event_log,
+                    )
+            except Exception as exc:
+                log_event(
+                    "tacti_routing_outcome_error",
+                    {
+                        "intent": intent,
+                        "provider": str(provider),
+                        "error": type(exc).__name__,
+                    },
+                    self.event_log,
+                )
 
         for name in order:
             if max_per_run and self.run_counts[intent] >= max_per_run:
@@ -942,6 +1022,7 @@ class PolicyRouter:
                 cfg = self.policy.get("defaults", {}).get("circuitBreaker", {})
                 if reason_code in cfg.get("failOn", []):
                     self._record_failure(circuit_key, reason_code)
+                _record_tacti(False, name, -0.25, 0.0, est_tokens)
                 self._update_preferences(
                     context_metadata,
                     {
@@ -1006,6 +1087,7 @@ class PolicyRouter:
                         },
                         self.event_log,
                     )
+                    _record_tacti(False, name, -0.15, 0.0, est_tokens)
                     continue
 
             self._record_success(circuit_key)
@@ -1015,6 +1097,8 @@ class PolicyRouter:
             format_score = 0.8 if ("\n" in text_out or "- " in text_out) else 0.45
             tool_score = 0.8 if bool(context_metadata.get("requires_tools")) else 0.55
             correction_score = 0.9 if result.get("ok") else 0.3
+            route_reward = max(0.05, min(1.0, 0.5 + (0.5 * verbosity_ratio)))
+            _record_tacti(True, name, route_reward, 0.0, in_tokens + out_tokens)
             ai_update = self._update_preferences(
                 context_metadata,
                 {
@@ -1053,6 +1137,7 @@ class PolicyRouter:
                 "parsed": parsed,
                 "attempts": attempts,
                 "reason_code": "success",
+                "tacti": tacti_annotations,
             }
 
         log_event(
@@ -1068,6 +1153,7 @@ class PolicyRouter:
             "ok": False,
             "reason_code": last_reason or "no_provider_available",
             "attempts": attempts,
+            "tacti": tacti_annotations,
         }
 
 

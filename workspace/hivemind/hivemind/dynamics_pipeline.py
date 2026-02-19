@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-import os
 from typing import Any, Dict, List
 
+from .flags import is_enabled
 from .peer_graph import PeerGraph
 from .physarum_router import PhysarumRouter
 from .reservoir import Reservoir
@@ -10,7 +10,7 @@ from .trails import TrailStore
 
 
 def _env_enabled(name: str) -> bool:
-    return os.environ.get(name, "0").strip() in {"1", "true", "TRUE", "yes", "on"}
+    return is_enabled(name)
 
 
 def _norm(values: Dict[str, float]) -> Dict[str, float]:
@@ -205,4 +205,3 @@ class TactiDynamicsPipeline:
         if isinstance(payload.get("trail_store"), dict):
             pipeline.trails = TrailStore.load(payload["trail_store"])
         return pipeline
-
