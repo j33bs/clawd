@@ -6,3 +6,16 @@
 # Keep this file empty (or with only comments) to skip heartbeat API calls.
 
 # Add tasks below when you want the agent to check something periodically.
+
+- [HB-PR-01] MEMORY size guard
+  - Check `wc -l /Users/heathyeager/clawd/MEMORY.md`; warn if `> 180`.
+
+- [HB-PR-02] Nightly log health
+  - Check `reports/nightly/$(date +%Y-%m-%d).log` exists and scan for `⚠️`.
+
+- [HB-PR-03] QMD MCP daemon health
+  - Check daemon responsiveness on port `8181` (for example `curl -fsS http://127.0.0.1:8181/`).
+
+- [HB-PR-04] KB sync freshness reminder
+  - Compare latest workspace markdown mtime vs `workspace/knowledge_base/data/last_sync.txt`.
+  - If workspace files are newer, remind to run `python3 workspace/knowledge_base/kb.py sync`.
