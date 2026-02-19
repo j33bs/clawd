@@ -15,5 +15,11 @@
     "system2:experiment": "node scripts/system2_experiment.js",
     "system2:experiment:auth": "npm run system2:experiment -- --fail-on log_signature_counts.auth_error",
     "secrets": "node scripts/openclaw_secrets_cli.js"
+  },
+  "jest": {
+    "testPathIgnorePatterns": [
+      "/node_modules/",
+      "/\\.claude/worktrees/"
+    ]
   }
 }
