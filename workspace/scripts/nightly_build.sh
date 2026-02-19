@@ -139,6 +139,15 @@ run_kb_sync() {
     fi
 }
 
+run_kb_decisions() {
+    log "=== Knowledge Base Decision Index ==="
+    if python3 "$CLAWD_DIR/workspace/scripts/extract_decisions.py" >>"$LOG_FILE" 2>&1; then
+        log "KB decision index complete"
+    else
+        log "⚠️ KB decision index failed"
+    fi
+}
+
 # Main
 case "${1:-all}" in
     research)
@@ -156,6 +165,7 @@ case "${1:-all}" in
         run_health
         run_memory
         run_kb_sync
+        run_kb_decisions
         log "=== Nightly Build Complete ==="
         ;;
     *)
