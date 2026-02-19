@@ -1,0 +1,15 @@
+{
+  "session_id": "skill-graph-impl",
+  "created_at": "2026-02-19T10:55:13Z",
+  "updated_at": "2026-02-19T10:55:43Z",
+  "live": true,
+  "task": "Implement a skill graph system for OpenClaw.\n\nThe skill graph should:\n1. Use many small markdown files instead of one big SKILL.md\n2. Each file has YAML frontmatter with: name, description, tags, links (to other skill files via wikilinks)\n3. An index file that maps skills and their connections\n4. Support progressive disclosure: scan descriptions first, then follow wikilinks for deeper context\n5. Include MOCs (Maps of Content) to organize clusters of related skills\n\nThe system should be in workspace/skill-graph/ with:\n- index.md (entry point listing all skills)\n- skills/ folder with individual skill files\n- mocs/ folder for maps of content\n- A reader script that can load a skill and its transitive dependencies\n\nThis is inspired by the Zettelkasten method - atomic notes linked together.",
+  "status": "stopped:repeated_failures",
+  "cycle": 2,
+  "queue": [],
+  "accepted_reports": 0,
+  "consecutive_failures": 2,
+  "max_cycles": 5,
+  "max_commands_per_cycle": 4,
+  "max_consecutive_failures": 2
+}
