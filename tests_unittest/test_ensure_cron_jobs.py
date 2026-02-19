@@ -109,10 +109,12 @@ class TestEnsureCronJobs(unittest.TestCase):
         templates = ensure_cron_jobs.load_templates(
             REPO_ROOT / "workspace" / "automation" / "cron_jobs.json"
         )
-        self.assertEqual(len(templates), 2)
         names = {item["name"] for item in templates}
-        self.assertIn("Daily Morning Briefing", names)
-        self.assertIn("HiveMind Ingest", names)
+        required = {"Daily Morning Briefing", "HiveMind Ingest", "Session Pattern Analysis"}
+        self.assertTrue(required.issubset(names))
+        by_name = {item["name"]: item for item in templates}
+        self.assertEqual(by_name["Session Pattern Analysis"]["schedule"]["expr"], "0 9 * * 5")
+        self.assertEqual(by_name["Session Pattern Analysis"]["schedule"]["tz"], "Australia/Brisbane")
         self.assertTrue(ensure_cron_jobs.template_requires_heartbeat(templates))
 
     def test_ensure_jobs_create_then_unchanged_then_update(self):
@@ -126,7 +128,7 @@ class TestEnsureCronJobs(unittest.TestCase):
             runner=runner,
             openclaw_bin="openclaw",
         )
-        self.assertEqual([a["operation"] for a in created["actions"]], ["create", "create"])
+        self.assertEqual([a["operation"] for a in created["actions"]], ["create"] * len(templates))
 
         unchanged = ensure_cron_jobs.ensure_jobs(
             templates,
@@ -134,18 +136,23 @@ class TestEnsureCronJobs(unittest.TestCase):
             runner=runner,
             openclaw_bin="openclaw",
         )
-        self.assertEqual([a["operation"] for a in unchanged["actions"]], ["unchanged", "unchanged"])
+        self.assertEqual([a["operation"] for a in unchanged["actions"]], ["unchanged"] * len(templates))
 
         mutated_templates = [dict(item) for item in templates]
-        mutated_templates[1]["command"] = "Run HiveMind ingest pipelines (updated)"
+        for item in mutated_templates:
+            if item["name"] == "HiveMind Ingest":
+                item["command"] = "Run HiveMind ingest pipelines (updated)"
+                break
         updated = ensure_cron_jobs.ensure_jobs(
             mutated_templates,
             apply=True,
             runner=runner,
             openclaw_bin="openclaw",
         )
-        self.assertEqual(updated["actions"][0]["operation"], "unchanged")
-        self.assertEqual(updated["actions"][1]["operation"], "update")
+        action_map = {item["name"]: item["operation"] for item in updated["actions"]}
+        self.assertEqual(action_map["Daily Morning Briefing"], "unchanged")
+        self.assertEqual(action_map["HiveMind Ingest"], "update")
+        self.assertEqual(action_map["Session Pattern Analysis"], "unchanged")
 
 
 class TestRunJobNowEnsure(unittest.TestCase):
