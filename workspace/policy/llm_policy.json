@@ -55,35 +55,17 @@
     }
   },
   "providers": {
-    "local_vllm_assistant": {
+    "google-gemini-cli": {
       "enabled": true,
       "paid": false,
       "tier": "free",
-      "provider_id": "local_vllm",
       "type": "openai_compatible",
-      "baseUrl": "http://127.0.0.1:8001/v1",
-      "model": "local-assistant",
+      "baseUrl": "https://generativelanguage.googleapis.com/v1beta/openai",
+      "apiKeyEnv": "GEMINI_API_KEY",
       "models": [
         {
-          "id": "local-assistant",
-          "maxInputChars": 4000,
-          "tier": "large"
-        }
-      ]
-    },
-    "local_vllm_coder": {
-      "enabled": true,
-      "paid": false,
-      "tier": "free",
-      "provider_id": "local_vllm",
-      "type": "openai_compatible",
-      "baseUrl": "http://127.0.0.1:8002/v1",
-      "model": "local-coder",
-      "models": [
-        {
-          "id": "local-coder",
-          "maxInputChars": 4000,
-          "tier": "large"
+          "id": "gemini-3-pro-preview",
+          "maxInputChars": 4000
         }
       ]
     },
@@ -120,7 +102,7 @@
         }
       ]
     },
-    "qwen": {
+    "qwen-portal": {
       "enabled": true,
       "paid": false,
       "tier": "free",
@@ -134,15 +116,34 @@
         }
       ]
     },
-    "openai_auth": {
-      "enabled": true,
+    "openai_auth_brain": {
+      "enabled": false,
       "paid": false,
       "tier": "auth",
       "type": "openai_auth",
-      "readyEnv": "OPENAI_AUTH_READY"
+      "readyEnv": "OPENAI_AUTH_READY",
+      "models": [
+        {
+          "id": "gpt-5.2-chat",
+          "maxInputChars": 6000
+        }
+      ]
+    },
+    "openai_auth_muscle": {
+      "enabled": false,
+      "paid": false,
+      "tier": "auth",
+      "type": "openai_auth",
+      "readyEnv": "OPENAI_AUTH_READY",
+      "models": [
+        {
+          "id": "gpt-5.3-codex",
+          "maxInputChars": 6000
+        }
+      ]
     },
     "claude_auth": {
-      "enabled": true,
+      "enabled": false,
       "paid": false,
       "tier": "auth",
       "type": "anthropic_auth",
@@ -163,7 +164,7 @@
       ]
     },
     "openai_api": {
-      "enabled": true,
+      "enabled": false,
       "paid": true,
       "tier": "paid",
       "type": "openai_compatible",
@@ -193,20 +194,10 @@
   },
   "routing": {
     "free_order": [
-      "local_vllm_assistant",
-      "ollama",
+      "google-gemini-cli",
+      "qwen-portal",
       "groq",
-      "qwen"
-    ],
-    "rules": [
-      {
-        "name": "coding_prefers_local_vllm_coder",
-        "when": {
-          "intent": "coding",
-          "task_type": "coding"
-        },
-        "provider": "local_vllm_coder"
-      }
+      "ollama"
     ],
     "intents": {
       "itc_classify": {
@@ -219,10 +210,9 @@
       },
       "coding": {
         "order": [
-          "local_vllm_coder",
-          "local_vllm_assistant",
           "free",
-          "openai_auth",
+          "openai_auth_brain",
+          "openai_auth_muscle",
           "claude_auth",
           "grok_api",
           "openai_api",
@@ -232,19 +222,33 @@
       },
       "governance": {
         "order": [
-          "claude_auth",
-          "claude_api"
+          "google-gemini-cli",
+          "qwen-portal",
+          "groq",
+          "ollama"
         ],
-        "allowPaid": true,
+        "allowPaid": false,
         "maxTokensPerRequest": 768
       },
       "security": {
         "order": [
-          "claude_auth",
-          "claude_api"
+          "google-gemini-cli",
+          "qwen-portal",
+          "groq",
+          "ollama"
         ],
-        "allowPaid": true,
+        "allowPaid": false,
         "maxTokensPerRequest": 768
+      },
+      "system2_audit": {
+        "order": [
+          "google-gemini-cli",
+          "qwen-portal",
+          "groq",
+          "ollama"
+        ],
+        "allowPaid": false,
+        "maxTokensPerRequest": 1024
       }
     }
   }
