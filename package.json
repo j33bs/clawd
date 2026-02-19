@@ -4,6 +4,7 @@
   "version": "0.0.0",
   "scripts": {
     "test": "node scripts/run_tests.js",
+    "governance:heartbeat": "sh workspace/scripts/sync_heartbeat.sh",
     "gate:module-resolution": "node scripts/module_resolution_gate.js --json",
     "redact:audit-evidence": "node scripts/redact_audit_evidence.js",
     "check:redaction-fixtures": "node scripts/redact_audit_evidence.js --in fixtures/redaction/in --out .tmp/redaction_out --json --dry-run",

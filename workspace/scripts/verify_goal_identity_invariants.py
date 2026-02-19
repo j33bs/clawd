@@ -48,6 +48,24 @@ def git(repo: Path, args):
     )
 
 
+def run_heartbeat_sync_guard(repo: Path) -> None:
+    guard = repo / "workspace" / "scripts" / "sync_heartbeat.sh"
+    if not guard.exists():
+        return
+    p = subprocess.run(
+        ["sh", str(guard)],
+        cwd=str(repo),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if p.returncode != 0:
+        out = (p.stdout or "").strip()
+        err = (p.stderr or "").strip()
+        details = "\n".join(part for part in (out, err) if part)
+        die(f"heartbeat sync guard failed: {guard}\n{details}")
+
+
 def read_json(path: Path):
     try:
         return json.loads(path.read_text(encoding="utf-8"))
@@ -138,6 +156,9 @@ def main() -> int:
             die(f"missing required governance doc: {p}")
     for p in (contract, anchor):
         assert_required_strings(p, ("C_Lawd", "TACTI(C)-R", "System Regulation"))
+
+    # Keep repo-root HEARTBEAT mirror in sync before byte-identity checks.
+    run_heartbeat_sync_guard(repo)
 
     # Repo-root bootstrap must not exist on disk (tracked or untracked).
     for name in REPO_ROOT_GOV_FILES_FORBIDDEN:
