@@ -1,0 +1,15 @@
+{
+  "session_id": "dashboard-impl",
+  "created_at": "2026-02-19T11:01:21Z",
+  "updated_at": "2026-02-19T11:01:36Z",
+  "live": true,
+  "task": "Design and implement a perfect interactive system management UI for OpenClaw.\n\nThis should be a web-based dashboard (HTML/CSS/JS) that provides effective agent-human integration. Include:\n\n1. **Task Management**\n   - View pending/running/completed tasks\n   - Drag-and-drop reordering\n   - Priority adjustment\n   - Task details panel\n   - Ability to create new tasks\n\n2. **Interactive Schedule**\n   - Calendar view of scheduled jobs\n   - Cron expression visualization\n   - Drag to reschedule\n   - Quick add scheduled tasks\n\n3. **Agent Status Dashboard**\n   - Active agents and their current tasks\n   - Resource usage indicators (CPU, memory)\n   - Agent health/status indicators\n   - Ability to pause/resume/kill agents\n\n4. **Useful Indicators**\n   - System health (VLLM, gateway, memory)\n   - Recent activity feed\n   - Notifications/alerts\n   - Session history\n\n5. **Integration Features**\n   - Real-time updates (WebSocket or polling)\n   - Quick actions toolbar\n   - Command palette (Cmd+K)\n   - Dark/light theme toggle\n\nThe UI should be modern, responsive, and feel like a professional dev tool. Place it in workspace/dashboard/ with a single HTML file that loads everything inline or from CDN.",
+  "status": "stopped:repeated_failures",
+  "cycle": 2,
+  "queue": [],
+  "accepted_reports": 0,
+  "consecutive_failures": 2,
+  "max_cycles": 5,
+  "max_commands_per_cycle": 4,
+  "max_consecutive_failures": 2
+}
