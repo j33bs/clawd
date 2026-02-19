@@ -7,9 +7,20 @@
 let currentView = 'dashboard';
 let refreshInterval = null;
 let statusRefreshInterval = null;
+const panelRefreshTimestamps = {};
 
 // Local selector helpers
 const $ = (selector, context = document) => context.querySelector(selector);
+
+const TACTI_PANEL_ENDPOINTS = {
+    dream: '/api/tacti/dream',
+    stigmergy: '/api/hivemind/stigmergy',
+    immune: '/api/tacti/immune',
+    arousal: '/api/tacti/arousal',
+    trails: '/api/hivemind/trails',
+    'peer-graph': '/api/hivemind/peer-graph',
+    skills: '/api/skills'
+};
 
 // Initialize application
 function initApp() {
@@ -29,6 +40,7 @@ function initApp() {
     initSettings();
     initKeyboardShortcuts();
     initTactiStatus();
+    initTactiDashboard();
     
     // Start data refresh
     startDataRefresh();
@@ -217,6 +229,194 @@ async function refreshTactiStatus(showToast) {
         setStatusTile('#status-memory', 'bad', 'ERROR', 'status endpoint unavailable');
         if (showToast) {
             Toast.error(`Status refresh failed: ${error.message}`);
+        }
+    }
+}
+
+function initTactiDashboard() {
+    document.querySelectorAll('.panel-refresh-btn').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+            const panel = btn.dataset.panelRefresh;
+            if (!panel) return;
+            await refreshTactiPanel(panel, true);
+        });
+    });
+
+    Object.keys(TACTI_PANEL_ENDPOINTS).forEach((panelKey) => {
+        refreshTactiPanel(panelKey, false);
+    });
+}
+
+function panelMetric(label, value) {
+    return `
+        <div class="panel-metric">
+            <span class="panel-metric-label">${label}</span>
+            <span class="panel-metric-value">${value}</span>
+        </div>
+    `;
+}
+
+function renderPanelDetails(panel, details) {
+    const container = $(`#panel-${panel}-details`);
+    if (!container) return;
+    if (!details || details.length === 0) {
+        container.innerHTML = '<div class="panel-detail-empty">No recent details available</div>';
+        return;
+    }
+    container.innerHTML = details.map((item) => `<div class="panel-detail-item">${item}</div>`).join('');
+}
+
+function renderPanelMetrics(panel, metrics) {
+    const container = $(`#panel-${panel}-metrics`);
+    if (!container) return;
+    container.innerHTML = metrics.map((metric) => panelMetric(metric.label, metric.value)).join('');
+}
+
+function renderPanelError(panel, message) {
+    const errEl = $(`#panel-${panel}-error`);
+    if (!errEl) return;
+    if (!message) {
+        errEl.classList.add('hidden');
+        errEl.textContent = '';
+        return;
+    }
+    errEl.textContent = message;
+    errEl.classList.remove('hidden');
+}
+
+function updatePanelTimestamp(panel, timestamp) {
+    panelRefreshTimestamps[panel] = timestamp || new Date().toISOString();
+    const updatedEl = $(`#panel-${panel}-updated`);
+    if (updatedEl) {
+        updatedEl.textContent = `Last updated: ${Utils.formatTime(panelRefreshTimestamps[panel])}`;
+    }
+}
+
+function shapePanelData(panel, payload) {
+    switch (panel) {
+        case 'dream': {
+            return {
+                metrics: [
+                    { label: 'Status', value: payload.status || 'unknown' },
+                    { label: 'Store Items', value: payload.store_items ?? 0 },
+                    { label: 'Reports', value: payload.report_count ?? 0 }
+                ],
+                details: [
+                    payload.last_outcome_summary ? `Summary: ${payload.last_outcome_summary}` : 'Summary: unavailable',
+                    payload.last_run ? `Last Run: ${Utils.formatTime(payload.last_run)}` : 'Last Run: never',
+                    payload.latest_report ? `Report: ${payload.latest_report}` : 'Report: unavailable'
+                ]
+            };
+        }
+        case 'stigmergy': {
+            const summary = payload.intensity_summary || {};
+            const marks = Array.isArray(payload.marks) ? payload.marks : [];
+            return {
+                metrics: [
+                    { label: 'Active Marks', value: payload.active_marks_count ?? 0 },
+                    { label: 'Intensity Avg', value: summary.avg ?? 0 },
+                    { label: 'Intensity Max', value: summary.max ?? 0 }
+                ],
+                details: marks.slice(0, 5).map((mark) => `${mark.topic} · ${mark.effective_intensity}`)
+            };
+        }
+        case 'immune': {
+            const blocks = Array.isArray(payload.recent_blocks) ? payload.recent_blocks : [];
+            return {
+                metrics: [
+                    { label: 'Quarantine', value: payload.quarantine_count ?? 0 },
+                    { label: 'Approvals', value: payload.approval_count ?? 0 },
+                    { label: 'Accepted', value: payload.accepted_count ?? 0 }
+                ],
+                details: blocks.slice(0, 5).map((block) => `${block.reason} · ${block.content_hash}`)
+            };
+        }
+        case 'arousal': {
+            const histogram = Array.isArray(payload.hourly_histogram) ? payload.hourly_histogram : [];
+            const top = histogram
+                .sort((a, b) => (b.value || 0) - (a.value || 0))
+                .slice(0, 4)
+                .map((bucket) => `h${bucket.hour}: ${bucket.value}`);
+            return {
+                metrics: [
+                    { label: 'Energy', value: payload.current_energy ?? 0 },
+                    { label: 'Baseline', value: payload.baseline ?? 0 },
+                    { label: 'Bins Used', value: payload.bins_used ?? 0 }
+                ],
+                details: top
+            };
+        }
+        case 'trails': {
+            const summary = payload.memory_heatmap_summary || {};
+            const strength = summary.strength_summary || {};
+            const recent = Array.isArray(payload.recent_trails) ? payload.recent_trails : [];
+            return {
+                metrics: [
+                    { label: 'Trail Count', value: summary.trail_count ?? 0 },
+                    { label: 'Strength Avg', value: strength.avg ?? 0 },
+                    { label: 'Top Tags', value: (summary.top_tags || []).length || 0 }
+                ],
+                details: recent.slice(0, 5).map((item) => item.text)
+            };
+        }
+        case 'peer-graph': {
+            const sample = Array.isArray(payload.adjacency_sample) ? payload.adjacency_sample : [];
+            return {
+                metrics: [
+                    { label: 'Nodes', value: payload.nodes_count ?? 0 },
+                    { label: 'Edges', value: payload.edges_count ?? 0 },
+                    { label: 'Source', value: payload.source ? 'artifact' : 'n/a' }
+                ],
+                details: sample.slice(0, 5).map((edge) => `${edge.src} -> ${edge.dst} (${edge.weight})`)
+            };
+        }
+        case 'skills': {
+            const skills = Array.isArray(payload.skills) ? payload.skills : [];
+            const links = Array.isArray(payload.links) ? payload.links : [];
+            return {
+                metrics: [
+                    { label: 'Skills', value: payload.count ?? skills.length },
+                    { label: 'MOCs', value: (payload.mocs || []).length || 0 },
+                    { label: 'Links', value: links.length }
+                ],
+                details: [
+                    ...links.slice(0, 3).map((link) => `${link.name}: ${link.path}`),
+                    ...skills.slice(0, 3).map((skill) => `Skill: ${skill.name}`)
+                ]
+            };
+        }
+        default:
+            return {
+                metrics: [{ label: 'Status', value: 'unavailable' }],
+                details: ['No data shape available']
+            };
+    }
+}
+
+async function refreshTactiPanel(panel, showToast) {
+    const endpoint = TACTI_PANEL_ENDPOINTS[panel];
+    if (!endpoint) return;
+    try {
+        const payload = await fetchContract(endpoint);
+        if (!payload || payload.ok !== true) {
+            const reason = payload?.error?.message || payload?.error?.code || 'endpoint unavailable';
+            throw new Error(reason);
+        }
+        const shaped = shapePanelData(panel, payload.data || {});
+        renderPanelMetrics(panel, shaped.metrics);
+        renderPanelDetails(panel, shaped.details);
+        renderPanelError(panel, null);
+        updatePanelTimestamp(panel, payload.ts);
+        if (showToast) {
+            Toast.success(`${panel} refreshed`);
+        }
+    } catch (error) {
+        renderPanelMetrics(panel, [{ label: 'Status', value: 'Unavailable' }]);
+        renderPanelDetails(panel, ['Module data unavailable']);
+        renderPanelError(panel, `Unavailable: ${error.message}`);
+        updatePanelTimestamp(panel, new Date().toISOString());
+        if (showToast) {
+            Toast.error(`${panel} refresh failed`);
         }
     }
 }

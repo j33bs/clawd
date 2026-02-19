@@ -709,6 +709,115 @@ input, select, textarea {
 }
 
 /* ===== Dashboard Grid ===== */
+.tacti-dashboard-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-md);
+    margin-bottom: var(--space-lg);
+}
+
+.tacti-panel {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-lg);
+    padding: var(--space-md);
+}
+
+.category-border-arousal {
+    border-top: 2px solid rgba(210, 74, 74, 0.65);
+}
+
+.category-border-temporality {
+    border-top: 2px solid rgba(63, 121, 217, 0.65);
+}
+
+.category-border-cross-timescale {
+    border-top: 2px solid rgba(143, 90, 217, 0.65);
+}
+
+.category-border-malleability {
+    border-top: 2px solid rgba(62, 167, 110, 0.65);
+}
+
+.category-border-agency {
+    border-top: 2px solid rgba(210, 166, 58, 0.65);
+}
+
+.tacti-panel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--space-sm);
+}
+
+.tacti-panel-header h3 {
+    font-size: var(--text-base);
+    font-weight: 600;
+}
+
+.tacti-panel-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+}
+
+.panel-metrics {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-sm);
+    margin-bottom: var(--space-sm);
+}
+
+.panel-metric {
+    padding: 8px;
+    border-radius: var(--radius-sm);
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid var(--border-subtle);
+}
+
+.panel-metric-label {
+    display: block;
+    color: var(--text-tertiary);
+    font-size: var(--text-xs);
+}
+
+.panel-metric-value {
+    display: block;
+    font-size: var(--text-sm);
+    font-weight: 600;
+}
+
+.panel-details {
+    min-height: 52px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: var(--text-sm);
+    color: var(--text-secondary);
+}
+
+.panel-detail-item {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.panel-detail-empty {
+    color: var(--text-tertiary);
+}
+
+.panel-error {
+    margin-top: var(--space-xs);
+    font-size: var(--text-sm);
+    color: var(--danger);
+}
+
+.panel-updated {
+    margin-top: var(--space-sm);
+    font-size: var(--text-xs);
+    color: var(--text-tertiary);
+}
+
 .dashboard-grid {
     display: grid;
     grid-template-columns: 1fr 400px;
@@ -1989,6 +2098,10 @@ input, select, textarea {
     }
     
     .dashboard-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .tacti-dashboard-grid {
         grid-template-columns: 1fr;
     }
     
