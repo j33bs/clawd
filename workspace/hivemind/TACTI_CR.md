@@ -80,10 +80,22 @@ When `ENABLE_ACTIVE_INFERENCE=1`, `PolicyRouter.execute_with_escalation`:
 4. Persists model state at `workspace/hivemind/data/active_inference_state.json`.
 
 ## Agent ID Resolution
+In this integration, 'agent IDs' refer to decision-units in the routing candidate set (often provider IDs); no assumption is made that these are cognitive agents.
+
 `resolve_agent_ids()` in `workspace/hivemind/hivemind/integrations/main_flow_hook.py` resolves in this order:
 1. Runtime orchestration catalog used by current flow (candidate order + policy routing/providers).
 2. Canonical repo manifests (`agents/*/agent/models.json`, `workspace/policy/llm_policy.json` providers).
 3. Empty list (TACTI disabled fail-open for that call) if no deterministic source is available.
+
+## Observability
+- Currently emitted TACTI fields (from `tacti_routing_plan`) are: `before_order`, `after_order`, `applied`, `agent_ids`.
+- Recommended fields (not yet guaranteed):
+  - `tacti.enabled`
+  - `tacti.ids_count`
+  - `tacti.plan_delta`
+  - `tacti.fail_open_reason`
+  - `tacti.seed`
+  - `tacti.flags`
 
 ## Enablement on C_Lawd
 Shell session:
@@ -108,6 +120,10 @@ EOF
 
 Failure mode:
 - If agent ID resolution returns empty/insufficient IDs, the hook returns original order and routing proceeds unchanged.
+
+## Rollback Scope
+- Operational rollback (immediate): unset TACTI flags.
+- Code rollback: revert `0e7b2b3`, `019c64b`, and `fabb591` (and earlier task commits only if full removal is required).
 
 ## Deterministic Verification
 - Script: `workspace/scripts/verify_tacti_system.sh`
