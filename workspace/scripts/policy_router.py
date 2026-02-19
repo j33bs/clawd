@@ -36,10 +36,14 @@ CIRCUIT_FILE = BASE_DIR / "itc" / "llm_circuit.json"
 EVENT_LOG = BASE_DIR / "itc" / "llm_router_events.jsonl"
 QWEN_AUTH_FILE = BASE_DIR / "agents" / "main" / "agent" / "auth-profiles.json"
 TACTI_EVENT_LOG = BASE_DIR / "workspace" / "state" / "tacti_cr" / "events.jsonl"
+ACTIVE_INFERENCE_STATE_PATH = BASE_DIR / "workspace" / "hivemind" / "data" / "active_inference_state.json"
 
 TACTI_ROOT = BASE_DIR / "workspace"
 if str(TACTI_ROOT) not in sys.path:
     sys.path.insert(0, str(TACTI_ROOT))
+HIVEMIND_ROOT = BASE_DIR / "workspace" / "hivemind"
+if str(HIVEMIND_ROOT) not in sys.path:
+    sys.path.insert(0, str(HIVEMIND_ROOT))
 
 try:
     from tacti_cr.arousal_oscillator import ArousalOscillator
@@ -53,6 +57,165 @@ except Exception:  # pragma: no cover - optional integration
     compute_expression = None
     collapse_emit_recommendation = None
     tacti_routing_bias = None
+
+try:
+    from hivemind.active_inference import PreferenceModel
+except Exception:  # pragma: no cover - optional integration
+    PreferenceModel = None
+
+try:
+    from hivemind.integrations.main_flow_hook import (
+        dynamics_flags_enabled as _hivemind_dynamics_flags_enabled,
+    )
+    from hivemind.integrations.main_flow_hook import (
+        tacti_enhance_plan as _hivemind_tacti_enhance_plan,
+    )
+except Exception:  # pragma: no cover - optional integration
+    _hivemind_dynamics_flags_enabled = None
+    _hivemind_tacti_enhance_plan = None
+
+
+class PolicyValidationError(Exception):
+    """Raised when policy schema validation fails in strict mode."""
+
+
+def _env_truthy(value):
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _policy_strict_enabled():
+    return not str(os.environ.get("OPENCLAW_POLICY_STRICT", "1")).strip().lower() in {
+        "0",
+        "false",
+        "no",
+        "off",
+    }
+
+
+def _validate_policy_or_raise(policy):
+    errors = []
+    allowed_budget_keys = {"dailyTokenBudget", "dailyCallBudget", "maxCallsPerRun"}
+    allowed_provider_keys = {
+        "enabled",
+        "paid",
+        "tier",
+        "type",
+        "baseUrl",
+        "apiKeyEnv",
+        "models",
+        "auth",
+        "readyEnv",
+        "provider_id",
+        "model",
+        "capabilities",
+    }
+
+    intents = ((policy or {}).get("budgets") or {}).get("intents") or {}
+    if isinstance(intents, dict):
+        for intent_name, cfg in intents.items():
+            if not isinstance(cfg, dict):
+                continue
+            for key in cfg.keys():
+                if key not in allowed_budget_keys:
+                    errors.append(f"budgets.intents.{intent_name}.{key}")
+
+    providers = (policy or {}).get("providers") or {}
+    if isinstance(providers, dict):
+        for provider_name, cfg in providers.items():
+            if not isinstance(cfg, dict):
+                continue
+            for key in cfg.keys():
+                if key not in allowed_provider_keys:
+                    errors.append(f"providers.{provider_name}.{key}")
+
+    if not errors:
+        return
+
+    message = "policy validation failed for keys: " + ", ".join(errors[:12])
+    if _policy_strict_enabled():
+        raise PolicyValidationError(message)
+    log_event("policy_validation_warn", {"errors": errors[:12], "count": len(errors)})
+
+
+def _active_inference_enabled():
+    return _env_truthy(os.environ.get("ENABLE_ACTIVE_INFERENCE", "0"))
+
+
+def _maybe_active_inference_metadata(context_metadata):
+    if not _active_inference_enabled() or PreferenceModel is None:
+        return None
+    try:
+        state_path = Path(ACTIVE_INFERENCE_STATE_PATH)
+        model = PreferenceModel.load_path(state_path)
+        params, confidence = model.predict(context_metadata or {})
+        model.update((context_metadata or {}).get("feedback"), {})
+        model.save_path(state_path)
+        return {
+            "preference_params": params,
+            "confidence": confidence,
+            "state_path": str(state_path),
+        }
+    except Exception as exc:
+        log_event("active_inference_error", {"reason_code": f"{type(exc).__name__}"})
+        return None
+
+
+def _dynamics_flags_enabled():
+    if callable(_hivemind_dynamics_flags_enabled):
+        try:
+            return bool(_hivemind_dynamics_flags_enabled(os.environ))
+        except Exception:
+            pass
+    return any(
+        _env_truthy(os.environ.get(name))
+        for name in ("ENABLE_MURMURATION", "ENABLE_RESERVOIR", "ENABLE_PHYSARUM_ROUTER", "ENABLE_TRAIL_MEMORY")
+    )
+
+
+def tacti_enhance_plan(context, candidates, policy=None):
+    ordered_candidates = []
+    seen = set()
+    for item in candidates or []:
+        name = str(item).strip()
+        if not name or name in seen:
+            continue
+        seen.add(name)
+        ordered_candidates.append(name)
+
+    if not _dynamics_flags_enabled():
+        return ordered_candidates, {
+            "ok": True,
+            "enabled": False,
+            "reason": "flags_off",
+            "agent_ids": ordered_candidates,
+        }
+
+    if callable(_hivemind_tacti_enhance_plan):
+        try:
+            reordered, annotations = _hivemind_tacti_enhance_plan(
+                context,
+                ordered_candidates,
+                policy=policy,
+            )
+            notes = dict(annotations or {})
+            notes["ok"] = True
+            notes.setdefault("agent_ids", ordered_candidates)
+            return list(reordered or ordered_candidates), notes
+        except Exception as exc:
+            return ordered_candidates, {
+                "ok": False,
+                "enabled": False,
+                "reason": "tacti_hook_error",
+                "error": type(exc).__name__,
+                "agent_ids": ordered_candidates,
+            }
+
+    return ordered_candidates, {
+        "ok": True,
+        "enabled": False,
+        "reason": "tacti_hook_unavailable",
+        "agent_ids": ordered_candidates,
+    }
 
 DEFAULT_POLICY = {
     "version": 2,
@@ -229,6 +392,7 @@ def load_policy(path=POLICY_FILE):
             policy = _deep_merge(DEFAULT_POLICY, raw)
         except Exception:
             log_event("policy_load_fail", {"path": str(path)})
+    _validate_policy_or_raise(policy)
     return policy
 
 
@@ -1003,10 +1167,30 @@ class PolicyRouter:
         intent_cfg = self._intent_cfg(intent)
         attempts = 0
         last_reason = None
-        context_metadata = context_metadata or {}
+        context_metadata = dict(context_metadata or {})
+        active_inference = _maybe_active_inference_metadata(context_metadata)
+        if active_inference:
+            context_metadata["active_inference"] = active_inference
         tacti_controls = self._tacti_runtime_controls(intent, intent_cfg, context_metadata)
         payload_text = _extract_text_from_payload(payload)
         order, decision = self._ordered_providers(intent_cfg, context_metadata, payload_text)
+        tacti_plan = None
+        if _dynamics_flags_enabled():
+            tacti_context = dict(context_metadata)
+            tacti_context.setdefault("intent", intent)
+            tacti_context.setdefault("source_agent", str(context_metadata.get("agent_id", "router") or "router"))
+            order, tacti_plan = tacti_enhance_plan(tacti_context, order, policy=self.policy)
+            log_event(
+                "tacti_routing_plan",
+                {
+                    "intent": intent,
+                    "enabled": bool((tacti_plan or {}).get("enabled")),
+                    "reason": (tacti_plan or {}).get("reason"),
+                    "agent_ids": (tacti_plan or {}).get("agent_ids", []),
+                    "consult_order": (tacti_plan or {}).get("consult_order", []),
+                },
+                self.event_log,
+            )
         route_explain = self.explain_route(intent, context_metadata=context_metadata, payload=payload)
         if decision:
             log_event(
@@ -1230,6 +1414,7 @@ class PolicyRouter:
                 "parsed": parsed,
                 "attempts": attempts,
                 "reason_code": "success",
+                "tacti": tacti_plan,
             }
 
         log_event(
@@ -1245,4 +1430,5 @@ class PolicyRouter:
             "ok": False,
             "reason_code": last_reason or "no_provider_available",
             "attempts": attempts,
+            "tacti": tacti_plan,
         }
