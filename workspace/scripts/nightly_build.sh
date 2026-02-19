@@ -8,6 +8,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CLAWD_DIR="$HOME/clawd"
 RESEARCH_TOPICS_FILE="$CLAWD_DIR/workspace/research/TOPICS.md"
 RESEARCH_OUT_DIR="$CLAWD_DIR/reports/research"
+OPENCLAW_BIN="${OPENCLAW_BIN:-$(command -v openclaw 2>/dev/null || echo "$HOME/.npm-global/bin/openclaw")}"
 
 # Activate virtual environment if it exists
 if [ -f "$CLAWD_DIR/.venv/bin/activate" ]; then
@@ -59,7 +60,7 @@ run_health() {
     log "=== System Health ==="
     
     # Check Gateway
-    if ~/.npm-global/bin/openclaw status 2>&1 | grep -q "running"; then
+    if "$OPENCLAW_BIN" status 2>&1 | grep -q "running"; then
         log "✅ Gateway: OK"
     else
         log "⚠️ Gateway: Issues detected"
@@ -73,7 +74,7 @@ run_health() {
     fi
     
     # Check Cron jobs
-    cron_status=$(~/.npm-global/bin/openclaw cron status 2>&1)
+    cron_status=$("$OPENCLAW_BIN" cron status 2>&1)
     if echo "$cron_status" | grep -q "running"; then
         log "✅ Cron: OK"
     else
@@ -101,16 +102,14 @@ run_memory() {
     log "Found $total_files memory files"
     
     # Archive files older than 30 days
-    archived=0
-    find "$memory_dir" -name "2*.md" -mtime +30 | while read -r file; do
-        # Check if already archived
-        if [[ ! "$file" =~ \-archive\- ]]; then
+    archived=$(find "$memory_dir" -name "2*.md" -mtime +30 ! -name "*-archive-*" | wc -l | tr -d ' ')
+    if [ "$archived" -gt 0 ]; then
+        while IFS= read -r -d '' file; do
             archive_dir="$memory_dir/archive/$(date +%Y)"
             mkdir -p "$archive_dir"
             mv "$file" "$archive_dir/"
-            archived=$((archived + 1))
-        fi
-    done
+        done < <(find "$memory_dir" -name "2*.md" -mtime +30 ! -name "*-archive-*" -print0)
+    fi
     
     if [ $archived -gt 0 ]; then
         log "Archived $archived old memory files"
