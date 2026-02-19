@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "default_node_id": "dali",
+  "nodes": {
+    "dali": {
+      "aliases": [
+        "dali",
+        "system1",
+        "system-1"
+      ],
+      "workspace_root": "nodes/dali",
+      "memory_root": "nodes/dali"
+    },
+    "c_lawd": {
+      "aliases": [
+        "c_lawd",
+        "c-lawd",
+        "system2",
+        "system-2"
+      ],
+      "workspace_root": "nodes/c_lawd",
+      "memory_root": "nodes/c_lawd"
+    }
+  }
+}

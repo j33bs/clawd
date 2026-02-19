@@ -9,6 +9,22 @@ function truncate(text, maxLen) {
     return `${text.slice(0, maxLen)}...`;
 }
 
+function redactSensitive(text) {
+    if (!text) return '';
+    return String(text)
+        .replace(/\b(sk|pk)_[A-Za-z0-9_-]{8,}\b/g, '[REDACTED_TOKEN]')
+        .replace(/\b[A-Za-z0-9_-]{24,}\b/g, '[REDACTED_TOKEN]')
+        .replace(/((?:token|key|secret|password)\s*[=:]\s*)[^\s,;]+/ig, '$1[REDACTED]');
+}
+
+function commandDiagnostic(id, result) {
+    return {
+        id,
+        exit_code: result.exitCode,
+        stderr_signature: truncate(redactSensitive(result.stderr), 200)
+    };
+}
+
 function logStructuredWarning(reasonCode, detail) {
     const payload = {
         timestamp: new Date().toISOString(),
@@ -46,38 +62,52 @@ async function execCommand(command, timeoutMs) {
 }
 
 async function runOpenclawStatus() {
+    const attempts = [];
     const deepResult = await execCommand('openclaw status --deep', OPENCLAW_STATUS_TIMEOUT_MS);
+    attempts.push(commandDiagnostic('status_deep', deepResult));
     if (!deepResult.error) {
-        return { ok: true, source: deepResult.command, stdout: deepResult.stdout };
+        return {
+            ok: true,
+            source: deepResult.command,
+            stdout: deepResult.stdout,
+            diagnostics: { command_attempts: attempts }
+        };
     }
-
-    logStructuredWarning('openclaw_status_unavailable', {
-        command: deepResult.command,
-        elapsed_ms: deepResult.elapsed_ms,
-        exit_code: deepResult.exitCode,
-        signal: deepResult.signal,
-        timed_out: deepResult.timedOut,
-        stderr: truncate(deepResult.stderr, 300),
-        stdout: truncate(deepResult.stdout, 300)
-    });
 
     const shallowResult = await execCommand('openclaw status', OPENCLAW_STATUS_TIMEOUT_MS);
+    attempts.push(commandDiagnostic('status_fallback', shallowResult));
     if (!shallowResult.error) {
-        return { ok: true, source: shallowResult.command, stdout: shallowResult.stdout };
+        return {
+            ok: true,
+            source: shallowResult.command,
+            stdout: shallowResult.stdout,
+            diagnostics: { command_attempts: attempts }
+        };
     }
 
-    logStructuredWarning('openclaw_status_unavailable', {
-        command: shallowResult.command,
-        elapsed_ms: shallowResult.elapsed_ms,
-        exit_code: shallowResult.exitCode,
-        signal: shallowResult.signal,
-        timed_out: shallowResult.timedOut,
-        stderr: truncate(shallowResult.stderr, 300),
-        stdout: truncate(shallowResult.stdout, 300),
-        note: 'Fallback after openclaw status --deep failed'
-    });
+    const gatewayStatusResult = await execCommand('openclaw gateway status --json', OPENCLAW_STATUS_TIMEOUT_MS);
+    attempts.push(commandDiagnostic('gateway_status', gatewayStatusResult));
 
-    return { ok: false, reason_code: 'openclaw_status_unavailable' };
+    const versionResult = await execCommand('openclaw version', OPENCLAW_STATUS_TIMEOUT_MS);
+    attempts.push(commandDiagnostic('openclaw_version', versionResult));
+
+    const diagnostics = {
+        command_attempts: attempts,
+        gateway_status: {
+            exit_code: gatewayStatusResult.exitCode,
+            stdout: truncate(redactSensitive(gatewayStatusResult.stdout), 500),
+            stderr_signature: truncate(redactSensitive(gatewayStatusResult.stderr), 200)
+        },
+        openclaw_version: {
+            exit_code: versionResult.exitCode,
+            stdout: truncate(redactSensitive(versionResult.stdout), 300),
+            stderr_signature: truncate(redactSensitive(versionResult.stderr), 200)
+        }
+    };
+
+    logStructuredWarning('openclaw_status_unavailable', diagnostics);
+
+    return { ok: false, reason_code: 'openclaw_status_unavailable', diagnostics };
 }
 
 // Telegram messaging system health check
@@ -89,7 +119,11 @@ async function checkTelegramMessaging() {
         const statusResult = await runOpenclawStatus();
         if (!statusResult.ok) {
             console.log('OpenClaw status unavailable; continuing with limited checks.');
-            return { status: 'warning', reason_code: statusResult.reason_code };
+            return {
+                status: 'warning',
+                reason_code: statusResult.reason_code,
+                status_unavailable: statusResult.diagnostics
+            };
         }
 
         console.log('Status check completed');
@@ -167,7 +201,8 @@ async function runCheck() {
             timestamp: new Date().toISOString(),
             status: result.status,
             reason_code: result.reason_code,
-            details: result.details || result.error
+            details: result.details || result.error,
+            status_unavailable: result.status_unavailable
         };
         
         const logFile = './telegram_health_log.json';

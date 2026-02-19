@@ -157,6 +157,27 @@ else
     check_fail "Required documentation missing"
 fi
 
+# Canonical node naming roots (compatibility aliases remain supported)
+NODE_DOCS_OK=1
+if [ ! -f "workspace/policy/system_map.json" ]; then
+    echo "    Missing: workspace/policy/system_map.json"
+    NODE_DOCS_OK=0
+fi
+if [ ! -f "nodes/dali/IDENTITY.md" ]; then
+    echo "    Missing: nodes/dali/IDENTITY.md"
+    NODE_DOCS_OK=0
+fi
+if [ ! -f "nodes/c_lawd/IDENTITY.md" ]; then
+    echo "    Missing: nodes/c_lawd/IDENTITY.md"
+    NODE_DOCS_OK=0
+fi
+
+if [ $NODE_DOCS_OK -eq 1 ]; then
+    check_pass
+else
+    check_fail "Canonical node identity roots missing"
+fi
+
 # ============================================
 # 7. OPTIONAL PROVIDER ENV GATING
 # ============================================
@@ -215,6 +236,39 @@ PY
     fi
 else
     check_fail "openclaw.json not found for provider gating check"
+fi
+
+echo "    Checking system_map aliases..."
+python3 - <<'PY'
+import json
+import sys
+
+with open("workspace/policy/system_map.json", "r", encoding="utf-8") as handle:
+    data = json.load(handle)
+
+nodes = data.get("nodes", {})
+dali = nodes.get("dali", {})
+c_lawd = nodes.get("c_lawd", {})
+
+required = [
+    ("dali", "system1"),
+    ("dali", "system-1"),
+    ("c_lawd", "system2"),
+    ("c_lawd", "system-2"),
+]
+
+for node_id, alias in required:
+    aliases = [str(x).lower() for x in nodes.get(node_id, {}).get("aliases", [])]
+    if alias not in aliases:
+        print(f"missing_alias:{node_id}:{alias}")
+        sys.exit(2)
+
+print("ok")
+PY
+if [ $? -eq 0 ]; then
+    check_pass
+else
+    check_fail "system_map alias coverage incomplete"
 fi
 
 # ============================================

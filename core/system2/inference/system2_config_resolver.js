@@ -13,52 +13,69 @@
  */
 
 const LOG_KEYS = ['base_url', 'api_key', 'model'];
+const { normalizeNodeId } = require('../../node_identity');
+
+function hasAnySystem2Env(env) {
+  return Boolean(
+    env.SYSTEM2_VLLM_BASE_URL
+    || env.SYSTEM2_VLLM_API_KEY
+    || env.SYSTEM2_VLLM_MODEL
+    || env.SYSTEM2_VLLM_TIMEOUT_MS
+    || env.SYSTEM2_VLLM_MAX_RETRIES
+    || env.SYSTEM2_VLLM_CB_OPEN_SECONDS
+    || env.SYSTEM2_VLLM_MAX_CONCURRENCY
+  );
+}
 
 function resolveSystem2VllmConfig(options = {}) {
   const env = options.env || process.env;
   const emit = options.emitEvent || (() => {});
+  const normalizedNodeId = normalizeNodeId(
+    options.nodeId || options.node_id || env.OPENCLAW_NODE_ID
+  );
+  const useSystem2Env = options.system2 === true || normalizedNodeId === 'c_lawd' || hasAnySystem2Env(env);
 
-  // Precedence: explicit > system2 env > system1 env > defaults
+  // Precedence: explicit > c_lawd/system2 env > dali/system1 env > defaults
   const config = {
     base_url: options.baseUrl
-      || env.SYSTEM2_VLLM_BASE_URL
+      || (useSystem2Env ? env.SYSTEM2_VLLM_BASE_URL : null)
       || env.OPENCLAW_VLLM_BASE_URL
       || 'http://127.0.0.1:8000/v1',
 
     api_key: options.apiKey
-      || env.SYSTEM2_VLLM_API_KEY
+      || (useSystem2Env ? env.SYSTEM2_VLLM_API_KEY : null)
       || env.OPENCLAW_VLLM_API_KEY
       || null,
 
     model: options.model
-      || env.SYSTEM2_VLLM_MODEL
+      || (useSystem2Env ? env.SYSTEM2_VLLM_MODEL : null)
       || env.OPENCLAW_VLLM_MODEL
       || null,
 
     timeout_ms: Number(
       options.timeoutMs
-      || env.SYSTEM2_VLLM_TIMEOUT_MS
+      || (useSystem2Env ? env.SYSTEM2_VLLM_TIMEOUT_MS : null)
       || env.OPENCLAW_VLLM_TIMEOUT_MS
       || 30000
     ),
 
     max_retries: Number(
       options.maxRetries
-      || env.SYSTEM2_VLLM_MAX_RETRIES
+      || (useSystem2Env ? env.SYSTEM2_VLLM_MAX_RETRIES : null)
       || env.OPENCLAW_VLLM_MAX_RETRIES
       || 2
     ),
 
     cb_open_seconds: Number(
       options.cbOpenSeconds
-      || env.SYSTEM2_VLLM_CB_OPEN_SECONDS
+      || (useSystem2Env ? env.SYSTEM2_VLLM_CB_OPEN_SECONDS : null)
       || env.OPENCLAW_VLLM_CB_OPEN_SECONDS
       || 60
     ),
 
     max_concurrent_requests: Number(
       options.maxConcurrentRequests
-      || env.SYSTEM2_VLLM_MAX_CONCURRENCY
+      || (useSystem2Env ? env.SYSTEM2_VLLM_MAX_CONCURRENCY : null)
       || env.OPENCLAW_VLLM_MAX_CONCURRENCY
       || 2
     )
@@ -71,8 +88,9 @@ function resolveSystem2VllmConfig(options = {}) {
   }
   emit('system2_vllm_config_resolved', {
     keys: keys_resolved,
-    base_url_source: env.SYSTEM2_VLLM_BASE_URL ? 'system2' : env.OPENCLAW_VLLM_BASE_URL ? 'system1' : 'default',
-    api_key_source: env.SYSTEM2_VLLM_API_KEY ? 'system2' : env.OPENCLAW_VLLM_API_KEY ? 'system1' : 'missing'
+    node_id: normalizedNodeId,
+    base_url_source: (useSystem2Env && env.SYSTEM2_VLLM_BASE_URL) ? 'system2' : env.OPENCLAW_VLLM_BASE_URL ? 'system1' : 'default',
+    api_key_source: (useSystem2Env && env.SYSTEM2_VLLM_API_KEY) ? 'system2' : env.OPENCLAW_VLLM_API_KEY ? 'system1' : 'missing'
   });
 
   // Fail-closed: required keys

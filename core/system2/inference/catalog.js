@@ -20,14 +20,12 @@ const CATALOG = Object.freeze([
     provider_id: 'local_vllm',
     kind: 'local',
     protocol: 'openai_compatible',
-    enabled_default: true,
+    enabled_default: false,
     base_url: {
-      default: 'http://127.0.0.1:11434/v1',
+      default: 'http://127.0.0.1:8001/v1',
       env_override: 'OPENCLAW_VLLM_BASE_URL'
     },
     auth: {
-      // Ollama's OpenAI-compatible endpoint typically requires no auth, but keep this
-      // bearer_optional so operators can still secure local endpoints if desired.
       type: 'bearer_optional',
       env_var: 'OPENCLAW_VLLM_API_KEY',
       redact_in_logs: true
@@ -38,7 +36,7 @@ const CATALOG = Object.freeze([
         task_classes: ['fast_chat', 'long_context', 'code', 'batch', 'tool_use'],
         context_window_hint: null,
         tool_support: 'via_adapter',
-        notes: 'Local OpenAI-compatible endpoint (Ollama on this Mac). Model resolved via OPENCLAW_VLLM_MODEL or /v1/models.'
+        notes: 'Replaced with concrete IDs after first successful /v1/models probe.'
       }
     ],
     constraints: {
@@ -57,66 +55,11 @@ const CATALOG = Object.freeze([
     healthcheck: {
       type: 'openai_compatible',
       endpoints: { models: '/models', chat: '/chat/completions' },
-      timeouts_ms: { connect: 800, read: 6000, chat: 120000 },
+      timeouts_ms: { connect: 800, read: 6000 },
       probe_prompt: 'Respond with a single word: OK',
       probe_max_tokens: 8
     },
     routing_tags: { prefers: ['local', 'cheap', 'low_latency'], avoids: [] },
-    evidence: [
-      {
-        type: 'doc',
-        title: 'vLLM OpenAI-compatible server',
-        url: 'https://docs.vllm.ai/en/latest/serving/openai_compatible_server/',
-        retrieved_utc: null
-      }
-    ]
-  },
-
-  // ── OPERATOR-RENTED VLLM (paid fallback, explicit enable) ──
-  {
-    provider_id: 'remote_vllm',
-    kind: 'external',
-    protocol: 'openai_compatible',
-    enabled_default: false,
-    base_url: {
-      default: '',
-      env_override: 'OPENCLAW_REMOTE_VLLM_BASE_URL'
-    },
-    auth: {
-      type: 'bearer_optional',
-      env_var: 'OPENCLAW_REMOTE_VLLM_API_KEY',
-      redact_in_logs: true
-    },
-    models: [
-      {
-        model_id: 'AUTO_DISCOVER',
-        task_classes: ['fast_chat', 'long_context', 'code', 'batch', 'tool_use'],
-        context_window_hint: null,
-        tool_support: 'via_adapter',
-        notes: 'Operator-rented endpoint. Replaced with concrete IDs after first successful /v1/models probe.'
-      }
-    ],
-    constraints: {
-      quota: {
-        mode: 'operator_budgeted',
-        max_concurrent_requests: { default: 2, env_override: 'OPENCLAW_REMOTE_VLLM_MAX_CONCURRENCY' },
-        max_tokens_per_request: { default: 8192, env_override: 'OPENCLAW_REMOTE_VLLM_MAX_TOKENS_PER_REQUEST' }
-      },
-      backoff: { strategy: 'bounded_exponential', max_retries: 1, cooldown_seconds: 10 },
-      circuit_breaker: {
-        consecutive_failures_to_open: 2,
-        open_seconds: 180,
-        half_open_probe_interval_seconds: 60
-      }
-    },
-    healthcheck: {
-      type: 'openai_compatible',
-      endpoints: { models: '/models', chat: '/chat/completions' },
-      timeouts_ms: { connect: 1000, read: 8000, chat: 120000 },
-      probe_prompt: 'Respond with a single word: OK',
-      probe_max_tokens: 8
-    },
-    routing_tags: { prefers: ['paid_fallback', 'cheap'], avoids: [] },
     evidence: [
       {
         type: 'doc',
@@ -197,7 +140,7 @@ const CATALOG = Object.freeze([
     provider_id: 'groq',
     kind: 'external',
     protocol: 'openai_compatible',
-    enabled_default: true,
+    enabled_default: false,
     base_url: {
       default: 'https://api.groq.com/openai/v1',
       env_override: 'OPENCLAW_GROQ_BASE_URL'
@@ -205,7 +148,6 @@ const CATALOG = Object.freeze([
     auth: {
       type: 'bearer',
       env_var: 'OPENCLAW_GROQ_API_KEY',
-      alias_env_vars: ['GROQ_API_KEY'],
       redact_in_logs: true
     },
     models: [
@@ -247,7 +189,7 @@ const CATALOG = Object.freeze([
       probe_prompt: 'Reply with: OK',
       probe_max_tokens: 8
     },
-    routing_tags: { prefers: ['free_tier', 'low_latency', 'burst_capacity'], avoids: [] },
+    routing_tags: { prefers: ['low_latency', 'burst_capacity'], avoids: [] },
     evidence: [
       {
         type: 'doc',
@@ -328,61 +270,6 @@ const CATALOG = Object.freeze([
     ]
   },
 
-  // ── PAID FALLBACK PROVIDERS ──
-  {
-    provider_id: 'openai',
-    kind: 'external',
-    protocol: 'openai_compatible',
-    enabled_default: false,
-    policy_disabled: true,
-    base_url: {
-      default: 'https://api.openai.com/v1',
-      env_override: 'OPENCLAW_OPENAI_BASE_URL'
-    },
-    auth: {
-      type: 'bearer',
-      env_var: 'OPENCLAW_OPENAI_API_KEY',
-      alias_env_vars: ['OPENAI_API_KEY'],
-      redact_in_logs: true
-    },
-    models: [],
-    constraints: {
-      quota: {
-        rpm_default: 5,
-        rpd_default: 50,
-        tpm_default: 60000,
-        tpd_default: 300000,
-        reset_policy: 'provider_defined',
-        operator_override_required: true
-      },
-      billing_safety: {
-        notes: 'Paid provider. Enable provider-side billing protections and enforce operator budgets.'
-      },
-      backoff: { strategy: 'bounded_exponential', max_retries: 1, cooldown_seconds: 10 },
-      circuit_breaker: {
-        consecutive_failures_to_open: 2,
-        open_seconds: 180,
-        half_open_probe_interval_seconds: 60
-      }
-    },
-    healthcheck: {
-      type: 'openai_compatible',
-      endpoints: { models: '/models', chat: '/chat/completions' },
-      timeouts_ms: { connect: 900, read: 9000 },
-      probe_prompt: 'Reply with: OK',
-      probe_max_tokens: 8
-    },
-    routing_tags: { prefers: ['paid_fallback'], avoids: [] },
-    evidence: [
-      {
-        type: 'doc',
-        title: 'OpenAI API',
-        url: 'https://platform.openai.com/docs',
-        retrieved_utc: null
-      }
-    ]
-  },
-
   {
     provider_id: 'openrouter',
     kind: 'external',
@@ -442,6 +329,70 @@ const CATALOG = Object.freeze([
         type: 'doc',
         title: 'OpenRouter limits',
         url: 'https://openrouter.ai/docs/api/reference/limits',
+        retrieved_utc: null
+      }
+    ]
+  },
+
+  {
+    provider_id: 'minimax-portal',
+    kind: 'external',
+    protocol: 'anthropic_messages',
+    enabled_default: false,
+    base_url: {
+      default: 'https://api.minimax.io/anthropic',
+      env_override: 'OPENCLAW_MINIMAX_PORTAL_BASE_URL'
+    },
+    auth: {
+      type: 'api_key',
+      env_var: 'OPENCLAW_MINIMAX_PORTAL_API_KEY',
+      redact_in_logs: true
+    },
+    models: [
+      {
+        model_id: 'MiniMax-M2.5',
+        task_classes: ['fast_chat', 'long_context', 'code', 'tool_use'],
+        context_window_hint: 131072,
+        tool_support: 'via_adapter',
+        notes: 'Portal Anthropic-messages endpoint; verify account model access.'
+      },
+      {
+        model_id: 'MiniMax-M2.1',
+        task_classes: ['fast_chat', 'code', 'batch'],
+        context_window_hint: 131072,
+        tool_support: 'via_adapter',
+        notes: 'Portal Anthropic-messages endpoint; verify account model access.'
+      }
+    ],
+    constraints: {
+      quota: {
+        rpm_default: 10,
+        tpm_default: 100000,
+        rpd_default: 100,
+        tpd_default: 500000,
+        reset_policy: 'provider_defined',
+        operator_override_required: true
+      },
+      backoff: { strategy: 'bounded_exponential', max_retries: 2, cooldown_seconds: 20 },
+      circuit_breaker: {
+        consecutive_failures_to_open: 3,
+        open_seconds: 120,
+        half_open_probe_interval_seconds: 60
+      }
+    },
+    healthcheck: {
+      type: 'anthropic_messages',
+      endpoints: { models: '/v1/models', messages: '/v1/messages' },
+      timeouts_ms: { connect: 1200, read: 9000 },
+      probe_prompt: 'Reply with: OK',
+      probe_max_tokens: 8
+    },
+    routing_tags: { prefers: ['free_tier', 'high_capability'], avoids: [] },
+    evidence: [
+      {
+        type: 'runtime_config',
+        title: 'OpenClaw local provider config (minimax-portal anthropic-messages)',
+        url: 'file://~/.openclaw/openclaw.json',
         retrieved_utc: null
       }
     ]

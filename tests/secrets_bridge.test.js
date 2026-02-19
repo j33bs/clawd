@@ -25,6 +25,7 @@ test('provider mapping exposes required env vars', function () {
   assert.equal(PROVIDER_ENV_MAP.groq.envVar, 'OPENCLAW_GROQ_API_KEY');
   assert.equal(PROVIDER_ENV_MAP.gemini.envVar, 'OPENCLAW_GEMINI_API_KEY');
   assert.equal(PROVIDER_ENV_MAP.openrouter.envVar, 'OPENCLAW_OPENROUTER_API_KEY');
+  assert.equal(PROVIDER_ENV_MAP['minimax-portal'].envVar, 'OPENCLAW_MINIMAX_PORTAL_API_KEY');
   assert.equal(PROVIDER_ENV_MAP.qwen.envVar, 'OPENCLAW_QWEN_API_KEY');
   assert.equal(PROVIDER_ENV_MAP.vllm.envVar, 'OPENCLAW_VLLM_API_KEY');
 });

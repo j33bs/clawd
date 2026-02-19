@@ -38,6 +38,11 @@ const PROVIDER_ENV_MAP = Object.freeze({
     baseUrlEnvVar: 'OPENCLAW_OPENROUTER_BASE_URL',
     catalogProviderId: 'openrouter'
   }),
+  'minimax-portal': Object.freeze({
+    envVar: 'OPENCLAW_MINIMAX_PORTAL_API_KEY',
+    baseUrlEnvVar: 'OPENCLAW_MINIMAX_PORTAL_BASE_URL',
+    catalogProviderId: 'minimax-portal'
+  }),
   qwen: Object.freeze({
     envVar: 'OPENCLAW_QWEN_API_KEY',
     baseUrlEnvVar: 'OPENCLAW_QWEN_BASE_URL',
@@ -64,6 +69,9 @@ function normalizeProviderId(providerId) {
   const key = String(providerId || '').trim().toLowerCase();
   if (key === 'qwen_alibaba') {
     return 'qwen';
+  }
+  if (key === 'minimax_portal') {
+    return 'minimax-portal';
   }
   return key;
 }

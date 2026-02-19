@@ -4,39 +4,52 @@ set -e
 python3 - <<'PY'
 import json
 import sys
+from pathlib import Path
 
 failures = []
 
 def load(path):
-    with open(path, 'r', encoding='utf-8') as f:
+    p = Path(path)
+    if not p.exists():
+        return None
+    with open(p, 'r', encoding='utf-8') as f:
         return json.load(f)
 
 def check_groq(path, provider):
     if not provider:
         return
-    # Groq is allowed for the System-2 free ladder, but must never contain key material.
-    # Accept either a missing apiKey field or a reference to the env var name.
-    api_key = provider.get('apiKey')
-    if api_key not in (None, '', 'GROQ_API_KEY'):
-        failures.append(f\"{path}: groq.apiKey must be empty or 'GROQ_API_KEY' (no secrets)\")
+    if provider.get('enabled') not in (False, 'false', 'False'):
+        failures.append(f"{path}: groq.enabled must be false")
+    if provider.get('apiKey'):
+        failures.append(f"{path}: groq.apiKey must be empty (no secrets)")
 
-# openclaw.json (optional; may not exist in this repo)
-try:
-    root = load('openclaw.json')
+# workspace/policy/system_map.json
+system_map = load('workspace/policy/system_map.json') or {}
+nodes = system_map.get('nodes', {})
+if 'dali' not in nodes or 'c_lawd' not in nodes:
+    failures.append('workspace/policy/system_map.json: expected nodes dali and c_lawd')
+
+# openclaw.json (optional in repo)
+root = load('openclaw.json') or {}
+if root:
     providers = root.get('models', {}).get('providers', {})
     check_groq('openclaw.json', providers.get('groq'))
-except FileNotFoundError:
-    pass
+
+    node_id = root.get('node', {}).get('id')
+    if not node_id:
+        failures.append('openclaw.json: node.id must be set (or rely on default dali outside tracked config)')
+else:
+    print('WARN: openclaw.json not found in repo; skipping repo-local node.id enforcement')
 
 # agents/main/agent/models.json
-main = load('agents/main/agent/models.json')
+main = load('agents/main/agent/models.json') or {}
 check_groq('agents/main/agent/models.json', main.get('providers', {}).get('groq'))
 
 # claude-code ollama baseUrl
-claude = load('agents/claude-code/agent/models.json')
+claude = load('agents/claude-code/agent/models.json') or {}
 ollama = claude.get('providers', {}).get('ollama', {})
 base = ollama.get('baseUrl', '')
-if not base.endswith('/v1'):
+if base and not base.endswith('/v1'):
     failures.append('agents/claude-code/agent/models.json: ollama.baseUrl must end with /v1')
 
 if failures:

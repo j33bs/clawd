@@ -4,7 +4,7 @@
  * FreeComputeCloud — Local vLLM Provider
  *
  * Wraps a vLLM OpenAI-compatible server running locally (or on LAN).
- * Primary use: System-1 local inference offload.
+ * Primary use: dali local inference offload.
  *
  * Features:
  *   - /v1/models probe for model discovery
@@ -13,9 +13,19 @@
  *   - Status artifact writer (pid/port/model/timestamp)
  */
 
-const { ProviderAdapter } = require('./provider_adapter');
+const { LocalVllmProvider } = require('./local_vllm_provider');
 const { getProvider } = require('./catalog');
 const { resolveSystem2VllmConfig } = require('./system2_config_resolver');
+const { normalizeNodeId } = require('../../node_identity');
+
+function isSystem2Context(options = {}) {
+  if (options.system2 === true) {
+    return true;
+  }
+  const env = options.env || process.env;
+  const marker = options.nodeId || options.node_id || env.OPENCLAW_NODE_ID;
+  return normalizeNodeId(marker) === 'c_lawd';
+}
 
 /**
  * Create a vLLM provider adapter with discovery.
@@ -31,11 +41,12 @@ function createVllmProvider(options = {}) {
     throw new Error('local_vllm not found in catalog');
   }
 
-  if (options.system2 === true) {
+  if (isSystem2Context(options)) {
     const env = options.env || process.env;
     const cfg = resolveSystem2VllmConfig({
       env,
       emitEvent: options.emitEvent,
+      nodeId: options.nodeId || options.node_id,
       baseUrl: options.baseUrl,
       apiKey: options.apiKey,
       model: options.model,
@@ -50,10 +61,10 @@ function createVllmProvider(options = {}) {
     if (cfg.api_key) resolvedEnv.OPENCLAW_VLLM_API_KEY = cfg.api_key;
     if (cfg.model) resolvedEnv.OPENCLAW_VLLM_MODEL = cfg.model;
 
-    return new ProviderAdapter(entry, { ...options, env: resolvedEnv });
+    return new LocalVllmProvider({ entry, ...options, env: resolvedEnv });
   }
 
-  return new ProviderAdapter(entry, options);
+  return new LocalVllmProvider({ entry, ...options });
 }
 
 /**
@@ -77,11 +88,13 @@ async function probeVllmServer(entry, options = {}, { providerFactory } = {}) {
   const env = options.env || process.env;
   const baseUrl = options.baseUrl
     || env.OPENCLAW_VLLM_BASE_URL
-    || 'http://127.0.0.1:8000/v1';
-  const system2Cfg = options.system2 === true
+    || 'http://127.0.0.1:18888/v1';
+  const useSystem2 = isSystem2Context(options)
+  const system2Cfg = useSystem2
     ? resolveSystem2VllmConfig({
         env,
         emitEvent: options.emitEvent,
+        nodeId: options.nodeId || options.node_id,
         baseUrl: options.baseUrl,
         apiKey: options.apiKey,
         model: options.model,
@@ -98,8 +111,6 @@ async function probeVllmServer(entry, options = {}, { providerFactory } = {}) {
     healthy: false,
     models: [],
     inference_ok: false,
-    generation_probe_ok: false,
-    generation_probe_reason: null,
     error: null
   };
 
@@ -116,7 +127,7 @@ async function probeVllmServer(entry, options = {}, { providerFactory } = {}) {
     const derivedOptions = {
       env: derivedEnv,
       emitEvent: options.emitEvent,
-      system2: options.system2 === true,
+      system2: useSystem2,
       baseUrl: options.baseUrl,
       apiKey: options.apiKey,
       model: options.model,
@@ -136,29 +147,17 @@ async function probeVllmServer(entry, options = {}, { providerFactory } = {}) {
     status.models = healthResult.models || [];
 
     if (healthResult.ok && status.models.length > 0) {
-      // Deterministic generation probe (short timeout) to catch "HTTP alive but generation wedged".
+      // Try a minimal inference
       try {
         const probeModel = (system2Cfg && system2Cfg.model) || status.models[0];
-        if (typeof provider.generationProbe === 'function') {
-          const timeoutMs = Number(env.FREECOMPUTE_LOCAL_VLLM_PROBE_TIMEOUT_MS || 5000);
-          const gen = await provider.generationProbe({ timeoutMs, model: probeModel });
-          status.generation_probe_ok = Boolean(gen && gen.ok);
-          status.generation_probe_reason = (gen && gen.ok) ? 'ok' : ((gen && gen.reason) || 'unknown');
-          status.inference_ok = status.generation_probe_ok;
-          if (!status.generation_probe_ok && !status.error) {
-            status.error = `generation probe failed: ${status.generation_probe_reason}`;
-          }
-        } else {
-          status.generation_probe_ok = false;
-          status.generation_probe_reason = 'not_supported';
-          status.inference_ok = false;
-          if (!status.error) status.error = 'generation probe not supported by provider';
-        }
+        const result = await provider.call({
+          messages: [{ role: 'user', content: 'Respond with a single word: OK' }],
+          metadata: { model: probeModel, maxTokens: 8 }
+        });
+        status.inference_ok = Boolean(result.text);
       } catch (err) {
-        status.generation_probe_ok = false;
-        status.generation_probe_reason = 'unknown';
         status.inference_ok = false;
-        status.error = `generation probe failed: ${err.message}`;
+        status.error = `inference probe failed: ${err.message}`;
       }
     }
   } catch (err) {
@@ -180,7 +179,7 @@ async function probeVllmServer(entry, options = {}, { providerFactory } = {}) {
  */
 function vllmStartCommand(options = {}) {
   const model = options.model || '<MODEL_NAME>';
-  const port = options.port || 8000;
+  const port = options.port || 18888;
   const gpuUtil = options.gpuMemoryUtilization || '0.90';
 
   const parts = [

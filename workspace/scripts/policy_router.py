@@ -494,6 +494,22 @@ def build_chat_payload(prompt, temperature=0.0, max_tokens=256):
     }
 
 
+def _provider_auth_type(provider):
+    auth = provider.get("auth")
+    if isinstance(auth, dict):
+        return auth.get("type")
+    return None
+
+
+def _provider_api_key_env(provider):
+    if provider.get("apiKeyEnv"):
+        return provider.get("apiKeyEnv")
+    auth = provider.get("auth")
+    if isinstance(auth, dict):
+        return auth.get("apiKeyEnv") or auth.get("env")
+    return ""
+
+
 def _call_openai_compatible(base_url, api_key, model_id, payload, timeout=15):
     if requests is None:
         return {"ok": False, "reason_code": "no_requests_lib"}
@@ -716,9 +732,13 @@ class PolicyRouter:
                 if not token:
                     return False, err or "missing_token"
             else:
-                api_key = read_env_or_secrets(provider.get("apiKeyEnv", ""))
-                if not api_key:
-                    return False, "missing_api_key"
+                auth_type = _provider_auth_type(provider)
+                api_key_env = _provider_api_key_env(provider)
+                requires_key = bool(api_key_env) or auth_type == "bearer"
+                if requires_key:
+                    api_key = read_env_or_secrets(api_key_env)
+                    if not api_key:
+                        return False, "missing_api_key"
 
         if ptype == "anthropic":
             api_key = read_env_or_secrets(provider.get("apiKeyEnv", ""))
@@ -1003,7 +1023,9 @@ class PolicyRouter:
                     if provider.get("auth") == "qwen_oauth":
                         api_key, _ = get_qwen_token()
                     else:
-                        api_key = read_env_or_secrets(provider.get("apiKeyEnv", ""))
+                        api_key_env = _provider_api_key_env(provider)
+                        if api_key_env:
+                            api_key = read_env_or_secrets(api_key_env)
                     result = _call_openai_compatible(provider.get("baseUrl", ""), api_key, model_id, payload)
                 elif ptype == "anthropic":
                     api_key = read_env_or_secrets(provider.get("apiKeyEnv", ""))
