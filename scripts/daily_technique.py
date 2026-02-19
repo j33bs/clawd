@@ -508,6 +508,7 @@ def main():
     parser.add_argument("--complex-task", action="store_true")
     parser.add_argument("--recent-errors", type=int, default=0)
     parser.add_argument("--json", action="store_true")
+    parser.add_argument("--format", choices=["full", "briefing", "json"], default="full")
     args = parser.parse_args()
 
     technique = get_technique_for_state(
@@ -516,7 +517,7 @@ def main():
         recent_errors=max(0, args.recent_errors),
     )
 
-    if args.json:
+    if args.json or args.format == "json":
         payload = {
             "technique": technique["name"],
             "category": technique["category"],
@@ -529,15 +530,14 @@ def main():
         print(json.dumps(payload, indent=2))
     else:
         print(format_briefing(technique))
-    
-    # Show principle breakdown
-    print("\n📊 Principle Distribution:")
-    principles = {}
-    for t in TECHNIQUES:
-        p = t.get("principle", "unknown")
-        principles[p] = principles.get(p, 0) + 1
-    for p, count in sorted(principles.items()):
-        print(f"  {p.upper()}: {count} techniques")
+        if args.format != "briefing":
+            print("\n📊 Principle Distribution:")
+            principles = {}
+            for t in TECHNIQUES:
+                p = t.get("principle", "unknown")
+                principles[p] = principles.get(p, 0) + 1
+            for p, count in sorted(principles.items()):
+                print(f"  {p.upper()}: {count} techniques")
 
 
 if __name__ == "__main__":
