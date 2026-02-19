@@ -67,7 +67,7 @@ class MemoryStore {
       ts_utc: new Date().toISOString(),
       text,
       source,
-      tags: JSON.stringify(tags),
+      tags: JSON.stringify(Array.isArray(tags) ? tags.map(String) : []),
       metadata: JSON.stringify(metadata),
       vector: Array.from(vector)
     };
@@ -98,7 +98,10 @@ class MemoryStore {
 
     let q = this._table.search(Array.from(vector)).limit(k);
     if (opts.source) {
-      q = q.where(`source = '${opts.source.replace(/'/g, "''")}'`);
+      if (!/^[a-zA-Z0-9_.\-@]+$/.test(opts.source)) {
+        throw new Error(`invalid source filter value: ${opts.source}`);
+      }
+      q = q.where(`source = '${opts.source}'`);
     }
 
     const rows = await q.toArray();

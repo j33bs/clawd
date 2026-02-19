@@ -94,14 +94,11 @@ function createOllamaEmbedder(cfg) {
   const dims = OLLAMA_DIMS_MAP[model] || 768;
 
   async function embed(texts) {
-    const results = [];
-    for (const text of texts) {
-      const res = await jsonPost(`${host}/api/embed`, { model, input: text }, {});
-      const vec = res.embeddings?.[0] ?? res.embedding;
-      if (!vec) throw new Error(`Ollama embed: no embedding in response for model ${model}`);
-      results.push(toFloat32(vec));
+    const res = await jsonPost(`${host}/api/embed`, { model, input: texts }, {});
+    if (!res.embeddings || !Array.isArray(res.embeddings)) {
+      throw new Error(`Ollama embed: no embeddings array in response for model ${model}`);
     }
-    return results;
+    return res.embeddings.map(toFloat32);
   }
 
   return { name: 'ollama', dims, embed };
