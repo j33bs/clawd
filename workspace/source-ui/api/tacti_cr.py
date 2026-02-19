@@ -8,6 +8,7 @@ import os
 import re
 import resource
 import socket
+import subprocess
 import sys
 import time
 from datetime import datetime, timezone
@@ -269,6 +270,48 @@ def _system_memory_snapshot() -> dict[str, Any]:
         )
     except Exception as exc:
         snapshot["system_memory_error"] = str(exc)
+
+    # macOS fallback where SC_AVPHYS_PAGES is unavailable.
+    if "system_total_mb" not in snapshot:
+        try:
+            total_bytes = int(
+                subprocess.check_output(["sysctl", "-n", "hw.memsize"], text=True, stderr=subprocess.DEVNULL).strip()
+            )
+            vm_stat = subprocess.check_output(["vm_stat"], text=True, stderr=subprocess.DEVNULL)
+            page_size = 4096.0
+            page_size_match = re.search(r"page size of\\s+(\\d+)\\s+bytes", vm_stat, flags=re.IGNORECASE)
+            if page_size_match:
+                page_size = float(page_size_match.group(1))
+
+            pages = {}
+            for line in vm_stat.splitlines():
+                if ":" not in line:
+                    continue
+                key, raw_value = line.split(":", 1)
+                value_text = raw_value.strip().rstrip(".")
+                value_text = re.sub(r"[^0-9]", "", value_text)
+                if not value_text:
+                    continue
+                pages[key.strip().lower()] = float(value_text)
+
+            available_pages = pages.get("pages free", 0.0) + pages.get("pages inactive", 0.0) + pages.get(
+                "pages speculative", 0.0
+            )
+            available_bytes = available_pages * page_size
+            total_mb = total_bytes / (1024.0 * 1024.0)
+            available_mb = available_bytes / (1024.0 * 1024.0)
+            used_mb = max(0.0, total_mb - available_mb)
+            snapshot.update(
+                {
+                    "system_total_mb": round(total_mb, 2),
+                    "system_available_mb": round(available_mb, 2),
+                    "system_used_mb": round(used_mb, 2),
+                    "system_used_pct": round(_safe_ratio(used_mb, total_mb) * 100.0, 2),
+                }
+            )
+            snapshot.pop("system_memory_error", None)
+        except Exception:
+            pass
 
     return snapshot
 
