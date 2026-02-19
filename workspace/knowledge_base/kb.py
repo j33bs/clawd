@@ -6,7 +6,9 @@ Unified interface for QMD + HiveMind + Knowledge Graph
 import argparse
 import json
 import os
+import re
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -195,33 +197,62 @@ def cmd_sync(args: argparse.Namespace) -> int:
     # Get recent files
     try:
         result = subprocess.run(
-            ["npx", "@tobilu/qmd", "ls", "-n", "20"],
+            ["npx", "@tobilu/qmd", "ls", "qmd://clawd", "-n", "20"],
             capture_output=True,
             text=True,
             timeout=15
         )
-        files = [l.strip() for l in result.stdout.split('\n') if l.strip() and not l.startswith('qmd://')]
+        files = []
+        for line in result.stdout.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            match = re.search(r"(qmd://\S+)$", line)
+            if match:
+                files.append(match.group(1))
     except Exception as e:
         print(f"❌ QMD not available: {e}")
         return 1
     
     store = KnowledgeGraphStore(DATA_DIR)
     count = 0
+    clawd_root = Path(__file__).resolve().parents[2]
     
     for f in files[:10]:  # Limit to 10 for now
         if f.endswith('.md'):
-            # Extract and store entities
-            entities = extract_entities(f"Document: {f}")
+            content = ""
+            if f.startswith("qmd://"):
+                fetched = subprocess.run(
+                    ["npx", "@tobilu/qmd", "get", f, "-l", "120"],
+                    capture_output=True,
+                    text=True,
+                    timeout=15,
+                )
+                if fetched.returncode == 0:
+                    content = fetched.stdout[:500]
+            if not content:
+                full_path = Path(f)
+                if not full_path.is_absolute():
+                    full_path = Path(clawd_root) / f.lstrip("/")
+                if full_path.exists():
+                    content = full_path.read_text(errors="ignore")[:500]
+                else:
+                    content = f
+            entities = extract_entities(content)
             if entities:
                 store.add_entity(
                     name=f[:50],
                     entity_type="document",
-                    content=f,
+                    content=content,
                     source="qmd-sync",
-                    metadata={"entities": entities}
+                    metadata={"entities": entities, "path": f}
                 )
                 count += 1
-    
+
+    (DATA_DIR / "last_sync.txt").write_text(
+        datetime.now(timezone.utc).isoformat() + "\n",
+        encoding="utf-8",
+    )
     print(f"✅ Synced {count} documents to knowledge graph")
     return 0
 

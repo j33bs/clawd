@@ -130,6 +130,15 @@ run_memory() {
     log "Memory prune complete"
 }
 
+run_kb_sync() {
+    log "=== Knowledge Base Sync ==="
+    if python3 "$CLAWD_DIR/workspace/knowledge_base/kb.py" sync >>"$LOG_FILE" 2>&1; then
+        log "KB sync complete"
+    else
+        log "⚠️ KB sync failed"
+    fi
+}
+
 # Main
 case "${1:-all}" in
     research)
@@ -146,6 +155,7 @@ case "${1:-all}" in
         run_research
         run_health
         run_memory
+        run_kb_sync
         log "=== Nightly Build Complete ==="
         ;;
     *)

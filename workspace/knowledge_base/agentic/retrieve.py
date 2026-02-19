@@ -122,7 +122,7 @@ def run_graph_search(query: str, limit: int = 5) -> List[Dict]:
     try:
         kb_dir = Path(__file__).parent.parent
         result = subprocess.run(
-            ["python3", "workspace/knowledge-base/kb.py", "graph", "--limit", str(limit)],
+            ["python3", "workspace/knowledge_base/kb.py", "graph", "--limit", str(limit)],
             capture_output=True,
             text=True,
             timeout=10,
