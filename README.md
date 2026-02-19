@@ -52,11 +52,6 @@ ENABLE_TRAIL_MEMORY=1     # External memory trails
 - `workspace/research/`
 - Command: `python workspace/research/research_ingest.py`
 
-### 🧬 AIN Node Scaffold
-- Active Integration Networks research node
-- `nodes/ain/`
-- Entry point: `nodes/ain/README.md`
-
 ### 📊 Daily Briefing
 - Automated morning summaries
 - Therapeutic techniques, quotes, calendar, reminders
@@ -93,7 +88,6 @@ clawd/
 ├── scripts/              # Utility scripts
 ├── docs/                 # OpenClaw documentation
 ├── memory/               # Session memory
-├── nodes/                # Node scaffolds and governed artifacts
 ├── agents/               # Agent configurations
 └── .openclaw/            # OpenClaw runtime
 ```
