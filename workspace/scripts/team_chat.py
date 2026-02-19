@@ -154,10 +154,14 @@ def run(args: argparse.Namespace) -> int:
     resuming = False
     if state_file.exists() and not args.force:
         existing_state = load_state(state_file, {})
-        if existing_state.get("session_id") == session_id and check_resumable(existing_state):
-            if args.resume or args.task is None:
-                print(f"Resuming session {session_id} (cycle {existing_state.get('cycle', 0)}, status: {existing_state.get('status')})")
-                resuming = True
+        if existing_state.get("session_id") == session_id:
+            if check_resumable(existing_state):
+                if args.resume or args.task is None:
+                    print(f"Resuming session {session_id} (cycle {existing_state.get('cycle', 0)}, status: {existing_state.get('status')})")
+                    resuming = True
+            elif args.resume:
+                print(f"Session {session_id} is not resumable (status: {existing_state.get('status')}). Use --force to start fresh.")
+                return 1
 
     if resuming:
         state = load_state(state_file, {})
