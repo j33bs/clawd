@@ -1144,3 +1144,79 @@ Updated after each audit completes. Compact record for quick comparison.
 | **feature_flag_matrix** | partial/debt: legacy TACTI flags compatibility shim added; broader matrix verification still needed |
 | **open_handoffs** | unchanged in this run (not re-counted) |
 ```
+
+## Phase 6 — Commits + Final Proof
+```bash
+git status --porcelain -uall
+ M workspace/audit/repo_audit_remediation_dali_20260220T025348Z.md
+ M workspace/policy/llm_policy.json
+?? workspace/audit/repo_audit_remediation_dali_20260220T024916Z.md
+?? workspace/audit/repo_audit_remediation_dali_20260220T025307Z.md
+git log --oneline -n 10 --decorate
+8699a47 (HEAD -> fix/dali-audit-remediation-20260220) docs(audit): refresh snapshot and remediation evidence pointers
+a259954 fix(policy-router): restore PolicyValidationError + active inference hooks
+89d7df8 (origin/feature/tacti-cr-novel-10-impl-20260219, feature/tacti-cr-novel-10-impl-20260219) docs(tacti-cr): document fixture verification
+7feb3a1 docs(audit): record novel10 fixture verification evidence
+4e72b0d test(tacti-cr): add novel10 verifier unit tests
+43f3859 feat(verify): add novel10 fixture verifier and wire into master verify
+9fd736a feat(tacti-cr): add novel10 contract + fixtures + fixture runner
+9ff8c08 docs(audit): add event contract evidence
+ea70df1 feat(tacti-cr): add unified event contract + verifier
+b780c71 fix(teamchat): require explicit arming and clean-tree for auto-commit
+bash workspace/scripts/regression.sh
+==========================================
+  OpenClaw Regression Validation
+==========================================
+
+[1/9] Checking constitutional invariants...
+[0;32m  ✓ PASS[0m
+[2/9] Verifying governance substrate...
+[0;32m  ✓ PASS[0m
+[3/9] Scanning for secrets in tracked files...
+[0;32m  ✓ PASS[0m
+[4/9] Checking for forbidden files...
+[0;32m  ✓ PASS[0m
+[5/9] Verifying git hooks...
+    pre-commit hook missing or not executable
+    pre-push hook missing or not executable
+[1;33m  ⚠ WARN: Git hooks not installed (run: bash workspace/scripts/install-hooks.sh)[0m
+[6/9] Checking documentation completeness...
+[0;32m  ✓ PASS[0m
+[0;32m  ✓ PASS[0m
+[7/9] Checking provider env gating (profile=core)...
+[0;31m  ✗ FAIL: openclaw.json not found for provider gating check[0m
+    Checking system_map aliases...
+ok
+[0;32m  ✓ PASS[0m
+[8/9] Checking heartbeat dependency invariant...
+[1;33m  ⚠ WARN: Could not read heartbeat cadence from openclaw config[0m
+[9/9] Checking branch state...
+    Current branch: fix/dali-audit-remediation-20260220
+[0;32m  ✓ PASS[0m
+
+==========================================
+[0;31m  REGRESSION FAILED[0m
+  Failures: 1
+  Warnings: 2
+
+  Fix all failures before admission.
+==========================================
+```
+
+## What changed
+- Added policy-router compatibility shims required by failing contract tests.
+- Refreshed `AUDIT_SNAPSHOT.md` with current remediation status.
+- Added this evidence pack under `workspace/audit/`.
+
+## Why
+- Restore expected `policy_router` contract used by unit tests while keeping behavior stable.
+- Confirm current secret posture for tracked policy/config and document bounded runtime integration risks.
+
+## Verification
+- Targeted tests: PASS (`tests_unittest` policy-router suite, 8/8).
+- Regression gate: one environment/config failure remains (missing `openclaw.json`), warnings for hooks/heartbeat cadence.
+- Secret triage: no live credentials in tracked policy/config files.
+
+## Residual risks / next actions
+- Telegram remains degraded (`chat not found`): verify numeric chat ID allowlist + DM/init + runtime token/config on Dali.
+- Feature-flag matrix debt: broader verification beyond legacy TACTI shim still pending.
