@@ -134,3 +134,18 @@ workspace/operator_transfer_brief.md
 # Run artifacts (do not commit)
 economics/
 completions/
+
+# Runtime state/logs (never commit)
+workspace/state/
+workspace/state/**/*.jsonl
+
+# Local audit scratch (untracked)
+workspace/audit/_scratch/
+
+# TeamChat runtime artifacts (local-only)
+workspace/teamchat/sessions/
+workspace/teamchat/state/
+workspace/teamchat/summaries/
+
+# Local append-only audit hook stream
+workspace/audit/commit_audit_log.jsonl

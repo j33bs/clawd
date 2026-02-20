@@ -271,10 +271,10 @@
   },
   "routing": {
     "free_order": [
-      "local_vllm_assistant",
-      "ollama",
+      "google-gemini-cli",
+      "qwen-portal",
       "groq",
-      "qwen"
+      "ollama"
     ],
     "rules": [
       {
@@ -310,19 +310,32 @@
       },
       "governance": {
         "order": [
-          "claude_auth",
-          "claude_api"
+          "google-gemini-cli",
+          "qwen-portal",
+          "groq",
+          "ollama"
         ],
-        "allowPaid": true,
+        "allowPaid": false,
         "maxTokensPerRequest": 768
       },
       "security": {
         "order": [
-          "claude_auth",
-          "claude_api"
+          "google-gemini-cli",
+          "qwen-portal",
+          "groq",
+          "ollama"
         ],
-        "allowPaid": true,
+        "allowPaid": false,
         "maxTokensPerRequest": 768
+      },
+      "system2_audit": {
+        "order": [
+          "google-gemini-cli",
+          "qwen-portal",
+          "groq",
+          "ollama"
+        ],
+        "allowPaid": false
       },
       "conversation": {
         "order": [

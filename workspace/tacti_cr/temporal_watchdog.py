@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from .config import get_int, is_enabled
+from .events import emit
 
 
 ISO_PATTERN = re.compile(r"\b(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:Z|[+-]\d{2}:?\d{2})?)\b")
@@ -40,6 +41,7 @@ def update_beacon(repo_root: Path | None = None, now: datetime | None = None) ->
         "epoch_ms": int(now.timestamp() * 1000),
     }
     path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    emit("tacti_cr.temporal_watchdog.beacon_updated", {"path": str(path), "epoch_ms": payload["epoch_ms"]}, now=now)
     return {"ok": True, "path": str(path), **payload}
 
 
@@ -123,13 +125,15 @@ def temporal_reset_event(
         return None
 
     digest = hashlib.sha256((text or "").encode("utf-8")).hexdigest()[:16]
-    return {
+    event = {
         "event": "temporal_reset",
         "ts": now.isoformat().replace("+00:00", "Z"),
         "content_hash": digest,
         "findings": findings,
         "action": "reanchor_today_memory_and_beacon",
     }
+    emit("tacti_cr.temporal_watchdog.temporal_reset", {"content_hash": digest, "findings": findings}, now=now)
+    return event
 
 
 __all__ = [

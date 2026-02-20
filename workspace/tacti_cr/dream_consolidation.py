@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from .config import get_float, is_enabled
+from .events import emit
 
 
 @dataclass
@@ -152,6 +153,7 @@ def run_consolidation(repo_root: Path, *, day: str, now: datetime | None = None)
         return {"ok": False, "reason": "dream_consolidation_disabled"}
 
     now_dt = _utc_now(now)
+    emit("tacti_cr.dream.consolidation_started", {"day": day}, now=now_dt)
     paths = _state_paths(repo_root)
     sources = _memory_sources(repo_root, day)
     source_lines: list[str] = []
@@ -208,6 +210,7 @@ def run_consolidation(repo_root: Path, *, day: str, now: datetime | None = None)
     for insight in insights:
         report.append(f"- {insight}")
     report_path.write_text("\n".join(report) + "\n", encoding="utf-8")
+    emit("tacti_cr.dream.report_written", {"day": day, "report_path": str(report_path)}, now=now_dt)
 
     long_term = paths["long_term"]
     long_term.parent.mkdir(parents=True, exist_ok=True)

@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from .config import get_int, is_enabled
+from .events import emit
 
 
 class PrefetchCache:
@@ -50,6 +51,7 @@ class PrefetchCache:
         idx["lru"] = idx["lru"][-200:]
         self._append({"ts": ts, "topic": topic, "docs": docs})
         self._save_index(idx)
+        emit("tacti_cr.prefetch.recorded", {"topic": topic, "docs_count": len(docs), "depth": int(idx.get("depth", 3))})
 
     def record_hit(self, hit: bool) -> dict[str, Any]:
         idx = self._load_index()
@@ -62,6 +64,7 @@ class PrefetchCache:
         if total >= 100 and hit_rate < 0.4:
             idx["depth"] = max(1, int(idx.get("depth", 3)) - 1)
         self._save_index(idx)
+        emit("tacti_cr.prefetch.hit_rate", {"hit": bool(hit), "hit_rate": hit_rate, "depth": int(idx["depth"]), "total": total})
         return {"hit_rate": hit_rate, "depth": idx["depth"], "total": total}
 
     def depth(self) -> int:
@@ -81,10 +84,12 @@ def prefetch_context(token_stream: str, query_fn, *, repo_root: Path | None = No
         return {"ok": False, "reason": "prefetch_disabled", "topics": []}
     cache = PrefetchCache(repo_root=repo_root)
     topics = predict_topics(token_stream, top_k=cache.depth())
+    emit("tacti_cr.prefetch.predicted_topics", {"topics": topics, "depth": cache.depth()})
     docs = []
     for topic in topics:
         docs.extend(query_fn(topic))
     cache.record_prefetch("|".join(topics), docs)
+    emit("tacti_cr.prefetch.cache_put", {"topics": topics, "docs_count": len(docs)})
     return {"ok": True, "topics": topics, "docs": docs}
 
 

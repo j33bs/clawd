@@ -808,12 +808,13 @@ def check_node_identity(failures, warnings):
     cfg = load_json(OPENCLAW_FILE) or {}
     system_map = load_json(SYSTEM_MAP_FILE) or {}
     default_node_id = str(system_map.get("default_node_id") or "dali")
+    config_exists = OPENCLAW_FILE.exists()
 
     node = cfg.get("node") if isinstance(cfg.get("node"), dict) else {}
     raw_node_id = node.get("id")
     normalized = normalize_node_id(raw_node_id, system_map)
 
-    if not raw_node_id:
+    if config_exists and not raw_node_id:
         warn(
             f"openclaw.json node.id missing; defaulting to '{default_node_id}' for compatibility",
             warnings,

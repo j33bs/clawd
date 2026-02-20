@@ -112,3 +112,36 @@ Update temporal beacon manually:
 ```bash
 python3 workspace/scripts/temporal_beacon_update.py
 ```
+
+## Event Contract
+
+- Unified runtime events are append-only JSONL at `workspace/state/tacti_cr/events.jsonl`.
+- Schema per line:
+  - `ts` (UTC ISO-8601 with `Z`)
+  - `type` (event name)
+  - `payload` (JSON object)
+  - `session_id` (optional)
+  - `schema` (`1`)
+- Runtime state is intentionally outside git history via ignore rules.
+
+Run deterministic event summary verifier:
+
+```bash
+bash workspace/scripts/verify_tacti_cr_events.sh
+```
+
+Optional assertions:
+
+```bash
+bash workspace/scripts/verify_tacti_cr_events.sh --min-count tacti_cr.team_chat.session_start=1
+```
+
+## Novel-10 Fixture Verification
+
+Run deterministic fixture coverage for Novel-10 features:
+
+```bash
+bash workspace/scripts/verify_tacti_cr_novel10_fixture.sh
+```
+
+This runs an offline fixture harness that enables all Novel-10 flags, drives minimal paths, and asserts required event types against `workspace/tacti_cr/novel10_contract.py`.

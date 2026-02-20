@@ -36,6 +36,7 @@ CIRCUIT_FILE = BASE_DIR / "itc" / "llm_circuit.json"
 EVENT_LOG = BASE_DIR / "itc" / "llm_router_events.jsonl"
 QWEN_AUTH_FILE = BASE_DIR / "agents" / "main" / "agent" / "auth-profiles.json"
 TACTI_EVENT_LOG = BASE_DIR / "workspace" / "state" / "tacti_cr" / "events.jsonl"
+ACTIVE_INFERENCE_STATE_PATH = BASE_DIR / "workspace" / "state" / "active_inference_state.json"
 
 TACTI_ROOT = BASE_DIR / "workspace"
 if str(TACTI_ROOT) not in sys.path:
@@ -47,12 +48,14 @@ try:
     from tacti_cr.expression import compute_expression
     from tacti_cr.collapse import emit_recommendation as collapse_emit_recommendation
     from tacti_cr.valence import routing_bias as tacti_routing_bias
+    from tacti_cr.events import emit as tacti_emit
 except Exception:  # pragma: no cover - optional integration
     ArousalOscillator = None
     tacti_enabled = None
     compute_expression = None
     collapse_emit_recommendation = None
     tacti_routing_bias = None
+    tacti_emit = None
 
 DEFAULT_POLICY = {
     "version": 2,
@@ -205,6 +208,58 @@ DEFAULT_POLICY = {
     },
 }
 
+# Alias normalization to reconcile invariant/policy strings with registry IDs.
+PROVIDER_ID_ALIASES = {
+    "google-gemini-cli": "gemini",
+    "qwen-portal": "qwen_alibaba",
+    "minimax-portal": "minimax-portal",
+    "gemini": "gemini",
+    "qwen_alibaba": "qwen_alibaba",
+    "groq": "groq",
+    "ollama": "ollama",
+}
+
+# Back-compat bridge from normalized registry IDs to policy provider keys.
+PROVIDER_ID_TO_POLICY_PROVIDER = {
+    "qwen_alibaba": "qwen",
+}
+
+
+class PolicyValidationError(Exception):
+    pass
+
+
+def normalize_provider_id(value):
+    if not isinstance(value, str):
+        return value
+    key = value.strip()
+    if not key:
+        return key
+    return PROVIDER_ID_ALIASES.get(key, key)
+
+
+def _normalize_provider_order(items):
+    if not isinstance(items, list):
+        return []
+    return [normalize_provider_id(item) for item in items if isinstance(item, str)]
+
+
+def _normalize_policy_routing(policy):
+    routing = policy.get("routing", {})
+    if not isinstance(routing, dict):
+        return
+    routing["free_order"] = _normalize_provider_order(routing.get("free_order", []))
+    intents = routing.get("intents", {})
+    if isinstance(intents, dict):
+        for cfg in intents.values():
+            if isinstance(cfg, dict):
+                cfg["order"] = _normalize_provider_order(cfg.get("order", []))
+    rules = routing.get("rules", [])
+    if isinstance(rules, list):
+        for rule in rules:
+            if isinstance(rule, dict) and isinstance(rule.get("provider"), str):
+                rule["provider"] = normalize_provider_id(rule.get("provider"))
+
 
 def _deep_merge(defaults, incoming):
     if not isinstance(defaults, dict) or not isinstance(incoming, dict):
@@ -221,14 +276,60 @@ def _deep_merge(defaults, incoming):
     return merged
 
 
+def _policy_strict_enabled():
+    value = str(os.environ.get("OPENCLAW_POLICY_STRICT", "1")).strip().lower()
+    return value not in {"0", "false", "no", "off"}
+
+
+def _validate_policy_schema(raw):
+    errors = []
+    budget_intent_keys = {"dailyTokenBudget", "dailyCallBudget", "maxCallsPerRun"}
+    provider_keys = {
+        "enabled",
+        "paid",
+        "tier",
+        "type",
+        "baseUrl",
+        "apiKeyEnv",
+        "models",
+        "auth",
+        "readyEnv",
+        "provider_id",
+        "capabilities",
+        "model",
+    }
+
+    for intent, cfg in (raw.get("budgets", {}).get("intents", {}) or {}).items():
+        if not isinstance(cfg, dict):
+            continue
+        unknown = sorted(set(cfg.keys()) - budget_intent_keys)
+        if unknown:
+            errors.append(f"budgets.intents.{intent} unknown keys: {', '.join(unknown)}")
+
+    for provider, cfg in (raw.get("providers", {}) or {}).items():
+        if not isinstance(cfg, dict):
+            continue
+        unknown = sorted(set(cfg.keys()) - provider_keys)
+        if unknown:
+            errors.append(f"providers.{provider} unknown keys: {', '.join(unknown)}")
+
+    if errors:
+        raise PolicyValidationError("; ".join(errors))
+
+
 def load_policy(path=POLICY_FILE):
     policy = DEFAULT_POLICY
     if path.exists():
         try:
             raw = json.loads(path.read_text(encoding="utf-8"))
+            if _policy_strict_enabled():
+                _validate_policy_schema(raw)
             policy = _deep_merge(DEFAULT_POLICY, raw)
+        except PolicyValidationError:
+            raise
         except Exception:
             log_event("policy_load_fail", {"path": str(path)})
+    _normalize_policy_routing(policy)
     return policy
 
 
@@ -287,7 +388,80 @@ def log_event(event_type, detail=None, path=EVENT_LOG):
 
 
 def _tacti_event(event_type, detail):
+    if callable(tacti_emit):
+        try:
+            tacti_emit(str(event_type), detail if isinstance(detail, dict) else {"detail": detail})
+            return
+        except Exception:
+            pass
     log_event(event_type, detail=detail, path=TACTI_EVENT_LOG)
+
+
+def _flag_enabled(name):
+    return str(os.environ.get(name, "")).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _legacy_tacti_flags_enabled():
+    return any(
+        _flag_enabled(name)
+        for name in (
+            "ENABLE_MURMURATION",
+            "ENABLE_RESERVOIR",
+            "ENABLE_PHYSARUM_ROUTER",
+            "ENABLE_TRAIL_MEMORY",
+        )
+    )
+
+
+def tacti_enhance_plan(plan, *, context_metadata=None, intent=None):
+    plan_dict = dict(plan or {})
+    plan_dict["enabled"] = bool(plan_dict.get("enabled", True))
+    agent_ids = list(plan_dict.get("agent_ids") or [])
+    if not agent_ids:
+        maybe_agent = (context_metadata or {}).get("agent_id")
+        if maybe_agent:
+            agent_ids = [str(maybe_agent)]
+    plan_dict["agent_ids"] = [str(a) for a in agent_ids if str(a).strip()]
+    if intent and "intent" not in plan_dict:
+        plan_dict["intent"] = intent
+    return plan_dict
+
+
+def _load_active_inference_state(path):
+    state_path = Path(path)
+    if state_path.exists():
+        try:
+            loaded = json.loads(state_path.read_text(encoding="utf-8"))
+            if isinstance(loaded, dict):
+                return loaded
+        except Exception:
+            pass
+    return {"version": 1, "runs": 0}
+
+
+def _save_active_inference_state(state, path):
+    state_path = Path(path)
+    state_path.parent.mkdir(parents=True, exist_ok=True)
+    state_path.write_text(json.dumps(state, indent=2) + "\n", encoding="utf-8")
+
+
+def _active_inference_payload(context_metadata):
+    state = _load_active_inference_state(ACTIVE_INFERENCE_STATE_PATH)
+    text = str((context_metadata or {}).get("input_text", "")).lower()
+    concise_hint = "concise" in text or "brief" in text
+    runs = int(state.get("runs", 0))
+    confidence = min(0.95, 0.5 + (runs * 0.05))
+    preference_params = {
+        "style": "concise" if concise_hint else "balanced",
+        "conciseness": 0.8 if concise_hint else 0.5,
+    }
+    state["runs"] = runs + 1
+    state["lastPreference"] = preference_params
+    _save_active_inference_state(state, ACTIVE_INFERENCE_STATE_PATH)
+    return {
+        "preference_params": preference_params,
+        "confidence": round(confidence, 3),
+    }
 
 
 def read_env_or_secrets(key_name):
@@ -546,7 +720,7 @@ def _resolve_order(intent_cfg, policy):
         if entry == "free":
             order.extend(policy.get("routing", {}).get("free_order", []))
         else:
-            order.append(entry)
+            order.append(normalize_provider_id(entry))
     # de-dup preserving order
     seen = set()
     final = []
@@ -597,7 +771,22 @@ class PolicyRouter:
         return intents.get("conversation", {})
 
     def _provider_cfg(self, name):
-        return self.policy.get("providers", {}).get(name, {})
+        providers = self.policy.get("providers", {})
+        if name in providers:
+            return providers.get(name, {})
+        normalized = normalize_provider_id(name)
+        if normalized in providers:
+            return providers.get(normalized, {})
+        mapped = PROVIDER_ID_TO_POLICY_PROVIDER.get(normalized)
+        if mapped and mapped in providers:
+            return providers.get(mapped, {})
+        for provider_name, cfg in providers.items():
+            if not isinstance(cfg, dict):
+                continue
+            pid = cfg.get("provider_id")
+            if isinstance(pid, str) and normalize_provider_id(pid) == normalized:
+                return providers.get(provider_name, {})
+        return {}
 
     def _provider_model(self, name, intent_cfg, context):
         provider = self._provider_cfg(name)
@@ -763,7 +952,7 @@ class PolicyRouter:
         decision = self._capability_decision(context_metadata, payload_text)
         if not decision:
             return base_order, None
-        preferred = decision.get("provider")
+        preferred = normalize_provider_id(decision.get("provider"))
         if preferred:
             order = [preferred] + [name for name in base_order if name != preferred]
         else:
@@ -1004,10 +1193,13 @@ class PolicyRouter:
         attempts = 0
         last_reason = None
         context_metadata = context_metadata or {}
-        tacti_controls = self._tacti_runtime_controls(intent, intent_cfg, context_metadata)
+        runtime_context = dict(context_metadata)
+        if _flag_enabled("ENABLE_ACTIVE_INFERENCE"):
+            runtime_context["active_inference"] = _active_inference_payload(runtime_context)
+        tacti_controls = self._tacti_runtime_controls(intent, intent_cfg, runtime_context)
         payload_text = _extract_text_from_payload(payload)
-        order, decision = self._ordered_providers(intent_cfg, context_metadata, payload_text)
-        route_explain = self.explain_route(intent, context_metadata=context_metadata, payload=payload)
+        order, decision = self._ordered_providers(intent_cfg, runtime_context, payload_text)
+        route_explain = self.explain_route(intent, context_metadata=runtime_context, payload=payload)
         if decision:
             log_event(
                 "router_route_selected",
@@ -1051,7 +1243,7 @@ class PolicyRouter:
 
             provider = self._provider_cfg(name)
             tier = provider.get("tier", "free")
-            model_id = self._provider_model(name, intent_cfg, context_metadata)
+            model_id = self._provider_model(name, intent_cfg, runtime_context)
             circuit_key = _circuit_key(name, model_id)
 
             if tacti_controls.get("suppress_heavy"):
@@ -1124,7 +1316,7 @@ class PolicyRouter:
             # handler dispatch
             handler = self.handlers.get(name)
             if handler:
-                result = handler(payload, model_id, context_metadata)
+                result = handler(payload, model_id, runtime_context)
             else:
                 ptype = provider.get("type")
                 if ptype == "openai_compatible":
@@ -1222,6 +1414,14 @@ class PolicyRouter:
                 },
                 self.event_log,
             )
+            tacti_plan = None
+            if _legacy_tacti_flags_enabled():
+                tacti_plan = tacti_enhance_plan(
+                    {"enabled": True, "agent_ids": [name], "provider": name},
+                    context_metadata=runtime_context,
+                    intent=intent,
+                )
+                log_event("tacti_routing_plan", tacti_plan, self.event_log)
             return {
                 "ok": True,
                 "provider": name,
@@ -1230,6 +1430,7 @@ class PolicyRouter:
                 "parsed": parsed,
                 "attempts": attempts,
                 "reason_code": "success",
+                "tacti": tacti_plan,
             }
 
         log_event(

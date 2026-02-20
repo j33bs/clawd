@@ -4,9 +4,18 @@ from __future__ import annotations
 
 import json
 import math
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+WORKSPACE_ROOT = Path(__file__).resolve().parents[2]
+if str(WORKSPACE_ROOT) not in sys.path:
+    sys.path.insert(0, str(WORKSPACE_ROOT))
+try:
+    from tacti_cr.events import emit as tacti_emit
+except Exception:  # pragma: no cover
+    tacti_emit = None
 
 
 def _to_dt(value: Any) -> datetime:
@@ -54,16 +63,19 @@ class StigmergyMap:
 
     def deposit_mark(self, topic: str, intensity: float, decay_rate: float, deposited_by: str, now: datetime | None = None) -> dict[str, Any]:
         rows = self._read()
+        mark = {
+            "topic": str(topic),
+            "intensity": float(intensity),
+            "decay_rate": float(decay_rate),
+            "deposited_by": str(deposited_by),
+            "timestamp": _utc(now),
+        }
         rows.append(
-            {
-                "topic": str(topic),
-                "intensity": float(intensity),
-                "decay_rate": float(decay_rate),
-                "deposited_by": str(deposited_by),
-                "timestamp": _utc(now),
-            }
+            mark
         )
         self._write(rows)
+        if callable(tacti_emit):
+            tacti_emit("tacti_cr.stigmergy.mark_deposited", mark, now=_to_dt(now or datetime.now(timezone.utc)))
         return {"ok": True, "count": len(rows), "path": str(self.path)}
 
     def query_marks(self, now: datetime | None = None, top_n: int = 20) -> list[dict[str, Any]]:
@@ -74,11 +86,25 @@ class StigmergyMap:
             item["effective_intensity"] = round(self._effective(row, now_dt), 6)
             scored.append(item)
         scored.sort(key=lambda x: (-float(x.get("effective_intensity", 0.0)), str(x.get("topic", ""))))
-        return scored[: max(1, int(top_n))]
+        out = scored[: max(1, int(top_n))]
+        if callable(tacti_emit):
+            tacti_emit(
+                "tacti_cr.stigmergy.query",
+                {"top_n": int(top_n), "returned": len(out)},
+                now=now_dt,
+            )
+        return out
 
     def suggest_avoid_topics(self, now: datetime | None = None, threshold: float = 0.75) -> list[str]:
         marks = self.query_marks(now=now, top_n=100)
-        return [m["topic"] for m in marks if float(m.get("effective_intensity", 0.0)) >= float(threshold)]
+        out = [m["topic"] for m in marks if float(m.get("effective_intensity", 0.0)) >= float(threshold)]
+        if callable(tacti_emit):
+            tacti_emit(
+                "tacti_cr.stigmergy.avoid_topics",
+                {"threshold": float(threshold), "count": len(out), "topics": out},
+                now=_to_dt(now or datetime.now(timezone.utc)),
+            )
+        return out
 
 
 __all__ = ["StigmergyMap"]

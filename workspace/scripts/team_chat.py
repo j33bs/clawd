@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -23,6 +24,10 @@ try:
 except Exception:  # pragma: no cover
     temporal_reset_event = None
 try:
+    from tacti_cr.events import emit as tacti_emit
+except Exception:  # pragma: no cover
+    tacti_emit = None
+try:
     from tacti_cr.mirror import update_from_event as mirror_update_from_event
 except Exception:  # pragma: no cover
     mirror_update_from_event = None
@@ -35,6 +40,20 @@ except Exception:  # pragma: no cover
 def auto_commit_changes(repo_root: Path, session_id: str, cycle: int) -> str | None:
     """Auto-commit changes after accepted patch. Returns commit SHA or None."""
     try:
+        # Run pre-commit audit
+        audit_script = repo_root / "workspace" / "scripts" / "audit_commit_hook.py"
+        if audit_script.exists():
+            audit_result = subprocess.run(
+                ["python3", str(audit_script)],
+                cwd=repo_root,
+                capture_output=True,
+                text=True,
+                timeout=60
+            )
+            if audit_result.returncode != 0:
+                print(f"Auto-commit blocked by audit: {audit_result.stdout}")
+                return None
+        
         # Check for changes
         result = subprocess.run(
             ["git", "status", "--porcelain"],
@@ -74,6 +93,107 @@ def auto_commit_changes(repo_root: Path, session_id: str, cycle: int) -> str | N
     except Exception as e:
         print(f"Auto-commit failed: {e}")
     return None
+
+
+def _parse_bool(value: Any, default: bool = False) -> bool:
+    if value is None:
+        return bool(default)
+    if isinstance(value, bool):
+        return value
+    text = str(value).strip().lower()
+    if text in {"1", "true", "yes", "on"}:
+        return True
+    if text in {"0", "false", "no", "off"}:
+        return False
+    return bool(default)
+
+
+def _current_branch(repo_root: Path) -> str:
+    try:
+        proc = subprocess.run(
+            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+        branch = (proc.stdout or "").strip()
+        if not branch:
+            return "unknown"
+        return branch
+    except Exception:
+        return "unknown"
+
+
+def _repo_is_dirty(repo_root: Path) -> bool:
+    try:
+        proc = subprocess.run(
+            ["git", "status", "--porcelain"],
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+        return bool((proc.stdout or "").strip())
+    except Exception:
+        return False
+
+
+def _guard_controls(
+    branch: str,
+    requested_auto_commit: bool,
+    requested_accept_patches: bool,
+    requested_commit_arm: str,
+    allow_dirty: bool,
+    repo_dirty: bool,
+) -> dict[str, Any]:
+    protected = branch in {"main", "master"}
+    arm_ok = str(requested_commit_arm or "").strip() == "I_UNDERSTAND"
+    requested_auto = bool(requested_auto_commit)
+    requested_accept = bool(requested_accept_patches)
+    requested_commit_enabled = requested_auto and requested_accept
+
+    final_auto = requested_auto
+    final_accept = requested_accept
+    commit_not_armed = False
+    dirty_tree_blocked = False
+    commit_not_armed_reason = ""
+
+    if protected:
+        final_auto = False
+        final_accept = False
+    elif not (requested_commit_enabled and arm_ok):
+        final_auto = False
+        final_accept = False
+        if requested_auto or requested_accept:
+            commit_not_armed = True
+            if not arm_ok:
+                commit_not_armed_reason = "missing_or_invalid_commit_arm"
+            else:
+                commit_not_armed_reason = "requires_auto_commit_and_accept_patches"
+
+    if final_auto and repo_dirty and not allow_dirty:
+        final_auto = False
+        dirty_tree_blocked = True
+
+    return {
+        "branch": branch,
+        "protected_branch": protected,
+        "repo_dirty": bool(repo_dirty),
+        "allow_dirty": bool(allow_dirty),
+        "requested_auto_commit": requested_auto,
+        "requested_accept_patches": requested_accept,
+        "requested_commit_arm": str(requested_commit_arm or ""),
+        "arm_ok": arm_ok,
+        "requested_commit_enabled": requested_commit_enabled,
+        "final_auto_commit": final_auto,
+        "final_accept_patches": final_accept,
+        "commit_not_armed": commit_not_armed,
+        "commit_not_armed_reason": commit_not_armed_reason,
+        "dirty_tree_blocked": dirty_tree_blocked,
+    }
 
 
 def utc_now() -> str:
@@ -150,6 +270,15 @@ def log_event(
         session_path,
         row,
     )
+    if callable(tacti_emit):
+        try:
+            tacti_emit(
+                f"tacti_cr.team_chat.{event_type}",
+                {"actor": actor, "cycle": cycle, "data": data, "route": route or {}},
+                session_id=session_id,
+            )
+        except Exception:
+            pass
     if callable(mirror_update_from_event) and actor not in {"system"}:
         try:
             mirror_update_from_event(actor, row, repo_root=Path(__file__).resolve().parents[2])
@@ -225,6 +354,27 @@ def run(args: argparse.Namespace) -> int:
         extra_allowlist=args.allow_cmd,
     )
 
+    requested_auto_commit = _parse_bool(
+        args.auto_commit if args.auto_commit is not None else os.environ.get("TEAMCHAT_AUTO_COMMIT", "1"),
+        default=True,
+    )
+    requested_accept_patches = _parse_bool(
+        args.accept_patches if args.accept_patches is not None else os.environ.get("TEAMCHAT_ACCEPT_PATCHES", "1"),
+        default=True,
+    )
+    requested_commit_arm = os.environ.get("TEAMCHAT_COMMIT_ARM", "")
+    allow_dirty = _parse_bool(os.environ.get("TEAMCHAT_ALLOW_DIRTY", "0"), default=False)
+    guard = _guard_controls(
+        _current_branch(repo_root),
+        requested_auto_commit,
+        requested_accept_patches,
+        requested_commit_arm,
+        allow_dirty,
+        _repo_is_dirty(repo_root),
+    )
+    auto_commit_enabled = bool(guard["final_auto_commit"])
+    accept_patches_enabled = bool(guard["final_accept_patches"])
+
     # Log session_start only for new sessions (not resumes)
     if not resuming:
         log_event(
@@ -244,6 +394,53 @@ def run(args: argparse.Namespace) -> int:
         },
         route=None,
     )
+        if guard["protected_branch"]:
+            log_event(
+                sessions_file,
+                session_id=session_id,
+                cycle=int(state["cycle"]),
+                actor="system",
+                event_type="teamchat.guard.protected_branch",
+                data=guard,
+                route=None,
+            )
+        if guard["commit_not_armed"]:
+            log_event(
+                sessions_file,
+                session_id=session_id,
+                cycle=int(state["cycle"]),
+                actor="system",
+                event_type="teamchat.guard.commit_not_armed",
+                data={
+                    "reason": guard["commit_not_armed_reason"],
+                    "requested_auto_commit": guard["requested_auto_commit"],
+                    "requested_accept_patches": guard["requested_accept_patches"],
+                    "requested_commit_arm": guard["requested_commit_arm"],
+                    "final_auto_commit": guard["final_auto_commit"],
+                    "final_accept_patches": guard["final_accept_patches"],
+                    "branch": guard["branch"],
+                },
+                route=None,
+            )
+        if guard["dirty_tree_blocked"]:
+            log_event(
+                sessions_file,
+                session_id=session_id,
+                cycle=int(state["cycle"]),
+                actor="system",
+                event_type="teamchat.guard.dirty_tree",
+                data={
+                    "reason": "dirty_tree_requires_TEAMCHAT_ALLOW_DIRTY=1",
+                    "requested_auto_commit": guard["requested_auto_commit"],
+                    "requested_accept_patches": guard["requested_accept_patches"],
+                    "final_auto_commit": guard["final_auto_commit"],
+                    "final_accept_patches": guard["final_accept_patches"],
+                    "repo_dirty": guard["repo_dirty"],
+                    "allow_dirty": guard["allow_dirty"],
+                    "branch": guard["branch"],
+                },
+                route=None,
+            )
 
     while True:
         if int(state["cycle"]) >= int(state["max_cycles"]):
@@ -383,6 +580,17 @@ def run(args: argparse.Namespace) -> int:
             continue
 
         decision = str(review_result.data.get("decision") or "revise")
+        if decision == "accept" and not accept_patches_enabled:
+            log_event(
+                sessions_file,
+                session_id=session_id,
+                cycle=cycle,
+                actor="system",
+                event_type="teamchat.guard.accept_patch_blocked",
+                data={"decision": decision, "accept_patches_enabled": False},
+                route=None,
+            )
+            decision = "request_input"
         if decision == "accept":
             state["accepted_reports"] = int(state["accepted_reports"]) + 1
             state["consecutive_failures"] = 0
@@ -392,7 +600,7 @@ def run(args: argparse.Namespace) -> int:
                 valence_update("coder", {"success": True}, repo_root=repo_root)
             
             # Auto-commit changes after acceptance
-            commit_sha = auto_commit_changes(repo_root, session_id, state.get("cycle", 0))
+            commit_sha = auto_commit_changes(repo_root, session_id, state.get("cycle", 0)) if auto_commit_enabled else None
             if commit_sha:
                 state["last_commit"] = commit_sha
         elif decision == "request_input":
@@ -467,6 +675,8 @@ def main() -> int:
     parser.add_argument("--max-consecutive-failures", type=int, default=0, help="0 = keep existing")
     parser.add_argument("--allow-cmd", action="append", default=[], help="Extra allowlist regex for live coder commands")
     parser.add_argument("--live", nargs="?", default=None, const=True, help="Enable live adapters (use --live or --live=1)")
+    parser.add_argument("--auto-commit", default=None, help="Enable/disable auto commit (1/0)")
+    parser.add_argument("--accept-patches", default=None, help="Enable/disable planner accept pathway (1/0)")
     parser.add_argument("--resume", action="store_true", help="Resume existing session if available")
     parser.add_argument("--force", action="store_true", help="Force new session even if one exists")
     args = parser.parse_args()

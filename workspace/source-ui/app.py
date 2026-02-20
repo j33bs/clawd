@@ -272,6 +272,15 @@ class SourceUIHandler(SimpleHTTPRequestHandler):
             else:
                 repo_root = Path(__file__).resolve().parents[2]
                 data = trails_heatmap_payload(repo_root, top_n=20)
+        elif path.startswith('state/valence/'):
+            # Serve valence state files
+            agent = path.split('/')[-1].replace('.json', '')
+            repo_root = Path(__file__).resolve().parents[2]
+            valence_file = repo_root / 'workspace' / 'state' / 'valence' / f'{agent}.json'
+            if valence_file.exists():
+                data = json.loads(valence_file.read_text())
+            else:
+                data = {'valence': 0.0, 'agent': agent}
         else:
             data = {'error': 'Not found'}
         

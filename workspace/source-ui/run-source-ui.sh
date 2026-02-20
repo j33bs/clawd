@@ -79,3 +79,8 @@ else
     echo "Starting Source UI on $HOST:$PORT..."
     python3 "$APP_DIR/app.py" --port "$PORT" --host "$HOST"
 fi
+stop)
+    pkill -f "source-ui/app.py" 2>/dev/null
+    echo "Stopped Source UI"
+    exit 0
+    ;;
