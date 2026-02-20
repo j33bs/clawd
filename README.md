@@ -55,7 +55,7 @@ All `OPENCLAW_*` evolution flags default OFF unless explicitly enabled.
 When enabled, runtime TACTI events write to `workspace/state_runtime/tacti_cr/events.jsonl` (ignored); `workspace/state/tacti_cr/events.jsonl` remains a deterministic tracked stub.
 Backward-compatible aliases still accepted: `OPENCLAW_DREAM_PRUNE`, `OPENCLAW_TRAIL_VALENCE`, `OPENCLAW_SURPRISE_GATE`, `OPENCLAW_PEER_ANNEAL`, `OPENCLAW_COUNTERFACTUAL_REPLAY`, `OPENCLAW_EPITOPE_CACHE`, `OPENCLAW_OSCILLATORY_GATING`.
 
-Team Chat is also default OFF and flag-gated. Runtime session logs write only to `workspace/state_runtime/teamchat/` (ignored), while governance/audit artifacts remain under `workspace/audit/`.
+Team Chat is also default OFF and flag-gated. Runtime session logs and witness ledger write only to `workspace/state_runtime/teamchat/` (ignored). See `workspace/teamchat/README.md` for Team Chat Witness verification steps.
 
 ## Team Chat
 
