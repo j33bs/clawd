@@ -6,6 +6,9 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from math import exp
 import json
+import os
+import hashlib
+import math
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -45,12 +48,25 @@ class TemporalMemory:
         metadata: Optional[Dict[str, str]] = None,
         timestamp: Optional[datetime] = None,
     ) -> TemporalEntry:
+        gated_metadata = dict(metadata or {})
+        if _surprise_gate_enabled():
+            centroid = gated_metadata.get("reservoir_centroid")
+            threshold = float(gated_metadata.get("surprise_threshold", 0.35) or 0.35)
+            if isinstance(centroid, list) and not should_write_episode(content, centroid, threshold=threshold):
+                return TemporalEntry(
+                    timestamp=timestamp or datetime.now(timezone.utc),
+                    content=content,
+                    importance=max(0.0, min(1.0, importance)),
+                    decay_rate=decay_rate if decay_rate is not None else DEFAULT_CONFIG.temporal.default_decay_rate,
+                    metadata={**gated_metadata, "surprise_blocked": "1"},
+                )
+
         entry = TemporalEntry(
             timestamp=timestamp or datetime.now(timezone.utc),
             content=content,
             importance=max(0.0, min(1.0, importance)),
             decay_rate=decay_rate if decay_rate is not None else DEFAULT_CONFIG.temporal.default_decay_rate,
-            metadata=metadata or {},
+            metadata=gated_metadata,
         )
         self._entries.append(entry)
         if self._sync_hivemind:
@@ -137,3 +153,44 @@ class TemporalMemory:
     @property
     def size(self) -> int:
         return len(self._entries)
+
+
+def _surprise_gate_enabled() -> bool:
+    return str(os.environ.get("OPENCLAW_SURPRISE_GATE", "0")).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _embed_text(text: str, dim: int = 24) -> List[float]:
+    vec = [0.0 for _ in range(dim)]
+    for token in str(text or "").lower().split():
+        digest = hashlib.sha256(token.encode("utf-8")).hexdigest()
+        idx = int(digest[:8], 16) % dim
+        sign = 1.0 if int(digest[8:10], 16) % 2 == 0 else -1.0
+        vec[idx] += sign
+    return vec
+
+
+def text_embedding_proxy(content: str, dim: int = 24) -> List[float]:
+    return _embed_text(content, dim=dim)
+
+
+def _cosine(a: List[float], b: List[float]) -> float:
+    if not a or not b:
+        return 0.0
+    dot = sum(x * y for x, y in zip(a, b))
+    na = math.sqrt(sum(x * x for x in a))
+    nb = math.sqrt(sum(y * y for y in b))
+    if na <= 1e-12 or nb <= 1e-12:
+        return 0.0
+    return dot / (na * nb)
+
+
+def surprise_score_proxy(content: str, reservoir_centroid: List[float]) -> float:
+    if not isinstance(reservoir_centroid, list) or not reservoir_centroid:
+        return 1.0
+    emb = _embed_text(content, dim=len(reservoir_centroid))
+    centroid = [float(x) for x in reservoir_centroid]
+    return max(0.0, min(2.0, 1.0 - _cosine(emb, centroid)))
+
+
+def should_write_episode(content: str, reservoir_centroid: List[float], threshold: float = 0.35) -> bool:
+    return surprise_score_proxy(content, reservoir_centroid) >= float(threshold)
