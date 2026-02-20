@@ -17,6 +17,16 @@ try:
 except ImportError:
     requests = None
 
+try:
+    from proprioception import ProprioceptiveSampler
+except Exception:  # pragma: no cover - optional integration
+    ProprioceptiveSampler = None
+
+try:
+    from witness_ledger import commit as witness_commit
+except Exception:  # pragma: no cover - optional integration
+    witness_commit = None
+
 def _resolve_repo_root(start: Path):
     current = start
     for _ in range(8):
@@ -37,6 +47,7 @@ EVENT_LOG = BASE_DIR / "itc" / "llm_router_events.jsonl"
 QWEN_AUTH_FILE = BASE_DIR / "agents" / "main" / "agent" / "auth-profiles.json"
 TACTI_EVENT_LOG = BASE_DIR / "workspace" / "state" / "tacti_cr" / "events.jsonl"
 ACTIVE_INFERENCE_STATE_PATH = BASE_DIR / "workspace" / "hivemind" / "data" / "active_inference_state.json"
+WITNESS_LEDGER_PATH = BASE_DIR / "workspace" / "audit" / "witness_ledger.jsonl"
 
 TACTI_ROOT = BASE_DIR / "workspace"
 if str(TACTI_ROOT) not in sys.path:
@@ -139,6 +150,23 @@ def _validate_policy_or_raise(policy):
 
 def _active_inference_enabled():
     return _env_truthy(os.environ.get("ENABLE_ACTIVE_INFERENCE", "0"))
+
+
+def _router_proprioception_enabled():
+    return _env_truthy(os.environ.get("OPENCLAW_ROUTER_PROPRIOCEPTION", "0"))
+
+
+def _witness_ledger_enabled():
+    return _env_truthy(os.environ.get("OPENCLAW_WITNESS_LEDGER", "0"))
+
+
+def tacti_features_from_proprioception(snapshot):
+    snap = dict(snapshot or {})
+    return {
+        "router_latency_band": "high" if float(snap.get("latency_ms_p95", 0.0) or 0.0) >= 800.0 else "normal",
+        "router_error_rate": float(snap.get("error_rate", 0.0) or 0.0),
+        "router_decision_volume": int(snap.get("decisions_last_n", 0) or 0),
+    }
 
 
 def _maybe_active_inference_metadata(context_metadata):
@@ -753,6 +781,11 @@ class PolicyRouter:
         self.circuit_state = load_circuit_state(circuit_path)
         self.handlers = handlers or {}
         self.run_counts = {}
+        self._proprio_sampler = (
+            ProprioceptiveSampler()
+            if _router_proprioception_enabled() and ProprioceptiveSampler is not None
+            else None
+        )
 
     def _intent_cfg(self, intent):
         intents = self.policy.get("routing", {}).get("intents", {})
@@ -1099,6 +1132,62 @@ class PolicyRouter:
         tier_state["tokens"] += est_tokens
         save_budget_state(self.budget_state, self.budget_path)
 
+    def _breaker_open_providers(self, now_ts):
+        out = set()
+        providers = self.circuit_state.get("providers", {})
+        for key, row in providers.items():
+            if not isinstance(row, dict):
+                continue
+            if int(row.get("openUntil", 0) or 0) <= int(now_ts):
+                continue
+            name = str(key).split(":", 1)[0]
+            if name:
+                out.add(name)
+        return sorted(out)
+
+    def _finalize_router_meta(
+        self,
+        *,
+        started_at,
+        intent,
+        provider,
+        ok,
+        reason_code,
+        attempts,
+        tokens_in,
+        tacti_plan,
+    ):
+        meta = {}
+        now_ts = int(time.time())
+        if self._proprio_sampler is not None:
+            self._proprio_sampler.set_breaker_open_providers(self._breaker_open_providers(now_ts))
+            duration_ms = max(0.0, (time.monotonic() - float(started_at)) * 1000.0)
+            self._proprio_sampler.record_decision(
+                duration_ms=duration_ms,
+                tokens_in=tokens_in,
+                provider=provider,
+                ok=bool(ok),
+                err=reason_code if not ok else None,
+            )
+            if _router_proprioception_enabled():
+                meta.setdefault("proprioception", self._proprio_sampler.snapshot())
+
+        if _witness_ledger_enabled() and callable(witness_commit):
+            record = {
+                "event": "router_decision",
+                "intent": intent,
+                "ok": bool(ok),
+                "provider": provider,
+                "reason_code": reason_code,
+                "attempts": int(attempts),
+                "tacti_reason": (tacti_plan or {}).get("reason") if isinstance(tacti_plan, dict) else None,
+                "tacti_enabled": bool((tacti_plan or {}).get("enabled")) if isinstance(tacti_plan, dict) else False,
+            }
+            committed = witness_commit(record=record, ledger_path=str(WITNESS_LEDGER_PATH))
+            meta["witness_hash"] = committed.get("hash")
+            meta["witness_seq"] = committed.get("seq")
+        return meta
+
     def select_model(self, intent, context_metadata=None):
         intent_cfg = self._intent_cfg(intent)
         order, _decision = self._ordered_providers(intent_cfg, context_metadata or {})
@@ -1167,12 +1256,21 @@ class PolicyRouter:
         intent_cfg = self._intent_cfg(intent)
         attempts = 0
         last_reason = None
+        decision_started_at = time.monotonic()
         context_metadata = dict(context_metadata or {})
+        payload_text = _extract_text_from_payload(payload)
+        tokens_in = estimate_tokens(payload_text) if payload_text else 0
+        if self._proprio_sampler is not None and _router_proprioception_enabled():
+            prior_snapshot = self._proprio_sampler.snapshot()
+            context_metadata.setdefault("proprioception", prior_snapshot)
+            context_metadata.setdefault(
+                "tacti_proprioception",
+                tacti_features_from_proprioception(prior_snapshot),
+            )
         active_inference = _maybe_active_inference_metadata(context_metadata)
         if active_inference:
             context_metadata["active_inference"] = active_inference
         tacti_controls = self._tacti_runtime_controls(intent, intent_cfg, context_metadata)
-        payload_text = _extract_text_from_payload(payload)
         order, decision = self._ordered_providers(intent_cfg, context_metadata, payload_text)
         tacti_plan = None
         if _dynamics_flags_enabled():
@@ -1395,6 +1493,16 @@ class PolicyRouter:
                     continue
 
             self._record_success(circuit_key)
+            meta = self._finalize_router_meta(
+                started_at=decision_started_at,
+                intent=intent,
+                provider=name,
+                ok=True,
+                reason_code="success",
+                attempts=attempts,
+                tokens_in=tokens_in,
+                tacti_plan=tacti_plan,
+            )
             log_event(
                 "router_success",
                 {
@@ -1403,10 +1511,11 @@ class PolicyRouter:
                     "model": model_id,
                     "tier": tier,
                     "attempt": attempts,
+                    "witness_hash": meta.get("witness_hash"),
                 },
                 self.event_log,
             )
-            return {
+            out = {
                 "ok": True,
                 "provider": name,
                 "model": model_id,
@@ -1416,19 +1525,36 @@ class PolicyRouter:
                 "reason_code": "success",
                 "tacti": tacti_plan,
             }
+            if meta:
+                out["meta"] = meta
+            return out
 
+        meta = self._finalize_router_meta(
+            started_at=decision_started_at,
+            intent=intent,
+            provider=None,
+            ok=False,
+            reason_code=last_reason or "no_provider_available",
+            attempts=attempts,
+            tokens_in=tokens_in,
+            tacti_plan=tacti_plan,
+        )
         log_event(
             "router_fail",
             {
                 "intent": intent,
                 "reason_code": last_reason or "no_provider_available",
                 "attempts": attempts,
+                "witness_hash": meta.get("witness_hash"),
             },
             self.event_log,
         )
-        return {
+        out = {
             "ok": False,
             "reason_code": last_reason or "no_provider_available",
             "attempts": attempts,
             "tacti": tacti_plan,
         }
+        if meta:
+            out["meta"] = meta
+        return out
