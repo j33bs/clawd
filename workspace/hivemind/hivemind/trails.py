@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List
@@ -64,6 +65,46 @@ def _embed_text(text: str, tags: List[str] | None = None, dim: int = EMBED_DIM) 
     return vec
 
 
+def _trail_valence_enabled() -> bool:
+    value = str(
+        os.environ.get(
+            "OPENCLAW_TRAILS_VALENCE",
+            os.environ.get("OPENCLAW_TRAIL_VALENCE", "0"),
+        )
+    ).strip().lower()
+    return value in {"1", "true", "yes", "on"}
+
+
+def dampen_valence_signature(signature: Any, hops: int = 1) -> Any:
+    factor = 0.5 ** max(0, int(hops))
+    if isinstance(signature, dict):
+        return {str(k): round(float(v) * factor, 6) for k, v in signature.items() if isinstance(v, (int, float))}
+    if isinstance(signature, list):
+        return [round(float(v) * factor, 6) for v in signature if isinstance(v, (int, float))]
+    if isinstance(signature, (int, float)):
+        return round(float(signature) * factor, 6)
+    return None
+
+
+def _blend_valence_signature(previous: Any, current: Any, alpha: float = 0.5) -> Any:
+    a = max(0.0, min(1.0, float(alpha)))
+    if previous is None:
+        return current
+    if isinstance(previous, (int, float)) and isinstance(current, (int, float)):
+        return round(((1.0 - a) * float(previous)) + (a * float(current)), 6)
+    if isinstance(previous, list) and isinstance(current, list):
+        width = min(len(previous), len(current))
+        return [round(((1.0 - a) * float(previous[i])) + (a * float(current[i])), 6) for i in range(width)]
+    if isinstance(previous, dict) and isinstance(current, dict):
+        keys = sorted(set(previous.keys()) & set(current.keys()))
+        return {
+            str(k): round(((1.0 - a) * float(previous[k])) + (a * float(current[k])), 6)
+            for k in keys
+            if isinstance(previous.get(k), (int, float)) and isinstance(current.get(k), (int, float))
+        }
+    return current
+
+
 class TrailStore:
     def __init__(self, path: Path | None = None, half_life_hours: float = DEFAULT_HALF_LIFE_HOURS):
         self.path = Path(path or DEFAULT_TRAILS_PATH)
@@ -92,6 +133,9 @@ class TrailStore:
                 handle.write(json.dumps(row, ensure_ascii=False) + "\n")
 
     def add(self, trail: Dict[str, Any]) -> str:
+        return self.deposit(trail, valence=trail.get("valence_signature"))
+
+    def deposit(self, trail: Dict[str, Any], valence: Any = None) -> str:
         text = str(trail.get("text", "")).strip()
         tags = [str(x) for x in (trail.get("tags") or []) if str(x)]
         embedding = trail.get("embedding")
@@ -109,9 +153,36 @@ class TrailStore:
             "created_at": str(trail.get("created_at") or now),
             "updated_at": str(trail.get("updated_at") or now),
         }
+        if _trail_valence_enabled() and (valence is not None or trail.get("valence_signature") is not None):
+            valence_raw = valence if valence is not None else trail.get("valence_signature")
+            hops = int(trail.get("valence_hops", 0) or 0)
+            row["valence_signature"] = dampen_valence_signature(valence_raw, hops=hops)
+            row["valence_hops"] = hops
+            previous = None
+            for prior in reversed(self._read_all()):
+                if str(prior.get("text", "")).strip() == text and prior.get("valence_consensus") is not None:
+                    previous = prior.get("valence_consensus")
+                    break
+                if str(prior.get("text", "")).strip() == text and prior.get("valence_signature") is not None:
+                    previous = prior.get("valence_signature")
+                    break
+            row["valence_consensus"] = _blend_valence_signature(previous, row.get("valence_signature"), alpha=0.5)
         with self.path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(row, ensure_ascii=False) + "\n")
         return row["trail_id"]
+
+    def follow(self, text_or_embedding: str | List[float], now: Any = None):
+        trails = self.query(text_or_embedding, k=1, now=now)
+        if not trails:
+            return None, None
+        trail = dict(trails[0])
+        if not _trail_valence_enabled():
+            return trail, None
+        source_signature = trail.get("valence_consensus", trail.get("valence_signature"))
+        if source_signature is None:
+            return trail, None
+        inherited = dampen_valence_signature(source_signature, hops=1)
+        return trail, inherited
 
     def _effective_strength(self, row: Dict[str, Any], now: datetime) -> float:
         updated = _parse_ts(row.get("updated_at") or row.get("created_at"))
@@ -189,4 +260,3 @@ class TrailStore:
             path=Path(str(payload.get("path") or DEFAULT_TRAILS_PATH)),
             half_life_hours=float(payload.get("half_life_hours", DEFAULT_HALF_LIFE_HOURS)),
         )
-

@@ -213,7 +213,7 @@
       ]
     },
     "openai_auth": {
-      "enabled": true,
+      "enabled": false,
       "paid": false,
       "tier": "auth",
       "type": "openai_auth",
@@ -241,7 +241,7 @@
       ]
     },
     "openai_api": {
-      "enabled": true,
+      "enabled": false,
       "paid": true,
       "tier": "paid",
       "type": "openai_compatible",

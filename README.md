@@ -36,7 +36,36 @@ ENABLE_MURMURATION=1      # Sparse peer connections
 ENABLE_RESERVOIR=1        # Echo-state dynamics
 ENABLE_PHYSARUM_ROUTER=1  # Adaptive routing
 ENABLE_TRAIL_MEMORY=1     # External memory trails
+
+# Evolution ideas (all default OFF; opt-in only)
+OPENCLAW_DREAM_PRUNING=0               # Competitive dream-cluster pruning
+OPENCLAW_ROUTER_PROPRIOCEPTION=0       # Router proprioception + TACTI arousal input
+OPENCLAW_TRAILS_VALENCE=0              # Trail valence inheritance and consensus
+OPENCLAW_TEMPORAL_SURPRISE_GATE=0      # KL surprise-gated episodic writes
+OPENCLAW_PEERGRAPH_ANNEAL=0            # Session-step topology annealing
+OPENCLAW_NARRATIVE_DISTILL=0           # Episodic -> semantic distillation writes
+OPENCLAW_AIF_COUNTERFACTUAL=0          # Active inference counterfactual replay
+OPENCLAW_SEMANTIC_IMMUNE_EPITOPES=0    # Bounded epitope cache fast-path
+OPENCLAW_OSCILLATORY_ATTENTION=0       # Phase scheduler for maintenance gating
+OPENCLAW_WITNESS_LEDGER=0              # Append-only witness hash-chain commits
+OPENCLAW_TEAMCHAT=0                    # Multi-agent Team Chat CLI mode
+OPENCLAW_TEAMCHAT_WITNESS=0            # Witness ledger on Team Chat turns
 ```
+All `OPENCLAW_*` evolution flags default OFF unless explicitly enabled.
+When enabled, runtime TACTI events write to `workspace/state_runtime/tacti_cr/events.jsonl` (ignored); `workspace/state/tacti_cr/events.jsonl` remains a deterministic tracked stub.
+Backward-compatible aliases still accepted: `OPENCLAW_DREAM_PRUNE`, `OPENCLAW_TRAIL_VALENCE`, `OPENCLAW_SURPRISE_GATE`, `OPENCLAW_PEER_ANNEAL`, `OPENCLAW_COUNTERFACTUAL_REPLAY`, `OPENCLAW_EPITOPE_CACHE`, `OPENCLAW_OSCILLATORY_GATING`.
+
+Team Chat is also default OFF and flag-gated. Runtime session logs and witness ledger write only to `workspace/state_runtime/teamchat/` (ignored). See `workspace/teamchat/README.md` for Team Chat Witness verification steps.
+
+## Team Chat
+
+Team Chat adds a policy-routed multi-agent conversational workspace with append-only session logs.
+
+- Enable with `OPENCLAW_TEAMCHAT=1` and run `python3 workspace/scripts/team_chat.py --agents planner,coder,critic --session teamchat_demo --max-turns 3`
+- Optional witness commitments per agent turn via `OPENCLAW_TEAMCHAT_WITNESS=1`
+- Auto-commit remains dual opt-in only:
+  - `TEAMCHAT_USER_DIRECTED_TEAMCHAT=1`
+  - `TEAMCHAT_ALLOW_AUTOCOMMIT=1`
 
 ---
 

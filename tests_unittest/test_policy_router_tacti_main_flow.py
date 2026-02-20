@@ -94,6 +94,39 @@ class TestPolicyRouterTactiMainFlow(unittest.TestCase):
                     events_payload.append(json.loads(line))
             self.assertTrue(any(item.get("event") == "tacti_routing_plan" for item in events_payload))
 
+    def test_flags_off_does_not_create_tacti_runtime_events_file(self):
+        with tempfile.TemporaryDirectory() as td:
+            tmp = Path(td)
+            budget = tmp / "budget.json"
+            circuit = tmp / "circuit.json"
+            events = tmp / "events.jsonl"
+            runtime_events = tmp / "state_runtime" / "tacti_cr" / "events.jsonl"
+
+            env = {
+                "ENABLE_MURMURATION": "0",
+                "ENABLE_RESERVOIR": "0",
+                "ENABLE_PHYSARUM_ROUTER": "0",
+                "ENABLE_TRAIL_MEMORY": "0",
+                "TACTI_CR_ENABLE": "0",
+                "TACTI_CR_EVENTS_PATH": str(runtime_events),
+                "GEMINI_API_KEY": "dummy-key",
+            }
+            with patch.dict(os.environ, env, clear=False):
+                router = policy_router.PolicyRouter(
+                    budget_path=budget,
+                    circuit_path=circuit,
+                    event_log=events,
+                    handlers={"google-gemini-cli": lambda payload, model_id, context: {"ok": True, "text": "ok"}},
+                )
+                result = router.execute_with_escalation(
+                    "itc_classify",
+                    {"prompt": "quick classify"},
+                    context_metadata={"input_text": "quick classify", "agent_id": "main"},
+                )
+
+            self.assertTrue(result["ok"])
+            self.assertFalse(runtime_events.exists())
+
 
 if __name__ == "__main__":
     unittest.main()
