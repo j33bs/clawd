@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -13,6 +14,8 @@ import sys
 
 from team_chat_adapters import build_adapters
 import subprocess
+
+AUTOCOMMIT_AUDIT_DIR = Path("workspace") / "audit"
 
 WORKSPACE_ROOT = Path(__file__).resolve().parents[1]
 if str(WORKSPACE_ROOT) not in sys.path:
@@ -32,48 +35,147 @@ except Exception:  # pragma: no cover
     valence_update = None
 
 
-def auto_commit_changes(repo_root: Path, session_id: str, cycle: int) -> str | None:
-    """Auto-commit changes after accepted patch. Returns commit SHA or None."""
+def _env_truthy(value: Any) -> bool:
+    return str(value or "").strip().lower() in {"1", "true", "yes", "on", "enabled"}
+
+
+def _git(repo_root: Path, *args: str, timeout: int = 30) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        ["git", *args],
+        cwd=repo_root,
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+    )
+
+
+def teamchat_user_directed_signal(args: argparse.Namespace) -> tuple[bool, str]:
+    if bool(getattr(args, "user_directed_teamchat", False)):
+        return True, "cli:--user-directed-teamchat"
+    if _env_truthy(os.environ.get("TEAMCHAT_USER_DIRECTED_TEAMCHAT", "0")):
+        return True, "env:TEAMCHAT_USER_DIRECTED_TEAMCHAT"
+    return False, "none"
+
+
+def autocommit_opt_in_signal(args: argparse.Namespace) -> tuple[bool, str]:
+    if bool(getattr(args, "allow_autocommit", False)):
+        return True, "cli:--allow-autocommit"
+    if _env_truthy(os.environ.get("TEAMCHAT_ALLOW_AUTOCOMMIT", "0")):
+        return True, "env:TEAMCHAT_ALLOW_AUTOCOMMIT"
+    return False, "none"
+
+
+def build_autocommit_audit_markdown(
+    *,
+    commit_sha: str,
+    actor_mode: str,
+    rationale: str,
+    files_changed: list[str],
+    command_outcomes: list[tuple[str, str]],
+    git_status_excerpt: str,
+    reproducibility_steps: list[str],
+) -> str:
+    lines = [
+        "# TeamChat Auto-commit Self Audit",
+        "",
+        "## Required Fields",
+        f"- commit_sha: {commit_sha}",
+        f"- actor_mode: {actor_mode}",
+        f"- rationale: {rationale}",
+        "",
+        "## Files Changed (name-status)",
+    ]
+    if files_changed:
+        lines.extend([f"- {row}" for row in files_changed])
+    else:
+        lines.append("- (none)")
+    lines.extend(
+        [
+            "",
+            "## Commands Run + Outcomes",
+        ]
+    )
+    if command_outcomes:
+        lines.extend([f"- `{cmd}` => {outcome}" for cmd, outcome in command_outcomes])
+    else:
+        lines.append("- (none)")
+    lines.extend(
+        [
+            "",
+            "## Cleanliness Evidence (git status)",
+            "```text",
+            git_status_excerpt.strip() or "(empty)",
+            "```",
+            "",
+            "## Reproducibility",
+        ]
+    )
+    lines.extend([f"- {step}" for step in reproducibility_steps])
+    return "\n".join(lines) + "\n"
+
+
+def auto_commit_changes(
+    repo_root: Path,
+    session_id: str,
+    cycle: int,
+    *,
+    autocommit_enabled: bool,
+    autocommit_signal: str,
+    user_directed: bool,
+    user_directed_signal: str,
+) -> tuple[str | None, str | None]:
+    """Auto-commit accepted patch changes when explicit opt-in is present."""
     try:
-        # Check for changes
-        result = subprocess.run(
-            ["git", "status", "--porcelain"],
-            cwd=repo_root,
-            capture_output=True,
-            text=True,
-            timeout=30
+        if not user_directed:
+            return None, None
+        if not autocommit_enabled:
+            return None, None
+
+        status_before = _git(repo_root, "status", "--porcelain", "-uall")
+        status_text = status_before.stdout
+        if not status_text.strip():
+            return None, None
+
+        _git(repo_root, "add", "-A")
+        staged = _git(repo_root, "diff", "--cached", "--name-status")
+        changed_rows = [line.strip() for line in staged.stdout.splitlines() if line.strip()]
+        if not changed_rows:
+            return None, None
+
+        audit_ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        audit_rel = AUTOCOMMIT_AUDIT_DIR / f"teamchat_autocommit_{audit_ts}.md"
+        audit_path = repo_root / audit_rel
+        actor_mode = f"team_chat:auto_commit ({autocommit_signal}; {user_directed_signal})"
+        rationale = f"planner review accepted cycle {cycle}"
+        reproducibility = [
+            f"python3 workspace/scripts/team_chat.py --session-id {session_id} --max-cycles 2 --max-commands-per-cycle 3 --user-directed-teamchat --allow-autocommit",
+            "git show --name-status HEAD",
+        ]
+        audit_body = build_autocommit_audit_markdown(
+            commit_sha="RESOLVE_WITH: git rev-parse HEAD",
+            actor_mode=actor_mode,
+            rationale=rationale,
+            files_changed=changed_rows,
+            command_outcomes=[
+                ("planner.review", "accept"),
+                ("git status --porcelain -uall", "dirty_before_commit"),
+                ("git diff --cached --name-status", f"{len(changed_rows)} files staged"),
+            ],
+            git_status_excerpt=status_text,
+            reproducibility_steps=reproducibility,
         )
-        if not result.stdout.strip():
-            return None  # No changes to commit
-        
-        # Stage all changes
-        subprocess.run(["git", "add", "-A"], cwd=repo_root, capture_output=True, timeout=30)
-        
-        # Create commit message
+        audit_path.parent.mkdir(parents=True, exist_ok=True)
+        audit_path.write_text(audit_body, encoding="utf-8")
+        _git(repo_root, "add", str(audit_rel))
+
         msg = f"teamchat({session_id}): cycle {cycle} accepted patch"
-        
-        # Commit
-        result = subprocess.run(
-            ["git", "commit", "-m", msg],
-            cwd=repo_root,
-            capture_output=True,
-            text=True,
-            timeout=30
-        )
-        
+        result = _git(repo_root, "commit", "-m", msg)
         if result.returncode == 0:
-            # Get commit SHA
-            sha_result = subprocess.run(
-                ["git", "rev-parse", "HEAD"],
-                cwd=repo_root,
-                capture_output=True,
-                text=True,
-                timeout=10
-            )
-            return sha_result.stdout.strip()[:8]
+            sha_result = _git(repo_root, "rev-parse", "HEAD", timeout=10)
+            return sha_result.stdout.strip()[:8], str(audit_rel)
     except Exception as e:
         print(f"Auto-commit failed: {e}")
-    return None
+    return None, None
 
 
 def utc_now() -> str:
@@ -169,6 +271,8 @@ def run(args: argparse.Namespace) -> int:
     repo_root = Path(__file__).resolve().parents[2]
     base_dir = Path(args.output_root) if args.output_root else (repo_root / "workspace" / "teamchat")
     session_id = args.session_id or datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    user_directed, user_directed_signal = teamchat_user_directed_signal(args)
+    autocommit_enabled, autocommit_signal = autocommit_opt_in_signal(args)
 
     sessions_file = base_dir / "sessions" / f"{session_id}.jsonl"
     summary_file = base_dir / "summaries" / f"{session_id}.md"
@@ -214,8 +318,16 @@ def run(args: argparse.Namespace) -> int:
             "max_cycles": max_cycles,
             "max_commands_per_cycle": int(args.max_commands_per_cycle),
             "max_consecutive_failures": max_consecutive_failures,
+            "user_directed_teamchat": bool(user_directed),
+            "user_directed_signal": user_directed_signal,
+            "autocommit_enabled": bool(autocommit_enabled),
+            "autocommit_signal": autocommit_signal,
         }
         state = load_state(state_file, default_state)
+    state["user_directed_teamchat"] = bool(user_directed)
+    state["user_directed_signal"] = user_directed_signal
+    state["autocommit_enabled"] = bool(autocommit_enabled)
+    state["autocommit_signal"] = autocommit_signal
 
     # Build adapters (both for new and resumed sessions)
     planner, coder = build_adapters(
@@ -391,10 +503,19 @@ def run(args: argparse.Namespace) -> int:
                 valence_update("planner", {"success": True}, repo_root=repo_root)
                 valence_update("coder", {"success": True}, repo_root=repo_root)
             
-            # Auto-commit changes after acceptance
-            commit_sha = auto_commit_changes(repo_root, session_id, state.get("cycle", 0))
+            commit_sha, commit_audit = auto_commit_changes(
+                repo_root,
+                session_id,
+                state.get("cycle", 0),
+                autocommit_enabled=bool(state.get("autocommit_enabled")),
+                autocommit_signal=str(state.get("autocommit_signal", "none")),
+                user_directed=bool(state.get("user_directed_teamchat")),
+                user_directed_signal=str(state.get("user_directed_signal", "none")),
+            )
             if commit_sha:
                 state["last_commit"] = commit_sha
+            if commit_audit:
+                state["last_commit_audit"] = commit_audit
         elif decision == "request_input":
             state["status"] = "request_input"
             state["consecutive_failures"] = 0
@@ -466,6 +587,8 @@ def main() -> int:
     parser.add_argument("--max-commands-per-cycle", type=int, default=4)
     parser.add_argument("--max-consecutive-failures", type=int, default=0, help="0 = keep existing")
     parser.add_argument("--allow-cmd", action="append", default=[], help="Extra allowlist regex for live coder commands")
+    parser.add_argument("--user-directed-teamchat", action="store_true", help="Required explicit signal that user directed this TeamChat run")
+    parser.add_argument("--allow-autocommit", action="store_true", help="Allow auto-commit only when user-directed signal is also present")
     parser.add_argument("--live", nargs="?", default=None, const=True, help="Enable live adapters (use --live or --live=1)")
     parser.add_argument("--resume", action="store_true", help="Resume existing session if available")
     parser.add_argument("--force", action="store_true", help="Force new session even if one exists")
