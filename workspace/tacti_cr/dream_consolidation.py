@@ -14,6 +14,10 @@ from typing import Any
 
 from .config import get_float, is_enabled
 
+PRUNE_SIM_THRESHOLD = 0.85
+MIN_MASS = 0.15
+WEAK_DECAY_MULT = 2.0
+
 
 @dataclass
 class DreamItem:
@@ -43,6 +47,71 @@ def _jaccard(a: str, b: str) -> float:
     if not ta or not tb:
         return 0.0
     return len(ta & tb) / float(len(ta | tb))
+
+
+def _env_truthy(value: Any) -> bool:
+    return str(value or "").strip().lower() in {"1", "true", "yes", "on", "enabled"}
+
+
+def _dream_pruning_enabled() -> bool:
+    # Backward-compatible alias support for existing flag spelling.
+    return _env_truthy(os.environ.get("OPENCLAW_DREAM_PRUNING", "0")) or _env_truthy(
+        os.environ.get("OPENCLAW_DREAM_PRUNE", "0")
+    )
+
+
+def _cluster_mass(row: dict[str, Any]) -> float:
+    return float(row.get("mass", row.get("weight", 1.0)) or 0.0)
+
+
+def _cluster_strength(row: dict[str, Any], now: datetime) -> float:
+    mass = max(0.0, _cluster_mass(row))
+    reinforced = int(row.get("reinforcement_count", row.get("count", 1)) or 1)
+    ts_raw = row.get("updated_at") or row.get("last_seen_at") or row.get("reinforced_at")
+    recency = 1.0
+    if ts_raw:
+        try:
+            ts = datetime.fromisoformat(str(ts_raw).replace("Z", "+00:00"))
+            if ts.tzinfo is None:
+                ts = ts.replace(tzinfo=timezone.utc)
+            age_days = max(0.0, (now - ts).total_seconds() / 86400.0)
+            recency = math.exp(-age_days / 30.0)
+        except Exception:
+            recency = 1.0
+    return mass * recency * max(1, reinforced)
+
+
+def _merge_cluster_essence(strong: dict[str, Any], weak: dict[str, Any]) -> dict[str, Any]:
+    out = dict(strong)
+    strong_mass = _cluster_mass(strong)
+    weak_mass = _cluster_mass(weak)
+    out_mass = strong_mass + (weak_mass * 0.4)
+
+    def _as_list(value: Any) -> list[str]:
+        if isinstance(value, list):
+            return [str(x) for x in value if str(x).strip()]
+        return []
+
+    exemplars = _as_list(strong.get("exemplars")) + _as_list(weak.get("exemplars"))
+    if not exemplars:
+        exemplars = [str(strong.get("text", "")).strip(), str(weak.get("text", "")).strip()]
+    tags = _as_list(strong.get("tags")) + _as_list(weak.get("tags"))
+    provenance = _as_list(strong.get("provenance")) + [str(weak.get("cluster_id", weak.get("id", "unknown")))]
+    out["exemplars"] = sorted({x for x in exemplars if x})
+    out["tags"] = sorted({x for x in tags if x})
+    out["provenance"] = sorted({x for x in provenance if x})
+    out["absorbed"] = sorted(
+        {
+            *[str(x) for x in _as_list(strong.get("absorbed"))],
+            str(weak.get("cluster_id", weak.get("id", "unknown"))),
+        }
+    )
+    out["mass"] = round(out_mass, 6)
+    out["weight"] = round(out_mass, 6)
+    out["reinforcement_count"] = int(strong.get("reinforcement_count", 1) or 1) + int(
+        weak.get("reinforcement_count", 1) or 1
+    )
+    return out
 
 
 def _state_paths(repo_root: Path) -> dict[str, Path]:
@@ -155,12 +224,19 @@ def prune_competing_clusters(clusters, sim_threshold, max_merge_per_pass=1):
     """
     if not is_enabled("dream_consolidation"):
         return list(clusters or [])
-    if str(os.environ.get("OPENCLAW_DREAM_PRUNE", "0")).strip().lower() not in {"1", "true", "yes", "on"}:
+    if not _dream_pruning_enabled():
         return list(clusters or [])
 
     rows = [dict(item) for item in (clusters or []) if isinstance(item, dict)]
     if len(rows) <= 1:
         return rows
+
+    threshold = float(sim_threshold if sim_threshold is not None else PRUNE_SIM_THRESHOLD)
+    prune_min_mass = float(os.environ.get("OPENCLAW_DREAM_MIN_MASS", MIN_MASS) or MIN_MASS)
+    weak_decay_mult = float(os.environ.get("OPENCLAW_DREAM_WEAK_DECAY_MULT", WEAK_DECAY_MULT) or WEAK_DECAY_MULT)
+    baseline_decay = 0.5
+    weak_decay_factor = baseline_decay / max(1.0, weak_decay_mult)
+    now_dt = _utc_now()
 
     merges_left = max(1, int(max_merge_per_pass))
     while merges_left > 0:
@@ -172,7 +248,7 @@ def prune_competing_clusters(clusters, sim_threshold, max_merge_per_pass=1):
                 text_a = str(a.get("text", ""))
                 text_b = str(b.get("text", ""))
                 sim = _jaccard(text_a, text_b)
-                if sim < float(sim_threshold):
+                if sim < threshold:
                     continue
                 key = (
                     -sim,
@@ -187,20 +263,24 @@ def prune_competing_clusters(clusters, sim_threshold, max_merge_per_pass=1):
         _, i, j, _sim = candidate
         left = rows[i]
         right = rows[j]
-        lw = float(left.get("weight", 1.0) or 1.0)
-        rw = float(right.get("weight", 1.0) or 1.0)
-        if rw > lw or (rw == lw and str(right.get("cluster_id", right.get("id", ""))) < str(left.get("cluster_id", left.get("id", "")))):
+        ls = _cluster_strength(left, now_dt)
+        rs = _cluster_strength(right, now_dt)
+        if rs > ls or (rs == ls and str(right.get("cluster_id", right.get("id", ""))) < str(left.get("cluster_id", left.get("id", "")))):
             left, right = right, left
-            lw, rw = rw, lw
+        weak_mass = _cluster_mass(right) * weak_decay_factor
+        merged = _merge_cluster_essence(left, right)
 
-        left["weight"] = round(lw + (rw * 0.25), 6)
-        left["absorbed"] = sorted(set([*left.get("absorbed", []), str(right.get("cluster_id", right.get("id", "")))]))
-        right["weight"] = round(rw * 0.5, 6)
         rows = [row for idx, row in enumerate(rows) if idx not in {i, j}]
-        rows.append(left)
+        rows.append(merged)
+        if weak_mass > prune_min_mass:
+            weakened = dict(right)
+            weakened["mass"] = round(weak_mass, 6)
+            weakened["weight"] = round(weak_mass, 6)
+            weakened["decayed_by_pruning"] = True
+            rows.append(weakened)
         merges_left -= 1
 
-    rows.sort(key=lambda row: (-float(row.get("weight", 1.0) or 1.0), str(row.get("cluster_id", row.get("id", "")))))
+    rows.sort(key=lambda row: (-_cluster_mass(row), str(row.get("cluster_id", row.get("id", "")))))
     return rows
 
 
