@@ -41,4 +41,4 @@ Body:
 - `TEAMCHAT_USER_DIRECTED_TEAMCHAT=1 TEAMCHAT_ALLOW_AUTOCOMMIT=1 bash workspace/scripts/verify_team_chat.sh` (opt-in: commit + audit artifact)
 
 ## 6) Rollback guidance
-- `git revert <merge-commit-sha>` (fill after merge)
+- `git revert 23abfb3`
