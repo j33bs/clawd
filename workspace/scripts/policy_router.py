@@ -828,11 +828,31 @@ class PolicyRouter:
             else None
         )
 
+    def _intent_aliases(self, intent):
+        value = str(intent or "").strip()
+        aliases = [value] if value else []
+        if value.startswith("teamchat:"):
+            agent = value.split(":", 1)[1].strip()
+            if agent:
+                aliases.append(f"teamchat:{agent}")
+                aliases.append(f"teamchat_{agent}")
+            aliases.append("teamchat")
+            aliases.append("coding")
+        return aliases
+
     def _intent_cfg(self, intent):
         intents = self.policy.get("routing", {}).get("intents", {})
-        if intent in intents:
-            return intents.get(intent, {})
-        return intents.get("conversation", {})
+        for key in self._intent_aliases(intent):
+            if key in intents:
+                return intents.get(key, {})
+        return intents.get("conversation", intents.get("coding", {}))
+
+    def _budget_intent_key(self, intent):
+        intents = self.policy.get("budgets", {}).get("intents", {})
+        for key in self._intent_aliases(intent):
+            if key in intents:
+                return key
+        return str(intent or "")
 
     def _provider_cfg(self, name):
         return self.policy.get("providers", {}).get(name, {})
@@ -1309,6 +1329,7 @@ class PolicyRouter:
 
     def execute_with_escalation(self, intent, payload, context_metadata=None, validate_fn=None):
         intent_cfg = self._intent_cfg(intent)
+        budget_intent = self._budget_intent_key(intent)
         attempts = 0
         last_reason = None
         decision_started_at = time.monotonic()
@@ -1371,12 +1392,14 @@ class PolicyRouter:
                 self.event_log,
             )
 
-        max_per_run = int(self.policy.get("budgets", {}).get("intents", {}).get(intent, {}).get("maxCallsPerRun", 0))
-        self.run_counts.setdefault(intent, 0)
+        max_per_run = int(
+            self.policy.get("budgets", {}).get("intents", {}).get(budget_intent, {}).get("maxCallsPerRun", 0)
+        )
+        self.run_counts.setdefault(budget_intent, 0)
         now = int(time.time())
 
         for name in order:
-            if max_per_run and self.run_counts[intent] >= max_per_run:
+            if max_per_run and self.run_counts[budget_intent] >= max_per_run:
                 last_reason = "max_calls_per_run_exhausted"
                 log_event("router_skip", {"intent": intent, "provider": name, "reason_code": last_reason}, self.event_log)
                 break
@@ -1449,15 +1472,15 @@ class PolicyRouter:
                 effective_tokens = max(1, int(round(est_tokens / max(multiplier, 0.05))))
                 if tacti_controls.get("tighten_budget"):
                     effective_tokens = max(1, int(round(effective_tokens * 1.25)))
-            allowed, reason = self._budget_allows(intent, tier, effective_tokens)
+            allowed, reason = self._budget_allows(budget_intent, tier, effective_tokens)
             if not allowed:
                 last_reason = reason
                 log_event("router_skip", {"intent": intent, "provider": name, "reason_code": reason}, self.event_log)
                 continue
 
             attempts += 1
-            self.run_counts[intent] += 1
-            self._budget_consume(intent, tier, effective_tokens)
+            self.run_counts[budget_intent] += 1
+            self._budget_consume(budget_intent, tier, effective_tokens)
 
             # handler dispatch
             handler = self.handlers.get(name)
