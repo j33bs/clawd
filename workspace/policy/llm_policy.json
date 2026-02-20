@@ -126,8 +126,12 @@
       "paid": true,
       "tier": "paid",
       "type": "openai_compatible",
-      "baseUrl": "https://api.openai.com/v1",
-      "apiKeyEnv": "OPENAI_API_KEY",
+      "baseUrl": "https://chatgpt.com",
+      "endpoint": "/backend-api/codex/responses",
+      "wire": "codex_cli_compat",
+      "auth": {
+        "type": "oauth_codex"
+      },
       "models": [
         {
           "id": "gpt-5.3-codex",
@@ -140,8 +144,12 @@
       "paid": true,
       "tier": "paid",
       "type": "openai_compatible",
-      "baseUrl": "https://api.openai.com/v1",
-      "apiKeyEnv": "OPENAI_API_KEY",
+      "baseUrl": "https://chatgpt.com",
+      "endpoint": "/backend-api/codex/responses",
+      "wire": "codex_cli_compat",
+      "auth": {
+        "type": "oauth_codex"
+      },
       "models": [
         {
           "id": "gpt-5.3-codex-spark",
