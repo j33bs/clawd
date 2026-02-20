@@ -726,3 +726,9 @@ OK 38 test group(s)
 - Witness ledger commit currently stores minimal routing summary record only; no cross-process lock is used.
 - Narrative distillation currently uses token Jaccard fallback and does not require embedding infrastructure.
 - `workspace/state/tacti_cr/events.jsonl` is a tracked runtime log and remained dirty in this worktree baseline; intentionally excluded from commits.
+
+## State log determinism contract
+- Tracked deterministic stub: workspace/state/tacti_cr/events.jsonl (never written at runtime)
+- Runtime sink (ignored): workspace/state_runtime/tacti_cr/events.jsonl
+- Override: TACTI_CR_EVENTS_PATH (tests/dev can pin fixtures)
+- Regression: test_flags_off_does_not_create_tacti_runtime_events_file
