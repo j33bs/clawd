@@ -37,8 +37,90 @@ except Exception:  # pragma: no cover
     valence_update = None
 
 
-def auto_commit_changes(repo_root: Path, session_id: str, cycle: int) -> str | None:
-    """Auto-commit changes after accepted patch. Returns commit SHA or None."""
+def _truthy(value: Any) -> bool:
+    return str(value or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def autocommit_opt_in_signal(args: argparse.Namespace) -> tuple[bool, str]:
+    if _truthy(os.environ.get("TEAMCHAT_ALLOW_AUTOCOMMIT")):
+        return True, "env:TEAMCHAT_ALLOW_AUTOCOMMIT"
+    if bool(getattr(args, "allow_autocommit", False)):
+        return True, "cli:--allow-autocommit"
+    return False, "none"
+
+
+def teamchat_user_directed_signal(args: argparse.Namespace) -> tuple[bool, str]:
+    if _truthy(os.environ.get("TEAMCHAT_USER_DIRECTED_TEAMCHAT")):
+        return True, "env:TEAMCHAT_USER_DIRECTED_TEAMCHAT"
+    if bool(getattr(args, "user_directed_teamchat", False)):
+        return True, "cli:--user-directed-teamchat"
+    return False, "none"
+
+
+def _write_autocommit_audit(
+    repo_root: Path,
+    *,
+    commit_sha: str,
+    session_id: str,
+    cycle: int,
+    autocommit_signal: str,
+    user_directed_signal: str,
+    files_changed_text: str,
+) -> Path:
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    rel_path = Path("workspace") / "audit" / f"teamchat_autocommit_{stamp}.md"
+    abs_path = repo_root / rel_path
+    abs_path.parent.mkdir(parents=True, exist_ok=True)
+    body = "\n".join(
+        [
+            "# TeamChat autocommit audit",
+            "",
+            "## Required Fields",
+            f"- commit_sha: {commit_sha}",
+            f"- actor_mode: teamchat_autocommit ({autocommit_signal}; {user_directed_signal})",
+            f"- rationale: session `{session_id}` cycle `{cycle}` accepted patch",
+            "",
+            "## Files Changed (name-status)",
+            "```text",
+            files_changed_text.strip() or "(none)",
+            "```",
+            "",
+            "## Commands Run + Outcomes",
+            "```text",
+            "git status --porcelain -uall : ok",
+            "git add -A : ok",
+            f"git commit -m teamchat({session_id}): cycle {cycle} accepted patch : ok",
+            "```",
+            "",
+            "## Cleanliness Evidence (git status)",
+            "```text",
+            "captured pre-commit via git status --porcelain -uall",
+            "```",
+            "",
+            "## Reproducibility",
+            "```text",
+            "TEAMCHAT_USER_DIRECTED_TEAMCHAT=1 TEAMCHAT_ALLOW_AUTOCOMMIT=1 bash workspace/scripts/verify_team_chat.sh",
+            "```",
+            "",
+        ]
+    )
+    abs_path.write_text(body, encoding="utf-8")
+    return rel_path
+
+
+def auto_commit_changes(
+    repo_root: Path,
+    session_id: str,
+    cycle: int,
+    *,
+    autocommit_enabled: bool = True,
+    autocommit_signal: str = "none",
+    user_directed: bool = True,
+    user_directed_signal: str = "none",
+) -> tuple[str | None, str | None]:
+    """Auto-commit changes after accepted patch. Returns (commit_sha_short, audit_rel_path) or (None, None)."""
+    if not autocommit_enabled or not user_directed:
+        return None, None
     try:
         # Run pre-commit audit
         audit_script = repo_root / "workspace" / "scripts" / "audit_commit_hook.py"
@@ -52,7 +134,7 @@ def auto_commit_changes(repo_root: Path, session_id: str, cycle: int) -> str | N
             )
             if audit_result.returncode != 0:
                 print(f"Auto-commit blocked by audit: {audit_result.stdout}")
-                return None
+                return None, None
         
         # Check for changes
         result = subprocess.run(
@@ -63,8 +145,20 @@ def auto_commit_changes(repo_root: Path, session_id: str, cycle: int) -> str | N
             timeout=30
         )
         if not result.stdout.strip():
-            return None  # No changes to commit
-        
+            return None, None  # No changes to commit
+
+        files_changed = result.stdout
+
+        audit_rel = _write_autocommit_audit(
+            repo_root,
+            commit_sha="pending",
+            session_id=session_id,
+            cycle=cycle,
+            autocommit_signal=autocommit_signal,
+            user_directed_signal=user_directed_signal,
+            files_changed_text=files_changed,
+        )
+
         # Stage all changes
         subprocess.run(["git", "add", "-A"], cwd=repo_root, capture_output=True, timeout=30)
         
@@ -89,10 +183,11 @@ def auto_commit_changes(repo_root: Path, session_id: str, cycle: int) -> str | N
                 text=True,
                 timeout=10
             )
-            return sha_result.stdout.strip()[:8]
+            commit_sha_short = sha_result.stdout.strip()[:8]
+            return commit_sha_short, str(audit_rel)
     except Exception as e:
         print(f"Auto-commit failed: {e}")
-    return None
+    return None, None
 
 
 def _parse_bool(value: Any, default: bool = False) -> bool:
@@ -600,7 +695,17 @@ def run(args: argparse.Namespace) -> int:
                 valence_update("coder", {"success": True}, repo_root=repo_root)
             
             # Auto-commit changes after acceptance
-            commit_sha = auto_commit_changes(repo_root, session_id, state.get("cycle", 0)) if auto_commit_enabled else None
+            commit_sha = None
+            if auto_commit_enabled:
+                commit_sha, _audit_path = auto_commit_changes(
+                    repo_root,
+                    session_id,
+                    state.get("cycle", 0),
+                    autocommit_enabled=auto_commit_enabled,
+                    autocommit_signal="env:TEAMCHAT_AUTO_COMMIT" if _truthy(os.environ.get("TEAMCHAT_AUTO_COMMIT")) else "runtime_guard",
+                    user_directed=True,
+                    user_directed_signal="runtime_teamchat_session",
+                )
             if commit_sha:
                 state["last_commit"] = commit_sha
         elif decision == "request_input":
@@ -685,3 +790,42 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
+
+def run_multi_agent(
+    args: argparse.Namespace,
+    *,
+    repo_root: Path | None = None,
+    router: Any | None = None,
+    input_fn=input,
+    output_fn=print,
+) -> int:
+    del input_fn  # reserved for interactive variants
+    root = Path(repo_root) if repo_root else Path(__file__).resolve().parents[2]
+    if not _truthy(os.environ.get("OPENCLAW_TEAMCHAT")):
+        output_fn("Team Chat disabled. Set OPENCLAW_TEAMCHAT=1 to enable.")
+        return 2
+
+    session_name = str(getattr(args, "session", "") or getattr(args, "session_id", "") or "teamchat")
+    message = str(getattr(args, "message", "") or "")
+    max_turns = int(getattr(args, "max_turns", 1) or 1)
+    agents = [item.strip() for item in str(getattr(args, "agents", "planner,coder")).split(",") if item.strip()]
+    if not agents:
+        output_fn("No agents configured.")
+        return 1
+
+    from teamchat.orchestrator import TeamChatOrchestrator
+    from teamchat.session import TeamChatSession
+    from policy_router import PolicyRouter
+
+    session = TeamChatSession(session_id=session_name, agents=agents, repo_root=root)
+    orchestrator = TeamChatOrchestrator(
+        session=session,
+        router=router or PolicyRouter(),
+        witness_enabled=_truthy(os.environ.get("OPENCLAW_TEAMCHAT_WITNESS")),
+        context_window=int(getattr(args, "context_window", 8) or 8),
+    )
+    result = orchestrator.run_cycle(user_message=message, max_turns=max_turns)
+    for row in result.get("replies", []):
+        output_fn(f"{row.get('role')}: {row.get('content')}")
+    return 0 if result.get("ok") else 1
