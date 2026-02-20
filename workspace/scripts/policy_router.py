@@ -208,9 +208,57 @@ DEFAULT_POLICY = {
     },
 }
 
+# Alias normalization to reconcile invariant/policy strings with registry IDs.
+PROVIDER_ID_ALIASES = {
+    "google-gemini-cli": "gemini",
+    "qwen-portal": "qwen_alibaba",
+    "minimax-portal": "minimax-portal",
+    "gemini": "gemini",
+    "qwen_alibaba": "qwen_alibaba",
+    "groq": "groq",
+    "ollama": "ollama",
+}
+
+# Back-compat bridge from normalized registry IDs to policy provider keys.
+PROVIDER_ID_TO_POLICY_PROVIDER = {
+    "qwen_alibaba": "qwen",
+}
+
 
 class PolicyValidationError(Exception):
     pass
+
+
+def normalize_provider_id(value):
+    if not isinstance(value, str):
+        return value
+    key = value.strip()
+    if not key:
+        return key
+    return PROVIDER_ID_ALIASES.get(key, key)
+
+
+def _normalize_provider_order(items):
+    if not isinstance(items, list):
+        return []
+    return [normalize_provider_id(item) for item in items if isinstance(item, str)]
+
+
+def _normalize_policy_routing(policy):
+    routing = policy.get("routing", {})
+    if not isinstance(routing, dict):
+        return
+    routing["free_order"] = _normalize_provider_order(routing.get("free_order", []))
+    intents = routing.get("intents", {})
+    if isinstance(intents, dict):
+        for cfg in intents.values():
+            if isinstance(cfg, dict):
+                cfg["order"] = _normalize_provider_order(cfg.get("order", []))
+    rules = routing.get("rules", [])
+    if isinstance(rules, list):
+        for rule in rules:
+            if isinstance(rule, dict) and isinstance(rule.get("provider"), str):
+                rule["provider"] = normalize_provider_id(rule.get("provider"))
 
 
 def _deep_merge(defaults, incoming):
@@ -281,6 +329,7 @@ def load_policy(path=POLICY_FILE):
             raise
         except Exception:
             log_event("policy_load_fail", {"path": str(path)})
+    _normalize_policy_routing(policy)
     return policy
 
 
@@ -671,7 +720,7 @@ def _resolve_order(intent_cfg, policy):
         if entry == "free":
             order.extend(policy.get("routing", {}).get("free_order", []))
         else:
-            order.append(entry)
+            order.append(normalize_provider_id(entry))
     # de-dup preserving order
     seen = set()
     final = []
@@ -722,7 +771,22 @@ class PolicyRouter:
         return intents.get("conversation", {})
 
     def _provider_cfg(self, name):
-        return self.policy.get("providers", {}).get(name, {})
+        providers = self.policy.get("providers", {})
+        if name in providers:
+            return providers.get(name, {})
+        normalized = normalize_provider_id(name)
+        if normalized in providers:
+            return providers.get(normalized, {})
+        mapped = PROVIDER_ID_TO_POLICY_PROVIDER.get(normalized)
+        if mapped and mapped in providers:
+            return providers.get(mapped, {})
+        for provider_name, cfg in providers.items():
+            if not isinstance(cfg, dict):
+                continue
+            pid = cfg.get("provider_id")
+            if isinstance(pid, str) and normalize_provider_id(pid) == normalized:
+                return providers.get(provider_name, {})
+        return {}
 
     def _provider_model(self, name, intent_cfg, context):
         provider = self._provider_cfg(name)
@@ -888,7 +952,7 @@ class PolicyRouter:
         decision = self._capability_decision(context_metadata, payload_text)
         if not decision:
             return base_order, None
-        preferred = decision.get("provider")
+        preferred = normalize_provider_id(decision.get("provider"))
         if preferred:
             order = [preferred] + [name for name in base_order if name != preferred]
         else:
