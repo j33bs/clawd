@@ -43,3 +43,9 @@
   - `workspace/source-ui/README.md` (`M`)
   - `workspace/source-ui/js/mood.js` (`D`)
 - Earlier mention of `team_chat.py` / `audit_commit_hook.py` drift refers to prior incident context captured in the copied verification markdown (`workspace/audit/team_chat_verification_dali_clean_20260220T050915Z.md`).
+
+## Correction / Clarification (Append-Only 2)
+- Observed-and-restored tracked drift for this session was limited to:
+  - `workspace/source-ui/README.md` (`M`)
+  - `workspace/source-ui/js/mood.js` (`D`)
+- `team_chat.py` / `audit_commit_hook.py` drift is treated as prior incident referenced in copied evidence, not asserted as directly observed in this session.
