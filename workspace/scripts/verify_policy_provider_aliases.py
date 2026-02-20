@@ -63,6 +63,7 @@ def main():
                 policy_paid_ids.add(pid)
             else:
                 policy_free_ids.add(pid)
+    catalog_unknown_cost_ids = set(catalog_ids) - set(policy_provider_ids)
     allowed_ids = set(catalog_ids) | set(policy_provider_ids)
 
     print("policy_path:", policy_path)
@@ -102,18 +103,29 @@ def main():
     sensitive_intents = ("governance", "security", "system2_audit")
     intent_orders_normalized = {}
     intent_paid_violations = {}
+    intent_unknown_cost_violations = {}
+    intent_cost_class = {}
     intents = (policy.get("routing", {}) or {}).get("intents", {}) or {}
     for intent in sensitive_intents:
         cfg = intents.get(intent)
         if not isinstance(cfg, dict):
             intent_orders_normalized[intent] = []
+            intent_cost_class[intent] = {"free": [], "paid": [], "unknown": []}
             continue
         order = cfg.get("order", [])
         normalized_order = [normalize_provider_id(x) for x in order if isinstance(x, str)]
         intent_orders_normalized[intent] = normalized_order
-        offenders = sorted({pid for pid in normalized_order if pid in policy_paid_ids})
-        if offenders:
-            intent_paid_violations[intent] = offenders
+        offenders_paid = sorted({pid for pid in normalized_order if pid in policy_paid_ids})
+        offenders_unknown = sorted({pid for pid in normalized_order if pid in catalog_unknown_cost_ids})
+        if offenders_paid:
+            intent_paid_violations[intent] = offenders_paid
+        if offenders_unknown:
+            intent_unknown_cost_violations[intent] = offenders_unknown
+        intent_cost_class[intent] = {
+            "free": sorted({pid for pid in normalized_order if pid in policy_free_ids}),
+            "paid": offenders_paid,
+            "unknown": offenders_unknown,
+        }
 
     unknown = sorted(unknown_set)
     print("diagnostics:")
@@ -138,6 +150,13 @@ def main():
     for intent in sensitive_intents:
         values = intent_orders_normalized.get(intent, [])
         print(f"    {intent}:", ",".join(values) if values else "<none>")
+    print("  intent_cost_class:")
+    for intent in sensitive_intents:
+        classes = intent_cost_class.get(intent, {"free": [], "paid": [], "unknown": []})
+        free_csv = ",".join(classes.get("free", [])) if classes.get("free") else "<none>"
+        paid_csv = ",".join(classes.get("paid", [])) if classes.get("paid") else "<none>"
+        unknown_csv = ",".join(classes.get("unknown", [])) if classes.get("unknown") else "<none>"
+        print(f"    {intent}: free={free_csv} paid={paid_csv} unknown={unknown_csv}")
     print(f"summary: checked={checked} unknown={len(unknown)}")
     if unknown:
         print("FAIL: unknown normalized routing provider IDs:")
@@ -151,6 +170,14 @@ def main():
                 continue
             print(f"FAIL: paid providers present in intent order: {intent}")
             print("  offending:", ",".join(offenders))
+        return 2
+    if intent_unknown_cost_violations:
+        for intent in sensitive_intents:
+            offenders = intent_unknown_cost_violations.get(intent)
+            if not offenders:
+                continue
+            print(f"FAIL: unknown cost-class providers present in intent order: {intent}")
+            print("  offending_unknown:", ",".join(offenders))
         return 2
 
     print("PASS: all normalized routing IDs are in catalog or policy providers")
