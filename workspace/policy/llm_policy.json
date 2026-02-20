@@ -135,6 +135,27 @@
         }
       ]
     },
+    "openai-codex": {
+      "enabled": true,
+      "paid": true,
+      "tier": "auth",
+      "type": "openai_compatible",
+      "baseUrl": "https://chatgpt.com/backend-api",
+      "models": [
+        {
+          "id": "gpt-5.3-codex",
+          "maxInputChars": 6000
+        },
+        {
+          "id": "gpt-5.2-codex",
+          "maxInputChars": 6000
+        },
+        {
+          "id": "gpt-5.1-codex",
+          "maxInputChars": 6000
+        }
+      ]
+    },
     "openai_gpt53_codex_spark": {
       "enabled": true,
       "paid": true,
@@ -354,7 +375,7 @@
       "structureComplexityMinBullets": 3,
       "structureComplexityMinPaths": 2,
       "explicitTriggers": {
-        "use chatgpt": "openai_gpt52_chat",
+        "use chatgpt": "openai-codex",
         "use codex": "openai_gpt53_codex"
       },
       "subagentProvider": "local_vllm_assistant",

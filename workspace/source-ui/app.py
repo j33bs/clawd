@@ -389,6 +389,15 @@ class SourceUIHandler(SimpleHTTPRequestHandler):
             else:
                 repo_root = Path(__file__).resolve().parents[2]
                 data = trails_heatmap_payload(repo_root, top_n=20)
+        elif path == 'ain/status':
+            # AIN Agent Status
+            data = self._get_ain_status()
+        elif path == 'ain/phi':
+            # AIN Phi (Consciousness) Measurement
+            data = self._get_ain_phi()
+        elif path == 'ain/drives':
+            # AIN Agent Drives
+            data = self._get_ain_drives()
         else:
             data = {'error': 'Not found'}
         
@@ -523,6 +532,71 @@ class SourceUIHandler(SimpleHTTPRequestHandler):
     def restart_gateway(self):
         """Restart gateway."""
         self.send_json({'success': True})
+    
+    # AIN Agent API Endpoints
+    def _get_ain_status(self):
+        """Get AIN agent status."""
+        # Check if AIN agent is running
+        import os
+        code_dir = Path(__file__).resolve().parents[2] / 'nodes' / 'ain' / 'code'
+        
+        if not code_dir.exists():
+            return {
+                'running': False,
+                'message': 'AIN agent not yet implemented. Run Codex to build prototype.',
+                'state': 'idle',
+                'total_drive': 0.0,
+                'drives': {}
+            }
+        
+        # Check for running agent
+        state_file = code_dir / 'agent_state.json'
+        if state_file.exists():
+            import json
+            try:
+                state = json.loads(state_file.read_text())
+                return {
+                    'running': True,
+                    **state
+                }
+            except:
+                pass
+        
+        return {
+            'running': False,
+            'message': 'AIN agent code exists but not running. Start with: python3 code/test_ain.py',
+            'state': 'idle',
+            'total_drive': 0.0,
+            'drives': {}
+        }
+    
+    def _get_ain_phi(self):
+        """Get AIN Phi (consciousness) measurement."""
+        code_dir = Path(__file__).resolve().parents[2] / 'nodes' / 'ain' / 'code'
+        phi_file = code_dir / 'phi_history.json'
+        
+        if phi_file.exists():
+            import json
+            try:
+                history = json.loads(phi_file.read_text())
+                if history:
+                    return history[-1]  # Latest reading
+            except:
+                pass
+        
+        return {
+            'phi': 0.0,
+            'integration': 0.0,
+            'complexity': 0.0,
+            'mutual_info': 0.0,
+            'irreducibility': 0.0,
+            'timestamp': None
+        }
+    
+    def _get_ain_drives(self):
+        """Get AIN agent drives."""
+        status = self._get_ain_status()
+        return status.get('drives', {})
     
     def send_json(self, data, status=200):
         """Send JSON response."""

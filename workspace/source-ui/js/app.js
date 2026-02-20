@@ -19,7 +19,8 @@ const TACTI_PANEL_ENDPOINTS = {
     arousal: '/api/tacti/arousal',
     trails: '/api/hivemind/trails',
     'peer-graph': '/api/hivemind/peer-graph',
-    skills: '/api/skills'
+    skills: '/api/skills',
+    ain: '/api/ain/status'
 };
 
 // Initialize application
@@ -471,6 +472,25 @@ function shapePanelData(panel, payload) {
                 details: [
                     ...links.slice(0, 3).map((link) => `${link.name}: ${link.path}`),
                     ...skills.slice(0, 3).map((skill) => `Skill: ${skill.name}`)
+                ]
+            };
+        }
+        case 'ain': {
+            // AIN Agent panel - consciousness measurement
+            const phiRes = await fetch('/api/ain/phi').catch(() => ({}));
+            const phi = phiRes.ok ? await phiRes.json() : {};
+            
+            return {
+                metrics: [
+                    { label: 'Agent', value: payload.running ? 'Running' : 'Not Running' },
+                    { label: 'State', value: payload.state || 'idle' },
+                    { label: 'Φ (Consciousness)', value: (phi.phi || 0).toFixed(4) },
+                    { label: 'Total Drive', value: (payload.total_drive || 0).toFixed(3) }
+                ],
+                details: [
+                    payload.message ? `Note: ${payload.message}` : 'AIN agent ready',
+                    phi.integration ? `Integration: ${phi.integration.toFixed(4)}` : 'Integration: —',
+                    phi.complexity ? `Complexity: ${phi.complexity.toFixed(4)}` : 'Complexity: —'
                 ]
             };
         }

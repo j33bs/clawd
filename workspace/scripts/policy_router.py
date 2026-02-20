@@ -94,6 +94,39 @@ class PolicyValidationError(Exception):
     """Raised when policy schema validation fails in strict mode."""
 
 
+def _resolve_openai_oauth_token() -> str | None:
+    """
+    Resolve OpenAI OAuth token from OpenClaw auth.json.
+    Returns access token if valid, None otherwise.
+    """
+    auth_path = Path.home() / ".openclaw" / "agents" / "main" / "agent" / "auth.json"
+    if not auth_path.exists():
+        return None
+    try:
+        auth_data = json.loads(auth_path.read_text())
+        # Check both "openai-codex" and "openai" keys
+        for key in ["openai-codex", "openai"]:
+            entry = auth_data.get(key)
+            if not entry:
+                continue
+            # Check for "access" or "access_token"
+            access_token = entry.get("access_token") or entry.get("access")
+            if access_token:
+                expires = entry.get("expires_at") or entry.get("expires")
+                # Check if token is expired (expires is in milliseconds)
+                if expires:
+                    try:
+                        current_ms = int(time.time() * 1000)
+                        if expires < current_ms:
+                            continue  # Token expired
+                    except (TypeError, ValueError):
+                        pass
+                return access_token
+        return None
+    except Exception:
+        return None
+
+
 def _env_truthy(value):
     return str(value).strip().lower() in {"1", "true", "yes", "on"}
 
@@ -632,12 +665,48 @@ def _provider_auth_type(provider):
 
 
 def _provider_api_key_env(provider):
+    # First: Check env var (backwards compatible)
     if provider.get("apiKeyEnv"):
         return provider.get("apiKeyEnv")
     auth = provider.get("auth")
     if isinstance(auth, dict):
-        return auth.get("apiKeyEnv") or auth.get("env")
+        env_val = auth.get("apiKeyEnv") or auth.get("env")
+        if env_val:
+            return env_val
+    
+    # Second: Check OAuth token for OpenAI providers
+    provider_name = provider.get("provider_id", "")
+    if "openai" in provider_name.lower() or provider.get("type") == "openai":
+        oauth_token = _resolve_openai_oauth_token()
+        if oauth_token:
+            return "OAUTH_TOKEN"  # Special marker, see _resolve_provider_api_key
+    
     return ""
+
+
+def _resolve_provider_api_key(provider):
+    """Get API key for provider, checking OAuth as fallback."""
+    # First: Check env var (backwards compatible)
+    api_key_env = _provider_api_key_env(provider)
+    
+    # Check for OAuth token marker
+    if api_key_env == "OAUTH_TOKEN":
+        return _resolve_openai_oauth_token()
+    
+    if api_key_env:
+        api_key = os.environ.get(api_key_env)
+        if api_key:
+            return api_key
+    
+    # Second: Check OAuth token for OpenAI providers (fallback when env var not set)
+    provider_name = provider.get("provider_id", "")
+    provider_type = provider.get("type", "")
+    if "openai" in provider_name.lower() or "openai" in provider_type.lower():
+        oauth_token = _resolve_openai_oauth_token()
+        if oauth_token:
+            return oauth_token
+    
+    return None
 
 
 def _call_openai_compatible(base_url, api_key, model_id, payload, timeout=15):
@@ -1008,12 +1077,10 @@ class PolicyRouter:
                     return False, err or "missing_token"
             else:
                 auth_type = _provider_auth_type(provider)
-                api_key_env = _provider_api_key_env(provider)
-                requires_key = bool(api_key_env) or auth_type == "bearer"
-                if requires_key:
-                    api_key = read_env_or_secrets(api_key_env)
-                    if not api_key:
-                        return False, "missing_api_key"
+                api_key = _resolve_provider_api_key(provider)
+                requires_key = bool(api_key) or auth_type == "bearer"
+                if requires_key and not api_key:
+                    return False, "missing_api_key"
 
         if ptype == "anthropic":
             api_key = read_env_or_secrets(provider.get("apiKeyEnv", ""))
@@ -1432,10 +1499,10 @@ class PolicyRouter:
                     if provider.get("auth") == "qwen_oauth":
                         api_key, _ = get_qwen_token()
                     else:
-                        api_key_env = _provider_api_key_env(provider)
-                        if api_key_env:
-                            api_key = read_env_or_secrets(api_key_env)
+                        api_key = _resolve_provider_api_key(provider)
+                        print(f"DEBUG: Resolving key for {name}: {bool(api_key)}")
                     result = _call_openai_compatible(provider.get("baseUrl", ""), api_key, model_id, payload)
+                    print(f"DEBUG: Call result for {name}: {result.get('reason_code')}")
                 elif ptype == "anthropic":
                     api_key = read_env_or_secrets(provider.get("apiKeyEnv", ""))
                     result = _call_anthropic(provider.get("baseUrl", ""), api_key, model_id, payload)

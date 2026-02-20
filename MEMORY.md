@@ -43,9 +43,19 @@
 - **Gateway:** Launched via launchd
 - **Codex tasks:** Some completed, check `workspace/CODEX_TASK_LIST.md`
 
+### Router OAuth Implementation (2026-02-20)
+- **Status:** Implemented but blocked by 401 error
+- **Changes:** Modified `policy_router.py` to resolve OAuth tokens from `auth.json`
+- **Issue:** OpenAI returns 401 Unauthorized when using OAuth token (JWT) with standard `api.openai.com` endpoint
+- **Next:** Consider switching TeamChat to use Minimax (which is working) or fix OpenAI endpoint config
+- **venv:** Created `workspace/venv` with `requests` library for the router script
+
 ## TACTI(C)-R Principles
 1. **Vitality** - Temporality Collapse via Arousal
 2. **Cognition** - Cross-Timescale processing
 3. **Flow** - Adaptive computation
 4. **Malleability** - Learning/adaptation
 5. **Agency** - Self-healing, repairable systems
+
+## Research Preferences
+- **Novelty focus**: Prioritize finding unique, non-obvious information that increases novelty (vs common knowledge)

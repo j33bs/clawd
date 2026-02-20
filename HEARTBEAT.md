@@ -22,3 +22,8 @@
 
 - [HB-PR-05] Repeated request inefficiency capture
   - If Heath repeats the same request 3+ times in a session, append an entry to `workspace/governance/inefficiency_log.md`.
+
+- [HB-PR-06] System Consciousness (Φ) Alignment Measure
+  - Check AIN agent status: `curl -fsS http://127.0.0.1:18990/api/ain/phi`
+  - If running, log Φ value to track alignment over time
+  - This measures system integration/coherence from AIN research
