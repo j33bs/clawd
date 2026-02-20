@@ -63,8 +63,10 @@ def main():
     )
     print("routing_id -> normalized_id -> allowed?")
 
-    unknown = []
-    seen_unknown = set()
+    resolved_via_catalog_direct = set()
+    resolved_via_alias_to_catalog = set()
+    resolved_via_policy_providers = set()
+    unknown_set = set()
     checked = 0
     for source_id in _routing_ids(policy):
         if source_id == "free":
@@ -72,16 +74,36 @@ def main():
         checked += 1
         normalized = normalize_provider_id(source_id)
         is_allowed = normalized in allowed_ids
+        if normalized in catalog_ids:
+            if source_id == normalized:
+                resolved_via_catalog_direct.add(normalized)
+            else:
+                resolved_via_alias_to_catalog.add(normalized)
+        if normalized in policy_provider_ids:
+            resolved_via_policy_providers.add(normalized)
         if not is_allowed:
             print(f"{source_id} -> {normalized} -> false")
-            if normalized not in seen_unknown:
-                unknown.append(normalized)
-                seen_unknown.add(normalized)
+            unknown_set.add(normalized)
 
+    unknown = sorted(unknown_set)
+    print("diagnostics:")
+    print(
+        "  resolved_via_catalog_direct:",
+        ",".join(sorted(resolved_via_catalog_direct)) if resolved_via_catalog_direct else "<none>",
+    )
+    print(
+        "  resolved_via_alias_to_catalog:",
+        ",".join(sorted(resolved_via_alias_to_catalog)) if resolved_via_alias_to_catalog else "<none>",
+    )
+    print(
+        "  resolved_via_policy_providers:",
+        ",".join(sorted(resolved_via_policy_providers)) if resolved_via_policy_providers else "<none>",
+    )
+    print("  unknown:", ",".join(unknown) if unknown else "<none>")
     print(f"summary: checked={checked} unknown={len(unknown)}")
     if unknown:
         print("FAIL: unknown normalized routing provider IDs:")
-        for item in sorted(unknown):
+        for item in unknown:
             print(f"  - {item}")
         return 2
 
