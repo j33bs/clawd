@@ -93,7 +93,7 @@ def audit_commit() -> bool:
         "checks": results
     }
     
-    audit_log = WORKSPACE_ROOT / "workspace" / "audit" / "commit_audit_log.jsonl"
+    audit_log = WORKSPACE_ROOT / "audit" / "commit_audit_log.jsonl"
     audit_log.parent.mkdir(parents=True, exist_ok=True)
     with open(audit_log, "a") as f:
         f.write(json.dumps(audit_entry) + "\n")

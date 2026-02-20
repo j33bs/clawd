@@ -690,3 +690,33 @@ if (document.readyState === 'loading') {
 
 // Mood Widget
 
+
+// Mood initialization - calls the living mood widget
+async function initMood() {
+    // This is now handled by the mood.js module
+    // Just wait for DOM to be ready and let mood.js handle it
+    if (typeof renderLivingMood === 'function') {
+        try {
+            const response = await fetch('/api/state/valence/planner.json');
+            if (response.ok) {
+                const state = await response.json();
+                const v = state.valence || 0;
+                const hour = new Date().getHours();
+                const a = (hour >= 9 && hour <= 17) ? 0.7 : (hour >= 22 || hour <= 6) ? 0.2 : 0.5;
+                renderLivingMood(v, a);
+            }
+        } catch (e) {
+            renderLivingMood(0, 0.5);
+        }
+        
+        setInterval(async () => {
+            try {
+                const response = await fetch('/api/state/valence/planner.json');
+                if (response.ok) {
+                    const state = await response.json();
+                    renderLivingMood(state.valence || 0, 0.5);
+                }
+            } catch (e) {}
+        }, 15000);
+    }
+}

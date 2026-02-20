@@ -37,3 +37,9 @@
 - 843f51b96e56a0b208eef62cc68a2a088cf97502167556b016364ad5e530a18f  workspace/memory/summaries/tc_dali_kill_clean_fixed_20260220T051241Z.md
 - 36a54fb5a3819ab2c9c003da98ddb14f8d075f09bea188b8b60f230855acb291  workspace/memory/summaries/tc_dali_live_guard_clean_20260220T063915Z.md
 - 92ac854cd4bedd80b2246b9bf90e319e49c6494fe3dfe4c09157d5f2e4a3b0d9  workspace/memory/summaries/tc_dali_verify_clean_fixed_20260220T051241Z.md
+
+## Correction (Append-Only)
+- Verify-worktree tracked drift that was directly observed and restored to `HEAD` in this incident was:
+  - `workspace/source-ui/README.md` (`M`)
+  - `workspace/source-ui/js/mood.js` (`D`)
+- Earlier mention of `team_chat.py` / `audit_commit_hook.py` drift refers to prior incident context captured in the copied verification markdown (`workspace/audit/team_chat_verification_dali_clean_20260220T050915Z.md`).
