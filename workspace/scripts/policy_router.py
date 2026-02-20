@@ -8,7 +8,9 @@ import json
 import os
 import re
 import sys
+import threading
 import time
+from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -17,12 +19,31 @@ try:
 except ImportError:
     requests = None
 
+_REPO_ROOT_LOCK = threading.Lock()
+_REPO_ROOT_CACHE = {}
+_REPO_ROOT_CACHE_STATS = {"hits": 0, "misses": 0}
+_POLICY_CACHE_LOCK = threading.Lock()
+_POLICY_CACHE = {}
+_POLICY_CACHE_STATS = {"hits": 0, "misses": 0}
+
+
 def _resolve_repo_root(start: Path):
-    current = start
+    key = str(Path(start).resolve())
+    with _REPO_ROOT_LOCK:
+        cached = _REPO_ROOT_CACHE.get(key)
+        if cached is not None:
+            _REPO_ROOT_CACHE_STATS["hits"] += 1
+            return cached
+        _REPO_ROOT_CACHE_STATS["misses"] += 1
+    current = Path(key)
     for _ in range(8):
         if (current / ".git").exists():
+            with _REPO_ROOT_LOCK:
+                _REPO_ROOT_CACHE[key] = current
             return current
         current = current.parent
+    with _REPO_ROOT_LOCK:
+        _REPO_ROOT_CACHE[key] = None
     return None
 
 
@@ -318,18 +339,34 @@ def _validate_policy_schema(raw):
 
 
 def load_policy(path=POLICY_FILE):
-    policy = DEFAULT_POLICY
-    if path.exists():
+    policy_path = Path(path)
+    try:
+        mtime_ns = int(policy_path.stat().st_mtime_ns) if policy_path.exists() else None
+    except Exception:
+        mtime_ns = None
+
+    cache_key = str(policy_path)
+    with _POLICY_CACHE_LOCK:
+        cached = _POLICY_CACHE.get(cache_key)
+        if cached and cached.get("mtime_ns") == mtime_ns:
+            _POLICY_CACHE_STATS["hits"] += 1
+            return deepcopy(cached["policy"])
+        _POLICY_CACHE_STATS["misses"] += 1
+
+    policy = deepcopy(DEFAULT_POLICY)
+    if policy_path.exists():
         try:
-            raw = json.loads(path.read_text(encoding="utf-8"))
+            raw = json.loads(policy_path.read_text(encoding="utf-8"))
             if _policy_strict_enabled():
                 _validate_policy_schema(raw)
             policy = _deep_merge(DEFAULT_POLICY, raw)
         except PolicyValidationError:
             raise
         except Exception:
-            log_event("policy_load_fail", {"path": str(path)})
+            log_event("policy_load_fail", {"path": str(policy_path)})
     _normalize_policy_routing(policy)
+    with _POLICY_CACHE_LOCK:
+        _POLICY_CACHE[cache_key] = {"mtime_ns": mtime_ns, "policy": deepcopy(policy)}
     return policy
 
 
