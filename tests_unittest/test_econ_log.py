@@ -2,8 +2,9 @@ import json
 import os
 import tempfile
 import unittest
+from unittest.mock import patch
 
-from core_infra.econ_log import append_jsonl
+from core_infra.econ_log import append_jsonl, flush_pending
 
 
 class TestEconLog(unittest.TestCase):
@@ -27,6 +28,19 @@ class TestEconLog(unittest.TestCase):
             with open(path, "r", encoding="utf-8") as f:
                 row = json.loads(f.readline())
             self.assertEqual(row["text"], "snowman ☃")
+
+    def test_batches_fsync_calls(self):
+        with tempfile.TemporaryDirectory() as td:
+            path = os.path.join(td, "batch.jsonl")
+            with patch("core_infra.econ_log.os.fsync") as fsync_mock:
+                for i in range(120):
+                    append_jsonl(path, {"i": i})
+                flush_pending(path)
+            # 120 writes with batch size 50 -> at most 3 fsyncs.
+            self.assertLessEqual(fsync_mock.call_count, 3)
+            with open(path, "r", encoding="utf-8") as f:
+                rows = [json.loads(line) for line in f if line.strip()]
+            self.assertEqual(len(rows), 120)
 
 
 if __name__ == "__main__":
