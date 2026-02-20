@@ -40,6 +40,20 @@ except Exception:  # pragma: no cover
 def auto_commit_changes(repo_root: Path, session_id: str, cycle: int) -> str | None:
     """Auto-commit changes after accepted patch. Returns commit SHA or None."""
     try:
+        # Run pre-commit audit
+        audit_script = repo_root / "workspace" / "scripts" / "audit_commit_hook.py"
+        if audit_script.exists():
+            audit_result = subprocess.run(
+                ["python3", str(audit_script)],
+                cwd=repo_root,
+                capture_output=True,
+                text=True,
+                timeout=60
+            )
+            if audit_result.returncode != 0:
+                print(f"Auto-commit blocked by audit: {audit_result.stdout}")
+                return None
+        
         # Check for changes
         result = subprocess.run(
             ["git", "status", "--porcelain"],
