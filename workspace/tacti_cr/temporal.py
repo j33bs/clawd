@@ -38,6 +38,7 @@ class TemporalMemory:
         self._retention_days = retention_days
         self._agent_scope = agent_scope
         self._sync_hivemind = sync_hivemind
+        self._surprise_ema: float | None = None
 
     def store(
         self,
@@ -51,14 +52,34 @@ class TemporalMemory:
         gated_metadata = dict(metadata or {})
         if _surprise_gate_enabled():
             centroid = gated_metadata.get("reservoir_centroid")
-            threshold = float(gated_metadata.get("surprise_threshold", 0.35) or 0.35)
-            if isinstance(centroid, list) and not should_write_episode(content, centroid, threshold=threshold):
+            threshold = gated_metadata.get("surprise_threshold")
+            floor = float(gated_metadata.get("surprise_floor", 0.05) or 0.05)
+            mult = float(gated_metadata.get("surprise_mult", 1.2) or 1.2)
+            ema_alpha = float(gated_metadata.get("surprise_ema_alpha", 0.2) or 0.2)
+            surprise_score = None
+            effective_threshold = float(threshold) if threshold is not None else floor
+            if isinstance(centroid, list):
+                surprise_score = surprise_score_proxy(content, centroid)
+                if threshold is None:
+                    baseline = self._surprise_ema if self._surprise_ema is not None else surprise_score
+                    effective_threshold = max(floor, float(baseline) * mult)
+                self._surprise_ema = (
+                    surprise_score
+                    if self._surprise_ema is None
+                    else ((1.0 - ema_alpha) * self._surprise_ema) + (ema_alpha * surprise_score)
+                )
+            if isinstance(centroid, list) and surprise_score is not None and surprise_score < effective_threshold:
                 return TemporalEntry(
                     timestamp=timestamp or datetime.now(timezone.utc),
                     content=content,
                     importance=max(0.0, min(1.0, importance)),
                     decay_rate=decay_rate if decay_rate is not None else DEFAULT_CONFIG.temporal.default_decay_rate,
-                    metadata={**gated_metadata, "surprise_blocked": "1"},
+                    metadata={
+                        **gated_metadata,
+                        "surprise_blocked": "1",
+                        "surprise_score": round(float(surprise_score), 6),
+                        "surprise_threshold": round(float(effective_threshold), 6),
+                    },
                 )
 
         entry = TemporalEntry(
@@ -156,7 +177,13 @@ class TemporalMemory:
 
 
 def _surprise_gate_enabled() -> bool:
-    return str(os.environ.get("OPENCLAW_SURPRISE_GATE", "0")).strip().lower() in {"1", "true", "yes", "on"}
+    value = str(
+        os.environ.get(
+            "OPENCLAW_TEMPORAL_SURPRISE_GATE",
+            os.environ.get("OPENCLAW_SURPRISE_GATE", "0"),
+        )
+    ).strip().lower()
+    return value in {"1", "true", "yes", "on"}
 
 
 def _embed_text(text: str, dim: int = 24) -> List[float]:
@@ -188,9 +215,32 @@ def surprise_score_proxy(content: str, reservoir_centroid: List[float]) -> float
     if not isinstance(reservoir_centroid, list) or not reservoir_centroid:
         return 1.0
     emb = _embed_text(content, dim=len(reservoir_centroid))
-    centroid = [float(x) for x in reservoir_centroid]
-    return max(0.0, min(2.0, 1.0 - _cosine(emb, centroid)))
+    p = _normalize_distribution(emb)
+    q = _normalize_distribution([float(x) for x in reservoir_centroid])
+    return _kl_divergence(p, q)
 
 
 def should_write_episode(content: str, reservoir_centroid: List[float], threshold: float = 0.35) -> bool:
     return surprise_score_proxy(content, reservoir_centroid) >= float(threshold)
+
+
+def _normalize_distribution(values: List[float], eps: float = 1e-9) -> List[float]:
+    if not values:
+        return [1.0]
+    raw = [abs(float(v)) + eps for v in values]
+    total = sum(raw)
+    if total <= 0.0:
+        return [1.0 / float(len(raw)) for _ in raw]
+    return [v / total for v in raw]
+
+
+def _kl_divergence(p: List[float], q: List[float], eps: float = 1e-9) -> float:
+    size = min(len(p), len(q))
+    if size <= 0:
+        return 0.0
+    value = 0.0
+    for idx in range(size):
+        pi = max(eps, float(p[idx]))
+        qi = max(eps, float(q[idx]))
+        value += pi * math.log(pi / qi)
+    return max(0.0, float(value))

@@ -164,12 +164,35 @@ def _witness_ledger_enabled():
     return _env_truthy(os.environ.get("OPENCLAW_WITNESS_LEDGER", "0"))
 
 
+def _clamp01(value):
+    return max(0.0, min(1.0, float(value)))
+
+
+def tacti_arousal_from_proprioception(snapshot):
+    snap = dict(snapshot or {})
+    latency_p95 = float(snap.get("latency_ms_p95", 0.0) or 0.0)
+    error_rate = float(snap.get("error_rate", 0.0) or 0.0)
+    breakers = len(snap.get("breaker_open_providers", []) or [])
+    throughput = float(snap.get("throughput_tokens_per_sec_p50", 0.0) or 0.0)
+    latency_stress = _clamp01(latency_p95 / 1200.0)
+    error_stress = _clamp01(error_rate * 2.0)
+    breaker_stress = _clamp01(breakers / 3.0)
+    throughput_stress = 0.5 if throughput <= 0.0 else _clamp01(1.0 - (throughput / 120.0))
+    return round(
+        _clamp01((0.45 * latency_stress) + (0.30 * error_stress) + (0.15 * breaker_stress) + (0.10 * throughput_stress)),
+        6,
+    )
+
+
 def tacti_features_from_proprioception(snapshot):
     snap = dict(snapshot or {})
     return {
         "router_latency_band": "high" if float(snap.get("latency_ms_p95", 0.0) or 0.0) >= 800.0 else "normal",
         "router_error_rate": float(snap.get("error_rate", 0.0) or 0.0),
         "router_decision_volume": int(snap.get("decisions_last_n", 0) or 0),
+        "router_throughput_tokens_per_sec": float(snap.get("throughput_tokens_per_sec_p50", 0.0) or 0.0),
+        "router_breaker_open_count": len(snap.get("breaker_open_providers", []) or []),
+        "router_arousal_input": tacti_arousal_from_proprioception(snap),
     }
 
 
@@ -1093,6 +1116,8 @@ class PolicyRouter:
         controls["enabled"] = True
         now_ts = int(time.time())
         now_local = time.localtime(now_ts)
+        proprio_arousal = float((context_metadata or {}).get("tacti_arousal_input", (context_metadata or {}).get("arousal", 1.0)) or 1.0)
+        proprio_arousal = _clamp01(proprio_arousal)
 
         if callable(compute_expression):
             expression = compute_expression(
@@ -1102,7 +1127,7 @@ class PolicyRouter:
                     "local_available": True,
                     "hour": int(now_local.tm_hour),
                     "valence": float((context_metadata or {}).get("valence", 0.0)),
-                    "arousal": 1.0,
+                    "arousal": proprio_arousal,
                 },
             )
             controls["expression"] = expression
@@ -1127,10 +1152,17 @@ class PolicyRouter:
             osc = ArousalOscillator(repo_root=BASE_DIR)
             explain = osc.explain(datetime.fromtimestamp(now_ts, tz=timezone.utc))
             controls["multiplier"] = float(explain.get("multiplier", 1.0))
+            if "tacti_arousal_input" in (context_metadata or {}):
+                controls["multiplier"] = round((controls["multiplier"] + proprio_arousal) / 2.0, 6)
             controls["suppress_heavy"] = bool(osc.should_suppress_heavy_escalation())
             _tacti_event(
                 "tacti_cr.arousal_multiplier",
-                {"intent": intent, "multiplier": controls["multiplier"], "explain": explain},
+                {
+                    "intent": intent,
+                    "multiplier": controls["multiplier"],
+                    "proprio_arousal": proprio_arousal,
+                    "explain": explain,
+                },
             )
             if controls["multiplier"] > 0.9 and callable(collapse_emit_recommendation):
                 collapse_emit_recommendation(
@@ -1174,6 +1206,7 @@ class PolicyRouter:
         attempts,
         tokens_in,
         tacti_plan,
+        context_metadata=None,
     ):
         meta = {}
         now_ts = int(time.time())
@@ -1191,6 +1224,7 @@ class PolicyRouter:
                 meta.setdefault("proprioception", self._proprio_sampler.snapshot())
 
         if _witness_ledger_enabled() and callable(witness_commit):
+            local_ctx = dict(context_metadata or {})
             record = {
                 "event": "router_decision",
                 "intent": intent,
@@ -1200,6 +1234,9 @@ class PolicyRouter:
                 "attempts": int(attempts),
                 "tacti_reason": (tacti_plan or {}).get("reason") if isinstance(tacti_plan, dict) else None,
                 "tacti_enabled": bool((tacti_plan or {}).get("enabled")) if isinstance(tacti_plan, dict) else False,
+                "arousal": float(local_ctx.get("tacti_arousal_input", local_ctx.get("arousal", 0.0)) or 0.0),
+                "valence": float(local_ctx.get("valence", 0.0) or 0.0),
+                "proprioception": dict(local_ctx.get("proprioception", {}) or {}),
             }
             committed = witness_commit(record=record, ledger_path=str(WITNESS_LEDGER_PATH))
             meta["witness_hash"] = committed.get("hash")
@@ -1285,6 +1322,7 @@ class PolicyRouter:
                 "tacti_proprioception",
                 tacti_features_from_proprioception(prior_snapshot),
             )
+            context_metadata.setdefault("tacti_arousal_input", tacti_arousal_from_proprioception(prior_snapshot))
         active_inference = _maybe_active_inference_metadata(context_metadata)
         if active_inference:
             context_metadata["active_inference"] = active_inference
@@ -1520,6 +1558,7 @@ class PolicyRouter:
                 attempts=attempts,
                 tokens_in=tokens_in,
                 tacti_plan=tacti_plan,
+                context_metadata=context_metadata,
             )
             log_event(
                 "router_success",
@@ -1556,6 +1595,7 @@ class PolicyRouter:
             attempts=attempts,
             tokens_in=tokens_in,
             tacti_plan=tacti_plan,
+            context_metadata=context_metadata,
         )
         log_event(
             "router_fail",
