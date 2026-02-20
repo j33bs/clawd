@@ -726,3 +726,14 @@ OK 38 test group(s)
 - Witness ledger commit currently stores minimal routing summary record only; no cross-process lock is used.
 - Narrative distillation currently uses token Jaccard fallback and does not require embedding infrastructure.
 - `workspace/state/tacti_cr/events.jsonl` is a tracked runtime log and remained dirty in this worktree baseline; intentionally excluded from commits.
+
+## Merge readiness (2026-02-20)
+- Branch: codex/feat/openclaw-evolution-pack-20260220
+- Tip: 0f66680
+- Clean worktree verification was run from `/tmp/wt_evolution_pack`.
+- Diff vs `origin/main` contains intended evolution/state files only.
+- Gates passed from clean worktree:
+  - `python3 -m unittest -q`
+  - `npm test --silent`
+- PR body paste block for manual GitHub update:
+  - `workspace/audit/PR_BODY_openclaw_evolution_pack_20260220.md`
