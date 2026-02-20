@@ -37,20 +37,21 @@ ENABLE_RESERVOIR=1        # Echo-state dynamics
 ENABLE_PHYSARUM_ROUTER=1  # Adaptive routing
 ENABLE_TRAIL_MEMORY=1     # External memory trails
 
-# Evolution pack (all default OFF; opt-in only)
-OPENCLAW_ROUTER_PROPRIOCEPTION=0  # Attach internal router telemetry in result meta
-OPENCLAW_NARRATIVE_DISTILL=0      # Run episodic->semantic distillation in nightly memory job
-OPENCLAW_WITNESS_LEDGER=0         # Append tamper-evident witness commits for routing decisions
-OPENCLAW_DREAM_PRUNE=0            # Enable deterministic competing-cluster prune merge
-OPENCLAW_TRAIL_VALENCE=0          # Persist optional damped valence signatures on trails
-OPENCLAW_SURPRISE_GATE=0          # Gate episodic writes by surprise-score proxy
-OPENCLAW_PEER_ANNEAL=0            # Temperature-decay peer churn schedule
-OPENCLAW_COUNTERFACTUAL_REPLAY=0  # Heuristic alternative-routing generation
-OPENCLAW_EPITOPE_CACHE=0          # Cache known losing-claim fingerprints
-OPENCLAW_OSCILLATORY_GATING=0     # Phase-based maintenance subsystem gating
+# Evolution ideas (all default OFF; opt-in only)
+OPENCLAW_DREAM_PRUNING=0               # Competitive dream-cluster pruning
+OPENCLAW_ROUTER_PROPRIOCEPTION=0       # Router proprioception + TACTI arousal input
+OPENCLAW_TRAILS_VALENCE=0              # Trail valence inheritance and consensus
+OPENCLAW_TEMPORAL_SURPRISE_GATE=0      # KL surprise-gated episodic writes
+OPENCLAW_PEERGRAPH_ANNEAL=0            # Session-step topology annealing
+OPENCLAW_NARRATIVE_DISTILL=0           # Episodic -> semantic distillation writes
+OPENCLAW_AIF_COUNTERFACTUAL=0          # Active inference counterfactual replay
+OPENCLAW_SEMANTIC_IMMUNE_EPITOPES=0    # Bounded epitope cache fast-path
+OPENCLAW_OSCILLATORY_ATTENTION=0       # Phase scheduler for maintenance gating
+OPENCLAW_WITNESS_LEDGER=0              # Append-only witness hash-chain commits
 ```
 All `OPENCLAW_*` evolution flags default OFF unless explicitly enabled.
-When enabled, TACTI events write to `workspace/state_runtime/tacti_cr/events.jsonl` (ignored); `workspace/state/tacti_cr/events.jsonl` remains a deterministic tracked stub.
+When enabled, runtime TACTI events write to `workspace/state_runtime/tacti_cr/events.jsonl` (ignored); `workspace/state/tacti_cr/events.jsonl` remains a deterministic tracked stub.
+Backward-compatible aliases still accepted: `OPENCLAW_DREAM_PRUNE`, `OPENCLAW_TRAIL_VALENCE`, `OPENCLAW_SURPRISE_GATE`, `OPENCLAW_PEER_ANNEAL`, `OPENCLAW_COUNTERFACTUAL_REPLAY`, `OPENCLAW_EPITOPE_CACHE`, `OPENCLAW_OSCILLATORY_GATING`.
 
 ---
 
