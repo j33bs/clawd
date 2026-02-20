@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List
@@ -64,6 +65,22 @@ def _embed_text(text: str, tags: List[str] | None = None, dim: int = EMBED_DIM) 
     return vec
 
 
+def _trail_valence_enabled() -> bool:
+    value = str(os.environ.get("OPENCLAW_TRAIL_VALENCE", "0")).strip().lower()
+    return value in {"1", "true", "yes", "on"}
+
+
+def dampen_valence_signature(signature: Any, hops: int = 1) -> Any:
+    factor = 0.5 ** max(0, int(hops))
+    if isinstance(signature, dict):
+        return {str(k): round(float(v) * factor, 6) for k, v in signature.items() if isinstance(v, (int, float))}
+    if isinstance(signature, list):
+        return [round(float(v) * factor, 6) for v in signature if isinstance(v, (int, float))]
+    if isinstance(signature, (int, float)):
+        return round(float(signature) * factor, 6)
+    return None
+
+
 class TrailStore:
     def __init__(self, path: Path | None = None, half_life_hours: float = DEFAULT_HALF_LIFE_HOURS):
         self.path = Path(path or DEFAULT_TRAILS_PATH)
@@ -109,6 +126,9 @@ class TrailStore:
             "created_at": str(trail.get("created_at") or now),
             "updated_at": str(trail.get("updated_at") or now),
         }
+        if _trail_valence_enabled() and trail.get("valence_signature") is not None:
+            hops = int(trail.get("valence_hops", 0) or 0)
+            row["valence_signature"] = dampen_valence_signature(trail.get("valence_signature"), hops=hops)
         with self.path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(row, ensure_ascii=False) + "\n")
         return row["trail_id"]
@@ -189,4 +209,3 @@ class TrailStore:
             path=Path(str(payload.get("path") or DEFAULT_TRAILS_PATH)),
             half_life_hours=float(payload.get("half_life_hours", DEFAULT_HALF_LIFE_HOURS)),
         )
-

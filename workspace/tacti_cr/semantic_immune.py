@@ -5,6 +5,8 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import os
+from collections import OrderedDict
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -25,6 +27,32 @@ def _vec(text: str, dim: int = 64) -> list[float]:
         sign = 1.0 if (int(digest[8:10], 16) % 2 == 0) else -1.0
         out[idx] += sign
     return out
+
+
+_EPITOPE_CACHE: "OrderedDict[str, str]" = OrderedDict()
+
+
+def _epitope_enabled() -> bool:
+    return str(os.environ.get("OPENCLAW_EPITOPE_CACHE", "0")).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _epitope_fingerprint(text: str) -> str:
+    tokens = [tok for tok in text.lower().split() if tok][:6]
+    joined = " ".join(tokens)
+    return hashlib.sha256(joined.encode("utf-8")).hexdigest()[:16]
+
+
+def cache_epitope(content: str, verdict: str = "reject", max_size: int = 128) -> str:
+    fp = _epitope_fingerprint(content)
+    _EPITOPE_CACHE[fp] = str(verdict)
+    _EPITOPE_CACHE.move_to_end(fp)
+    while len(_EPITOPE_CACHE) > max(4, int(max_size)):
+        _EPITOPE_CACHE.popitem(last=False)
+    return fp
+
+
+def epitope_cache_hit(content: str) -> bool:
+    return _epitope_fingerprint(content) in _EPITOPE_CACHE
 
 
 def _norm(v: list[float]) -> float:
@@ -91,6 +119,18 @@ def assess_content(repo_root: Path, content: str) -> dict[str, Any]:
         return {"ok": True, "reason": "semantic_immune_disabled", "quarantined": False}
 
     paths = _paths(repo_root)
+    if _epitope_enabled() and epitope_cache_hit(content):
+        digest = hashlib.sha256(content.encode("utf-8")).hexdigest()[:16]
+        row = {
+            "ts": _utc_now(),
+            "content_hash": digest,
+            "score": 1.0,
+            "threshold": 0.0,
+            "reason": "epitope_cache_hit",
+        }
+        _append(paths["quarantine"], {**row, "content": content})
+        return {"ok": True, "quarantined": True, **row}
+
     stats = _load_stats(paths["stats"])
     centroid = [float(x) for x in stats.get("centroid", [0.0] * 64)]
     count = int(stats.get("count", 0))
@@ -115,6 +155,8 @@ def assess_content(repo_root: Path, content: str) -> dict[str, Any]:
 
     if quarantine:
         _append(paths["quarantine"], {**row, "content": content})
+        if _epitope_enabled():
+            cache_epitope(content, verdict="reject")
         return {"ok": True, "quarantined": True, **row}
 
     # update healthy distribution
@@ -160,4 +202,4 @@ def approve_quarantine(repo_root: Path, content_hash: str) -> dict[str, Any]:
     return {"ok": True, "content_hash": target}
 
 
-__all__ = ["assess_content", "approve_quarantine"]
+__all__ = ["assess_content", "approve_quarantine", "cache_epitope", "epitope_cache_hit"]

@@ -36,6 +36,18 @@ ENABLE_MURMURATION=1      # Sparse peer connections
 ENABLE_RESERVOIR=1        # Echo-state dynamics
 ENABLE_PHYSARUM_ROUTER=1  # Adaptive routing
 ENABLE_TRAIL_MEMORY=1     # External memory trails
+
+# Evolution pack (all default OFF; opt-in only)
+OPENCLAW_ROUTER_PROPRIOCEPTION=0  # Attach internal router telemetry in result meta
+OPENCLAW_NARRATIVE_DISTILL=0      # Run episodic->semantic distillation in nightly memory job
+OPENCLAW_WITNESS_LEDGER=0         # Append tamper-evident witness commits for routing decisions
+OPENCLAW_DREAM_PRUNE=0            # Enable deterministic competing-cluster prune merge
+OPENCLAW_TRAIL_VALENCE=0          # Persist optional damped valence signatures on trails
+OPENCLAW_SURPRISE_GATE=0          # Gate episodic writes by surprise-score proxy
+OPENCLAW_PEER_ANNEAL=0            # Temperature-decay peer churn schedule
+OPENCLAW_COUNTERFACTUAL_REPLAY=0  # Heuristic alternative-routing generation
+OPENCLAW_EPITOPE_CACHE=0          # Cache known losing-claim fingerprints
+OPENCLAW_OSCILLATORY_GATING=0     # Phase-based maintenance subsystem gating
 ```
 
 ---

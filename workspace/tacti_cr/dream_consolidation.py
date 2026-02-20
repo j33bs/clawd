@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import os
 import re
 from dataclasses import dataclass
 from datetime import datetime, timezone, timedelta
@@ -147,6 +148,62 @@ def _cluster_insights(candidates: list[str], top_n: int = 5) -> list[str]:
     return insights
 
 
+def prune_competing_clusters(clusters, sim_threshold, max_merge_per_pass=1):
+    """
+    Deterministically merge highly similar clusters, decaying weaker competitors.
+    Enabled only when OPENCLAW_DREAM_PRUNE is truthy.
+    """
+    if not is_enabled("dream_consolidation"):
+        return list(clusters or [])
+    if str(os.environ.get("OPENCLAW_DREAM_PRUNE", "0")).strip().lower() not in {"1", "true", "yes", "on"}:
+        return list(clusters or [])
+
+    rows = [dict(item) for item in (clusters or []) if isinstance(item, dict)]
+    if len(rows) <= 1:
+        return rows
+
+    merges_left = max(1, int(max_merge_per_pass))
+    while merges_left > 0:
+        candidate = None
+        for i in range(len(rows)):
+            for j in range(i + 1, len(rows)):
+                a = rows[i]
+                b = rows[j]
+                text_a = str(a.get("text", ""))
+                text_b = str(b.get("text", ""))
+                sim = _jaccard(text_a, text_b)
+                if sim < float(sim_threshold):
+                    continue
+                key = (
+                    -sim,
+                    str(a.get("cluster_id", a.get("id", i))),
+                    str(b.get("cluster_id", b.get("id", j))),
+                )
+                if candidate is None or key < candidate[0]:
+                    candidate = (key, i, j, sim)
+        if candidate is None:
+            break
+
+        _, i, j, _sim = candidate
+        left = rows[i]
+        right = rows[j]
+        lw = float(left.get("weight", 1.0) or 1.0)
+        rw = float(right.get("weight", 1.0) or 1.0)
+        if rw > lw or (rw == lw and str(right.get("cluster_id", right.get("id", ""))) < str(left.get("cluster_id", left.get("id", "")))):
+            left, right = right, left
+            lw, rw = rw, lw
+
+        left["weight"] = round(lw + (rw * 0.25), 6)
+        left["absorbed"] = sorted(set([*left.get("absorbed", []), str(right.get("cluster_id", right.get("id", "")))]))
+        right["weight"] = round(rw * 0.5, 6)
+        rows = [row for idx, row in enumerate(rows) if idx not in {i, j}]
+        rows.append(left)
+        merges_left -= 1
+
+    rows.sort(key=lambda row: (-float(row.get("weight", 1.0) or 1.0), str(row.get("cluster_id", row.get("id", "")))))
+    return rows
+
+
 def run_consolidation(repo_root: Path, *, day: str, now: datetime | None = None) -> dict[str, Any]:
     if not is_enabled("dream_consolidation"):
         return {"ok": False, "reason": "dream_consolidation_disabled"}
@@ -231,4 +288,4 @@ def run_consolidation(repo_root: Path, *, day: str, now: datetime | None = None)
     }
 
 
-__all__ = ["run_consolidation"]
+__all__ = ["run_consolidation", "prune_competing_clusters"]

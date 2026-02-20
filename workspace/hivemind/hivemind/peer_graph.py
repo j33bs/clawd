@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+import os
 import random
 from dataclasses import dataclass
 from typing import Any, Dict, List
@@ -80,6 +81,18 @@ class PeerGraph:
             return 0
         return min(self._k, len(self._agents) - 1)
 
+    def _anneal_enabled(self) -> bool:
+        value = str(os.environ.get("OPENCLAW_PEER_ANNEAL", "0")).strip().lower()
+        return value in {"1", "true", "yes", "on"}
+
+    def anneal_temperature(self) -> float:
+        if not self._anneal_enabled():
+            return 1.0
+        return max(0.1, math.exp(-0.08 * max(0.0, self._t)))
+
+    def current_churn_probability(self) -> float:
+        return self._churn_rate * self.anneal_temperature()
+
     def _init_topology(self) -> None:
         target = self._target_k()
         for src in self._agents:
@@ -146,8 +159,9 @@ class PeerGraph:
                 if age > 1.0:
                     edge.weight = _clamp(edge.weight * stale_decay, 0.01, 20.0)
 
+        churn_probability = self.current_churn_probability()
         for agent in self._agents:
-            if self._rng.random() < self._churn_rate:
+            if self._rng.random() < churn_probability:
                 self._churn_one_peer(agent)
             self._ensure_k_for_agent(agent)
 
@@ -240,4 +254,3 @@ class PeerGraph:
         for agent in graph._agents:
             graph._ensure_k_for_agent(agent)
         return graph
-

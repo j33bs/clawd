@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, Tuple
@@ -131,3 +132,39 @@ class PreferenceModel:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(self.snapshot(), indent=2) + "\n", encoding="utf-8")
 
+
+def counterfactual_replay_enabled() -> bool:
+    value = str(os.environ.get("OPENCLAW_COUNTERFACTUAL_REPLAY", "0")).strip().lower()
+    return value in {"1", "true", "yes", "on"}
+
+
+def generate_counterfactual_routings(event: Dict[str, Any], candidates: list[str] | None = None, max_items: int = 3) -> list[Dict[str, Any]]:
+    """
+    Deterministic heuristic alternatives for routing analysis without model calls.
+    """
+    if not counterfactual_replay_enabled():
+        return []
+
+    row = dict(event or {})
+    provider = str(row.get("provider") or "")
+    base_reason = str(row.get("reason_code") or "unknown")
+    options = [str(x) for x in (candidates or row.get("candidates") or []) if str(x)]
+    if provider and provider not in options:
+        options.append(provider)
+    options = sorted(dict.fromkeys(options))
+    if not options:
+        options = ["local_vllm_assistant", "groq", "ollama"]
+
+    out: list[Dict[str, Any]] = []
+    for idx, choice in enumerate(options[: max(1, int(max_items))]):
+        latency_penalty = 0.1 if choice.startswith("local_") else 0.25
+        failure_penalty = 0.35 if base_reason not in {"success", "none"} else 0.05
+        score = max(0.0, min(1.0, 1.0 - latency_penalty - failure_penalty - (idx * 0.07)))
+        out.append(
+            {
+                "provider": choice,
+                "estimated_success": round(score, 6),
+                "reason": f"counterfactual_from_{base_reason}",
+            }
+        )
+    return out
