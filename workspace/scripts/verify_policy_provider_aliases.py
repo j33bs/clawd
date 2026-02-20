@@ -53,6 +53,16 @@ def main():
     catalog_ids = _load_catalog_ids()
     providers = policy.get("providers", {})
     policy_provider_ids = set(providers.keys()) if isinstance(providers, dict) else set()
+    policy_paid_ids = set()
+    policy_free_ids = set()
+    if isinstance(providers, dict):
+        for pid, cfg in providers.items():
+            if not isinstance(cfg, dict):
+                continue
+            if cfg.get("paid") is True:
+                policy_paid_ids.add(pid)
+            else:
+                policy_free_ids.add(pid)
     allowed_ids = set(catalog_ids) | set(policy_provider_ids)
 
     print("policy_path:", policy_path)
@@ -65,7 +75,8 @@ def main():
 
     resolved_via_catalog_direct = set()
     resolved_via_alias_to_catalog = set()
-    resolved_via_policy_providers = set()
+    resolved_via_policy_paid = set()
+    resolved_via_policy_free = set()
     unknown_set = set()
     checked = 0
     for source_id in _routing_ids(policy):
@@ -80,10 +91,29 @@ def main():
             else:
                 resolved_via_alias_to_catalog.add(normalized)
         if normalized in policy_provider_ids:
-            resolved_via_policy_providers.add(normalized)
+            if normalized in policy_paid_ids:
+                resolved_via_policy_paid.add(normalized)
+            else:
+                resolved_via_policy_free.add(normalized)
         if not is_allowed:
             print(f"{source_id} -> {normalized} -> false")
             unknown_set.add(normalized)
+
+    sensitive_intents = ("governance", "security", "system2_audit")
+    intent_orders_normalized = {}
+    intent_paid_violations = {}
+    intents = (policy.get("routing", {}) or {}).get("intents", {}) or {}
+    for intent in sensitive_intents:
+        cfg = intents.get(intent)
+        if not isinstance(cfg, dict):
+            intent_orders_normalized[intent] = []
+            continue
+        order = cfg.get("order", [])
+        normalized_order = [normalize_provider_id(x) for x in order if isinstance(x, str)]
+        intent_orders_normalized[intent] = normalized_order
+        offenders = sorted({pid for pid in normalized_order if pid in policy_paid_ids})
+        if offenders:
+            intent_paid_violations[intent] = offenders
 
     unknown = sorted(unknown_set)
     print("diagnostics:")
@@ -96,15 +126,31 @@ def main():
         ",".join(sorted(resolved_via_alias_to_catalog)) if resolved_via_alias_to_catalog else "<none>",
     )
     print(
-        "  resolved_via_policy_providers:",
-        ",".join(sorted(resolved_via_policy_providers)) if resolved_via_policy_providers else "<none>",
+        "  resolved_via_policy_paid:",
+        ",".join(sorted(resolved_via_policy_paid)) if resolved_via_policy_paid else "<none>",
+    )
+    print(
+        "  resolved_via_policy_free:",
+        ",".join(sorted(resolved_via_policy_free)) if resolved_via_policy_free else "<none>",
     )
     print("  unknown:", ",".join(unknown) if unknown else "<none>")
+    print("  intent_orders_normalized:")
+    for intent in sensitive_intents:
+        values = intent_orders_normalized.get(intent, [])
+        print(f"    {intent}:", ",".join(values) if values else "<none>")
     print(f"summary: checked={checked} unknown={len(unknown)}")
     if unknown:
         print("FAIL: unknown normalized routing provider IDs:")
         for item in unknown:
             print(f"  - {item}")
+        return 2
+    if intent_paid_violations:
+        for intent in sensitive_intents:
+            offenders = intent_paid_violations.get(intent)
+            if not offenders:
+                continue
+            print(f"FAIL: paid providers present in intent order: {intent}")
+            print("  offending:", ",".join(offenders))
         return 2
 
     print("PASS: all normalized routing IDs are in catalog or policy providers")
