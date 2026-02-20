@@ -173,6 +173,15 @@ run_memory() {
         fi
     fi
 
+    if [ "${OPENCLAW_NARRATIVE_DISTILL:-0}" = "1" ]; then
+        log "Running narrative distillation (OPENCLAW_NARRATIVE_DISTILL=1)"
+        if python3 "$CLAWD_DIR/workspace/scripts/run_narrative_distill.py" >>"$LOG_FILE" 2>&1; then
+            log "Narrative distillation complete"
+        else
+            log "⚠️ Narrative distillation failed"
+        fi
+    fi
+
     inefficiency_log="$CLAWD_DIR/workspace/governance/inefficiency_log.md"
     if [ -f "$inefficiency_log" ]; then
         stale_open="$(python3 - "$inefficiency_log" <<'PY'
