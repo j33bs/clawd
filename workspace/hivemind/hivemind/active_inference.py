@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import random
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, Tuple
@@ -134,7 +135,12 @@ class PreferenceModel:
 
 
 def counterfactual_replay_enabled() -> bool:
-    value = str(os.environ.get("OPENCLAW_COUNTERFACTUAL_REPLAY", "0")).strip().lower()
+    value = str(
+        os.environ.get(
+            "OPENCLAW_AIF_COUNTERFACTUAL",
+            os.environ.get("OPENCLAW_COUNTERFACTUAL_REPLAY", "0"),
+        )
+    ).strip().lower()
     return value in {"1", "true", "yes", "on"}
 
 
@@ -168,3 +174,61 @@ def generate_counterfactual_routings(event: Dict[str, Any], candidates: list[str
             }
         )
     return out
+
+
+def replay_counterfactuals(event: Dict[str, Any], k: int = 3, rng_seed: int | None = None) -> Dict[str, Any]:
+    """
+    Generate deterministic counterfactual routing alternatives and apply
+    low-impact phantom updates to a free-energy landscape.
+    """
+    if not counterfactual_replay_enabled():
+        return {"ok": True, "enabled": False, "counterfactuals": [], "updates": [], "free_energy": {}}
+
+    row = dict(event or {})
+    chosen = str(row.get("provider") or "")
+    candidates = [str(x) for x in (row.get("candidates") or []) if str(x)]
+    if chosen and chosen not in candidates:
+        candidates.append(chosen)
+    if not candidates:
+        candidates = ["local_vllm_assistant", "groq", "ollama"]
+    candidates = sorted(dict.fromkeys(candidates))
+    alternatives = [c for c in candidates if c != chosen] or candidates
+
+    seed = int(rng_seed) if rng_seed is not None else int(sum(ord(ch) for ch in "|".join(alternatives + [chosen])))
+    rng = random.Random(seed)
+    rng.shuffle(alternatives)
+    selected = alternatives[: max(1, min(3, int(k)))]
+
+    prior_scores = row.get("provider_priors") if isinstance(row.get("provider_priors"), dict) else {}
+    free_energy = {
+        str(key): float(value)
+        for key, value in (row.get("free_energy") or {}).items()
+        if isinstance(value, (int, float))
+    }
+    lr = float(row.get("learning_rate", 0.2) or 0.2) * 0.2
+    updates = []
+    counterfactuals = []
+    for idx, provider in enumerate(selected):
+        prior = float(prior_scores.get(provider, 0.5) or 0.5)
+        novelty_penalty = 0.06 * idx
+        predicted = max(0.0, min(1.0, prior - novelty_penalty))
+        counterfactuals.append(
+            {
+                "provider": provider,
+                "estimated_success": round(predicted, 6),
+                "reason": "counterfactual_replay",
+            }
+        )
+        prev = float(free_energy.get(provider, 0.5))
+        next_val = max(0.0, min(2.0, prev + (lr * (1.0 - predicted))))
+        free_energy[provider] = round(next_val, 6)
+        updates.append({"provider": provider, "from": round(prev, 6), "to": round(next_val, 6), "lr": round(lr, 6)})
+
+    return {
+        "ok": True,
+        "enabled": True,
+        "counterfactuals": counterfactuals,
+        "updates": updates,
+        "free_energy": free_energy,
+        "seed": seed,
+    }

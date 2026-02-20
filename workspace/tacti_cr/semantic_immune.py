@@ -29,11 +29,37 @@ def _vec(text: str, dim: int = 64) -> list[float]:
     return out
 
 
-_EPITOPE_CACHE: "OrderedDict[str, str]" = OrderedDict()
+class EpitopeCache:
+    def __init__(self, capacity: int = 256):
+        self.capacity = max(4, int(capacity))
+        self._rows: "OrderedDict[str, str]" = OrderedDict()
+
+    def add(self, epitope: str, verdict: str = "reject") -> str:
+        key = str(epitope)
+        self._rows[key] = str(verdict)
+        self._rows.move_to_end(key)
+        while len(self._rows) > self.capacity:
+            self._rows.popitem(last=False)
+        return key
+
+    def match(self, claim: str) -> bool:
+        return str(claim) in self._rows
+
+    def __len__(self) -> int:
+        return len(self._rows)
+
+
+_EPITOPE_CACHE = EpitopeCache(capacity=256)
 
 
 def _epitope_enabled() -> bool:
-    return str(os.environ.get("OPENCLAW_EPITOPE_CACHE", "0")).strip().lower() in {"1", "true", "yes", "on"}
+    value = str(
+        os.environ.get(
+            "OPENCLAW_SEMANTIC_IMMUNE_EPITOPES",
+            os.environ.get("OPENCLAW_EPITOPE_CACHE", "0"),
+        )
+    ).strip().lower()
+    return value in {"1", "true", "yes", "on"}
 
 
 def _epitope_fingerprint(text: str) -> str:
@@ -44,15 +70,12 @@ def _epitope_fingerprint(text: str) -> str:
 
 def cache_epitope(content: str, verdict: str = "reject", max_size: int = 128) -> str:
     fp = _epitope_fingerprint(content)
-    _EPITOPE_CACHE[fp] = str(verdict)
-    _EPITOPE_CACHE.move_to_end(fp)
-    while len(_EPITOPE_CACHE) > max(4, int(max_size)):
-        _EPITOPE_CACHE.popitem(last=False)
-    return fp
+    _EPITOPE_CACHE.capacity = max(4, int(max_size))
+    return _EPITOPE_CACHE.add(fp, verdict=str(verdict))
 
 
 def epitope_cache_hit(content: str) -> bool:
-    return _epitope_fingerprint(content) in _EPITOPE_CACHE
+    return _EPITOPE_CACHE.match(_epitope_fingerprint(content))
 
 
 def _norm(v: list[float]) -> float:
@@ -202,4 +225,4 @@ def approve_quarantine(repo_root: Path, content_hash: str) -> dict[str, Any]:
     return {"ok": True, "content_hash": target}
 
 
-__all__ = ["assess_content", "approve_quarantine", "cache_epitope", "epitope_cache_hit"]
+__all__ = ["EpitopeCache", "assess_content", "approve_quarantine", "cache_epitope", "epitope_cache_hit"]
