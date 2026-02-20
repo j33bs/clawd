@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from .message import canonical_message_hash
+from .message import MESSAGE_HASH_VERSION_V2, canonical_message_hash_v2
 from .session import TeamChatSession
 
 try:
@@ -28,7 +28,7 @@ class TeamChatOrchestrator:
         self.router = router
         self.witness_enabled = bool(witness_enabled)
         self.witness_ledger_path = Path(witness_ledger_path) if witness_ledger_path else (
-            self.session.repo_root / "workspace" / "audit" / "witness_ledger.jsonl"
+            self.session.repo_root / "workspace" / "state_runtime" / "teamchat" / "witness_ledger.jsonl"
         )
         self.context_window = max(2, int(context_window))
 
@@ -65,7 +65,12 @@ class TeamChatOrchestrator:
             "turn": int(turn),
             "agent": str(agent),
             "route": dict(route or {}),
-            "message_hash": canonical_message_hash(message_row),
+            "message_hash_version": MESSAGE_HASH_VERSION_V2,
+            "message_hash": canonical_message_hash_v2(
+                message_row,
+                session_id=self.session.session_id,
+                turn=int(turn),
+            ),
             "ts": str(message_row.get("ts", "")),
         }
         witness_commit(record=record, ledger_path=str(self.witness_ledger_path))

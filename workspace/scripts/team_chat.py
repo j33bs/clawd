@@ -43,6 +43,7 @@ except Exception:  # pragma: no cover
 
 
 TEAMCHAT_RUNTIME_DIR = Path("workspace") / "state_runtime" / "teamchat"
+TEAMCHAT_WITNESS_LEDGER_REL = TEAMCHAT_RUNTIME_DIR / "witness_ledger.jsonl"
 
 
 def _env_truthy(value: Any) -> bool:
@@ -355,7 +356,7 @@ def run_multi_agent(
         session=session,
         router=router_impl,
         witness_enabled=_teamchat_witness_enabled(),
-        witness_ledger_path=repo / "workspace" / "audit" / "witness_ledger.jsonl",
+        witness_ledger_path=repo / TEAMCHAT_WITNESS_LEDGER_REL,
         context_window=int(getattr(args, "context_window", 12) or 12),
     )
 
