@@ -49,6 +49,8 @@ OPENCLAW_COUNTERFACTUAL_REPLAY=0  # Heuristic alternative-routing generation
 OPENCLAW_EPITOPE_CACHE=0          # Cache known losing-claim fingerprints
 OPENCLAW_OSCILLATORY_GATING=0     # Phase-based maintenance subsystem gating
 ```
+All `OPENCLAW_*` evolution flags default OFF unless explicitly enabled.
+When enabled, TACTI events write to `workspace/state_runtime/tacti_cr/events.jsonl` (ignored); `workspace/state/tacti_cr/events.jsonl` remains a deterministic tracked stub.
 
 ---
 
