@@ -24,6 +24,7 @@ function initApp() {
     initNotifications();
     initSettings();
     initKeyboardShortcuts();
+    initMood();
     
     // Start data refresh
     startDataRefresh();
@@ -685,4 +686,57 @@ if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', initApp);
 } else {
     initApp();
+}
+
+// Mood Widget
+async function initMood() {
+    // Try to load mood from valence state
+    try {
+        const response = await fetch('/api/state/valence/planner.json');
+        if (response.ok) {
+            const state = await response.json();
+            updateMoodDisplay(state.valence || 0);
+        } else {
+            // Use default neutral
+            updateMoodDisplay(0);
+        }
+    } catch (e) {
+        console.log('Mood state not available, using default');
+        updateMoodDisplay(0);
+    }
+    
+    // Update every 30 seconds
+    setInterval(async () => {
+        try {
+            const response = await fetch('/api/state/valence/planner.json');
+            if (response.ok) {
+                const state = await response.json();
+                updateMoodDisplay(state.valence || 0);
+            }
+        } catch (e) {}
+    }, 30000);
+}
+
+function updateMoodDisplay(valence) {
+    const emoji = document.getElementById('mood-emoji');
+    const label = document.getElementById('mood-label');
+    const valenceEl = document.getElementById('mood-valence');
+    
+    // Simple mood based on valence
+    let mood, color;
+    if (valence > 0.5) {
+        mood = 'Excited'; emoji.textContent = '🤩'; color = '#ffdd00';
+    } else if (valence > 0.2) {
+        mood = 'Happy'; emoji.textContent = '😊'; color = '#88ff00';
+    } else if (valence > -0.2) {
+        mood = 'Neutral'; emoji.textContent = '😐'; color = '#888888';
+    } else if (valence > -0.5) {
+        mood = 'Anxious'; emoji.textContent = '😰'; color = '#ff4400';
+    } else {
+        mood = 'Stressed'; emoji.textContent = '😫'; color = '#ff2200';
+    }
+    
+    if (label) label.textContent = mood;
+    if (label) label.style.color = color;
+    if (valenceEl) valenceEl.textContent = `Valence: ${valence.toFixed(2)}`;
 }
