@@ -138,3 +138,6 @@ completions/
 # Runtime state/logs (never commit)
 workspace/state/
 workspace/state/**/*.jsonl
+
+# Local audit scratch (untracked)
+workspace/audit/_scratch/
