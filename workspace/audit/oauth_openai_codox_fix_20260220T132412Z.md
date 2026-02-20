@@ -174,3 +174,54 @@ FAILURES: 1/38
 ## Root cause summary
 
 TeamChat/codex routing was using the wrong wire contract (`api.openai.com/v1/chat/completions` + API-key assumptions). The official Codex OAuth path requires ChatGPT codex backend (`/backend-api/codex/responses`) with required `instructions` and SSE streaming payload/response shape. Implementing a dedicated `codex_cli_compat` wire mode fixed the OAuth request path and removed the 403/500/400 class mismatch caused by contract drift.
+
+## Baseline parity evidence (origin/main vs PR #37)
+
+Date (UTC): 2026-02-21
+
+### Environment
+
+- `origin/main` SHA: `e8ad6d7`
+- PR SHA: `eed9ce7`
+- Python: `Python 3.14.3`
+- Node: `v25.6.0`
+- npm: `11.8.0`
+
+### Commands
+
+```bash
+# origin/main worktree
+python3 -m unittest -q > /tmp/main_py_unittest.txt 2>&1 || true
+npm test --silent > /tmp/main_npm_test.txt 2>&1 || true
+
+# PR worktree
+python3 -m unittest -q > /tmp/pr_py_unittest.txt 2>&1 || true
+npm test --silent > /tmp/pr_npm_test.txt 2>&1 || true
+
+diff -u /tmp/main_py_unittest.txt /tmp/pr_py_unittest.txt | head -n 120 || true
+diff -u /tmp/main_npm_test.txt /tmp/pr_npm_test.txt | head -n 120 || true
+```
+
+### Python unittest parity summary
+
+- `origin/main` failing headers (`ERROR`/`FAIL`) count: `13`
+- PR failing headers (`ERROR`/`FAIL`) count: `13`
+- Set difference (`main - pr`): none
+- Set difference (`pr - main`): none
+- Primary failures match (same modules/messages), including:
+  - `ImportError: cannot import name 'cache_epitope'`
+  - `AttributeError: module 'team_chat' has no attribute 'run_multi_agent'`
+  - `ImportError: cannot import name 'surprise_score_proxy'`
+  - `AttributeError: policy_router has no attribute 'WITNESS_LEDGER_PATH'`
+
+### npm test parity summary
+
+- Embedded Python failure headers inside npm run: identical (`13`)
+- npm summary line on both:
+  - `FAILURES: 1/38`
+- Set difference (`main - pr`): none
+- Set difference (`pr - main`): none
+
+### Conclusion
+
+Parity confirmed; PR #37 does not worsen baseline gate failures on this machine.
