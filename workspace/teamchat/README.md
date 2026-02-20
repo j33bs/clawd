@@ -1,63 +1,48 @@
-# TeamChat
+# Team Chat
 
-TeamChat runs a two-agent loop with shared local memory and append-only evidence:
+Team Chat provides a governed multi-agent conversation workspace.
 
-- Planner agent: produces `plan` JSON and `work_orders` JSON.
-- Coder agent: executes one work order, runs allowlisted commands, emits `patch_report` JSON.
-- Planner review: returns `accept`, `revise`, or `request_input`.
+## Modes
 
-## Storage layout
+- `Legacy planner/coder`: existing workflow used by `workspace/scripts/verify_team_chat.sh`.
+- `Multi-agent Team Chat`: enabled with `--agents` and routed through `policy_router`.
 
-The session store is local and authoritative:
-
-- `workspace/teamchat/sessions/<id>.jsonl`
-- `workspace/teamchat/summaries/<id>.md`
-- `workspace/teamchat/state/<id>.json`
-
-Each tool call is logged as JSONL (`event=tool_call`) with command, allowlist decision, and exit code.
-
-## Governance controls
-
-Kill-switch and budgets are enforced per session:
-
-- `--max-cycles`
-- `--max-commands-per-cycle`
-- `--max-consecutive-failures`
-
-TeamChat is explicit opt-in only (CLI run). It does not alter default chat routing.
-
-## Offline verification (default)
+## Multi-agent usage
 
 ```bash
-bash workspace/scripts/verify_team_chat.sh
+OPENCLAW_TEAMCHAT=1 python3 workspace/scripts/team_chat.py \
+  --agents planner,coder,critic \
+  --session teamchat_demo \
+  --max-turns 3
 ```
 
-This uses fake adapters and deterministic outputs. No network calls required.
-
-## Live adapters
-
-Enable real planner/coder adapters via `--live`:
+Optional one-shot mode:
 
 ```bash
-python3 workspace/scripts/team_chat.py \
-  --task "Implement small verified change" \
-  --session-id teamchat_live_example \
-  --max-cycles 3 \
-  --max-commands-per-cycle 4 \
-  --live
+OPENCLAW_TEAMCHAT=1 python3 workspace/scripts/team_chat.py \
+  --agents planner,coder,critic \
+  --session teamchat_demo \
+  --max-turns 3 \
+  --once \
+  --message "Plan a safe patch sequence"
 ```
 
-Live mode uses `PolicyRouter.execute_with_escalation` and logs selected provider/model decisions in `event.meta.route`.
-Planner prompts include explicit `use chatgpt`, coder prompts include explicit `use codex`.
-If auth is unavailable, the run fails closed with recorded route reasons.
+## Governance guarantees
 
-## Command allowlist (live coder)
+- Default OFF: `OPENCLAW_TEAMCHAT` must be set to `1` for multi-agent mode.
+- Append-only session logs: `workspace/state_runtime/teamchat/sessions/<session_id>.jsonl`.
+- Optional witness logging (`OPENCLAW_TEAMCHAT_WITNESS=1`) writes hash-chain entries to `workspace/audit/witness_ledger.jsonl`.
+- Auto-commit requires dual opt-in:
+  - `TEAMCHAT_USER_DIRECTED_TEAMCHAT=1`
+  - `TEAMCHAT_ALLOW_AUTOCOMMIT=1`
+- Without dual opt-in, Team Chat does not commit changes.
 
-Allowed by default:
+## Message schema (JSONL)
 
-- `git status|diff|log`
-- `python3 -m py_compile ...`
-- `npm test`
-- `bash workspace/scripts/verify_*.sh`
+Each line is deterministic JSON with:
 
-Add additional regex patterns only via explicit `--allow-cmd`.
+- `ts`
+- `role` (`user` or `agent:<name>`)
+- `content`
+- optional `route`
+- optional `meta`
