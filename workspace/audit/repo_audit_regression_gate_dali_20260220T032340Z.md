@@ -508,3 +508,55 @@ a259954 fix(policy-router): restore PolicyValidationError + active inference hoo
 ## Final Status
 - Regression: PASS (0 failures), with 2 intentional non-fatal warnings.
 - Branch ready for single regression-gate commit.
+
+## Post-Commit Verification (Appended)
+```bash
+git status --porcelain -uall
+ M workspace/audit/repo_audit_regression_gate_dali_20260220T032340Z.md
+?? workspace/audit/repo_audit_regression_gate_dali_20260220T032202Z.md
+?? workspace/audit/repo_audit_remediation_dali_20260220T024916Z.md
+?? workspace/audit/repo_audit_remediation_dali_20260220T025307Z.md
+bash workspace/scripts/regression.sh
+==========================================
+  OpenClaw Regression Validation
+==========================================
+
+[regression] Using ephemeral OPENCLAW_CONFIG_PATH=/tmp/tmp.sCHVaGVFyO/openclaw.json
+[1/9] Checking constitutional invariants...
+[0;32m  ✓ PASS[0m
+[2/9] Verifying governance substrate...
+[0;32m  ✓ PASS[0m
+[3/9] Scanning for secrets in tracked files...
+[0;32m  ✓ PASS[0m
+[4/9] Checking for forbidden files...
+[0;32m  ✓ PASS[0m
+[5/9] Verifying git hooks...
+    pre-commit hook missing or not executable
+    pre-push hook missing or not executable
+[1;33m  ⚠ WARN: Git hooks not installed (run: bash workspace/scripts/install-hooks.sh)[0m
+[6/9] Checking documentation completeness...
+[0;32m  ✓ PASS[0m
+[0;32m  ✓ PASS[0m
+[7/9] Checking provider env gating (profile=core)...
+ok
+[0;32m  ✓ PASS[0m
+    Checking system_map aliases...
+ok
+[0;32m  ✓ PASS[0m
+[8/9] Checking heartbeat dependency invariant...
+[1;33m  ⚠ WARN: Heartbeat cadence unavailable from openclaw config; heartbeat invariant skipped (non-fatal)[0m
+[9/9] Checking branch state...
+    Current branch: fix/dali-audit-remediation-20260220
+[0;32m  ✓ PASS[0m
+
+==========================================
+[0;32m  REGRESSION PASSED[0m
+  Warnings: 2 (review recommended)
+==========================================
+git log --oneline -n 5 --decorate
+c0f892a (HEAD -> fix/dali-audit-remediation-20260220) fix(regression): provision ephemeral openclaw config + stabilize warnings
+41a629b docs(audit): append final verification and residual risk summary
+8699a47 docs(audit): refresh snapshot and remediation evidence pointers
+a259954 fix(policy-router): restore PolicyValidationError + active inference hooks
+89d7df8 (origin/feature/tacti-cr-novel-10-impl-20260219, feature/tacti-cr-novel-10-impl-20260219) docs(tacti-cr): document fixture verification
+```
