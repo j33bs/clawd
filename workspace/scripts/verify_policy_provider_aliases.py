@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Deterministic check: routing aliases normalize to known catalog/provider ids."""
+"""Deterministic fail-closed check for routing/provider alias consistency."""
 
 import json
 import subprocess
@@ -51,29 +51,41 @@ def main():
     policy_path = REPO_ROOT / "workspace" / "policy" / "llm_policy.json"
     policy = json.loads(policy_path.read_text(encoding="utf-8"))
     catalog_ids = _load_catalog_ids()
+    providers = policy.get("providers", {})
+    policy_provider_ids = set(providers.keys()) if isinstance(providers, dict) else set()
+    allowed_ids = set(catalog_ids) | set(policy_provider_ids)
 
     print("policy_path:", policy_path)
     print("catalog_ids:", ",".join(sorted(catalog_ids)))
-    print("routing_id -> normalized_id -> in_catalog")
+    print(
+        "policy_provider_ids:",
+        ",".join(sorted(policy_provider_ids)) if policy_provider_ids else "<none>",
+    )
+    print("routing_id -> normalized_id -> allowed?")
 
-    missing = []
+    unknown = []
+    seen_unknown = set()
+    checked = 0
     for source_id in _routing_ids(policy):
         if source_id == "free":
             continue
+        checked += 1
         normalized = normalize_provider_id(source_id)
-        in_catalog = normalized in catalog_ids
-        print(f"{source_id} -> {normalized} -> {str(in_catalog).lower()}")
-        # Only fail when an explicit alias normalization target is missing.
-        if source_id != normalized and not in_catalog:
-            missing.append((source_id, normalized))
+        is_allowed = normalized in allowed_ids
+        if not is_allowed:
+            print(f"{source_id} -> {normalized} -> false")
+            if normalized not in seen_unknown:
+                unknown.append(normalized)
+                seen_unknown.add(normalized)
 
-    if missing:
-        print("FAIL: routing IDs normalize to values outside catalog:")
-        for source_id, normalized in missing:
-            print(f"  - {source_id} -> {normalized}")
-        return 1
+    print(f"summary: checked={checked} unknown={len(unknown)}")
+    if unknown:
+        print("FAIL: unknown normalized routing provider IDs:")
+        for item in sorted(unknown):
+            print(f"  - {item}")
+        return 2
 
-    print("PASS: all routing IDs normalize to catalog IDs")
+    print("PASS: all normalized routing IDs are in catalog or policy providers")
     return 0
 
 
