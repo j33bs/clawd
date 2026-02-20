@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""TeamChat planner+coder loop with append-only evidence and shared local memory."""
+"""TeamChat entrypoint.
+
+Default mode preserves the existing planner+coder loop.
+Flag-gated mode (`--agents`) enables first-class multi-agent Team Chat.
+"""
 
 from __future__ import annotations
 
@@ -9,7 +13,7 @@ import os
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 import sys
 
 from team_chat_adapters import build_adapters
@@ -20,6 +24,9 @@ AUTOCOMMIT_AUDIT_DIR = Path("workspace") / "audit"
 WORKSPACE_ROOT = Path(__file__).resolve().parents[1]
 if str(WORKSPACE_ROOT) not in sys.path:
     sys.path.insert(0, str(WORKSPACE_ROOT))
+
+from policy_router import PolicyRouter  # noqa: E402
+from teamchat import TeamChatOrchestrator, TeamChatSession  # noqa: E402
 
 try:
     from tacti_cr.temporal_watchdog import temporal_reset_event
@@ -33,6 +40,9 @@ try:
     from tacti_cr.valence import update_valence as valence_update
 except Exception:  # pragma: no cover
     valence_update = None
+
+
+TEAMCHAT_RUNTIME_DIR = Path("workspace") / "state_runtime" / "teamchat"
 
 
 def _env_truthy(value: Any) -> bool:
@@ -265,6 +275,145 @@ def check_resumable(state: dict[str, Any]) -> bool:
     if status.startswith("stopped:") or status in {"accepted", "request_input"}:
         return False
     return True
+
+
+def _teamchat_enabled() -> bool:
+    return _env_truthy(os.environ.get("OPENCLAW_TEAMCHAT", "0"))
+
+
+def _teamchat_witness_enabled() -> bool:
+    return _env_truthy(os.environ.get("OPENCLAW_TEAMCHAT_WITNESS", "0"))
+
+
+def _parse_agents(raw: str) -> list[str]:
+    cleaned = []
+    seen = set()
+    for item in str(raw or "").split(","):
+        name = item.strip()
+        if not name or name in seen:
+            continue
+        seen.add(name)
+        cleaned.append(name)
+    return cleaned
+
+
+def _run_teamchat_cycle_autocommit(
+    *,
+    repo_root: Path,
+    session_id: str,
+    cycle: int,
+    args: argparse.Namespace,
+    output: Callable[[str], None],
+) -> None:
+    user_directed, user_directed_signal = teamchat_user_directed_signal(args)
+    autocommit_enabled, autocommit_signal = autocommit_opt_in_signal(args)
+    sha, audit = auto_commit_changes(
+        repo_root,
+        session_id,
+        cycle,
+        autocommit_enabled=autocommit_enabled,
+        autocommit_signal=autocommit_signal,
+        user_directed=user_directed,
+        user_directed_signal=user_directed_signal,
+    )
+    if sha:
+        output(f"[teamchat] auto-commit: {sha}")
+    if audit:
+        output(f"[teamchat] auto-commit audit: {audit}")
+
+
+def run_multi_agent(
+    args: argparse.Namespace,
+    *,
+    repo_root: Path | None = None,
+    router: PolicyRouter | None = None,
+    input_fn: Callable[[str], str] = input,
+    output_fn: Callable[[str], None] = print,
+) -> int:
+    if not _teamchat_enabled():
+        output_fn("error: OPENCLAW_TEAMCHAT=1 is required for multi-agent Team Chat mode")
+        return 2
+
+    agents = _parse_agents(getattr(args, "agents", ""))
+    if not agents:
+        output_fn("error: --agents requires at least one agent name")
+        return 2
+
+    repo = Path(repo_root or Path(__file__).resolve().parents[2])
+    session_id = str(getattr(args, "session", "") or getattr(args, "session_id", "")).strip()
+    if not session_id:
+        session_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+
+    explicit_output_root = str(getattr(args, "output_root", "") or "").strip()
+    store_path = None
+    if explicit_output_root:
+        store_path = Path(explicit_output_root) / "sessions" / f"{session_id}.jsonl"
+
+    session = TeamChatSession(session_id=session_id, agents=agents, repo_root=repo, store_path=store_path)
+    router_impl = router if router is not None else PolicyRouter()
+    orchestrator = TeamChatOrchestrator(
+        session=session,
+        router=router_impl,
+        witness_enabled=_teamchat_witness_enabled(),
+        witness_ledger_path=repo / "workspace" / "audit" / "witness_ledger.jsonl",
+        context_window=int(getattr(args, "context_window", 12) or 12),
+    )
+
+    max_turns = max(1, int(getattr(args, "max_turns", 1) or 1))
+    ran_cycle = 0
+    seed_message = str(getattr(args, "message", "") or "").strip()
+    pending = [seed_message] if seed_message else []
+
+    while True:
+        if pending:
+            user_text = pending.pop(0)
+        else:
+            try:
+                user_text = str(input_fn("you> ")).strip()
+            except EOFError:
+                break
+        if not user_text:
+            break
+        if user_text.lower() in {"quit", "exit"}:
+            break
+
+        result = orchestrator.run_cycle(user_message=user_text, max_turns=max_turns)
+        if not result.get("ok"):
+            output_fn(f"[teamchat] cycle failed: {result.get('reason', 'unknown')}")
+            return 1
+        ran_cycle += 1
+
+        for row in result.get("replies", []):
+            role = str(row.get("role", "agent:unknown"))
+            content = str(row.get("content", ""))
+            output_fn(f"{role}> {content}")
+
+        _run_teamchat_cycle_autocommit(
+            repo_root=repo,
+            session_id=session_id,
+            cycle=ran_cycle,
+            args=args,
+            output=output_fn,
+        )
+
+        if bool(getattr(args, "once", False)):
+            break
+        if seed_message:
+            break
+
+    output_fn(
+        json.dumps(
+            {
+                "ok": True,
+                "session_id": session_id,
+                "agents": agents,
+                "cycles": ran_cycle,
+                "session_jsonl": str(session.store.path),
+            },
+            ensure_ascii=True,
+        )
+    )
+    return 0
 
 
 def run(args: argparse.Namespace) -> int:
@@ -578,10 +727,16 @@ def run(args: argparse.Namespace) -> int:
     return 0
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(description="Run TeamChat planner+coder loop")
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="Run TeamChat (legacy planner/coder or multi-agent mode)")
     parser.add_argument("--task", default=None, help="Top-level task for planner (not needed if resuming)")
     parser.add_argument("--session-id", default="", help="Session id (default: UTC timestamp)")
+    parser.add_argument("--session", default="", help="Team Chat session id for --agents mode")
+    parser.add_argument("--agents", default="", help="Comma-separated agent names for multi-agent Team Chat mode")
+    parser.add_argument("--message", default="", help="Optional one-shot user message for --agents mode")
+    parser.add_argument("--once", action="store_true", help="Run one Team Chat cycle then exit")
+    parser.add_argument("--max-turns", type=int, default=3, help="Max agent turns per Team Chat cycle")
+    parser.add_argument("--context-window", type=int, default=12, help="Transcript messages included in each agent prompt")
     parser.add_argument("--output-root", default="", help="Output root (default: workspace/teamchat)")
     parser.add_argument("--max-cycles", type=int, default=0, help="Max cycles (0 = keep existing)")
     parser.add_argument("--max-commands-per-cycle", type=int, default=4)
@@ -592,7 +747,9 @@ def main() -> int:
     parser.add_argument("--live", nargs="?", default=None, const=True, help="Enable live adapters (use --live or --live=1)")
     parser.add_argument("--resume", action="store_true", help="Resume existing session if available")
     parser.add_argument("--force", action="store_true", help="Force new session even if one exists")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
+    if str(args.agents or "").strip():
+        return run_multi_agent(args)
     return run(args)
 
 
