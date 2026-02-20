@@ -157,7 +157,15 @@ def read_episodic_events(path: Path, last_n: int = 200) -> List[Dict[str, Any]]:
 
 
 def write_semantic_entries(entries: List[Dict[str, Any]], repo_root: Path) -> Dict[str, Any]:
-    from hivemind.trails import TrailStore
+    try:
+        from hivemind.trails import TrailStore
+    except Exception:
+        import sys
+
+        hivemind_pkg = Path(repo_root) / "workspace" / "hivemind" / "hivemind"
+        if str(hivemind_pkg) not in sys.path:
+            sys.path.insert(0, str(hivemind_pkg))
+        from trails import TrailStore
 
     trails_path = repo_root / "workspace" / "hivemind" / "data" / "trails.jsonl"
     try:

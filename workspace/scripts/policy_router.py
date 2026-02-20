@@ -45,7 +45,7 @@ BUDGET_FILE = BASE_DIR / "itc" / "llm_budget.json"
 CIRCUIT_FILE = BASE_DIR / "itc" / "llm_circuit.json"
 EVENT_LOG = BASE_DIR / "itc" / "llm_router_events.jsonl"
 QWEN_AUTH_FILE = BASE_DIR / "agents" / "main" / "agent" / "auth-profiles.json"
-TACTI_EVENT_LOG = BASE_DIR / "workspace" / "state" / "tacti_cr" / "events.jsonl"
+TACTI_EVENT_LOG = BASE_DIR / "workspace" / "state_runtime" / "tacti_cr" / "events.jsonl"
 ACTIVE_INFERENCE_STATE_PATH = BASE_DIR / "workspace" / "hivemind" / "data" / "active_inference_state.json"
 WITNESS_LEDGER_PATH = BASE_DIR / "workspace" / "audit" / "witness_ledger.jsonl"
 
@@ -58,12 +58,16 @@ if str(HIVEMIND_ROOT) not in sys.path:
 
 try:
     from tacti_cr.arousal_oscillator import ArousalOscillator
+    from tacti_cr.events_paths import ensure_parent as tacti_ensure_parent
+    from tacti_cr.events_paths import resolve_events_path as tacti_resolve_events_path
     from tacti_cr.config import is_enabled as tacti_enabled
     from tacti_cr.expression import compute_expression
     from tacti_cr.collapse import emit_recommendation as collapse_emit_recommendation
     from tacti_cr.valence import routing_bias as tacti_routing_bias
 except Exception:  # pragma: no cover - optional integration
     ArousalOscillator = None
+    tacti_ensure_parent = None
+    tacti_resolve_events_path = None
     tacti_enabled = None
     compute_expression = None
     collapse_emit_recommendation = None
@@ -478,8 +482,22 @@ def log_event(event_type, detail=None, path=EVENT_LOG):
         pass
 
 
+def _resolve_tacti_event_log_path():
+    if callable(tacti_resolve_events_path):
+        try:
+            path = Path(tacti_resolve_events_path(BASE_DIR))
+            if callable(tacti_ensure_parent):
+                tacti_ensure_parent(path)
+            else:
+                path.parent.mkdir(parents=True, exist_ok=True)
+            return path
+        except Exception:
+            pass
+    return TACTI_EVENT_LOG
+
+
 def _tacti_event(event_type, detail):
-    log_event(event_type, detail=detail, path=TACTI_EVENT_LOG)
+    log_event(event_type, detail=detail, path=_resolve_tacti_event_log_path())
 
 
 def read_env_or_secrets(key_name):

@@ -3,10 +3,17 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
 from narrative_distill import distill_episodes, read_episodic_events, write_semantic_entries
+
+WORKSPACE_ROOT = Path(__file__).resolve().parents[1]
+if str(WORKSPACE_ROOT) not in sys.path:
+    sys.path.insert(0, str(WORKSPACE_ROOT))
+
+from tacti_cr.events_paths import resolve_events_path
 
 
 def _repo_root() -> Path:
@@ -19,15 +26,22 @@ def _utc_stamp() -> str:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Distill episodic events into semantic memory entries.")
-    parser.add_argument("--source", default="workspace/state/tacti_cr/events.jsonl", help="episodic JSONL source")
+    parser.add_argument("--source", default="", help="episodic JSONL source")
     parser.add_argument("--fallback-source", default="itc/llm_router_events.jsonl", help="fallback episodic source")
     parser.add_argument("--last-n", type=int, default=200, help="number of events to read")
     parser.add_argument("--max-items", type=int, default=50, help="maximum semantic entries to emit")
     args = parser.parse_args()
 
     root = _repo_root()
-    source = root / args.source
-    fallback = root / args.fallback_source
+    if str(args.source or "").strip():
+        source = Path(args.source)
+        if not source.is_absolute():
+            source = root / source
+    else:
+        source = resolve_events_path(root)
+    fallback = Path(args.fallback_source)
+    if not fallback.is_absolute():
+        fallback = root / fallback
 
     episodes = read_episodic_events(source, last_n=args.last_n)
     source_used = source
