@@ -732,3 +732,13 @@ OK 38 test group(s)
 - Runtime sink (ignored): workspace/state_runtime/tacti_cr/events.jsonl
 - Override: TACTI_CR_EVENTS_PATH (tests/dev can pin fixtures)
 - Regression: test_flags_off_does_not_create_tacti_runtime_events_file
+
+## Merge readiness (2026-02-20)
+- Branch: codex/feat/openclaw-evolution-pack-20260220
+- Tip: 0f66680
+- Diff vs `origin/main` contains intended files only.
+- Clean worktree gates passed:
+  - `python3 -m unittest -q`
+  - `npm test --silent`
+- PR body paste block:
+  - `workspace/audit/PR_BODY_openclaw_evolution_pack_20260220.md`
