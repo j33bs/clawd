@@ -2,7 +2,7 @@
   "tools": {
     "memory_query": {
       "type": "exec",
-      "command": "python3",
+      "command": "python",
       "args": [
         "scripts/memory_tool.py",
         "query",

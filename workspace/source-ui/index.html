@@ -17,25 +17,12 @@
                 <div class="logo">
                     <div class="logo-icon">
                         <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-                            <circle cx="12" cy="12" r="2.6" fill="currentColor"/>
-                            <path d="M12 3.5C16.6944 3.5 20.5 7.30558 20.5 12C20.5 16.6944 16.6944 20.5 12 20.5C7.30558 20.5 3.5 16.6944 3.5 12C3.5 7.30558 7.30558 3.5 12 3.5Z" stroke="currentColor" stroke-width="1.4"/>
-                            <path d="M5.2 9.9C7.4 8.1 9.9 7.2 12.7 7.2C15.5 7.2 17.7 8.1 19.1 9.8" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
-                            <path d="M4.9 14.2C7.2 15.9 9.6 16.8 12.1 16.8C14.7 16.8 17.1 15.9 19.4 14.2" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
-                            <circle cx="7.3" cy="12.1" r="1" fill="currentColor" opacity="0.8"/>
-                            <circle cx="16.7" cy="12.1" r="1" fill="currentColor" opacity="0.8"/>
+                            <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            <path d="M2 17L12 22L22 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            <path d="M2 12L12 17L22 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                         </svg>
                     </div>
-                    <div class="logo-copy">
-                        <span class="logo-text">Source</span>
-                        <span class="logo-subtext">TACTI(C)-R</span>
-                    </div>
-                </div>
-                <div class="tacti-principles">
-                    <span class="category-badge category-arousal">Arousal</span>
-                    <span class="category-badge category-temporality">Temporality</span>
-                    <span class="category-badge category-cross-timescale">Cross-Timescale</span>
-                    <span class="category-badge category-malleability">Malleability</span>
-                    <span class="category-badge category-agency">Agency</span>
+                    <span class="logo-text">Source</span>
                 </div>
             </div>
 
@@ -141,7 +128,7 @@
         <!-- Main Content -->
         <main class="main-content" id="main-content">
             <!-- Header -->
-            <header class="main-header tacti-header">
+            <header class="main-header">
                 <div class="header-left">
                     <button class="menu-toggle" id="menu-toggle">
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -197,46 +184,6 @@
             <div class="content-area" id="content-area">
                 <!-- Dashboard View -->
                 <div class="view active" id="view-dashboard">
-                    <div class="tacti-status-strip" id="tacti-status-strip">
-                        <div class="status-strip-header">
-                            <h2 class="status-strip-title">System Status</h2>
-                            <button class="btn-text" id="refresh-status-btn">Refresh</button>
-                        </div>
-                        <div class="status-strip-grid">
-                            <div class="status-tile" id="status-qmd">
-                                <span class="status-tile-label">QMD (8181)</span>
-                                <span class="status-tile-value" data-status-field="value">--</span>
-                                <span class="status-tile-meta" data-status-field="meta">--</span>
-                            </div>
-                            <div class="status-tile" id="status-kb">
-                                <span class="status-tile-label">Knowledge Sync</span>
-                                <span class="status-tile-value" data-status-field="value">--</span>
-                                <span class="status-tile-meta" data-status-field="meta">--</span>
-                            </div>
-                            <div class="status-tile" id="status-cron">
-                                <span class="status-tile-label">Cron Health</span>
-                                <span class="status-tile-value" data-status-field="value">--</span>
-                                <span class="status-tile-meta" data-status-field="meta">--</span>
-                            </div>
-                            <div class="status-tile" id="status-memory">
-                                <span class="status-tile-label">Memory</span>
-                                <span class="status-tile-value" data-status-field="value">--</span>
-                                <span class="status-tile-meta" data-status-field="meta">--</span>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="quick-actions-strip" id="quick-actions-strip">
-                        <button class="btn btn-primary quick-action-btn" id="qa-run-dream">Run Dream Consolidation</button>
-                        <div class="quick-action-query">
-                            <input type="text" id="qa-stig-query" placeholder="Stigmergy query topic...">
-                            <button class="btn quick-action-btn" id="qa-query-stigmergy">Query Stigmergy</button>
-                        </div>
-                        <button class="btn quick-action-btn" id="qa-view-immune">View Immune Status</button>
-                        <button class="btn quick-action-btn" id="qa-trigger-trail">Trigger Memory Trail</button>
-                        <button class="btn quick-action-btn" id="qa-refresh-peer">Refresh Peer Graph</button>
-                        <span class="quick-action-feedback" id="quick-action-feedback"></span>
-                    </div>
                     <div class="stats-grid">
                         <div class="stat-card">
                             <div class="stat-header">
@@ -270,106 +217,6 @@
                             <div class="stat-value" id="stat-uptime">--</div>
                             <div class="stat-change positive">99.9%</div>
                         </div>
-                    </div>
-
-                    <div class="tacti-dashboard-grid" id="tacti-dashboard-grid">
-                        <section class="tacti-panel category-border-arousal" id="panel-dream">
-                            <div class="tacti-panel-header">
-                                <h3>Dream Consolidation</h3>
-                                <div class="tacti-panel-actions">
-                                    <span class="category-badge category-arousal">Arousal</span>
-                                    <button class="btn-text panel-refresh-btn" data-panel-refresh="dream">Refresh</button>
-                                </div>
-                            </div>
-                            <div class="panel-metrics" id="panel-dream-metrics"></div>
-                            <div class="panel-details" id="panel-dream-details"></div>
-                            <div class="panel-error hidden" id="panel-dream-error"></div>
-                            <div class="panel-updated" id="panel-dream-updated">Last updated: --</div>
-                        </section>
-
-                        <section class="tacti-panel category-border-cross-timescale" id="panel-stigmergy">
-                            <div class="tacti-panel-header">
-                                <h3>Stigmergy Map</h3>
-                                <div class="tacti-panel-actions">
-                                    <span class="category-badge category-cross-timescale">Cross-Timescale</span>
-                                    <button class="btn-text panel-refresh-btn" data-panel-refresh="stigmergy">Refresh</button>
-                                </div>
-                            </div>
-                            <div class="panel-metrics" id="panel-stigmergy-metrics"></div>
-                            <div class="panel-details" id="panel-stigmergy-details"></div>
-                            <div class="panel-error hidden" id="panel-stigmergy-error"></div>
-                            <div class="panel-updated" id="panel-stigmergy-updated">Last updated: --</div>
-                        </section>
-
-                        <section class="tacti-panel category-border-agency" id="panel-immune">
-                            <div class="tacti-panel-header">
-                                <h3>Semantic Immune</h3>
-                                <div class="tacti-panel-actions">
-                                    <span class="category-badge category-agency">Agency</span>
-                                    <button class="btn-text panel-refresh-btn" data-panel-refresh="immune">Refresh</button>
-                                </div>
-                            </div>
-                            <div class="panel-metrics" id="panel-immune-metrics"></div>
-                            <div class="panel-details" id="panel-immune-details"></div>
-                            <div class="panel-error hidden" id="panel-immune-error"></div>
-                            <div class="panel-updated" id="panel-immune-updated">Last updated: --</div>
-                        </section>
-
-                        <section class="tacti-panel category-border-arousal" id="panel-arousal">
-                            <div class="tacti-panel-header">
-                                <h3>Arousal Oscillator</h3>
-                                <div class="tacti-panel-actions">
-                                    <span class="category-badge category-arousal">Arousal</span>
-                                    <button class="btn-text panel-refresh-btn" data-panel-refresh="arousal">Refresh</button>
-                                </div>
-                            </div>
-                            <div class="panel-metrics" id="panel-arousal-metrics"></div>
-                            <div class="panel-details" id="panel-arousal-details"></div>
-                            <div class="panel-error hidden" id="panel-arousal-error"></div>
-                            <div class="panel-updated" id="panel-arousal-updated">Last updated: --</div>
-                        </section>
-
-                        <section class="tacti-panel category-border-malleability" id="panel-trails">
-                            <div class="tacti-panel-header">
-                                <h3>Trail Memory</h3>
-                                <div class="tacti-panel-actions">
-                                    <span class="category-badge category-malleability">Malleability</span>
-                                    <button class="btn-text panel-refresh-btn" data-panel-refresh="trails">Refresh</button>
-                                </div>
-                            </div>
-                            <div class="panel-metrics" id="panel-trails-metrics"></div>
-                            <div class="panel-details" id="panel-trails-details"></div>
-                            <div class="panel-error hidden" id="panel-trails-error"></div>
-                            <div class="panel-updated" id="panel-trails-updated">Last updated: --</div>
-                        </section>
-
-                        <section class="tacti-panel category-border-cross-timescale" id="panel-peer-graph">
-                            <div class="tacti-panel-header">
-                                <h3>HiveMind Peer Graph</h3>
-                                <div class="tacti-panel-actions">
-                                    <span class="category-badge category-cross-timescale">Cross-Timescale</span>
-                                    <button class="btn-text panel-refresh-btn" data-panel-refresh="peer-graph">Refresh</button>
-                                </div>
-                            </div>
-                            <div class="panel-metrics" id="panel-peer-graph-metrics"></div>
-                            <div class="panel-details" id="panel-peer-graph-details"></div>
-                            <div class="panel-error hidden" id="panel-peer-graph-error"></div>
-                            <div class="panel-updated" id="panel-peer-graph-updated">Last updated: --</div>
-                        </section>
-
-                        <section class="tacti-panel category-border-temporality" id="panel-skills">
-                            <div class="tacti-panel-header">
-                                <h3>Skill Graph</h3>
-                                <div class="tacti-panel-actions">
-                                    <span class="category-badge category-temporality">Temporality</span>
-                                    <button class="btn-text panel-refresh-btn" data-panel-refresh="skills">Refresh</button>
-                                </div>
-                            </div>
-                            <div class="panel-metrics" id="panel-skills-metrics"></div>
-                            <div class="panel-details" id="panel-skills-details"></div>
-                            <div class="panel-error hidden" id="panel-skills-error"></div>
-                            <div class="panel-updated" id="panel-skills-updated">Last updated: --</div>
-                        </section>
                     </div>
 
                     <div class="dashboard-grid">

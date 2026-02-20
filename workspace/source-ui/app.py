@@ -23,85 +23,6 @@ try:
 except Exception:  # pragma: no cover
     trails_heatmap_payload = None
 
-try:
-    from api.tacti_cr import (
-        ModuleUnavailableError,
-        get_arousal_status,
-        get_dream_status,
-        get_immune_status,
-        get_peer_graph_status,
-        get_skills,
-        get_status_data,
-        get_stigmergy_status,
-        get_trails_status,
-        query_stigmergy,
-        response_error,
-        response_ok,
-        run_dream_consolidation,
-        trigger_trail,
-    )
-except Exception as exc:  # pragma: no cover
-    ModuleUnavailableError = RuntimeError
-    _TACTI_IMPORT_ERROR = str(exc)
-
-    def _source_ui_import_error() -> str:
-        return f"source_ui_api_unavailable: {_TACTI_IMPORT_ERROR}"
-
-    def response_error(code, message, detail=None, data=None):  # type: ignore[override]
-        payload = {
-            "ok": False,
-            "ts": datetime.now().astimezone().isoformat(),
-            "data": data,
-            "error": {
-                "code": str(code),
-                "message": str(message),
-            },
-        }
-        if detail is not None:
-            payload["error"]["detail"] = detail
-        return payload
-
-    def response_ok(data):  # type: ignore[override]
-        return {
-            "ok": True,
-            "ts": datetime.now().astimezone().isoformat(),
-            "data": data,
-            "error": None,
-        }
-
-    def get_status_data():  # type: ignore[override]
-        return {"unavailable_reason": _source_ui_import_error()}
-
-    def get_dream_status(limit=20):  # type: ignore[override]
-        raise ModuleUnavailableError(_source_ui_import_error())
-
-    def run_dream_consolidation(day=None):  # type: ignore[override]
-        raise ModuleUnavailableError(_source_ui_import_error())
-
-    def get_stigmergy_status(limit=20):  # type: ignore[override]
-        raise ModuleUnavailableError(_source_ui_import_error())
-
-    def query_stigmergy(text, limit=20):  # type: ignore[override]
-        raise ModuleUnavailableError(_source_ui_import_error())
-
-    def get_immune_status(limit=20):  # type: ignore[override]
-        raise ModuleUnavailableError(_source_ui_import_error())
-
-    def get_arousal_status():  # type: ignore[override]
-        raise ModuleUnavailableError(_source_ui_import_error())
-
-    def get_trails_status(limit=20):  # type: ignore[override]
-        raise ModuleUnavailableError(_source_ui_import_error())
-
-    def trigger_trail(text=None, tags=None, strength=None):  # type: ignore[override]
-        raise ModuleUnavailableError(_source_ui_import_error())
-
-    def get_peer_graph_status(limit=20):  # type: ignore[override]
-        raise ModuleUnavailableError(_source_ui_import_error())
-
-    def get_skills(limit=100):  # type: ignore[override]
-        raise ModuleUnavailableError(_source_ui_import_error())
-
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -131,7 +52,7 @@ class Config:
         
         static_dir = args.static_dir
         if not static_dir:
-            static_dir = str(Path(__file__).parent)
+            static_dir = str(Path(__file__).parent / "static")
         
         return cls(
             host=args.host,
@@ -291,12 +212,9 @@ class SourceUIHandler(SimpleHTTPRequestHandler):
             self.serve_file('index.html', 'text/html')
             return
         
-        # Static files - also handle /css/ and /js/ without /static/ prefix
+        # Static files
         if parsed.path.startswith('/static/'):
             self.serve_static(parsed.path[8:])
-            return
-        if parsed.path.startswith('/css/') or parsed.path.startswith('/js/'):
-            self.serve_static(parsed.path)
             return
         
         # Default to index
@@ -305,13 +223,7 @@ class SourceUIHandler(SimpleHTTPRequestHandler):
     def do_POST(self):
         parsed = urlparse(self.path)
         
-        if parsed.path == '/api/tacti/dream/run':
-            self.run_dream()
-        elif parsed.path == '/api/hivemind/stigmergy/query':
-            self.query_stigmergy_marks()
-        elif parsed.path == '/api/hivemind/trails/trigger':
-            self.trigger_memory_trail()
-        elif parsed.path == '/api/tasks':
+        if parsed.path == '/api/tasks':
             self.create_task()
         elif parsed.path == '/api/refresh':
             self.refresh_data()
@@ -341,39 +253,10 @@ class SourceUIHandler(SimpleHTTPRequestHandler):
     def handle_api(self, parsed):
         """Handle API requests."""
         path = parsed.path[5:]  # Remove /api/
-        query = parse_qs(parsed.query)
-
-        # TACTI(C)-R endpoints with strict JSON contract.
-        if path == 'status':
-            self.send_json(response_ok(get_status_data()))
-            return
-        if path == 'tacti/dream':
-            self.send_dashboard_payload(lambda: get_dream_status(limit=self._query_int(query, "limit", default=20, maximum=50)))
-            return
-        if path == 'hivemind/stigmergy':
-            self.send_dashboard_payload(
-                lambda: get_stigmergy_status(limit=self._query_int(query, "limit", default=20, maximum=50))
-            )
-            return
-        if path == 'tacti/immune':
-            self.send_dashboard_payload(lambda: get_immune_status(limit=self._query_int(query, "limit", default=20, maximum=50)))
-            return
-        if path == 'tacti/arousal':
-            self.send_dashboard_payload(get_arousal_status)
-            return
-        if path == 'hivemind/trails':
-            self.send_dashboard_payload(lambda: get_trails_status(limit=self._query_int(query, "limit", default=20, maximum=50)))
-            return
-        if path == 'hivemind/peer-graph':
-            self.send_dashboard_payload(
-                lambda: get_peer_graph_status(limit=self._query_int(query, "limit", default=12, maximum=25))
-            )
-            return
-        if path == 'skills':
-            self.send_dashboard_payload(lambda: get_skills(limit=self._query_int(query, "limit", default=100, maximum=200)))
-            return
         
-        if path == 'agents':
+        if path == 'status':
+            data = self.state.to_dict()
+        elif path == 'agents':
             data = self.state.agents
         elif path == 'tasks':
             data = self.state.tasks
@@ -393,80 +276,6 @@ class SourceUIHandler(SimpleHTTPRequestHandler):
             data = {'error': 'Not found'}
         
         self.send_json(data)
-
-    @staticmethod
-    def _query_int(query: dict[str, list[str]], key: str, *, default: int, maximum: int) -> int:
-        values = query.get(key)
-        if not values:
-            return default
-        try:
-            parsed = int(values[0])
-        except Exception:
-            return default
-        return max(1, min(maximum, parsed))
-
-    def read_json_body(self) -> dict[str, Any]:
-        try:
-            length = int(self.headers.get('Content-Length', 0))
-        except Exception:
-            length = 0
-        if length <= 0:
-            return {}
-        raw = self.rfile.read(length)
-        if not raw:
-            return {}
-        try:
-            payload = json.loads(raw)
-        except Exception:
-            return {}
-        return payload if isinstance(payload, dict) else {}
-
-    def send_dashboard_payload(self, fn):
-        try:
-            data = fn()
-            self.send_json(response_ok(data))
-        except ModuleUnavailableError as exc:
-            self.send_json(
-                response_error(
-                    'module_unavailable',
-                    'Requested module is unavailable',
-                    detail=str(exc),
-                ),
-                status=503,
-            )
-        except Exception as exc:
-            logger.exception("Dashboard endpoint failed")
-            self.send_json(
-                response_error(
-                    'runtime_error',
-                    'Dashboard endpoint failed',
-                    detail=str(exc),
-                ),
-                status=500,
-            )
-
-    def run_dream(self):
-        payload = self.read_json_body()
-        day = payload.get('day') if isinstance(payload.get('day'), str) else None
-        self.send_dashboard_payload(lambda: run_dream_consolidation(day=day))
-
-    def query_stigmergy_marks(self):
-        payload = self.read_json_body()
-        query = ''
-        if isinstance(payload.get('query'), str):
-            query = payload['query']
-        elif isinstance(payload.get('q'), str):
-            query = payload['q']
-        self.send_dashboard_payload(lambda: query_stigmergy(query, limit=20))
-
-    def trigger_memory_trail(self):
-        payload = self.read_json_body()
-        text = payload.get('text') if isinstance(payload.get('text'), str) else None
-        tags_raw = payload.get('tags')
-        tags = [str(x) for x in tags_raw] if isinstance(tags_raw, list) else []
-        strength_raw = payload.get('strength')
-        strength = float(strength_raw) if isinstance(strength_raw, (int, float)) else None
-        self.send_dashboard_payload(lambda: trigger_trail(text=text, tags=tags, strength=strength))
     
     def create_task(self):
         """Create a new task."""
@@ -510,14 +319,14 @@ class SourceUIHandler(SimpleHTTPRequestHandler):
     
     def refresh_data(self):
         """Refresh all data."""
-        self.state.health_metrics = DemoDataGenerator.generate_health_metrics()
+        self.state.health_metrics = self.demo.generate_health_metrics()
         self.state.last_update = datetime.now()
         self.state.gateway_connected = False  # Would check real gateway
         self.send_json(self.state.to_dict())
     
     def run_health_check(self):
         """Run health check."""
-        self.state.health_metrics = DemoDataGenerator.generate_health_metrics()
+        self.state.health_metrics = self.demo.generate_health_metrics()
         self.send_json({'success': True, 'metrics': self.state.health_metrics})
     
     def restart_gateway(self):

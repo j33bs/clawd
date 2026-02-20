@@ -36,7 +36,8 @@ from datetime import datetime, timezone
 try:
     import yaml
 except ImportError:
-    yaml = None
+    print("ERROR: pyyaml not installed. Run: pip install pyyaml")
+    raise SystemExit(1)
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
@@ -124,8 +125,6 @@ def deep_merge(base, overlay):
 
 def load_config(base_path, overlay_path=None):
     """Load base config and optional overlay config, deep-merged."""
-    if yaml is None:
-        raise RuntimeError("pyyaml is required for load_config(); install with: pip install pyyaml")
     base_path = Path(base_path)
     with open(base_path, "r", encoding="utf-8") as f:
         base = yaml.safe_load(f) or {}

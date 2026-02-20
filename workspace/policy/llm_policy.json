@@ -213,7 +213,7 @@
       ]
     },
     "openai_auth": {
-      "enabled": false,
+      "enabled": true,
       "paid": false,
       "tier": "auth",
       "type": "openai_auth",
@@ -241,7 +241,7 @@
       ]
     },
     "openai_api": {
-      "enabled": false,
+      "enabled": true,
       "paid": true,
       "tier": "paid",
       "type": "openai_compatible",
@@ -271,10 +271,10 @@
   },
   "routing": {
     "free_order": [
-      "google-gemini-cli",
-      "qwen-portal",
+      "local_vllm_assistant",
+      "ollama",
       "groq",
-      "ollama"
+      "qwen"
     ],
     "rules": [
       {
@@ -310,32 +310,19 @@
       },
       "governance": {
         "order": [
-          "google-gemini-cli",
-          "qwen-portal",
-          "groq",
-          "ollama"
+          "claude_auth",
+          "claude_api"
         ],
-        "allowPaid": false,
+        "allowPaid": true,
         "maxTokensPerRequest": 768
       },
       "security": {
         "order": [
-          "google-gemini-cli",
-          "qwen-portal",
-          "groq",
-          "ollama"
+          "claude_auth",
+          "claude_api"
         ],
-        "allowPaid": false,
+        "allowPaid": true,
         "maxTokensPerRequest": 768
-      },
-      "system2_audit": {
-        "order": [
-          "google-gemini-cli",
-          "qwen-portal",
-          "groq",
-          "ollama"
-        ],
-        "allowPaid": false
       },
       "conversation": {
         "order": [
