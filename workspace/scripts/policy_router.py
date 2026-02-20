@@ -37,6 +37,10 @@ EVENT_LOG = BASE_DIR / "itc" / "llm_router_events.jsonl"
 QWEN_AUTH_FILE = BASE_DIR / "agents" / "main" / "agent" / "auth-profiles.json"
 TACTI_EVENT_LOG = BASE_DIR / "workspace" / "state" / "tacti_cr" / "events.jsonl"
 ACTIVE_INFERENCE_STATE_PATH = BASE_DIR / "workspace" / "state" / "active_inference_state.json"
+OPENCLAW_AGENT_AUTH_FILE = Path.home() / ".openclaw" / "agents" / "main" / "agent" / "auth.json"
+CODEX_AUTH_FILE = Path.home() / ".codex" / "auth.json"
+CODEX_COMPAT_BASE_URL = "https://chatgpt.com"
+CODEX_COMPAT_ENDPOINT = "/backend-api/codex/responses"
 
 TACTI_ROOT = BASE_DIR / "workspace"
 if str(TACTI_ROOT) not in sys.path:
@@ -290,6 +294,8 @@ def _validate_policy_schema(raw):
         "tier",
         "type",
         "baseUrl",
+        "endpoint",
+        "wire",
         "apiKeyEnv",
         "models",
         "auth",
@@ -604,15 +610,215 @@ def _provider_api_key_env(provider):
     return ""
 
 
-def _call_openai_compatible(base_url, api_key, model_id, payload, timeout=15):
-    if requests is None:
+def _provider_wire_mode(provider):
+    value = provider.get("wire")
+    if isinstance(value, str):
+        return value.strip().lower()
+    return ""
+
+
+def _resolve_auth_path(env_name, default_path):
+    raw = str(os.environ.get(env_name, "")).strip()
+    if raw:
+        return Path(raw).expanduser()
+    return Path(default_path)
+
+
+def _load_json_dict(path):
+    path = Path(path)
+    if not path.exists():
+        return None
+    try:
+        loaded = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    if isinstance(loaded, dict):
+        return loaded
+    return None
+
+
+def _resolve_codex_oauth_context(provider=None):
+    codex_path = _resolve_auth_path("OPENCLAW_CODEX_AUTH_FILE", CODEX_AUTH_FILE)
+    codex_auth = _load_json_dict(codex_path) or {}
+    codex_tokens = codex_auth.get("tokens", {}) if isinstance(codex_auth.get("tokens"), dict) else {}
+    codex_token = codex_tokens.get("access_token") or codex_auth.get("access_token")
+    codex_account_id = codex_tokens.get("account_id") or codex_auth.get("account_id")
+    if codex_token:
+        return {
+            "api_key": codex_token,
+            "account_id": codex_account_id,
+            "token_source": "codex_auth",
+            "token_path": str(codex_path),
+        }
+
+    agent_auth_path = _resolve_auth_path("OPENCLAW_AGENT_AUTH_FILE", OPENCLAW_AGENT_AUTH_FILE)
+    agent_auth = _load_json_dict(agent_auth_path) or {}
+    codex_profile = agent_auth.get("openai-codex") if isinstance(agent_auth, dict) else None
+    if isinstance(codex_profile, dict):
+        agent_token = codex_profile.get("access") or codex_profile.get("access_token") or codex_profile.get("token")
+        if agent_token:
+            return {
+                "api_key": agent_token,
+                "account_id": codex_profile.get("account_id"),
+                "token_source": "openclaw_auth",
+                "token_path": str(agent_auth_path),
+            }
+
+    return {
+        "api_key": None,
+        "account_id": None,
+        "token_source": None,
+        "token_path": None,
+    }
+
+
+def _resolve_provider_api_key(provider):
+    auth_type = _provider_auth_type(provider)
+    wire_mode = _provider_wire_mode(provider)
+    if auth_type in {"oauth_codex", "oauth_codox"} or wire_mode == "codex_cli_compat":
+        context = _resolve_codex_oauth_context(provider)
+        return context.get("api_key")
+    if provider.get("auth") == "qwen_oauth":
+        token, _ = get_qwen_token()
+        return token
+    api_key_env = _provider_api_key_env(provider)
+    if not api_key_env:
+        return None
+    return read_env_or_secrets(api_key_env)
+
+
+def _normalize_codex_input(payload):
+    messages = payload.get("messages")
+    if isinstance(messages, list) and messages:
+        out = []
+        for msg in messages:
+            if not isinstance(msg, dict):
+                continue
+            role = str(msg.get("role") or "user")
+            content = msg.get("content")
+            if isinstance(content, list):
+                text_parts = []
+                for item in content:
+                    if isinstance(item, dict):
+                        text_val = item.get("text")
+                        if isinstance(text_val, str):
+                            text_parts.append(text_val)
+                    elif isinstance(item, str):
+                        text_parts.append(item)
+                content = "\n".join(text_parts)
+            if not isinstance(content, str):
+                content = str(content or "")
+            out.append(
+                {
+                    "type": "message",
+                    "role": role,
+                    "content": [{"type": "input_text", "text": content}],
+                }
+            )
+        if out:
+            return out
+    prompt = payload.get("prompt")
+    if isinstance(prompt, str) and prompt:
+        return [{"type": "message", "role": "user", "content": [{"type": "input_text", "text": prompt}]}]
+    return [{"type": "message", "role": "user", "content": [{"type": "input_text", "text": ""}]}]
+
+
+def _extract_codex_text(data):
+    if not isinstance(data, dict):
+        return ""
+    output_text = data.get("output_text")
+    if isinstance(output_text, str):
+        return output_text
+    output = data.get("output")
+    if isinstance(output, list):
+        pieces = []
+        for item in output:
+            if not isinstance(item, dict):
+                continue
+            content = item.get("content")
+            if not isinstance(content, list):
+                continue
+            for part in content:
+                if not isinstance(part, dict):
+                    continue
+                text_value = part.get("text")
+                if isinstance(text_value, str):
+                    pieces.append(text_value)
+        if pieces:
+            return "\n".join(pieces)
+    choices = data.get("choices")
+    if isinstance(choices, list) and choices:
+        choice = choices[0]
+        if isinstance(choice, dict):
+            message = choice.get("message")
+            if isinstance(message, dict) and isinstance(message.get("content"), str):
+                return message.get("content")
+            if isinstance(choice.get("text"), str):
+                return choice.get("text")
+    return ""
+
+
+def _extract_codex_sse_text(raw_text):
+    if not isinstance(raw_text, str) or not raw_text:
+        return ""
+    deltas = []
+    completed_parts = []
+    for line in raw_text.splitlines():
+        if not line.startswith("data: "):
+            continue
+        payload = line[6:].strip()
+        if payload == "[DONE]":
+            continue
+        try:
+            event = json.loads(payload)
+        except Exception:
+            continue
+        event_type = event.get("type")
+        if event_type == "response.output_text.delta":
+            delta = event.get("delta")
+            if isinstance(delta, str):
+                deltas.append(delta)
+        if event_type == "response.completed":
+            response = event.get("response", {})
+            output = response.get("output", []) if isinstance(response, dict) else []
+            for item in output:
+                if not isinstance(item, dict):
+                    continue
+                if item.get("type") != "message":
+                    continue
+                content = item.get("content", [])
+                if not isinstance(content, list):
+                    continue
+                for part in content:
+                    if not isinstance(part, dict):
+                        continue
+                    if part.get("type") == "output_text" and isinstance(part.get("text"), str):
+                        completed_parts.append(part.get("text"))
+    if completed_parts:
+        return "".join(completed_parts)
+    if deltas:
+        return "".join(deltas)
+    return ""
+
+
+def _compose_codex_url(base_url, endpoint):
+    endpoint = endpoint or CODEX_COMPAT_ENDPOINT
+    if isinstance(endpoint, str) and endpoint.startswith(("http://", "https://")):
+        return endpoint
+    base = base_url or CODEX_COMPAT_BASE_URL
+    return base.rstrip("/") + "/" + str(endpoint).lstrip("/")
+
+
+def _call_openai_compatible(base_url, api_key, model_id, payload, timeout=15, http_post=None):
+    if requests is None and not callable(http_post):
         return {"ok": False, "reason_code": "no_requests_lib"}
     url = base_url.rstrip("/") + "/chat/completions"
     headers = {"Content-Type": "application/json"}
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
+    post = http_post or requests.post
     try:
-        resp = requests.post(url, json={"model": model_id, **payload}, headers=headers, timeout=timeout)
+        resp = post(url, json={"model": model_id, **payload}, headers=headers, timeout=timeout)
         if resp.status_code == 429:
             return {"ok": False, "reason_code": "request_http_429"}
         if resp.status_code == 404:
@@ -629,11 +835,104 @@ def _call_openai_compatible(base_url, api_key, model_id, payload, timeout=15):
         else:
             content = choice.get("text", "")
         return {"ok": True, "text": content}
-    except requests.exceptions.Timeout:
-        return {"ok": False, "reason_code": "request_timeout"}
-    except requests.exceptions.ConnectionError:
-        return {"ok": False, "reason_code": "request_conn_error"}
     except Exception as exc:
+        if requests is not None and isinstance(exc, requests.exceptions.Timeout):
+            return {"ok": False, "reason_code": "request_timeout"}
+        if requests is not None and isinstance(exc, requests.exceptions.ConnectionError):
+            return {"ok": False, "reason_code": "request_conn_error"}
+        return {"ok": False, "reason_code": f"request_{type(exc).__name__}"}
+
+
+def _call_codex_cli_compat(base_url, endpoint, oauth_context, model_id, payload, timeout=15, http_post=None):
+    if requests is None and not callable(http_post):
+        return {"ok": False, "reason_code": "no_requests_lib"}
+    token = (oauth_context or {}).get("api_key")
+    if not token:
+        return {
+            "ok": False,
+            "reason_code": "missing_oauth_token",
+            "diagnostic": {
+                "wire": "codex_cli_compat",
+                "hint": "missing OAuth token; run codex login and retry",
+            },
+        }
+    url = _compose_codex_url(base_url, endpoint)
+    headers = {
+        "Accept": "text/event-stream",
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {token}",
+        "User-Agent": "openclaw-policy-router/codex-cli-compat",
+    }
+    account_id = (oauth_context or {}).get("account_id")
+    if account_id:
+        headers["ChatGPT-Account-Id"] = str(account_id)
+    instructions = (payload or {}).get("instructions")
+    if not isinstance(instructions, str) or not instructions.strip():
+        instructions = "You are a precise coding assistant. Follow the user's request."
+    body = {
+        "model": model_id,
+        "instructions": instructions,
+        "stream": True,
+        "store": False,
+        "input": _normalize_codex_input(payload or {}),
+        "reasoning": {"effort": "low", "summary": "auto"},
+        "text": {"verbosity": "low"},
+        "parallel_tool_calls": False,
+        "tool_choice": "auto",
+        "tools": [],
+        "include": [],
+    }
+    post = http_post or requests.post
+    try:
+        resp = post(url, json=body, headers=headers, timeout=timeout)
+        status = int(getattr(resp, "status_code", 0))
+        data = {}
+        try:
+            data = resp.json()
+        except Exception:
+            data = {}
+        if status in {401, 403}:
+            return {
+                "ok": False,
+                "reason_code": "auth_forbidden",
+                "diagnostic": {
+                    "status_code": status,
+                    "wire": "codex_cli_compat",
+                    "hint": "OAuth token rejected for chatgpt codex backend; refresh auth and retry",
+                },
+            }
+        if status == 429:
+            return {"ok": False, "reason_code": "request_http_429"}
+        if status == 404:
+            return {"ok": False, "reason_code": "request_http_404"}
+        if status >= 500:
+            return {
+                "ok": False,
+                "reason_code": "request_http_5xx",
+                "diagnostic": {"status_code": status, "wire": "codex_cli_compat"},
+            }
+        if status != 200:
+            detail = None
+            if isinstance(data, dict):
+                err = data.get("error")
+                if isinstance(err, dict):
+                    detail = err.get("message") or err.get("detail")
+                if detail is None and data.get("detail"):
+                    detail = data.get("detail")
+            return {
+                "ok": False,
+                "reason_code": f"request_http_{status}",
+                "diagnostic": {"status_code": status, "wire": "codex_cli_compat", "detail": detail},
+            }
+        text = _extract_codex_sse_text(getattr(resp, "text", ""))
+        if not text:
+            text = _extract_codex_text(data)
+        return {"ok": True, "text": text}
+    except Exception as exc:
+        if requests is not None and isinstance(exc, requests.exceptions.Timeout):
+            return {"ok": False, "reason_code": "request_timeout"}
+        if requests is not None and isinstance(exc, requests.exceptions.ConnectionError):
+            return {"ok": False, "reason_code": "request_conn_error"}
         return {"ok": False, "reason_code": f"request_{type(exc).__name__}"}
 
 
@@ -753,6 +1052,7 @@ class PolicyRouter:
         circuit_path=CIRCUIT_FILE,
         event_log=EVENT_LOG,
         handlers=None,
+        http_post=None,
     ):
         self.policy_path = policy_path
         self.budget_path = budget_path
@@ -762,6 +1062,7 @@ class PolicyRouter:
         self.budget_state = load_budget_state(budget_path)
         self.circuit_state = load_circuit_state(circuit_path)
         self.handlers = handlers or {}
+        self.http_post = http_post
         self.run_counts = {}
 
     def _intent_cfg(self, intent):
@@ -982,10 +1283,17 @@ class PolicyRouter:
                     return False, err or "missing_token"
             else:
                 auth_type = _provider_auth_type(provider)
-                api_key_env = _provider_api_key_env(provider)
-                requires_key = bool(api_key_env) or auth_type == "bearer"
-                if requires_key:
-                    api_key = read_env_or_secrets(api_key_env)
+                wire_mode = _provider_wire_mode(provider)
+                if auth_type in {"oauth_codex", "oauth_codox"} or wire_mode == "codex_cli_compat":
+                    api_key = _resolve_provider_api_key(provider)
+                    if not api_key:
+                        return False, "missing_oauth_token"
+                else:
+                    api_key_env = _provider_api_key_env(provider)
+                    requires_key = bool(api_key_env) or auth_type == "bearer"
+                    api_key = None
+                    if requires_key:
+                        api_key = read_env_or_secrets(api_key_env)
                     if not api_key:
                         return False, "missing_api_key"
 
@@ -1320,14 +1628,26 @@ class PolicyRouter:
             else:
                 ptype = provider.get("type")
                 if ptype == "openai_compatible":
-                    api_key = None
-                    if provider.get("auth") == "qwen_oauth":
-                        api_key, _ = get_qwen_token()
+                    wire_mode = _provider_wire_mode(provider)
+                    if wire_mode == "codex_cli_compat":
+                        oauth_context = _resolve_codex_oauth_context(provider)
+                        result = _call_codex_cli_compat(
+                            provider.get("baseUrl", CODEX_COMPAT_BASE_URL),
+                            provider.get("endpoint", CODEX_COMPAT_ENDPOINT),
+                            oauth_context,
+                            model_id,
+                            payload,
+                            http_post=self.http_post,
+                        )
                     else:
-                        api_key_env = _provider_api_key_env(provider)
-                        if api_key_env:
-                            api_key = read_env_or_secrets(api_key_env)
-                    result = _call_openai_compatible(provider.get("baseUrl", ""), api_key, model_id, payload)
+                        api_key = _resolve_provider_api_key(provider)
+                        result = _call_openai_compatible(
+                            provider.get("baseUrl", ""),
+                            api_key,
+                            model_id,
+                            payload,
+                            http_post=self.http_post,
+                        )
                 elif ptype == "anthropic":
                     api_key = read_env_or_secrets(provider.get("apiKeyEnv", ""))
                     result = _call_anthropic(provider.get("baseUrl", ""), api_key, model_id, payload)
