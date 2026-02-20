@@ -50,11 +50,29 @@ class ProprioceptiveSampler:
 
     def snapshot(self):
         durations = [float(item.get("duration_ms", 0.0) or 0.0) for item in self._buffer]
+        throughput = []
+        elapsed_per_token = []
+        for item in self._buffer:
+            duration_ms = float(item.get("duration_ms", 0.0) or 0.0)
+            tokens_in = item.get("tokens_in")
+            tokens_out = item.get("tokens_out")
+            total_tokens = 0
+            if isinstance(tokens_in, int):
+                total_tokens += max(0, tokens_in)
+            if isinstance(tokens_out, int):
+                total_tokens += max(0, tokens_out)
+            if duration_ms > 0.0 and total_tokens > 0:
+                seconds = duration_ms / 1000.0
+                throughput.append(float(total_tokens) / seconds)
+                elapsed_per_token.append(duration_ms / float(total_tokens))
         errors = sum(1 for item in self._buffer if not item.get("ok", False))
         count = len(self._buffer)
         return {
             "latency_ms_p50": round(self._quantile(durations, 0.50), 6),
             "latency_ms_p95": round(self._quantile(durations, 0.95), 6),
+            "throughput_tokens_per_sec_p50": round(self._quantile(throughput, 0.50), 6),
+            "throughput_tokens_per_sec_p95": round(self._quantile(throughput, 0.95), 6),
+            "elapsed_ms_per_token_p50": round(self._quantile(elapsed_per_token, 0.50), 6),
             "decisions_last_n": count,
             "error_rate": round((errors / float(count)) if count else 0.0, 6),
             "breaker_open_providers": list(self._breaker_open_providers),

@@ -57,10 +57,11 @@ class TestRouterProprioception(unittest.TestCase):
     def test_sampler_quantiles_deterministic(self):
         sampler = ProprioceptiveSampler(maxlen=10)
         for value in [10.0, 20.0, 30.0, 40.0]:
-            sampler.record_decision(duration_ms=value, ok=True)
+            sampler.record_decision(duration_ms=value, tokens_in=20, tokens_out=10, ok=True)
         snap = sampler.snapshot()
         self.assertEqual(snap["latency_ms_p50"], 25.0)
         self.assertEqual(snap["latency_ms_p95"], 38.5)
+        self.assertEqual(snap["throughput_tokens_per_sec_p50"], 1250.0)
         self.assertEqual(snap["decisions_last_n"], 4)
         self.assertEqual(snap["error_rate"], 0.0)
 
@@ -105,6 +106,49 @@ class TestRouterProprioception(unittest.TestCase):
         self.assertIn("latency_ms_p95", snap)
         self.assertIn("decisions_last_n", snap)
         self.assertEqual(snap["breaker_open_providers"], [])
+
+    def test_proprioception_is_consumed_by_tacti_arousal_path(self):
+        with tempfile.TemporaryDirectory() as td:
+            tmp = Path(td)
+            captured_context = {}
+
+            def _capture_expression(*, now, context, manifest_path=None):
+                captured_context.update(dict(context or {}))
+                return {
+                    "enabled_features": [],
+                    "suppressed_features": [],
+                    "reasons": {},
+                    "manifest_path": str(manifest_path or ""),
+                }
+
+            with patch.dict(
+                os.environ,
+                {
+                    "OPENCLAW_ROUTER_PROPRIOCEPTION": "1",
+                    "OPENCLAW_WITNESS_LEDGER": "0",
+                    "TACTI_CR_ENABLE": "1",
+                    "TACTI_CR_EXPRESSION_ROUTER": "1",
+                },
+                clear=False,
+            ):
+                with patch.object(policy_router, "compute_expression", side_effect=_capture_expression):
+                    router = policy_router.PolicyRouter(
+                        policy_path=self._policy_path(tmp),
+                        budget_path=tmp / "budget.json",
+                        circuit_path=tmp / "circuit.json",
+                        event_log=tmp / "events.jsonl",
+                        handlers={"mock_provider": lambda payload, model_id, context: {"ok": True, "text": "ok"}},
+                    )
+                    result = router.execute_with_escalation(
+                        "coding",
+                        {"prompt": "small patch"},
+                        context_metadata={"agent_id": "main"},
+                    )
+
+        self.assertTrue(result["ok"])
+        self.assertIn("arousal", captured_context)
+        self.assertAlmostEqual(float(captured_context["arousal"]), 0.05, places=6)
+        self.assertIn("proprioception", result.get("meta", {}))
 
 
 if __name__ == "__main__":
