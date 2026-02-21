@@ -1183,3 +1183,151 @@ Result:
 - This shell-only pass validated patch presence + regression coverage + gateway restart on rebuilt runtime.
 - A deterministic dashboard-triggered oversized exec payload was not reproduced in this run, so no fresh `exec_payload_transport` journal line was captured yet.
 - Existing pre-fix `spawn E2BIG` evidence remains captured above; post-fix runtime now contains the transport safeguard and Telegram correlation/error-reply path.
+
+## Telegram Responsiveness + Observability Restoration (2026-02-21)
+
+### Phase 0: Ground truth (service context)
+Commands:
+```bash
+systemctl --user list-units --type=service --no-pager | rg -i "openclaw|telegram|gateway" || true
+systemctl --user status openclaw-gateway.service --no-pager || true
+systemctl --user status openclaw-telegram.service --no-pager || true
+```
+Observed:
+- `openclaw-gateway.service` is the active runtime (no dedicated `openclaw-telegram.service`).
+- Telegram is handled inside gateway process.
+
+Early failure signature (root cause found):
+```bash
+journalctl --user -u openclaw-gateway.service -n 80 --no-pager
+```
+- Crash loop due to syntax error in injected runtime patch:
+  - `file:///home/jeebs/src/clawd/.runtime/openclaw/dist/reply-B4B0jUCM.js:35318`
+  - `return '\''${s.replace(/'\/g, "'"'"'")}\'';`
+  - `SyntaxError: missing ) after argument list`
+
+This prevented any Telegram update ingestion.
+
+### Phase 1: Fix crash + restore ingestion
+Action:
+- Fixed quote escaping in `workspace/scripts/rebuild_runtime_openclaw.sh` exec payload helper.
+- Rebuilt runtime and restarted user gateway.
+
+Commands:
+```bash
+./workspace/scripts/rebuild_runtime_openclaw.sh
+systemctl --user restart openclaw-gateway.service
+systemctl --user status openclaw-gateway.service --no-pager | sed -n '1,60p'
+journalctl --user -u openclaw-gateway.service --since '2026-02-21 20:02:15' --no-pager
+```
+Observed:
+- Gateway recovered to `active (running)`.
+- Telegram provider startup resumed:
+  - `[telegram] [default] starting provider (@jeebsdalibot)`
+  - `[telegram] autoSelectFamily=true (default-node22)`
+
+### Phase 2: Non-silent handler guarantees added
+Changed injector logic in `workspace/scripts/rebuild_runtime_openclaw.sh` (runtime overlay path):
+- Added bounded handler timeout:
+  - `OPENCLAW_TELEGRAM_HANDLER_TIMEOUT_MS` (default 25000)
+- Wrapped inbound processing in timeout guard:
+  - `runTelegramInboundWithTimeout(...)`
+- Added structured failure logging on handler failure:
+  - `event=telegram_handler_failed`
+  - fields: `correlation_id`, `update_id`, `stage`, `err_class`, `err_message`
+- Added dead-letter append-only file:
+  - `workspace/telemetry/telegram_deadletter.jsonl`
+  - fields: `ts`, `correlation_id`, `update_id`, `chat_id_hash`, `stage`, `err`
+- Added retry logic for error replies (sendMessage path):
+  - `sendTelegramErrorReplyWithRetry(...)`
+  - attempts with backoff: 250ms, 1000ms, 3000ms
+  - structured retry log: `event=telegram_send_retry`
+- Added completion log in finally path:
+  - `telegram_handler_finally chatId=... messageId=...`
+
+Runtime verification of injected markers:
+```bash
+rg -n -S "OPENCLAW_TELEGRAM_ERROR_CORRELATION|runTelegramInboundWithTimeout|telegram_handler_failed|telegram_send_retry|telegram_handler_finally|sendTelegramErrorReplyWithRetry" \
+  .runtime/openclaw/dist/reply-B4B0jUCM.js
+```
+Observed hits at expected callsites.
+
+### Phase 3: Telegram probe utility added
+Added deterministic probe script:
+- `scripts/openclaw_telegram_probe.js`
+- Outputs machine-readable snapshot (`JSON` default) and `--plain` mode.
+- Behavior: no secrets printed; missing token handled explicitly (`error_code=telegram_token_missing`).
+
+Tests added:
+- `tests/telegram_probe.test.js`
+
+Commands:
+```bash
+node tests/telegram_probe.test.js
+node tests/safe_spawn.test.js
+node scripts/openclaw_telegram_probe.js
+node scripts/openclaw_telegram_probe.js --plain
+```
+Observed:
+- Probe tests: PASS
+- safe_spawn tests: PASS
+- Probe command runs and fails explicitly when token cannot be resolved from env/json in this shell context:
+  - `error_code=telegram_token_missing`
+
+### Service-context send-path evidence
+Direct runtime send probe:
+```bash
+/usr/bin/node /home/jeebs/src/clawd/.runtime/openclaw/dist/index.js message send \
+  --channel telegram --target telegram:8159253715 --message "telegram out probe <ts>" --json
+```
+Observed:
+- `HttpError: Network request for 'sendMessage' failed!`
+
+Interpretation:
+- Runtime is no longer crash-looping; Telegram adapter starts in gateway.
+- Outbound Telegram API call failed due network/API reachability in this probe context.
+- With new handler guardrails, inbound failures at runtime now emit correlation logs + dead-letter + retry attempts instead of silent loss.
+
+### Runbook (restart + verify)
+1. Rebuild runtime overlay:
+```bash
+./workspace/scripts/rebuild_runtime_openclaw.sh
+```
+2. Restart gateway:
+```bash
+systemctl --user restart openclaw-gateway.service
+systemctl --user status openclaw-gateway.service --no-pager
+```
+3. Verify Telegram adapter startup:
+```bash
+journalctl --user -u openclaw-gateway.service -n 200 --no-pager | rg -i "\[telegram\]|telegram_handler|sendMessage|getUpdates|deadletter|retry"
+```
+4. Run probe:
+```bash
+node scripts/openclaw_telegram_probe.js
+node scripts/openclaw_telegram_probe.js --plain
+```
+5. If failures occur, correlate by `correlation_id` and inspect dead-letter:
+```bash
+tail -n 50 workspace/telemetry/telegram_deadletter.jsonl
+```
+
+### Additional verification (service uptime + probe)
+Commands:
+```bash
+systemctl --user status openclaw-gateway.service --no-pager | sed -n '1,60p'
+node scripts/openclaw_telegram_probe.js
+/usr/bin/node /home/jeebs/src/clawd/.runtime/openclaw/dist/index.js message send \
+  --channel telegram --target telegram:8159253715 --message "telegram out probe <ts>" --json
+```
+Observed:
+- Gateway is `active (running)` on runtime entrypoint `.runtime/openclaw/dist/index.js`.
+- Telegram probe returns explicit runtime network failure in this environment:
+  - `{"ok": false, "error_code": "telegram_probe_runtime_error", "error": "fetch failed"}`
+- Direct telegram send probe similarly fails with network error:
+  - `HttpError: Network request for 'sendMessage' failed!`
+
+Operational conclusion:
+- Service crash-loop root cause is fixed.
+- Telegram handler hardening/observability is now in place (timeout + retry + deadletter + correlation logging).
+- Remaining blocker to a live bot reply from this shell context is Telegram API network reachability (`fetch failed`), not silent handler failure.

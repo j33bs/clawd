@@ -71,7 +71,7 @@ const OPENCLAW_EXEC_INLINE_MAX_BYTES = 32 * 1024;
 let openclawExecPayloadCounter = 0;
 function quoteShellArg(value) {
 	const s = String(value ?? "");
-	return \`'\${s.replace(/'/g, "'\"'\"'")}'\`;
+	return "'" + s.replace(/'/g, "'\\\\''") + "'";
 }
 function nextExecPayloadCorrelationId() {
 	openclawExecPayloadCounter = (openclawExecPayloadCounter + 1) % 1679616;
@@ -132,11 +132,82 @@ if (!src.includes('const execCommandPrepared = externalizeExecCommandIfOversized
 const tgMarker = '/* OPENCLAW_TELEGRAM_ERROR_CORRELATION */';
 if (!src.includes(tgMarker)) {
   const tgAnchor = 'const registerTelegramHandlers = ({ cfg, accountId, bot, opts, runtime, mediaMaxBytes, telegramCfg, groupAllowFrom, resolveGroupPolicy, resolveTelegramGroupConfig, shouldSkipUpdate, processMessage, logger }) => {';
-  const tgBlock = `${tgMarker}
+const tgBlock = `${tgMarker}
 let openclawTelegramErrorCounter = 0;
+const OPENCLAW_TELEGRAM_HANDLER_TIMEOUT_MS = (() => {
+	const parsed = Number.parseInt(String(process.env.OPENCLAW_TELEGRAM_HANDLER_TIMEOUT_MS || "25000"), 10);
+	return Number.isFinite(parsed) && parsed > 0 ? parsed : 25000;
+})();
 function nextTelegramErrorCorrelationId() {
 	openclawTelegramErrorCounter = (openclawTelegramErrorCounter + 1) % 1679616;
 	return \`tg-\${Date.now().toString(36)}-\${openclawTelegramErrorCounter.toString(36).padStart(3, "0")}\`;
+}
+function sleepMs(ms) {
+	return new Promise((resolve) => setTimeout(resolve, ms));
+}
+function appendTelegramDeadletter(entry) {
+	try {
+		const deadletterPath = process.env.OPENCLAW_TELEGRAM_DEADLETTER_PATH || path.join(process.cwd(), "workspace", "telemetry", "telegram_deadletter.jsonl");
+		fs$1.mkdirSync(path.dirname(deadletterPath), { recursive: true });
+		fs$1.appendFileSync(deadletterPath, JSON.stringify(entry) + "\\n", "utf8");
+	} catch (err) {
+		console.error(JSON.stringify({
+			event: "telegram_deadletter_write_failed",
+			error: String(err)
+		}));
+	}
+}
+function isRetryableTelegramSendError(err) {
+	const status = Number(err?.error_code ?? err?.statusCode ?? err?.status ?? 0);
+	if (status === 429 || status >= 500) return true;
+	const text = String(err?.description || err?.message || err || "");
+	return /timeout|timed out|network request|fetch failed|ecconn|econn|socket hang up|temporar/i.test(text);
+}
+async function sendTelegramErrorReplyWithRetry({ bot, event, runtime, correlationId, messageText }) {
+	const delays = [250, 1000, 3000];
+	let lastErr;
+	for (let attempt = 1; attempt <= delays.length; attempt += 1) {
+		try {
+			await withTelegramApiErrorLogging({
+				operation: "sendMessage",
+				runtime,
+				fn: () => bot.api.sendMessage(event.chatId, messageText, buildTypingThreadParams(event.messageThreadId))
+			});
+			return;
+		} catch (err) {
+			lastErr = err;
+			const retryable = isRetryableTelegramSendError(err);
+			console.error(JSON.stringify({
+				event: "telegram_send_retry",
+				correlation_id: correlationId,
+				attempt,
+				retryable,
+				error: String(err)
+			}));
+			if (!retryable || attempt >= delays.length) break;
+			await sleepMs(delays[attempt - 1]);
+		}
+	}
+	throw lastErr || new Error("telegram sendMessage failed");
+}
+async function runTelegramInboundWithTimeout(fn, event, runtime) {
+	let timer = null;
+	try {
+		await Promise.race([
+			fn(),
+			new Promise((_, reject) => {
+				timer = setTimeout(() => {
+					const timeoutErr = new Error(\`telegram handler timed out after \${OPENCLAW_TELEGRAM_HANDLER_TIMEOUT_MS}ms\`);
+					timeoutErr.code = "TELEGRAM_HANDLER_TIMEOUT";
+					timeoutErr.stage = "pipeline";
+					reject(timeoutErr);
+				}, OPENCLAW_TELEGRAM_HANDLER_TIMEOUT_MS);
+			})
+		]);
+	} finally {
+		if (timer) clearTimeout(timer);
+		runtime.log?.(warn(\`telegram_handler_finally chatId=\${event.chatId} messageId=\${event.msg?.message_id ?? "n/a"}\`));
+	}
 }
 `;
   if (!src.includes(tgAnchor)) {
@@ -145,10 +216,23 @@ function nextTelegramErrorCorrelationId() {
   src = src.replace(tgAnchor, `${tgBlock}\n${tgAnchor}`);
 }
 
-const tgCatchNeedle = '\t\t} catch (err) {\n\t\t\truntime.error?.(danger(`${event.errorMessage}: ${String(err)}`));\n\t\t}\n\t};';
-if (src.includes(tgCatchNeedle)) {
-  const tgCatchReplacement = '\t\t} catch (err) {\n\t\t\tconst correlationId = nextTelegramErrorCorrelationId();\n\t\t\truntime.error?.(danger(`${event.errorMessage} (correlation_id=${correlationId}): ${String(err)}`));\n\t\t\ttry {\n\t\t\t\tawait withTelegramApiErrorLogging({\n\t\t\t\t\toperation: "sendMessage",\n\t\t\t\t\truntime,\n\t\t\t\t\tfn: () => bot.api.sendMessage(event.chatId, `Error processing request (code: ${correlationId}). Check gateway logs.`, buildTypingThreadParams(event.messageThreadId))\n\t\t\t\t});\n\t\t\t} catch (notifyErr) {\n\t\t\t\truntime.error?.(danger(`telegram error notification failed (correlation_id=${correlationId}): ${String(notifyErr)}`));\n\t\t\t}\n\t\t}\n\t};';
-  src = src.replace(tgCatchNeedle, tgCatchReplacement);
+const handleAnchor = 'const handleInboundMessageLike = async (event) => {';
+const handleEndAnchor = '\n\tbot.on("message", async (ctx) => {';
+const handleStart = src.indexOf(handleAnchor);
+if (handleStart !== -1) {
+  const handleEnd = src.indexOf(handleEndAnchor, handleStart);
+  if (handleEnd !== -1) {
+    let section = src.slice(handleStart, handleEnd);
+    section = section.replace(
+      /await processInboundMessage\(\{([\s\S]*?)\}\);/,
+      'await runTelegramInboundWithTimeout(() => processInboundMessage({$1}), event, runtime);'
+    );
+    section = section.replace(
+      /\t\t\} catch \(err\) \{[\s\S]*?\t\t\}\n\t\};/,
+      '\t\t} catch (err) {\n\t\t\tconst correlationId = nextTelegramErrorCorrelationId();\n\t\t\tconst stage = String(err?.stage || err?.code || "handler");\n\t\t\tconst errorText = String(err && err.message ? err.message : err);\n\t\t\tconsole.error(JSON.stringify({\n\t\t\t\tevent: "telegram_handler_failed",\n\t\t\t\tcorrelation_id: correlationId,\n\t\t\t\tupdate_id: event.msg?.message_id ?? null,\n\t\t\t\tstage,\n\t\t\t\terr_class: err?.name || "Error",\n\t\t\t\terr_message: errorText\n\t\t\t}));\n\t\t\tappendTelegramDeadletter({\n\t\t\t\tts: new Date().toISOString(),\n\t\t\t\tcorrelation_id: correlationId,\n\t\t\t\tupdate_id: event.msg?.message_id ?? null,\n\t\t\t\tchat_id_hash: event.chatId != null ? String(event.chatId).slice(-6) : null,\n\t\t\t\tstage,\n\t\t\t\terr: errorText\n\t\t\t});\n\t\t\truntime.error?.(danger(event.errorMessage + " (correlation_id=" + correlationId + ", stage=" + stage + "): " + errorText));\n\t\t\ttry {\n\t\t\t\tawait sendTelegramErrorReplyWithRetry({\n\t\t\t\t\tbot,\n\t\t\t\t\tevent,\n\t\t\t\t\truntime,\n\t\t\t\t\tcorrelationId,\n\t\t\t\t\tmessageText: "Error (code: " + correlationId + "). Gateway logs contain details."\n\t\t\t\t});\n\t\t\t} catch (notifyErr) {\n\t\t\t\truntime.error?.(danger("telegram error notification failed (correlation_id=" + correlationId + "): " + String(notifyErr)));\n\t\t\t}\n\t\t}\n\t};'
+    );
+    src = src.slice(0, handleStart) + section + src.slice(handleEnd);
+  }
 }
 
 fs.writeFileSync(file, src);
