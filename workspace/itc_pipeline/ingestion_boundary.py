@@ -36,6 +36,11 @@ from typing import Dict, Any, Optional, Set
 from dataclasses import dataclass, asdict
 
 from .allowlist import is_chat_allowed, log_allowlist_on_startup
+try:
+    from workspace.memory.message_hooks import build_message_event, process_message_event
+except Exception:  # pragma: no cover
+    build_message_event = None
+    process_message_event = None
 
 logger = logging.getLogger(__name__)
 
@@ -192,6 +197,19 @@ def ingest_message(
         f"msg_id={message.message_id} chat='{message.chat_title}' "
         f"text_len={len(message.text)}"
     )
+    if callable(build_message_event) and callable(process_message_event):
+        try:
+            event = build_message_event(
+                session_id=f"{message.source}:{message.chat_id}",
+                role="user",
+                content=message.text,
+                ts_utc=message.date,
+                source=message.source,
+                tone="unlabeled",
+            )
+            process_message_event(event, repo_root=Path(__file__).resolve().parents[2])
+        except Exception:
+            pass
 
     if dry_run:
         logger.info(f"DRY-RUN: Would process message {dedupe_key}")
