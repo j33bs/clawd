@@ -1177,3 +1177,22 @@ M	workspace/state/tacti_cr/events.jsonl
 - Intent: instantiate lazy PrefetchCache singleton in KB query path and reuse cached query context on repeat calls.
 - Cache semantics: first query warms cache + records miss, repeated same query returns cached docs + records hit.
 - Rollback: git revert <commit_sha_for_wiring_10>
+
+## Wiring #2 Validation 2026-02-21T21:08:52Z
+$ python3 -m unittest tests_unittest.test_policy_router_oscillatory_gating tests_unittest.test_policy_router_tacti_novel10 -v
+test_gating_invoked_when_flag_enabled (tests_unittest.test_policy_router_oscillatory_gating.TestPolicyRouterOscillatoryGating.test_gating_invoked_when_flag_enabled) ... ok
+test_arousal_and_expression_can_gate_heavy_escalation (tests_unittest.test_policy_router_tacti_novel10.TestPolicyRouterTactiNovel10.test_arousal_and_expression_can_gate_heavy_escalation) ... ok
+
+----------------------------------------------------------------------
+Ran 2 tests in 0.006s
+
+OK
+$ git diff --name-status
+M	env.d/system1-routing.env
+M	workspace/audit/wirings_integration_20260222.md
+M	workspace/state/tacti_cr/events.jsonl
+
+### Wiring #2 summary
+- Intent: ensure oscillatory gating is explicitly enabled in system1 routing env and covered by a router invocation test.
+- Router callsite already existed in policy_router._tacti_runtime_controls; test pins invocation under enabled flags.
+- Rollback: git revert <commit_sha_for_wiring_2>
