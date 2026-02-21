@@ -1696,3 +1696,58 @@ check your internet connection or https://githubstatus.com
 ```
 Browser fallback:
 - https://github.com/j33bs/clawd/compare/main...feat/dali-wire-existing-components-20260221T2015Z?expand=1
+
+## CI + PR Description Attachment (2026-02-21)
+
+### Workflow added
+- Path: `.github/workflows/ci.yml`
+- Summary:
+  - Trigger: `pull_request`, `push` (`main` + `feat/dali-wire-existing-components-*`), `workflow_dispatch`
+  - Runner: `ubuntu-latest`
+  - Tooling: `actions/setup-node@v4` (`node-version: 22`), `actions/setup-python@v5` (`python-version: 3.12`)
+  - Optional install gates:
+    - Python: `requirements.txt` or `pyproject.toml` if present
+    - Node: `npm ci` if lockfile exists, else `npm install`, gated by `package.json`
+  - Checks executed:
+    - `bash -n scripts/vllm_launch_optimal.sh`
+    - `python3 -m unittest tests_unittest.test_policy_router_tacti_main_flow tests_unittest.test_policy_router_glue_integrations tests_unittest.test_itc_ingestion_boundary_forwarding tests_unittest.test_source_ui_sse`
+    - `node tests/providers/local_vllm_provider.test.js`
+    - `node tests/router_gpu_guard.test.js`
+
+### Local verification rerun
+Commands:
+```bash
+bash -n scripts/vllm_launch_optimal.sh
+python3 -m unittest tests_unittest.test_policy_router_tacti_main_flow tests_unittest.test_policy_router_glue_integrations tests_unittest.test_itc_ingestion_boundary_forwarding tests_unittest.test_source_ui_sse
+node tests/providers/local_vllm_provider.test.js
+node tests/router_gpu_guard.test.js
+```
+Observed: PASS for all commands.
+
+### Commit
+- `ci: add minimal PR checks for glue wiring suite`
+- SHA: `ed7b877`
+
+### PR body attach attempt for PR #39
+Primary command:
+```bash
+gh pr edit 39 --body-file workspace/audit/pr_body_dali_wire_existing_components_20260221.md
+```
+Output:
+```text
+error connecting to api.github.com
+check your internet connection or https://githubstatus.com
+```
+Fallback command:
+```bash
+gh pr comment 39 --body "$(cat workspace/audit/pr_body_dali_wire_existing_components_20260221.md)"
+```
+Output:
+```text
+error connecting to api.github.com
+check your internet connection or https://githubstatus.com
+```
+Result: PR body/comment could not be attached via `gh` in this environment due API connectivity.
+Use browser PR URL and paste from:
+- `workspace/audit/pr_body_dali_wire_existing_components_20260221.md`
+- https://github.com/j33bs/clawd/pull/39
