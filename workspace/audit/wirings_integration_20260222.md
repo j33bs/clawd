@@ -1359,3 +1359,54 @@ M	workspace/state/tacti_cr/events.jsonl
 - Intent: enable counterfactual replay in dynamics routing loop with runtime circuit breakers.
 - Guards: depth cap, per-decision time budget, and auto temporary-disable after repeated replay errors.
 - Rollback: git revert <commit_sha_for_wiring_5>
+
+## Wiring #1 Validation 2026-02-21T21:18:52Z
+$ python3 -m unittest tests_unittest.test_tacti_efe_calculator tests_unittest.test_policy_router_active_inference_hook tests_unittest.test_policy_router_tacti_main_flow -v
+test_arousal_and_collapse_penalize_complex_policies (tests_unittest.test_tacti_efe_calculator.TestTactiEfeCalculator.test_arousal_and_collapse_penalize_complex_policies) ... ok
+test_expected_utility_and_epistemic_are_monotonic (tests_unittest.test_tacti_efe_calculator.TestTactiEfeCalculator.test_expected_utility_and_epistemic_are_monotonic) ... ok
+test_active_inference_fallback_keeps_router_operational (tests_unittest.test_policy_router_active_inference_hook.TestPolicyRouterActiveInferenceHook.test_active_inference_fallback_keeps_router_operational) ... ok
+test_active_inference_predict_and_update_in_execute (tests_unittest.test_policy_router_active_inference_hook.TestPolicyRouterActiveInferenceHook.test_active_inference_predict_and_update_in_execute) ... ok
+test_openclaw_active_inference_prefers_local_provider_for_concise_tasks (tests_unittest.test_policy_router_active_inference_hook.TestPolicyRouterActiveInferenceHook.test_openclaw_active_inference_prefers_local_provider_for_concise_tasks) ... FAIL
+test_flag_on_runs_tacti_hook_and_records_non_empty_agent_ids (tests_unittest.test_policy_router_tacti_main_flow.TestPolicyRouterTactiMainFlow.test_flag_on_runs_tacti_hook_and_records_non_empty_agent_ids) ... ok
+test_flags_off_does_not_create_tacti_runtime_events_file (tests_unittest.test_policy_router_tacti_main_flow.TestPolicyRouterTactiMainFlow.test_flags_off_does_not_create_tacti_runtime_events_file) ... ok
+test_flags_off_preserves_flow_without_tacti_hook_invocation (tests_unittest.test_policy_router_tacti_main_flow.TestPolicyRouterTactiMainFlow.test_flags_off_preserves_flow_without_tacti_hook_invocation) ... ok
+
+======================================================================
+FAIL: test_openclaw_active_inference_prefers_local_provider_for_concise_tasks (tests_unittest.test_policy_router_active_inference_hook.TestPolicyRouterActiveInferenceHook.test_openclaw_active_inference_prefers_local_provider_for_concise_tasks)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/private/tmp/twenty-evolutions-20260221/tests_unittest/test_policy_router_active_inference_hook.py", line 108, in test_openclaw_active_inference_prefers_local_provider_for_concise_tasks
+    self.assertEqual(result["provider"], "local_vllm_assistant")
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'groq' != 'local_vllm_assistant'
+- groq
++ local_vllm_assistant
+
+
+----------------------------------------------------------------------
+Ran 8 tests in 0.012s
+
+FAILED (failures=1)
+$ python3 -m unittest tests_unittest.test_policy_router_active_inference_hook tests_unittest.test_tacti_efe_calculator -v
+test_active_inference_fallback_keeps_router_operational (tests_unittest.test_policy_router_active_inference_hook.TestPolicyRouterActiveInferenceHook.test_active_inference_fallback_keeps_router_operational) ... ok
+test_active_inference_predict_and_update_in_execute (tests_unittest.test_policy_router_active_inference_hook.TestPolicyRouterActiveInferenceHook.test_active_inference_predict_and_update_in_execute) ... ok
+test_openclaw_active_inference_prefers_local_provider_for_concise_tasks (tests_unittest.test_policy_router_active_inference_hook.TestPolicyRouterActiveInferenceHook.test_openclaw_active_inference_prefers_local_provider_for_concise_tasks) ... ok
+test_arousal_and_collapse_penalize_complex_policies (tests_unittest.test_tacti_efe_calculator.TestTactiEfeCalculator.test_arousal_and_collapse_penalize_complex_policies) ... ok
+test_expected_utility_and_epistemic_are_monotonic (tests_unittest.test_tacti_efe_calculator.TestTactiEfeCalculator.test_expected_utility_and_epistemic_are_monotonic) ... ok
+
+----------------------------------------------------------------------
+Ran 5 tests in 0.006s
+
+OK
+$ git diff --name-status
+M	env.d/system1-routing.env
+M	tests_unittest/test_policy_router_active_inference_hook.py
+M	workspace/audit/wirings_integration_20260222.md
+M	workspace/scripts/policy_router.py
+M	workspace/state/tacti_cr/events.jsonl
+M	workspace/tacti/efe_calculator.py
+
+### Wiring #1 summary
+- Intent: replace EFE TODO with deterministic utility+epistemic+arousal/collapse scoring and route through ActiveInferenceAgent when OPENCLAW_ACTIVE_INFERENCE=1.
+- Router behavior: active inference emits preferred_provider and capability router honors it; fallback remains intact on errors.
+- Rollback: git revert <commit_sha_for_wiring_1>
