@@ -9,6 +9,7 @@ import os
 import re
 import sys
 import time
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -211,6 +212,16 @@ DEFAULT_POLICY = {
                 "allowPaid": True,
             },
         },
+        "capability_router": {
+            "enabled": True,
+            "subagentProvider": "local_vllm_assistant",
+            "mechanicalProvider": "local_vllm_assistant",
+            "planningProvider": "claude_auth",
+            "reasoningProvider": "claude_auth",
+            "codeProvider": "local_vllm_assistant",
+            "smallCodeProvider": "local_vllm_assistant",
+            "explicitTriggers": {},
+        },
     },
 }
 
@@ -300,6 +311,72 @@ def _deep_merge(defaults, incoming):
 def _policy_strict_enabled():
     value = str(os.environ.get("OPENCLAW_POLICY_STRICT", "1")).strip().lower()
     return value not in {"0", "false", "no", "off"}
+
+
+_SECRET_VALUE_PATTERNS = [
+    re.compile(r"(authorization\s*:\s*bearer\s+)[^\s,;]+", re.IGNORECASE),
+    re.compile(r"\bBearer\s+[A-Za-z0-9._~+\-/=]{8,}\b"),
+    re.compile(r"\b(sk|gsk|xoxb|xoxp)-[A-Za-z0-9_-]{8,}\b", re.IGNORECASE),
+    re.compile(r"((?:api[_-]?key|token|secret|password)\s*[:=]\s*)([^\s,;]+)", re.IGNORECASE),
+]
+
+
+def _redact_text(value):
+    text = str(value or "")
+    for pattern in _SECRET_VALUE_PATTERNS:
+        if pattern.pattern.startswith("((?:api"):
+            text = pattern.sub(r"\1<redacted>", text)
+        elif "authorization" in pattern.pattern.lower():
+            text = pattern.sub(r"\1<redacted>", text)
+        else:
+            text = pattern.sub("<redacted-token>", text)
+    text = re.sub(r"(cookie\s*:\s*)([^\r\n]+)", r"\1<redacted>", text, flags=re.IGNORECASE)
+    text = re.sub(r"(set-cookie\s*:\s*)([^\r\n]+)", r"\1<redacted>", text, flags=re.IGNORECASE)
+    return text
+
+
+def _redact_detail(value):
+    if isinstance(value, str):
+        return _redact_text(value)
+    if value is None:
+        return None
+    if isinstance(value, list):
+        return [_redact_detail(item) for item in value]
+    if isinstance(value, dict):
+        out = {}
+        for key, item in value.items():
+            if re.search(r"authorization|cookie|token|secret|password|api[_-]?key", str(key), re.IGNORECASE):
+                out[str(key)] = "<redacted>"
+            else:
+                out[str(key)] = _redact_detail(item)
+        return out
+    return value
+
+
+def _new_request_id(prefix="req"):
+    pfx = re.sub(r"[^a-z0-9_-]", "", str(prefix or "req").lower()) or "req"
+    return f"{pfx}-{int(time.time() * 1000):x}-{uuid.uuid4().hex[:8]}"
+
+
+def _outcome_class_from_reason(reason_code):
+    code = str(reason_code or "").lower()
+    if code in {"success", "ok"}:
+        return "success"
+    if "timeout" in code:
+        return "timeout"
+    if "429" in code or "rate" in code:
+        return "rate_limit"
+    if "auth" in code or "missing_api_key" in code:
+        return "auth_error"
+    if "circuit" in code:
+        return "circuit_open"
+    return "failure"
+
+
+def _budget_intent_key(intent):
+    if isinstance(intent, str) and intent.startswith("teamchat:"):
+        return "coding"
+    return intent
 
 
 def _validate_policy_schema(raw):
@@ -400,7 +477,7 @@ def log_event(event_type, detail=None, path=EVENT_LOG):
         "event": event_type,
     }
     if detail:
-        entry["detail"] = detail
+        entry["detail"] = _redact_detail(detail)
     try:
         with open(path, "a", encoding="utf-8") as f:
             f.write(json.dumps(entry, ensure_ascii=False) + "\n")
@@ -797,6 +874,8 @@ class PolicyRouter:
     def _intent_cfg(self, intent):
         intent = canonical_intent(intent)
         intents = self.policy.get("routing", {}).get("intents", {})
+        if isinstance(intent, str) and intent.startswith("teamchat:") and "coding" in intents:
+            return intents.get("coding", {})
         if intent in intents:
             return intents.get(intent, {})
         return intents.get("conversation", {})
@@ -864,6 +943,66 @@ class PolicyRouter:
     def _capability_cfg(self):
         return self.policy.get("routing", {}).get("capability_router", {})
 
+    def _capability_class(self, context_metadata, payload_text=""):
+        context_metadata = context_metadata or {}
+        text = "\n".join(
+            t for t in [str(context_metadata.get("input_text", "")), str(payload_text or "")] if t
+        )
+        lower = text.lower()
+
+        planning_keywords = [
+            "plan",
+            "design",
+            "architecture",
+            "evaluate options",
+            "trade-off",
+            "tradeoffs",
+            "synthesis",
+            "uncertainty",
+            "hypothesis",
+            "reason about",
+        ]
+        mechanical_keywords = [
+            "write code",
+            "code",
+            "implement",
+            "run test",
+            "run tests",
+            "pytest",
+            "unittest",
+            "grep",
+            "ripgrep",
+            "sed",
+            "apply patch",
+            "patch",
+            "diff",
+            "refactor",
+            "rename",
+            "format",
+            "lint",
+            "execute",
+            "command",
+            "fix failing",
+            "repo",
+            "file",
+            "line",
+        ]
+
+        has_planning = any(keyword in lower for keyword in planning_keywords)
+        has_mechanical = any(keyword in lower for keyword in mechanical_keywords)
+        bullets = _count_bullets(text)
+        file_paths = _count_file_paths(text)
+
+        if has_planning and not has_mechanical:
+            return "planning_synthesis"
+        if has_mechanical and not has_planning:
+            return "mechanical_execution"
+        if has_mechanical and has_planning:
+            return "hybrid"
+        if file_paths >= 2 or bullets >= 3:
+            return "mechanical_execution"
+        return "general_conversation"
+
     def _capability_decision(self, context_metadata, payload_text=""):
         cfg = self._capability_cfg()
         if cfg.get("enabled") is False:
@@ -896,84 +1035,30 @@ class PolicyRouter:
                     "matched": "subagent=true",
                     "provider": provider,
                     "reason": "subagent primary uses local provider",
+                    "capability_class": "mechanical_execution",
                 }
 
-        lower = text.lower()
-        reasoning_keywords = [
-            "plan",
-            "design",
-            "architecture",
-            "evaluate options",
-            "trade-offs",
-            "step-by-step",
-            "derive",
-            "prove",
-            "formalize",
-        ]
-        code_keywords = [
-            "write code",
-            "implement",
-            "patch",
-            "diff",
-            "tests",
-            "refactor",
-            "typescript",
-            "javascript",
-            "python",
-            "ci",
-            "github actions",
-            "```",
-        ]
-        tool_keywords = [
-            "run commands",
-            "audit",
-            "regression",
-            "fix failing tests",
-        ]
-
-        has_reasoning = any(keyword in lower for keyword in reasoning_keywords)
-        has_code = any(keyword in lower for keyword in code_keywords)
-        has_tool_ops = any(keyword in lower for keyword in tool_keywords)
-
-        min_bullets = _coerce_positive_int(cfg.get("structureComplexityMinBullets"), 3)
-        min_paths = _coerce_positive_int(cfg.get("structureComplexityMinPaths"), 2)
-        bullets = _count_bullets(text)
-        file_paths = _count_file_paths(text)
-        structure_complex = bullets >= min_bullets or file_paths >= min_paths
-        complex_task = has_reasoning or has_code or has_tool_ops or structure_complex
-
-        if has_code:
-            small_by_ctx = context_metadata.get("expected_change_size") in {"small", "tiny"}
-            loc_hint = _coerce_positive_int(context_metadata.get("expected_loc"), 0)
-            small_by_loc = 0 < loc_hint <= 50
-            tests_requested = "tests" in lower or "test " in lower
-            small_by_shape = file_paths <= 1 and bullets < min_bullets and not tests_requested
-            if small_by_ctx or small_by_loc or small_by_shape:
-                provider = cfg.get("smallCodeProvider")
-                if provider:
-                    return {
-                        "trigger": "complexity_small_code",
-                        "matched": "code+small_change",
-                        "provider": provider,
-                        "reason": "small self-contained coding task",
-                    }
-            provider = cfg.get("codeProvider")
+        capability_class = self._capability_class(context_metadata, payload_text)
+        if capability_class in {"mechanical_execution", "hybrid"}:
+            provider = cfg.get("mechanicalProvider") or cfg.get("codeProvider") or cfg.get("subagentProvider")
             if provider:
                 return {
-                    "trigger": "complexity_code",
-                    "matched": "code_generation_markers",
+                    "trigger": "capability_class",
+                    "matched": capability_class,
                     "provider": provider,
-                    "reason": "code generation task",
+                    "reason": "mechanical/execution class prefers local vLLM subagent",
+                    "capability_class": capability_class,
                 }
 
-        if has_reasoning or (complex_task and not has_code):
-            provider = cfg.get("reasoningProvider")
+        if capability_class == "planning_synthesis":
+            provider = cfg.get("planningProvider") or cfg.get("reasoningProvider")
             if provider:
                 return {
-                    "trigger": "complexity_reasoning",
-                    "matched": "reasoning_or_structure_markers",
+                    "trigger": "capability_class",
+                    "matched": capability_class,
                     "provider": provider,
-                    "reason": "complex reasoning/planning task",
+                    "reason": "planning/synthesis class prefers cloud reasoning",
+                    "capability_class": capability_class,
                 }
 
         return None
@@ -1215,6 +1300,8 @@ class PolicyRouter:
             "matched_trigger": (decision or {}).get("trigger") or "default",
             "matched_detail": (decision or {}).get("matched") or "none",
             "reason": (decision or {}).get("reason") or "default intent routing order",
+            "capability_class": (decision or {}).get("capability_class")
+            or self._capability_class(context_metadata, payload_text),
             "base_order": base_order,
             "evaluated_order": order,
             "chosen": chosen,
@@ -1236,11 +1323,10 @@ class PolicyRouter:
         if _flag_enabled("ENABLE_ACTIVE_INFERENCE"):
             runtime_context["active_inference"] = _active_inference_payload(runtime_context)
         tacti_controls = self._tacti_runtime_controls(intent, intent_cfg, runtime_context)
-        payload_text = _extract_text_from_payload(payload)
         order, decision = self._ordered_providers(intent_cfg, runtime_context, payload_text)
         route_explain = self.explain_route(intent, context_metadata=runtime_context, payload=payload)
         if decision:
-            log_event(
+            _emit(
                 "router_route_selected",
                 {
                     "intent": intent,
@@ -1248,12 +1334,12 @@ class PolicyRouter:
                     "matched": decision.get("matched"),
                     "preferred_provider": decision.get("provider"),
                     "reason": decision.get("reason"),
+                    "capability_class": decision.get("capability_class") or capability_class,
                     "fallback_candidates": route_explain.get("fallback_candidates", []),
                 },
-                self.event_log,
             )
         else:
-            log_event(
+            _emit(
                 "router_route_selected",
                 {
                     "intent": intent,
@@ -1261,7 +1347,6 @@ class PolicyRouter:
                     "preferred_provider": None,
                     "fallback_candidates": route_explain.get("fallback_candidates", []),
                 },
-                self.event_log,
             )
 
         max_per_run = int(self.policy.get("budgets", {}).get("intents", {}).get(budget_intent, {}).get("maxCallsPerRun", 0))
@@ -1272,13 +1357,13 @@ class PolicyRouter:
             provider_start = time.perf_counter()
             if max_per_run and self.run_counts[budget_intent] >= max_per_run:
                 last_reason = "max_calls_per_run_exhausted"
-                log_event("router_skip", {"intent": intent, "provider": name, "reason_code": last_reason}, self.event_log)
+                _emit("router_skip", {"intent": intent, "provider": name, "reason_code": last_reason})
                 break
 
             ok, reason = self._provider_available(name, intent_cfg)
             if not ok:
                 last_reason = reason
-                log_event("router_skip", {"intent": intent, "provider": name, "reason_code": reason}, self.event_log)
+                _emit("router_skip", {"intent": intent, "provider": name, "reason_code": reason})
                 continue
 
             provider = self._provider_cfg(name)
@@ -1290,25 +1375,23 @@ class PolicyRouter:
                 is_heavy = tier in {"paid", "auth"} or str(name).startswith(("openai_", "claude_", "grok_"))
                 if is_heavy:
                     last_reason = "tacti_cr_arousal_suppress_heavy"
-                    log_event(
+                    _emit(
                         "router_skip",
                         {"intent": intent, "provider": name, "reason_code": last_reason},
-                        self.event_log,
                     )
                     continue
             if tacti_controls.get("prefer_local"):
                 if str(name).startswith(("openai_", "claude_", "grok_")):
                     last_reason = "tacti_cr_valence_prefer_local"
-                    log_event(
+                    _emit(
                         "router_skip",
                         {"intent": intent, "provider": name, "reason_code": last_reason},
-                        self.event_log,
                     )
                     continue
 
             if self._circuit_open(circuit_key, now):
                 last_reason = "circuit_open"
-                log_event("router_skip", {"intent": intent, "provider": name, "reason_code": "circuit_open"}, self.event_log)
+                _emit("router_skip", {"intent": intent, "provider": name, "reason_code": "circuit_open"})
                 continue
             max_chars = self._provider_max_chars(name, model_id)
 
@@ -1331,10 +1414,9 @@ class PolicyRouter:
             )
             if max_tokens_req and est_tokens > max_tokens_req:
                 last_reason = "request_token_cap_exceeded"
-                log_event(
+                _emit(
                     "router_skip",
                     {"intent": intent, "provider": name, "reason_code": last_reason},
-                    self.event_log,
                 )
                 continue
             effective_tokens = est_tokens
@@ -1346,7 +1428,7 @@ class PolicyRouter:
             allowed, reason = self._budget_allows(budget_intent, tier, effective_tokens)
             if not allowed:
                 last_reason = reason
-                log_event("router_skip", {"intent": intent, "provider": name, "reason_code": reason}, self.event_log)
+                _emit("router_skip", {"intent": intent, "provider": name, "reason_code": reason})
                 continue
 
             attempts += 1
@@ -1382,7 +1464,37 @@ class PolicyRouter:
                 elif ptype == "openai_auth" or ptype == "anthropic_auth":
                     result = {"ok": False, "reason_code": "auth_login_required"}
                 else:
-                    result = {"ok": False, "reason_code": "provider_unhandled"}
+                    ptype = provider.get("type")
+                    if ptype == "openai_compatible":
+                        api_key = None
+                        if provider.get("auth") == "qwen_oauth":
+                            api_key, _ = get_qwen_token()
+                        else:
+                            api_key_env = _provider_api_key_env(provider)
+                            if api_key_env:
+                                api_key = read_env_or_secrets(api_key_env)
+                        provider_caps = resolve_tool_call_capability(provider, model_id)
+                        result = _call_openai_compatible(
+                            provider.get("baseUrl", ""),
+                            api_key,
+                            model_id,
+                            payload,
+                            provider_caps=provider_caps,
+                        )
+                    elif ptype == "anthropic":
+                        api_key = read_env_or_secrets(provider.get("apiKeyEnv", ""))
+                        result = _call_anthropic(provider.get("baseUrl", ""), api_key, model_id, payload)
+                    elif ptype == "ollama":
+                        base = provider.get("baseUrl", "http://localhost:11434")
+                        result = _call_ollama(base, model_id, payload)
+                    elif ptype == "openai_auth" or ptype == "anthropic_auth":
+                        result = {"ok": False, "reason_code": "auth_login_required"}
+                    else:
+                        result = {"ok": False, "reason_code": "provider_unhandled"}
+            except Exception as exc:
+                result = {"ok": False, "reason_code": f"provider_exception_{type(exc).__name__}", "error": str(exc)}
+
+            latency_ms = int((time.perf_counter() - started_at) * 1000)
 
             if not result.get("ok"):
                 reason_code = result.get("reason_code", "provider_error")
@@ -1390,7 +1502,7 @@ class PolicyRouter:
                 cfg = self.policy.get("defaults", {}).get("circuitBreaker", {})
                 if reason_code in cfg.get("failOn", []):
                     self._record_failure(circuit_key, reason_code)
-                log_event(
+                _emit(
                     "router_attempt",
                     {
                         "intent": intent,
@@ -1398,19 +1510,22 @@ class PolicyRouter:
                         "model": model_id,
                         "tier": tier,
                         "reason_code": reason_code,
+                        "outcome_class": _outcome_class_from_reason(reason_code),
+                        "latency_ms": latency_ms,
                         "attempt": attempts,
+                        "selected_tool": runtime_context.get("selected_tool"),
                     },
-                    self.event_log,
                 )
-                log_event(
+                _emit(
                     "router_escalate",
                     {
                         "intent": intent,
                         "from_provider": name,
                         "reason_code": reason_code,
+                        "outcome_class": _outcome_class_from_reason(reason_code),
+                        "latency_ms": latency_ms,
                         "attempt": attempts,
                     },
-                    self.event_log,
                 )
                 if self._proprio_sampler is not None:
                     breaker_open = []
@@ -1440,7 +1555,7 @@ class PolicyRouter:
                     parsed = None
                 if not parsed:
                     last_reason = "response_invalid"
-                    log_event(
+                    _emit(
                         "router_attempt",
                         {
                             "intent": intent,
@@ -1448,33 +1563,37 @@ class PolicyRouter:
                             "model": model_id,
                             "tier": tier,
                             "reason_code": "response_invalid",
+                            "outcome_class": _outcome_class_from_reason("response_invalid"),
+                            "latency_ms": latency_ms,
                             "attempt": attempts,
                         },
-                        self.event_log,
                     )
-                    log_event(
+                    _emit(
                         "router_escalate",
                         {
                             "intent": intent,
                             "from_provider": name,
                             "reason_code": "response_invalid",
+                            "outcome_class": _outcome_class_from_reason("response_invalid"),
+                            "latency_ms": latency_ms,
                             "attempt": attempts,
                         },
-                        self.event_log,
                     )
                     continue
 
             self._record_success(circuit_key)
-            log_event(
+            _emit(
                 "router_success",
                 {
                     "intent": intent,
                     "provider": name,
                     "model": model_id,
                     "tier": tier,
+                    "outcome_class": "success",
+                    "latency_ms": latency_ms,
+                    "selected_tool": runtime_context.get("selected_tool"),
                     "attempt": attempts,
                 },
-                self.event_log,
             )
             tacti_plan = None
             if _legacy_tacti_flags_enabled():
@@ -1512,23 +1631,27 @@ class PolicyRouter:
                 "parsed": parsed,
                 "attempts": attempts,
                 "reason_code": "success",
+                "request_id": request_id,
+                "capability_class": capability_class,
                 "tacti": tacti_plan,
             }
             if meta is not None:
                 result_payload["meta"] = meta
             return result_payload
 
-        log_event(
+        _emit(
             "router_fail",
             {
                 "intent": intent,
                 "reason_code": last_reason or "no_provider_available",
+                "outcome_class": _outcome_class_from_reason(last_reason or "no_provider_available"),
                 "attempts": attempts,
             },
-            self.event_log,
         )
         return {
             "ok": False,
             "reason_code": last_reason or "no_provider_available",
             "attempts": attempts,
+            "request_id": request_id,
+            "capability_class": capability_class,
         }
