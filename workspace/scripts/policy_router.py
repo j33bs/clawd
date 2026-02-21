@@ -709,9 +709,23 @@ def _resolve_provider_api_key(provider):
     return None
 
 
+def _looks_like_oauth_jwt(token):
+    token_str = str(token or "").strip()
+    return bool(re.fullmatch(r"[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+", token_str))
+
+
 def _call_openai_compatible(base_url, api_key, model_id, payload, timeout=15):
     if requests is None:
         return {"ok": False, "reason_code": "no_requests_lib"}
+    if _looks_like_oauth_jwt(api_key) and "api.openai.com" in str(base_url or "").lower():
+        log_event(
+            "oauth_endpoint_blocked",
+            {
+                "base_url": str(base_url or ""),
+                "reason_code": "oauth_jwt_unsupported_endpoint",
+            },
+        )
+        return {"ok": False, "reason_code": "oauth_jwt_unsupported_endpoint"}
     url = base_url.rstrip("/") + "/chat/completions"
     headers = {"Content-Type": "application/json"}
     if api_key:
