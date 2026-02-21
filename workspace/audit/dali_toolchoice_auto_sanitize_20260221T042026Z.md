@@ -1509,3 +1509,43 @@ Result:
 Explicitly excluded remaining unrelated drift after this commit:
 - `workspace/state/tacti_cr/events.jsonl` (modified runtime state)
 - untracked docs/runtime files not required for glue wiring.
+
+## PR-Readiness Closure (2026-02-21)
+
+### Required module tracking decision
+Dependency check:
+```bash
+rg -n -S "concurrency_tuner|GpuGuard|gpu_guard" scripts core workspace
+```
+Confirmed required:
+- `scripts/tune_concurrency.js` imports `core/system2/inference/concurrency_tuner.js`
+- `core/system2/inference/router.js` imports `./gpu_guard`
+
+Action:
+- Committed required modules:
+  - `core/system2/inference/concurrency_tuner.js`
+  - `core/system2/inference/gpu_guard.js`
+
+### Commit metadata correction
+- Amended misleading prior commit message to:
+  - `fix(glue): add required vllm_metrics_sink; stabilize tacti test; revert unrelated drift`
+- Added follow-up module tracking commit:
+  - `feat(glue): track required inference modules used by tuned launch and gpu deflection`
+
+### Full claimed suite (re-run)
+```bash
+python3 -m unittest tests_unittest.test_policy_router_tacti_main_flow tests_unittest.test_policy_router_glue_integrations tests_unittest.test_itc_ingestion_boundary_forwarding tests_unittest.test_source_ui_sse
+node tests/providers/local_vllm_provider.test.js
+node tests/router_gpu_guard.test.js
+bash -n scripts/vllm_launch_optimal.sh
+```
+Observed:
+- All PASS.
+
+### Final status snapshot
+```bash
+git status --porcelain -uall
+```
+Only explicitly excluded drift remains:
+- `workspace/state/tacti_cr/events.jsonl` (runtime state)
+- untracked docs/runtime artifacts not required for this PR.
