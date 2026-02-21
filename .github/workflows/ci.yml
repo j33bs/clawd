@@ -16,6 +16,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Detect Node project
         id: detect
@@ -41,6 +43,15 @@ jobs:
       - name: Smoke test
         if: steps.detect.outputs.has_node == 'true'
         run: |
+          BASE_SHA="${{ github.event.before }}"
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          fi
+          if [ -n "${BASE_SHA}" ] && [ "${BASE_SHA}" != "0000000000000000000000000000000000000000" ]; then
+            bash workspace/scripts/verify_governance_log.sh "${BASE_SHA}" "${{ github.sha }}"
+          else
+            bash workspace/scripts/verify_governance_log.sh
+          fi
           npm run test --if-present
           npm run smoke --if-present
           node --version

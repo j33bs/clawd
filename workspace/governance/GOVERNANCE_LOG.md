@@ -8,6 +8,7 @@ Append-only record of all governance events. Each entry is immutable once added.
 |------|------|-----|---------|-------|--------|
 | 2026-02-05 | ADMISSION | INITIAL-2026-02-05-001 | Initialize repository with security-first .gitignore | system | ADMITTED |
 | 2026-02-05 | ADMISSION | INITIAL-2026-02-05-002 | Add CONTRIBUTING.md with governance workflow | system | ADMITTED |
+| 2026-02-21 | ADMISSION | AUDIT-2026-02-21-001 | System-wide remediation: integrity guard re-verification, provider auth hardening, audit-chain verification, governance guard enforcement | system | ADMITTED |
 
 ---
 

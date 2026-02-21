@@ -15,6 +15,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
@@ -25,6 +27,17 @@ jobs:
         run: python3 -m pip install pyyaml
       - name: Install dependencies
         run: npm ci
+      - name: Governance log guard
+        run: |
+          BASE_SHA="${{ github.event.before }}"
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          fi
+          if [ -n "${BASE_SHA}" ] && [ "${BASE_SHA}" != "0000000000000000000000000000000000000000" ]; then
+            bash workspace/scripts/verify_governance_log.sh "${BASE_SHA}" "${{ github.sha }}"
+          else
+            bash workspace/scripts/verify_governance_log.sh
+          fi
       - name: Run tests
         run: npm test
       - name: Module resolution gate
