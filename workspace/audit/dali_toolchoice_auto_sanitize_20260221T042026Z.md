@@ -1599,3 +1599,19 @@ git status --porcelain -uall
 ?? workspace/artifacts/itc/events/itc_events.jsonl
 ```
 Only explicitly excluded untracked drift remains.
+
+### Phase 4 — PR open attempt
+Commands:
+```bash
+gh pr create --base main --head feat/dali-wire-existing-components-20260221T2015Z \
+  --title "feat(glue): wire existing subsystems (metrics, ITC, TACTI, GPU, vLLM, SSE)" \
+  --body-file workspace/audit/pr_body_dali_wire_existing_components_20260221.md
+```
+Observed:
+```text
+error connecting to api.github.com
+check your internet connection or https://githubstatus.com
+```
+PR creation via `gh` blocked by network/API reachability in this environment.
+Use browser compare URL instead:
+- https://github.com/j33bs/clawd/compare/main...feat/dali-wire-existing-components-20260221T2015Z?expand=1
