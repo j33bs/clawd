@@ -3,10 +3,12 @@ set -e
 
 python3 - <<'PY'
 import json
+import os
+import subprocess
 import sys
 from pathlib import Path
 
-path = Path('workspace/policy/llm_policy.json')
+path = Path(os.environ.get('OPENCLAW_VERIFY_LLM_POLICY_PATH', 'workspace/policy/llm_policy.json'))
 if not path.exists():
     print('FAIL: policy file missing')
     sys.exit(1)
@@ -57,6 +59,40 @@ for name, cfg in providers.items():
         print(f'FAIL: provider {name} missing type')
         sys.exit(1)
 
+provider_ids = set(providers.keys())
+
+
+def load_catalog_provider_ids():
+    try:
+        out = subprocess.check_output(
+            [
+                'node',
+                '-e',
+                "const { CATALOG } = require('./core/system2/inference/catalog');"
+                "for (const p of CATALOG) console.log(p.provider_id);",
+            ],
+            text=True,
+        )
+        return {line.strip() for line in out.splitlines() if line.strip()}
+    except Exception:
+        return set()
+
+
+catalog_provider_ids = load_catalog_provider_ids()
+
+# Legacy policy IDs mapped to canonical provider IDs.
+provider_aliases = {
+    'google-gemini-cli': 'gemini',
+    'qwen-portal': 'qwen_alibaba',
+}
+
+
+def normalize_provider_id(value):
+    if not isinstance(value, str):
+        return value
+    return provider_aliases.get(value, value)
+
+
 intent_routes = routing.get('intents', {})
 if not intent_routes:
     print('FAIL: routing.intents missing')
@@ -70,13 +106,18 @@ for intent_name, route in intent_routes.items():
     for entry in order:
         if entry == 'free':
             continue
-        if entry not in providers:
-            print(f'FAIL: routing for {intent_name} references unknown provider {entry}')
+        normalized = normalize_provider_id(entry)
+        if normalized not in provider_ids and normalized not in catalog_provider_ids:
+            print(
+                f'FAIL: routing for {intent_name} references unknown provider '
+                f'{entry} (normalized={normalized})'
+            )
             sys.exit(1)
 
 for name in free_order:
-    if name not in providers:
-        print(f'FAIL: free_order references unknown provider {name}')
+    normalized = normalize_provider_id(name)
+    if normalized not in provider_ids and normalized not in catalog_provider_ids:
+        print(f'FAIL: free_order references unknown provider {name} (normalized={normalized})')
         sys.exit(1)
 
 print('ok')
