@@ -9393,3 +9393,132 @@ OK 38 test group(s)
 ### Rollback
 - Revert this hardening commit only:
   - `git revert <commit_sha>`
+
+=== tacti_cr shim double-exec sentinel hardening ===
+Sat Feb 21 13:41:11 UTC 2026
+ M tests_unittest/test_tacti_namespace_aliasing.py
+ M workspace/audit/twenty_evolutions_impl_20260221T104827Z.md
+ M workspace/tacti_cr/__init__.py
+ M workspace/tacti_cr/active_inference_agent.py
+ M workspace/tacti_cr/arousal.py
+ M workspace/tacti_cr/arousal_oscillator.py
+ M workspace/tacti_cr/collapse.py
+ M workspace/tacti_cr/config.py
+ M workspace/tacti_cr/cross_timescale.py
+ M workspace/tacti_cr/curiosity.py
+ M workspace/tacti_cr/dream_consolidation.py
+ M workspace/tacti_cr/efe_calculator.py
+ M workspace/tacti_cr/events.py
+ M workspace/tacti_cr/events_paths.py
+ M workspace/tacti_cr/expression.py
+ M workspace/tacti_cr/external_memory.py
+ M workspace/tacti_cr/hivemind_bridge.py
+ M workspace/tacti_cr/impasse.py
+ M workspace/tacti_cr/mirror.py
+ M workspace/tacti_cr/novel10_contract.py
+ M workspace/tacti_cr/oscillatory_gating.py
+ M workspace/tacti_cr/prefetch.py
+ M workspace/tacti_cr/repair.py
+ M workspace/tacti_cr/semantic_immune.py
+ M workspace/tacti_cr/temporal.py
+ M workspace/tacti_cr/temporal_watchdog.py
+ M workspace/tacti_cr/valence.py
+24b0781
+
+=== unittest: tacti namespace aliasing (with reload) ===
+test_arousal_alias_functional_equivalence (tests_unittest.test_tacti_namespace_aliasing.TestTactiNamespaceAliasing.test_arousal_alias_functional_equivalence) ... ok
+test_events_alias_shares_persistence_target_contract (tests_unittest.test_tacti_namespace_aliasing.TestTactiNamespaceAliasing.test_events_alias_shares_persistence_target_contract) ... ok
+test_reload_does_not_reexec_or_clobber_legacy_events_globals (tests_unittest.test_tacti_namespace_aliasing.TestTactiNamespaceAliasing.test_reload_does_not_reexec_or_clobber_legacy_events_globals) ... ok
+
+----------------------------------------------------------------------
+Ran 3 tests in 0.058s
+
+OK
+
+=== npm test (shim sentinel) ===
+log_path=/tmp/twenty_evolutions_npm_test_shim_sentinel_20260221.log
+PASS injectRuntimeEnv respects operator override and injects missing
+PASS injectRuntimeEnv propagates GROQ_API_KEY operator override to OPENCLAW_GROQ_API_KEY
+PASS config includes secrets bridge governance knobs
+PASS redaction covers mapped secret env vars
+PASS auto backend detection is platform deterministic
+PASS file backend requires explicit opt-in
+RUN node tests/secrets_cli_exec.test.js
+PASS secrets cli exec injects alias env keys without printing values
+RUN node tests/secrets_cli_plugin.test.js
+PASS plugin registers CLI command: secrets
+PASS secrets cli status prints enablement header (no secrets)
+secrets_cli_plugin tests complete
+RUN node tests/skill_composer.test.js
+PASS skill composer is disabled by default
+PASS skill composer respects tool governance decisions
+RUN node tests/system1_ignores_system2_env.test.js
+PASS createVllmProvider ignores SYSTEM2_VLLM_* when system2 is false
+PASS probeVllmServer ignores SYSTEM2_VLLM_* when system2 is false
+PASS probeVllmServer consults SYSTEM2_VLLM_* when system2 is true
+PASS probeVllmServer consults SYSTEM2_VLLM_* when nodeId alias resolves to c_lawd
+RUN node tests/system2_config_resolver.test.js
+PASS resolves with explicit args (highest precedence)
+PASS falls back to SYSTEM2_VLLM_* env vars
+PASS falls back to OPENCLAW_VLLM_* env vars
+PASS prefers SYSTEM2_VLLM_* over OPENCLAW_VLLM_*
+PASS uses node alias system-2 for c_lawd routing context
+PASS uses defaults when envs not set
+PASS emits diagnostic events (keys only)
+PASS resolves numeric config deterministically
+PASS invalid numeric env yields NaN (no throw)
+RUN node tests/system2_evidence_bundle.test.js
+PASS buildEvidenceBundle captures raw, writes redacted output, and emits manifest
+PASS buildEvidenceBundle preserves fail-closed snapshot status
+RUN node tests/system2_experiment.test.js
+PASS no-change fixture yields INCONCLUSIVE
+PASS improvement fixture yields KEEP
+PASS regression fixture yields REVERT
+PASS auth preset script maps to calibrated fail-on path
+PASS calibrated auth fail-on yields REVERT on regression fixture
+PASS failing subprocess writes UNAVAILABLE report and exits 3
+RUN node tests/system2_federation_observability_contract.test.js
+PASS FederatedEnvelopeV1 fixture validates (strict)
+PASS FederatedEnvelopeV1 rejects invalid schema (fail-closed)
+PASS System2EventV1 fixture validates
+PASS JSONL sink contract is deterministic (exact line match)
+PASS redaction-at-write is deterministic and idempotent
+PASS gating: disabled emitter is a no-op
+PASS gating: enabled emitter appends a redacted event
+PASS emitter does not throw on sink error by default (strict=false)
+PASS emitter fails closed on sink error when strict=true
+RUN node tests/system2_http_edge.test.js
+SKIP system2_http_edge: loopback bind not permitted in this environment
+RUN node tests/system2_repair_auth_profiles_acceptance.test.js
+PASS system2 repair auth-profiles acceptance check
+RUN node tests/system2_repair_models_acceptance.test.js
+PASS system2 repair models acceptance check
+RUN node tests/system2_repair_scripts_regression.test.js
+PASS system2 repair scripts regression gate
+RUN node tests/system2_snapshot_capture.test.js
+PASS captureSnapshot writes stable files and summary shape
+PASS captureSnapshot fail-closed with partial outputs when command fails
+RUN node tests/system2_snapshot_diff.test.js
+PASS JSON output is stable and ignores timestamp fields by default
+PASS ignore list suppresses expected diff paths and exits 0
+PASS fail-on marks regressions and exits 2
+PASS human output includes summary counts and regression marker
+PASS computeDiff supports deterministic dotpath flattening
+RUN node tests/system2_snapshot_observability_seam.test.js
+PASS OFF: system2.observability.enabled=false emits nothing and writes no JSONL
+PASS ON: system2.observability.enabled=true writes exactly one deterministic JSONL line
+RUN node tests/tacticr_feedback_writer.test.js
+PASS tacticr feedback writer appends schema-valid sanitized JSONL entries
+PASS tacticr feedback writer enforces required schema fields
+RUN node tests/tool_governance.test.js
+PASS tool governance allows explicit allowlist actions
+PASS tool governance asks for exec/network/outside-workspace writes
+PASS tool governance denies explicit denylist actions
+RUN node tests/tool_governance_edge_hook.test.js
+PASS http edge governance hook maps approval/deny errors deterministically
+OK 38 test group(s)
+
+### Shim sentinel rationale
+- Added a one-time `_TACTI_SHIM_EXECUTED` guard in each `workspace/tacti_cr` shim so `importlib.reload()` does not re-exec canonical code and clobber mutable shim globals.
+- Kept exec-forward compatibility semantics: first import still executes canonical module body into shim namespace.
+- Added reload regression to pin behavior under repeated imports.

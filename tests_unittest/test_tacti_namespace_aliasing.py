@@ -1,4 +1,5 @@
 import json
+import importlib
 import tempfile
 import unittest
 from dataclasses import asdict
@@ -51,6 +52,29 @@ class TestTactiNamespaceAliasing(unittest.TestCase):
             self.assertEqual(2, len(rows))
             self.assertEqual("tacti.alias.canonical", rows[0]["type"])
             self.assertEqual("tacti.alias.legacy", rows[1]["type"])
+
+    def test_reload_does_not_reexec_or_clobber_legacy_events_globals(self):
+        import workspace.tacti_cr.events as legacy_events
+
+        with tempfile.TemporaryDirectory() as td:
+            sink = Path(td) / "events_reload.jsonl"
+            old_default = legacy_events.DEFAULT_PATH
+            try:
+                legacy_events.DEFAULT_PATH = sink
+                legacy_events.emit("tacti.alias.before_reload", {"phase": "before"}, session_id="s1")
+                self.assertTrue(legacy_events._TACTI_SHIM_EXECUTED)
+
+                reloaded = importlib.reload(legacy_events)
+                self.assertIs(reloaded, legacy_events)
+                self.assertTrue(legacy_events._TACTI_SHIM_EXECUTED)
+                self.assertEqual(sink, legacy_events.DEFAULT_PATH)
+
+                legacy_events.emit("tacti.alias.after_reload", {"phase": "after"}, session_id="s1")
+            finally:
+                legacy_events.DEFAULT_PATH = old_default
+
+            rows = [json.loads(line) for line in sink.read_text(encoding="utf-8").splitlines() if line.strip()]
+            self.assertEqual(["tacti.alias.before_reload", "tacti.alias.after_reload"], [row["type"] for row in rows])
 
 
 if __name__ == "__main__":
