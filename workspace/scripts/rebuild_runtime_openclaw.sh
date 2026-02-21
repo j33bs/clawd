@@ -13,6 +13,55 @@ echo "target=$RUNTIME_DIR"
 mkdir -p "$RUNTIME_DIR"
 rsync -a --delete /usr/lib/node_modules/openclaw/ "$RUNTIME_DIR/"
 
+PI_AI_PROVIDER_FILE="$RUNTIME_DIR/node_modules/@mariozechner/pi-ai/dist/providers/openai-completions.js"
+if [ -f "$PI_AI_PROVIDER_FILE" ]; then
+  node - <<'NODE' "$PI_AI_PROVIDER_FILE"
+const fs = require('node:fs');
+const path = process.argv[2];
+let src = fs.readFileSync(path, 'utf8');
+
+const marker = '/* OPENCLAW_LOCAL_VLLM_TOOLCALL_GATE */';
+if (!src.includes(marker)) {
+  const helperAnchor = 'function hasToolHistory(messages) {';
+  const helperBlock = `${marker}
+function isLocalVllmTarget(baseUrl) {
+    const value = String(baseUrl || "").trim().toLowerCase();
+    if (!value)
+        return false;
+    if (value.includes("127.0.0.1:8001") || value.includes("localhost:8001") || value.includes("[::1]:8001"))
+        return true;
+    return value.includes("/vllm") || value.includes("vllm");
+}
+function isLocalVllmToolCallEnabled() {
+    const value = String(process.env.OPENCLAW_VLLM_TOOLCALL || "0").trim().toLowerCase();
+    return value === "1" || value === "true" || value === "yes" || value === "on";
+}
+function applyLocalVllmToolPayloadGate(baseUrl, params) {
+    if (!isLocalVllmTarget(baseUrl))
+        return;
+    if (isLocalVllmToolCallEnabled())
+        return;
+    delete params.tools;
+    delete params.tool_choice;
+}
+`;
+  if (!src.includes(helperAnchor)) {
+    throw new Error('openai-completions helper anchor not found');
+  }
+  src = src.replace(helperAnchor, `${helperBlock}\n${helperAnchor}`);
+
+  const applyAnchor = '    // OpenRouter provider routing preferences';
+  const applyBlock = '    applyLocalVllmToolPayloadGate(model.baseUrl, params);\n';
+  if (!src.includes(applyAnchor)) {
+    throw new Error('openai-completions apply anchor not found');
+  }
+  src = src.replace(applyAnchor, `${applyBlock}${applyAnchor}`);
+
+  fs.writeFileSync(path, src);
+}
+NODE
+fi
+
 cat > "$PATCH_FILE" <<'JS'
 // Runtime overlay from repo branch to enforce tool payload invariant.
 // Marker: OPENCLAW_STRICT_TOOL_PAYLOAD

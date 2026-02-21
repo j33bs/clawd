@@ -585,3 +585,67 @@ Next minimal patch location (from trace evidence):
 - provider path used by `@mariozechner/pi-ai/src/providers/openai-completions.ts` for local vLLM-targeted requests.
 - enforce capability gate there (strip `tools` for unsupported/disabled vLLM toolcalling), not just `tool_choice` invariant.
 
+
+## Local vLLM Capability Gate at pi-ai Callsite (2026-02-21T06:51:43Z)
+
+Objective for this phase:
+- Gate tool payload for local vLLM in the proven dispatch path:
+  `@mariozechner/pi-ai/src/providers/openai-completions.ts`
+- Fail closed by default (`OPENCLAW_VLLM_TOOLCALL=0`) and enforce invariant:
+  if `tools` stripped => `tool_choice` stripped.
+
+### Code/Test Changes
+
+Added:
+- `core/system2/inference/openai_completions_local_vllm_gate.js`
+- `tests/providers/openai_completions_local_vllm_gate.test.js`
+
+Updated:
+- `workspace/scripts/rebuild_runtime_openclaw.sh`
+  - deterministic runtime patch of `.runtime/openclaw/node_modules/@mariozechner/pi-ai/dist/providers/openai-completions.js`
+  - marker: `OPENCLAW_LOCAL_VLLM_TOOLCALL_GATE`
+  - injects local-vLLM gate + `applyLocalVllmToolPayloadGate(model.baseUrl, params)` in `buildParams`
+
+### Commands Run
+
+```bash
+node tests/providers/openai_completions_local_vllm_gate.test.js
+./workspace/scripts/rebuild_runtime_openclaw.sh
+systemctl --user daemon-reload
+systemctl --user restart openclaw-gateway.service
+systemctl --user status openclaw-gateway.service --no-pager | sed -n '1,20p'
+openclaw agent --to +10000000000 --message "post-capability-gate repro" --json
+journalctl --user -u openclaw-gateway.service -n 240 --no-pager | rg -n -S "vllm_outbound_trace|auto\" tool choice|tool-call-parser"
+```
+
+### Key Output
+
+Test:
+- `tests 3`
+- `pass 3`
+- `fail 0`
+
+Service ExecStart (active):
+- `/usr/bin/node /home/jeebs/src/clawd/.runtime/openclaw/dist/index.js gateway --port 18789`
+
+Before gate (earlier trace baseline on same callsite):
+- `has_tools=true`
+- `has_tool_choice=false`
+- stack ended at `.../@mariozechner/pi-ai/src/providers/openai-completions.ts:109:25`
+- followed by vLLM 400 tool-choice parser error
+
+After gate + rebuild (same callsite family):
+- `vllm_outbound_trace` shows:
+  - `target_url=http://127.0.0.1:8001/v1/chat/completions`
+  - `payload_top_keys=["model","messages","stream","stream_options","store","max_completion_tokens"]`
+  - `has_tools=false`
+  - `has_tool_choice=false`
+  - stack ends at `.../@mariozechner/pi-ai/src/providers/openai-completions.ts:131:7`
+- still followed by:
+  - `400 "auto" tool choice requires --enable-auto-tool-choice and --tool-call-parser to be set`
+
+### Conclusion
+
+- The proven outbound callsite in `@mariozechner/pi-ai` is now stripping both `tools` and `tool_choice` for local vLLM when disabled.
+- The persistent vLLM 400 remains even when outbound payload keys show no tools/tool_choice, indicating residual server-side behavior and/or additional semantics not captured by top-level key presence.
+- This commit resolves the requested local-callsite capability gate and provides deterministic evidence in-service-context.
