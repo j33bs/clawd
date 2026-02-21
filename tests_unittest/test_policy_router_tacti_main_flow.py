@@ -16,6 +16,29 @@ if str(REPO_ROOT / "workspace" / "scripts") not in sys.path:
 import policy_router  # noqa: E402
 
 
+def _policy_path(tmp: Path) -> Path:
+    policy_path = tmp / "policy.json"
+    policy = {
+        "version": 2,
+        "defaults": {"allowPaid": False, "maxTokensPerRequest": 1024},
+        "budgets": {
+            "intents": {"itc_classify": {"dailyTokenBudget": 999999, "dailyCallBudget": 9999, "maxCallsPerRun": 50}},
+            "tiers": {"free": {"dailyTokenBudget": 999999, "dailyCallBudget": 9999}},
+        },
+        "providers": {
+            "gemini": {
+                "enabled": True,
+                "paid": False,
+                "tier": "free",
+                "models": [{"id": "gemini-test", "maxInputChars": 4000}],
+            }
+        },
+        "routing": {"free_order": ["gemini"], "intents": {"itc_classify": {"order": ["free"]}}},
+    }
+    policy_path.write_text(json.dumps(policy), encoding="utf-8")
+    return policy_path
+
+
 class TestPolicyRouterTactiMainFlow(unittest.TestCase):
     def test_flags_off_preserves_flow_without_tacti_hook_invocation(self):
         with tempfile.TemporaryDirectory() as td:
@@ -38,10 +61,11 @@ class TestPolicyRouterTactiMainFlow(unittest.TestCase):
                     side_effect=AssertionError("tacti_enhance_plan should not be called when flags are off"),
                 ):
                     router = policy_router.PolicyRouter(
+                        policy_path=_policy_path(tmp),
                         budget_path=budget,
                         circuit_path=circuit,
                         event_log=events,
-                        handlers={"google-gemini-cli": lambda payload, model_id, context: {"ok": True, "text": "ok"}},
+                        handlers={"gemini": lambda payload, model_id, context: {"ok": True, "text": "ok"}},
                     )
                     result = router.execute_with_escalation(
                         "itc_classify",
@@ -68,10 +92,11 @@ class TestPolicyRouterTactiMainFlow(unittest.TestCase):
             }
             with patch.dict(os.environ, env, clear=False):
                 router = policy_router.PolicyRouter(
+                    policy_path=_policy_path(tmp),
                     budget_path=budget,
                     circuit_path=circuit,
                     event_log=events,
-                    handlers={"google-gemini-cli": lambda payload, model_id, context: {"ok": True, "text": "ok"}},
+                    handlers={"gemini": lambda payload, model_id, context: {"ok": True, "text": "ok"}},
                 )
                 result = router.execute_with_escalation(
                     "itc_classify",
@@ -113,10 +138,11 @@ class TestPolicyRouterTactiMainFlow(unittest.TestCase):
             }
             with patch.dict(os.environ, env, clear=False):
                 router = policy_router.PolicyRouter(
+                    policy_path=_policy_path(tmp),
                     budget_path=budget,
                     circuit_path=circuit,
                     event_log=events,
-                    handlers={"google-gemini-cli": lambda payload, model_id, context: {"ok": True, "text": "ok"}},
+                    handlers={"gemini": lambda payload, model_id, context: {"ok": True, "text": "ok"}},
                 )
                 result = router.execute_with_escalation(
                     "itc_classify",

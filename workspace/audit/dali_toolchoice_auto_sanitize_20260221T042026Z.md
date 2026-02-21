@@ -1473,3 +1473,39 @@ node scripts/tune_concurrency.js
 bash -n scripts/vllm_launch_optimal.sh
 ```
 Observed status: all PASS.
+
+## Follow-up Consistency Commit (2026-02-21)
+
+Issue:
+- Prior glue commit omitted required module `workspace/scripts/vllm_metrics_sink.py`.
+- Working tree also had unrelated drift in `workspace/hivemind/hivemind/reservoir.py` and `workspace/policy/llm_policy.json`.
+
+Resolution:
+- Added required file: `workspace/scripts/vllm_metrics_sink.py`.
+- Reverted unrelated drift from:
+  - `workspace/hivemind/hivemind/reservoir.py`
+  - `workspace/policy/llm_policy.json`
+- Stabilized `tests_unittest/test_policy_router_tacti_main_flow.py` to use a temp policy fixture so it does not depend on mutable local `workspace/policy/llm_policy.json` state.
+
+Diffstat for this follow-up:
+```bash
+git diff --stat --cached
+```
+Observed:
+- `workspace/scripts/vllm_metrics_sink.py` added (256 insertions)
+- plus deterministic test update in `tests_unittest/test_policy_router_tacti_main_flow.py`
+
+Verification commands (exact suite requested + compile/shell check):
+```bash
+python3 -m py_compile workspace/scripts/policy_router.py workspace/itc_pipeline/ingestion_boundary.py workspace/source-ui/app.py workspace/scripts/vllm_metrics_sink.py tests_unittest/test_policy_router_glue_integrations.py tests_unittest/test_itc_ingestion_boundary_forwarding.py tests_unittest/test_source_ui_sse.py tests_unittest/test_policy_router_tacti_main_flow.py
+python3 -m unittest tests_unittest.test_policy_router_tacti_main_flow tests_unittest.test_policy_router_glue_integrations tests_unittest.test_itc_ingestion_boundary_forwarding tests_unittest.test_source_ui_sse
+node tests/providers/local_vllm_provider.test.js
+node tests/router_gpu_guard.test.js
+bash -n scripts/vllm_launch_optimal.sh
+```
+Result:
+- All PASS.
+
+Explicitly excluded remaining unrelated drift after this commit:
+- `workspace/state/tacti_cr/events.jsonl` (modified runtime state)
+- untracked docs/runtime files not required for glue wiring.
