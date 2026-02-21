@@ -30,6 +30,8 @@ Message Schema (normalized):
 import os
 import json
 import logging
+import hashlib
+import importlib.util
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any, Optional, Set
@@ -52,6 +54,9 @@ DEDUPE_STATE_PATH = Path(os.environ.get(
 
 # Maximum dedupe entries to keep (rolling window)
 DEDUPE_MAX_ENTRIES = 10000
+_ITC_CLASSIFIER_PATH = Path(__file__).resolve().parents[2] / "scripts" / "itc_classify.py"
+_ITC_CANON_PATH = Path(__file__).resolve().parents[2] / "itc" / "canon" / "messages.jsonl"
+_CLASSIFY_RULES = None
 
 
 @dataclass
@@ -234,15 +239,68 @@ def _forward_to_pipeline(message: IngestedMessage):
     - Apply authority weights
     - Store in digest format
     """
-    # For now, write to a processing queue file
+    # Preserve existing queue contract.
     output_path = DEDUPE_STATE_PATH.parent / "itc_incoming_queue.jsonl"
 
     try:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
         with open(output_path, "a") as f:
             f.write(json.dumps(message.to_dict()) + "\n")
         logger.debug(f"Queued message to {output_path}")
     except Exception as e:
         logger.error(f"Failed to queue message: {e}")
+
+    # Also forward to classifier input contract consumed by scripts/itc_classify.py.
+    classify = _resolve_classifier()
+    primary_tag = "noise"
+    all_tags = ["noise"]
+    if callable(classify):
+        try:
+            primary, tags = classify(message.text or "")
+            if isinstance(primary, str) and primary:
+                primary_tag = primary
+            if isinstance(tags, list) and tags:
+                all_tags = [str(tag) for tag in tags if str(tag).strip()]
+        except Exception as e:
+            logger.warning(f"ITC classifier bridge failed; using fallback tag: {e}")
+    try:
+        _ITC_CANON_PATH.parent.mkdir(parents=True, exist_ok=True)
+        canonical_row = {
+            "hash": hashlib.sha256(f"{message.dedupe_key()}:{message.text}".encode("utf-8")).hexdigest(),
+            "source": message.source,
+            "chat_id": message.chat_id,
+            "message_id": message.message_id,
+            "date": message.date,
+            "text": message.text,
+            "primary_tag": primary_tag,
+            "all_tags": all_tags,
+            "classifier": "ingestion_boundary.forwarder/rules",
+        }
+        with _ITC_CANON_PATH.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(canonical_row, ensure_ascii=False) + "\n")
+    except Exception as e:
+        logger.error(f"Failed classifier forward write: {e}")
+
+
+def _resolve_classifier():
+    global _CLASSIFY_RULES
+    if _CLASSIFY_RULES is not None:
+        return _CLASSIFY_RULES
+    if not _ITC_CLASSIFIER_PATH.exists():
+        return None
+    try:
+        spec = importlib.util.spec_from_file_location("itc_classify_bridge", str(_ITC_CLASSIFIER_PATH))
+        if spec is None or spec.loader is None:
+            return None
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        fn = getattr(module, "classify_rules", None)
+        if callable(fn):
+            _CLASSIFY_RULES = fn
+            return _CLASSIFY_RULES
+    except Exception as e:
+        logger.warning(f"Classifier module load failed: {e}")
+    return None
 
 
 def initialize_ingestion():
