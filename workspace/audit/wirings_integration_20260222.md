@@ -1091,3 +1091,48 @@ M	workspace/itc_pipeline/ingestion_boundary.py
 - Intent: connect ingestion boundary forwarding to ITC classifier input contract.
 - Files touched: workspace/itc_pipeline/ingestion_boundary.py, tests_unittest/test_itc_ingestion_forwarding.py
 - Rollback: git revert <commit_sha_for_wiring_3>
+
+## Wiring #4 Validation 2026-02-21T21:06:30Z
+$ python3 -m unittest tests_unittest.test_audit_commit_hook_witness tests_unittest.test_witness_ledger -v
+test_witness_commit_invoked_on_audit_write (tests_unittest.test_audit_commit_hook_witness.TestAuditCommitHookWitness.test_witness_commit_invoked_on_audit_write) ... ok
+test_witness_failure_degrades_when_not_strict (tests_unittest.test_audit_commit_hook_witness.TestAuditCommitHookWitness.test_witness_failure_degrades_when_not_strict) ... ok
+test_witness_failure_fails_closed_when_strict (tests_unittest.test_audit_commit_hook_witness.TestAuditCommitHookWitness.test_witness_failure_fails_closed_when_strict) ... ok
+test_commit_chain_is_deterministic (tests_unittest.test_witness_ledger.TestWitnessLedger.test_commit_chain_is_deterministic) ... ok
+test_flag_off_produces_no_witness_ledger_writes (tests_unittest.test_witness_ledger.TestWitnessLedger.test_flag_off_produces_no_witness_ledger_writes) ... ok
+test_tamper_detection_fails_chain_verification (tests_unittest.test_witness_ledger.TestWitnessLedger.test_tamper_detection_fails_chain_verification) ... ok
+
+----------------------------------------------------------------------
+Ran 6 tests in 0.006s
+
+OK
+==================================================
+🔍 PRE-COMMIT AUDIT
+==================================================
+✅ tests_pass: ok
+==================================================
+✅ AUDIT PASSED - Safe to commit
+==================================================
+==================================================
+🔍 PRE-COMMIT AUDIT
+==================================================
+✅ tests_pass: ok
+⚠️ witness ledger commit skipped: witness_error: boom
+==================================================
+✅ AUDIT PASSED - Safe to commit
+==================================================
+==================================================
+🔍 PRE-COMMIT AUDIT
+==================================================
+✅ tests_pass: ok
+❌ witness ledger commit failed (strict): witness_error: boom
+==================================================
+❌ AUDIT FAILED - Commit blocked
+==================================================
+$ git diff --name-status
+M	workspace/audit/wirings_integration_20260222.md
+M	workspace/scripts/audit_commit_hook.py
+
+### Wiring #4 summary
+- Intent: chain governance/audit JSONL writes through witness ledger with strict fail-closed mode optional.
+- Flag behavior: OPENCLAW_WITNESS_LEDGER defaults on for audit path, OPENCLAW_WITNESS_LEDGER=0 disables, OPENCLAW_WITNESS_LEDGER_STRICT=1 enforces fail-closed.
+- Rollback: git revert <commit_sha_for_wiring_4>
