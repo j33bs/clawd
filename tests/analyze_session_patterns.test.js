@@ -7,6 +7,7 @@ const path = require('node:path');
 
 const {
   analyzeSessions,
+  analyzeSessionsConcurrent,
   renderReport
 } = require('../scripts/analyze_session_patterns');
 
@@ -39,3 +40,20 @@ function testPatternAggregation() {
 }
 
 testPatternAggregation();
+
+async function testConcurrentParity() {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'pattern-scan-workers-'));
+  const memoryDir = path.join(root, 'workspace', 'memory');
+  fs.mkdirSync(memoryDir, { recursive: true });
+  fs.writeFileSync(path.join(memoryDir, '2026-02-11.md'), 'all models failed\\nnormal note\\n', 'utf8');
+  fs.writeFileSync(path.join(memoryDir, '2026-02-12.md'), 'cooldown retry loop\\n', 'utf8');
+  const syncResult = analyzeSessions({ memoryDir });
+  const concurrentResult = await analyzeSessionsConcurrent({ memoryDir, workers: 2 });
+  assert.deepStrictEqual(concurrentResult, syncResult);
+  console.log('PASS analyze_session_patterns concurrent parity');
+}
+
+testConcurrentParity().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});

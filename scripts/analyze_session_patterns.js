@@ -3,6 +3,7 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
+const { Worker, isMainThread, parentPort, workerData } = require('node:worker_threads');
 
 const PATTERNS = Object.freeze([
   {
@@ -48,8 +49,7 @@ function listMemoryFiles(memoryDir) {
     .map((name) => path.join(memoryDir, name));
 }
 
-function analyzeSessions({ memoryDir, patterns = PATTERNS }) {
-  const files = listMemoryFiles(memoryDir);
+function initFindings(patterns) {
   const findings = new Map();
   for (const pattern of patterns) {
     findings.set(pattern.id, {
@@ -60,17 +60,64 @@ function analyzeSessions({ memoryDir, patterns = PATTERNS }) {
       files: []
     });
   }
+  return findings;
+}
 
-  for (const filePath of files) {
-    const rel = path.basename(filePath);
-    const lines = fs.readFileSync(filePath, 'utf8').split(/\r?\n/);
-    for (const pattern of patterns) {
-      const matches = [];
-      for (let i = 0; i < lines.length; i += 1) {
-        if (pattern.regex.test(lines[i])) {
-          matches.push(i + 1);
+function scanFileStreamSync(filePath, patterns, options = {}) {
+  const stopWhenAllMatched = Boolean(options.stopWhenAllMatched);
+  const matchesByPattern = Object.create(null);
+  for (const pattern of patterns) {
+    matchesByPattern[pattern.id] = [];
+  }
+  const seenAny = new Set();
+
+  const fd = fs.openSync(filePath, 'r');
+  const chunk = Buffer.allocUnsafe(64 * 1024);
+  let carry = '';
+  let lineNo = 0;
+
+  try {
+    while (true) {
+      const bytes = fs.readSync(fd, chunk, 0, chunk.length, null);
+      if (bytes <= 0) break;
+      const text = carry + chunk.toString('utf8', 0, bytes);
+      const lines = text.split(/\r?\n/);
+      carry = lines.pop() || '';
+      for (const line of lines) {
+        lineNo += 1;
+        for (const pattern of patterns) {
+          if (pattern.regex.test(line)) {
+            matchesByPattern[pattern.id].push(lineNo);
+            seenAny.add(pattern.id);
+          }
+        }
+        if (stopWhenAllMatched && seenAny.size === patterns.length) {
+          return matchesByPattern;
         }
       }
+    }
+
+    if (carry.length > 0) {
+      lineNo += 1;
+      for (const pattern of patterns) {
+        if (pattern.regex.test(carry)) {
+          matchesByPattern[pattern.id].push(lineNo);
+        }
+      }
+    }
+  } finally {
+    fs.closeSync(fd);
+  }
+  return matchesByPattern;
+}
+
+function aggregateFindings(files, patterns, fileMatchesMap) {
+  const findings = initFindings(patterns);
+  for (const filePath of files) {
+    const rel = path.basename(filePath);
+    const matchesByPattern = fileMatchesMap.get(rel) || Object.create(null);
+    for (const pattern of patterns) {
+      const matches = matchesByPattern[pattern.id] || [];
       if (matches.length > 0) {
         const row = findings.get(pattern.id);
         row.total += matches.length;
@@ -78,11 +125,95 @@ function analyzeSessions({ memoryDir, patterns = PATTERNS }) {
       }
     }
   }
-
+  for (const row of findings.values()) {
+    row.files.sort((a, b) => a.file.localeCompare(b.file));
+  }
   return {
     scannedFiles: files.map((f) => path.basename(f)),
     findings: Array.from(findings.values())
   };
+}
+
+function analyzeSessions({ memoryDir, patterns = PATTERNS, stopWhenAllMatched = false }) {
+  const files = listMemoryFiles(memoryDir);
+  const map = new Map();
+  for (const filePath of files) {
+    const rel = path.basename(filePath);
+    map.set(rel, scanFileStreamSync(filePath, patterns, { stopWhenAllMatched }));
+  }
+  return aggregateFindings(files, patterns, map);
+}
+
+function serializePatterns(patterns) {
+  return patterns.map((p) => ({
+    id: p.id,
+    title: p.title,
+    recommendation: p.recommendation,
+    source: p.regex.source,
+    flags: p.regex.flags
+  }));
+}
+
+function hydratePatterns(serialized) {
+  return serialized.map((p) => ({
+    id: p.id,
+    title: p.title,
+    recommendation: p.recommendation,
+    regex: new RegExp(p.source, p.flags)
+  }));
+}
+
+async function runWorkers(files, patterns, options = {}) {
+  const workers = Math.max(1, Number(options.workers) || 1);
+  const stopWhenAllMatched = Boolean(options.stopWhenAllMatched);
+  const map = new Map();
+  let index = 0;
+  const encoded = serializePatterns(patterns);
+
+  async function runSingle(filePath) {
+    return new Promise((resolve, reject) => {
+      const worker = new Worker(__filename, {
+        workerData: {
+          mode: 'scan_file',
+          filePath,
+          patterns: encoded,
+          stopWhenAllMatched
+        }
+      });
+      worker.once('message', (payload) => {
+        resolve(payload);
+      });
+      worker.once('error', reject);
+      worker.once('exit', (code) => {
+        if (code !== 0) reject(new Error(`worker exited ${code}`));
+      });
+    });
+  }
+
+  async function loop() {
+    while (true) {
+      const i = index;
+      index += 1;
+      if (i >= files.length) return;
+      const filePath = files[i];
+      const payload = await runSingle(filePath);
+      map.set(payload.file, payload.matchesByPattern);
+    }
+  }
+
+  const pool = [];
+  const size = Math.min(workers, files.length || 1);
+  for (let i = 0; i < size; i += 1) {
+    pool.push(loop());
+  }
+  await Promise.all(pool);
+  return map;
+}
+
+async function analyzeSessionsConcurrent({ memoryDir, patterns = PATTERNS, workers = 2, stopWhenAllMatched = false }) {
+  const files = listMemoryFiles(memoryDir);
+  const fileMatchesMap = await runWorkers(files, patterns, { workers, stopWhenAllMatched });
+  return aggregateFindings(files, patterns, fileMatchesMap);
 }
 
 function renderReport({ dateKey, scannedFiles, findings }) {
@@ -140,7 +271,7 @@ function writePatternReport({ repoRoot, dateKey, result, outPath }) {
 }
 
 function parseArgs(argv) {
-  const out = {};
+  const out = { workers: 2, stopEarly: false };
   for (let i = 0; i < argv.length; i += 1) {
     const a = argv[i];
     if (a === '--date' && argv[i + 1]) {
@@ -152,35 +283,58 @@ function parseArgs(argv) {
     } else if (a === '--output' && argv[i + 1]) {
       out.output = argv[i + 1];
       i += 1;
+    } else if (a === '--workers' && argv[i + 1]) {
+      out.workers = Number.parseInt(argv[i + 1], 10);
+      i += 1;
+    } else if (a === '--stop-early') {
+      out.stopEarly = true;
     }
   }
   return out;
 }
 
-function main() {
-  const args = parseArgs(process.argv.slice(2));
+async function main(argv = process.argv.slice(2)) {
+  const args = parseArgs(argv);
   const repoRoot = resolveRepoRoot(process.cwd());
   const dateKey = args.date || utcDate();
   const memoryDir = args.memoryDir
     ? path.resolve(args.memoryDir)
     : path.join(repoRoot, 'workspace', 'memory');
-  const result = analyzeSessions({ memoryDir });
+
+  const workers = Math.max(1, Number(args.workers) || 1);
+  const result = workers > 1
+    ? await analyzeSessionsConcurrent({ memoryDir, workers, stopWhenAllMatched: args.stopEarly })
+    : analyzeSessions({ memoryDir, stopWhenAllMatched: args.stopEarly });
+
   const outPath = writePatternReport({ repoRoot, dateKey, result, outPath: args.output });
   process.stdout.write(`${path.relative(repoRoot, outPath)}\n`);
 }
 
-if (require.main === module) {
+if (!isMainThread && workerData && workerData.mode === 'scan_file') {
   try {
-    main();
+    const patterns = hydratePatterns(workerData.patterns || []);
+    const rel = path.basename(workerData.filePath);
+    const matchesByPattern = scanFileStreamSync(workerData.filePath, patterns, {
+      stopWhenAllMatched: Boolean(workerData.stopWhenAllMatched)
+    });
+    parentPort.postMessage({ file: rel, matchesByPattern });
   } catch (error) {
+    throw error;
+  }
+}
+
+if (isMainThread && require.main === module) {
+  main().catch((error) => {
     process.stderr.write(`analyze_session_patterns failed: ${error.message}\n`);
     process.exit(1);
-  }
+  });
 }
 
 module.exports = {
   PATTERNS,
   analyzeSessions,
+  analyzeSessionsConcurrent,
   renderReport,
+  scanFileStreamSync,
   writePatternReport
 };
