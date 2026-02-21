@@ -3,8 +3,32 @@
 set -euo pipefail
 
 ALLOWLIST_FILE="workspace/governance/audit_secret_allowlist.txt"
-BASE_SHA="${1:-}"
-HEAD_SHA="${2:-}"
+MODE=""
+POSITIONAL=()
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --mode)
+      MODE="${2:-}"
+      shift 2
+      ;;
+    --mode=*)
+      MODE="${1#*=}"
+      shift
+      ;;
+    *)
+      POSITIONAL+=("$1")
+      shift
+      ;;
+  esac
+done
+
+if [[ -z "$MODE" ]]; then
+  MODE="staged"
+fi
+
+BASE_SHA="${POSITIONAL[0]:-}"
+HEAD_SHA="${POSITIONAL[1]:-}"
 
 if ! git rev-parse --git-dir >/dev/null 2>&1; then
   echo "FAIL audit-secret-scan: not inside a git repository"
@@ -40,6 +64,24 @@ collect_all_tracked_audit_files() {
   git ls-files 'workspace/audit/**' || true
 }
 
+collect_ci_diff_audit_files() {
+  local base_branch="${GITHUB_BASE_REF:-main}"
+  local base_ref="origin/${base_branch}"
+  local diff_output=""
+
+  git fetch origin "$base_branch" --depth=1 >/dev/null 2>&1 || true
+
+  if ! git rev-parse --verify "${base_ref}^{commit}" >/dev/null 2>&1; then
+    return 2
+  fi
+
+  if ! diff_output="$(git diff --name-only --diff-filter=ACMR "${base_ref}"...HEAD 2>/dev/null)"; then
+    return 2
+  fi
+
+  printf '%s\n' "$diff_output" | rg '^workspace/audit/' || true
+}
+
 is_text_file() {
   local path="$1"
   if [[ ! -e "$path" ]]; then
@@ -62,17 +104,35 @@ is_allowlisted_match() {
   return 1
 }
 
-SCAN_MODE="staged"
-SCAN_FILES_RAW="$(collect_staged_audit_files)"
+SCAN_MODE="$MODE"
+SCAN_FILES_RAW=""
 
-if [[ -z "${SCAN_FILES_RAW//[[:space:]]/}" && -n "$BASE_SHA" && -n "$HEAD_SHA" ]]; then
-  SCAN_MODE="diff"
-  SCAN_FILES_RAW="$(collect_diff_audit_files "$BASE_SHA" "$HEAD_SHA")"
-fi
-
-if [[ -z "${SCAN_FILES_RAW//[[:space:]]/}" && ( "${CI:-}" = "true" || "${GITHUB_ACTIONS:-}" = "true" ) ]]; then
-  SCAN_MODE="all-tracked"
-  SCAN_FILES_RAW="$(collect_all_tracked_audit_files)"
+if [[ "$MODE" = "staged" ]]; then
+  SCAN_FILES_RAW="$(collect_staged_audit_files)"
+  if [[ -z "${SCAN_FILES_RAW//[[:space:]]/}" ]]; then
+    if [[ -n "$BASE_SHA" && -n "$HEAD_SHA" ]]; then
+      SCAN_MODE="diff"
+      SCAN_FILES_RAW="$(collect_diff_audit_files "$BASE_SHA" "$HEAD_SHA")"
+    fi
+  fi
+  if [[ -z "${SCAN_FILES_RAW//[[:space:]]/}" && ( "${CI:-}" = "true" || "${GITHUB_ACTIONS:-}" = "true" ) ]]; then
+    SCAN_MODE="all-tracked"
+    SCAN_FILES_RAW="$(collect_all_tracked_audit_files)"
+  fi
+elif [[ "$MODE" = "ci-diff" ]]; then
+  if SCAN_FILES_RAW="$(collect_ci_diff_audit_files)"; then
+    SCAN_MODE="ci-diff"
+  else
+    SCAN_MODE="all-tracked-fallback"
+    SCAN_FILES_RAW="$(collect_all_tracked_audit_files)"
+  fi
+  if [[ -z "${SCAN_FILES_RAW//[[:space:]]/}" && "$SCAN_MODE" = "ci-diff" ]]; then
+    echo "PASS audit-secret-scan: 0 files changed under workspace/audit/** [mode=ci-diff]"
+    exit 0
+  fi
+else
+  echo "FAIL audit-secret-scan: unsupported mode '$MODE' (supported: staged, ci-diff)"
+  exit 1
 fi
 
 if [[ -z "${SCAN_FILES_RAW//[[:space:]]/}" ]]; then

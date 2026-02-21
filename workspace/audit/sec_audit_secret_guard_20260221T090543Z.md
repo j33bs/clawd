@@ -102,7 +102,7 @@ bash workspace/scripts/scan_audit_secrets.sh
 #### Probe fail output
 ```text
 FAIL audit-secret-scan: potential secret material detected in workspace/audit artifacts.
-workspace/audit/_tmp_secret_probe.md:3:OPENCLAW_TOKEN=abcdefabcdefabcdefabcdefabcdefabcd
+workspace/audit/_tmp_secret_probe.md:3:OPENCLAW_TOKEN=[REDACTED_TEST_PROBE]
 Guidance: redact, replace with placeholders, re-run.
 ```
 
