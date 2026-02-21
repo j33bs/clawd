@@ -1630,3 +1630,54 @@ Output:
 ?? workspace/artifacts/itc/events/itc_events.jsonl
 ```
 No tracked glue files modified.
+
+## Hygiene Re-run + PR Prep (2026-02-21, repeat)
+
+### Phase 1 — Runtime artifact revert
+Commands:
+```bash
+git restore workspace/state/tacti_cr/events.jsonl
+git status --porcelain -uall
+```
+Output after revert:
+```text
+?? docs/GPU_SETUP.md
+?? scripts/vllm_prefix_warmup.js
+?? workspace/NOVELTY_LOVE_ALIGNMENT_RECS.md
+?? workspace/NOVELTY_LOVE_ALIGNMENT_TODO.md
+?? workspace/artifacts/itc/events/itc_events.jsonl
+```
+Confirmed: tracked runtime artifact is not modified.
+
+### Phase 2 — Required module check + suite
+Commands:
+```bash
+ls core/system2/inference/concurrency_tuner.js
+ls core/system2/inference/gpu_guard.js
+ls workspace/scripts/vllm_metrics_sink.py
+python3 -m unittest tests_unittest.test_policy_router_tacti_main_flow tests_unittest.test_policy_router_glue_integrations tests_unittest.test_itc_ingestion_boundary_forwarding tests_unittest.test_source_ui_sse
+node tests/providers/local_vllm_provider.test.js
+node tests/router_gpu_guard.test.js
+bash -n scripts/vllm_launch_optimal.sh
+```
+Observed:
+- Required files exist.
+- Python unittest bundle: PASS (`Ran 9 tests ... OK`).
+- Node provider test: PASS.
+- Router gpu guard test: PASS.
+- Shell syntax check: PASS.
+
+### Phase 5 — Final git status
+Command:
+```bash
+git status --porcelain -uall
+```
+Output:
+```text
+?? docs/GPU_SETUP.md
+?? scripts/vllm_prefix_warmup.js
+?? workspace/NOVELTY_LOVE_ALIGNMENT_RECS.md
+?? workspace/NOVELTY_LOVE_ALIGNMENT_TODO.md
+?? workspace/artifacts/itc/events/itc_events.jsonl
+```
+Only explicitly excluded untracked drift remains; no tracked glue files modified.
