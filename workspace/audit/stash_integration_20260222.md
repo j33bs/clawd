@@ -369,3 +369,59 @@ git status --porcelain -uall
 ?? workspace/knowledge_base/research/papers/2601.06002_molecular_structure_thought.md
 ?? workspace/mlx_audit.zip
 ```
+
+## Phase 3 Commit 1 Docs/Audits/Briefs (2026-02-21T23:40:20Z)
+Intent: integrate stashed documentation/audit artifacts only.
+```bash
+git diff --stat --cached
+ MEMORY.md                                          |  58 ++--
+ SOUL.md                                            |  10 +
+ workspace/MLX_INTEGRATION_AUDIT.md                 | 192 +++++++++++
+ workspace/TEN_HIGH_LEVERAGE.md                     | 116 +++++++
+ workspace/TWENTY_EVOLUTIONS.md                     | 129 +++++++
+ ...lawd_pr_merge_and_followups_20260221T080418Z.md |  90 +++++
+ .../fix_canonical_soul_drift_20260221T080815Z.md   | 125 +++++++
+ .../fix_groq_policy_alignment_20260221T081255Z.md  |  50 +++
+ ...regression_bootstrap_config_20260221T081128Z.md |  81 +++++
+ .../pr_body_c_lawd_full_remediation_20260221.md    |  57 ++++
+ ...udit_secret_guard_normalize_20260221T092622Z.md |  33 ++
+ workspace/audit/stash_integration_20260222.md      | 371 +++++++++++++++++++++
+ workspace/briefs/codex_prompt_agents_update.md     |  48 +++
+ workspace/briefs/memory_integration.md             | 155 +++++++++
+ 14 files changed, 1487 insertions(+), 28 deletions(-)
+```
+Rollback: git revert da84eba
+
+## Phase 3 Commit 2 Data/KB/Sessions (2026-02-21T23:41:00Z)
+Decision: exclude ignored session file workspace/teamchat/sessions/tacti_architecture_review.jsonl from commits due ambiguity (.gitignore-scoped session artifact).
+```bash
+git add memory/literature/state.json workspace/knowledge_base/data/entities.jsonl workspace/knowledge_base/data/last_sync.txt workspace/research/data/papers.jsonl workspace/knowledge_base/research/papers/2601.06002_molecular_structure_thought.md
+
+git diff --stat --cached
+ memory/literature/state.json                       |   7 +-
+ workspace/knowledge_base/data/entities.jsonl       | 201 +++++++++++++++++++++
+ workspace/knowledge_base/data/last_sync.txt        |   1 +
+ .../2601.06002_molecular_structure_thought.md      |  78 ++++++++
+ workspace/research/data/papers.jsonl               |  15 ++
+ 5 files changed, 300 insertions(+), 2 deletions(-)
+```
+Rollback: git revert 9ae463d
+
+## Phase 3 Commit 3 Scripts/Source (2026-02-21T23:43:10Z)
+Intent: integrate stashed script/source updates with no refactor.
+```bash
+git diff --stat --cached
+ scripts/daily_technique.py | 35 +++++++++++++++++++++++++++++++++++
+ scripts/get_daily_quote.js | 41 ++++++++++++++++++++++++++++++-----------
+ 2 files changed, 65 insertions(+), 11 deletions(-)
+```
+Rollback: git revert 5a78788
+
+## Phase 3 Commit 4 Artifact Handling (2026-02-21T23:43:34Z)
+Artifact workspace/mlx_audit.zip moved out of repo to /tmp/wt_wirings_integration_excluded/mlx_audit.zip (not committed).
+Ambiguity isolated: workspace/teamchat/sessions/tacti_architecture_review.jsonl remains ignored by .gitignore and was excluded from commits.
+```bash
+git status --porcelain -uall
+ M workspace/audit/stash_integration_20260222.md
+```
+Rollback: git revert 17eccdb
