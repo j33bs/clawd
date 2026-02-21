@@ -101,3 +101,60 @@ Result:
   - `test_team_chat_no_side_effects` attribute error
   - `tests/model_routing_no_oauth.test.js` failure from pre-existing policy free_order drift
 - Relevant system2/freecompute suites for this change passed as shown above.
+
+## Dali Runtime Verification (2026-02-21)
+
+### Gateway token drift remediation
+
+Commands run:
+- `openclaw gateway install --force`
+- `sudo systemctl restart openclaw-gateway.service` (blocked in this shell: sudo password/TTY required)
+- `sudo systemctl status openclaw-gateway.service --no-pager` (blocked in this shell: sudo password/TTY required)
+- `systemctl --user restart openclaw-gateway.service && systemctl --user status openclaw-gateway.service --no-pager`
+
+Observed:
+- `openclaw gateway install --force` reinstalled gateway unit: `/home/jeebs/.config/systemd/user/openclaw-gateway.service`
+- user service is active and running after restart (`Active: active (running)`)
+
+### Phase 3 commands and observed behavior
+
+#### Case A — OpenAI family request fail-closed; no vLLM dispatch
+
+Command run:
+- `node - <<'NODE'` (ProviderRegistry harness with `OPENCLAW_DEBUG_ROUTE=1`, `OPENCLAW_ALLOW_CROSSFAMILY_FALLBACK=0`, and `metadata.model='openai/gpt-4o-mini'`)
+
+Observed output:
+- route debug: `[openclaw.route] {"requested_model":"openai/gpt-4o-mini","requested_provider_family":"openai","selected_provider_id":null,"reason":"requested_provider_family_unavailable"}`
+- error code: `REQUESTED_PROVIDER_UNAVAILABLE`
+- vLLM dispatch attempted: `false` (`caseA.localCalled=false`)
+
+#### Case B — Cross-family fallback only when explicitly enabled
+
+Command run:
+- same ProviderRegistry harness, with `OPENCLAW_ALLOW_CROSSFAMILY_FALLBACK=1` and `metadata.model='openai-codex/gpt-5-codex'`
+
+Observed output:
+- route debug: `[openclaw.route] {"requested_model":"openai-codex/gpt-5-codex","requested_provider_family":"openai-codex","selected_provider_id":"local_vllm","reason":"escape_hatch_local_vllm"}`
+- selected provider: `local_vllm`
+- fallback dispatch executed: `true` (`caseB.localCalled=true`)
+
+#### Case C — vLLM tool payload gating default-off
+
+Command run:
+- `node - <<'NODE'` (LocalVllmProvider harness with `OPENCLAW_VLLM_ENABLE_AUTO_TOOL_CHOICE=1`, `OPENCLAW_VLLM_TOOLCALL=0`, and a stubbed `_httpRequest` capture)
+
+Observed output:
+- `caseC.has_tools=false`
+- `caseC.has_tool_choice=false`
+
+Result: outgoing vLLM payload had tool-related fields stripped while toolcalling gate was off.
+
+#### Optional Case D — classify known vLLM tool-choice 400 with remediation
+
+Command run:
+- same LocalVllmProvider harness, with `OPENCLAW_VLLM_TOOLCALL=1`, forcing known tool-choice unsupported error text
+
+Observed output:
+- `caseD.code=PROVIDER_TOOLCALL_UNSUPPORTED`
+- `caseD.status=400`
+- message includes remediation: start vLLM with `--enable-auto-tool-choice --tool-call-parser ...` or disable gate via `OPENCLAW_VLLM_TOOLCALL=0`.
