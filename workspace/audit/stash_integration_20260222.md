@@ -425,3 +425,648 @@ git status --porcelain -uall
  M workspace/audit/stash_integration_20260222.md
 ```
 Rollback: git revert 17eccdb
+
+## Phase 4 Regression (2026-02-21T23:45:04Z)
+```bash
+npm test
+
+> openclaw@0.0.0 test
+> node scripts/run_tests.js
+
+RUN python3  -m unittest discover -s tests_unittest -p test_*.py
+..............................F..............................................................................................................................................................
+======================================================================
+FAIL: test_verifier_passes_in_repo (test_goal_identity_invariants.TestGoalIdentityInvariants.test_verifier_passes_in_repo)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/private/tmp/wt_wirings_integration/tests_unittest/test_goal_identity_invariants.py", line 21, in test_verifier_passes_in_repo
+    self.assertEqual(p.returncode, 0, p.stdout + "\n" + p.stderr)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 2 != 0 : FAIL: repo-root governance file diverges from canonical: SOUL.md
+
+
+
+----------------------------------------------------------------------
+Ran 189 tests in 6.000s
+
+FAILED (failures=1)
+==================================================
+🔍 PRE-COMMIT AUDIT
+==================================================
+✅ tests_pass: ok
+==================================================
+✅ AUDIT PASSED - Safe to commit
+==================================================
+==================================================
+🔍 PRE-COMMIT AUDIT
+==================================================
+✅ tests_pass: ok
+⚠️ witness ledger commit skipped: witness_error: boom
+==================================================
+✅ AUDIT PASSED - Safe to commit
+==================================================
+==================================================
+🔍 PRE-COMMIT AUDIT
+==================================================
+✅ tests_pass: ok
+❌ witness ledger commit failed (strict): witness_error: boom
+==================================================
+❌ AUDIT FAILED - Commit blocked
+==================================================
+system2_stray_auto_ingest: ok
+moved:
+- moltbook_registration_plan.md -> /private/var/folders/n7/1czk3b2d0_jbr7ngjp_6fth80000gn/T/tmp84sriljz/home/.openclaw/ingest/moltbook_registration_plan.md
+- .openclaw/workspace-state.json -> /private/var/folders/n7/1czk3b2d0_jbr7ngjp_6fth80000gn/T/tmp84sriljz/home/.openclaw/workspace-state.json
+backups:
+governance_auto_ingest: ok
+quarantined_files=['AGENTS.md', 'HEARTBEAT.md', 'IDENTITY.md', 'SOUL.md', 'TOOLS.md', 'USER.md']
+quarantine_dir=/var/folders/n7/1czk3b2d0_jbr7ngjp_6fth80000gn/T/tmp84sriljz/overlay/quarantine/20260222-094509/repo_root_governance
+STOP (fail-closed: known stray path exists as dir/symlink)
+path=.openclaw/workspace-state.json
+kind=dir
+STOP (fail-closed: known stray path exists as dir/symlink)
+path=.openclaw/workspace-state.json
+kind=symlink
+governance_auto_ingest: ok
+quarantined_files=['AGENTS.md', 'HEARTBEAT.md', 'IDENTITY.md', 'SOUL.md', 'TOOLS.md', 'USER.md']
+quarantine_dir=/var/folders/n7/1czk3b2d0_jbr7ngjp_6fth80000gn/T/tmpyre98cwq/overlay/quarantine/20260222-094510/repo_root_governance
+governance_auto_ingest: ok
+quarantined_files=['AGENTS.md', 'HEARTBEAT.md', 'IDENTITY.md', 'SOUL.md', 'TOOLS.md', 'USER.md']
+quarantine_dir=/var/folders/n7/1czk3b2d0_jbr7ngjp_6fth80000gn/T/tmpwmd0u2_x/overlay/quarantine/20260222-094511/repo_root_governance
+STOP (unrelated workspace drift detected)
+untracked_disallowed_paths:
+- core/other/place.js
+governance_auto_ingest: ok
+quarantined_files=['AGENTS.md', 'HEARTBEAT.md', 'IDENTITY.md', 'SOUL.md', 'TOOLS.md', 'USER.md']
+quarantine_dir=/var/folders/n7/1czk3b2d0_jbr7ngjp_6fth80000gn/T/tmpcwdmvx6d/overlay/quarantine/20260222-094511/repo_root_governance
+STOP (unrelated workspace drift detected)
+untracked_disallowed_paths:
+- core/integration/other.bin
+governance_auto_ingest: ok
+quarantined_files=['AGENTS.md', 'HEARTBEAT.md', 'IDENTITY.md', 'SOUL.md', 'TOOLS.md', 'USER.md']
+quarantine_dir=/var/folders/n7/1czk3b2d0_jbr7ngjp_6fth80000gn/T/tmpeqevpseu/overlay/quarantine/20260222-094511/repo_root_governance
+STOP (teammate auto-ingest requires regular files; no symlinks/dirs)
+path=core/integration/econ_adapter.js
+governance_auto_ingest: ok
+quarantined_files=['AGENTS.md', 'HEARTBEAT.md', 'IDENTITY.md', 'SOUL.md', 'TOOLS.md', 'USER.md']
+quarantine_dir=/var/folders/n7/1czk3b2d0_jbr7ngjp_6fth80000gn/T/tmp5ebjop6s/overlay/quarantine/20260222-094511/repo_root_governance
+STOP (teammate auto-ingest safety scan failed)
+flagged_paths:
+- core/integration/econ_adapter.js: rule_test
+quarantine_root=/var/folders/n7/1czk3b2d0_jbr7ngjp_6fth80000gn/T/tmp5ebjop6s/quarantine/openclaw-quarantine-20260222-094511
+RUN node tests/analyze_session_patterns.test.js
+PASS analyze_session_patterns aggregates recurring inefficiency patterns
+RUN node tests/anticipate.test.js
+PASS anticipate module emits suggestion-only low-risk automation hints
+PASS anticipate feature flag disables suggestions
+RUN node tests/ask_first_tool_governance.test.js
+PASS ask_first enforces approval for exec
+PASS ask_first allows ask-decision action with operator approval
+PASS ask_first surfaces deny decisions as ToolDeniedError
+RUN node tests/audit_sink_hash_chain.test.js
+PASS audit sink hash chaining persists across rotation
+RUN node tests/budget_circuit_breaker.test.js
+PASS starts in closed state with zero usage
+PASS records usage and decrements remaining
+PASS trips on token cap exceeded
+PASS trips on call cap exceeded
+PASS rejects usage when open
+PASS canProceed returns false when open
+PASS canProceed returns false when estimate exceeds remaining
+PASS reset restores closed state
+PASS reset with new caps
+budget_circuit_breaker tests complete
+RUN node tests/context_sanitizer.test.js
+PASS context sanitizer redacts tool-shaped JSON payload
+PASS context sanitizer strips role/authority prefixes
+PASS context sanitizer preserves normal human text
+RUN node tests/freecompute_cloud.test.js
+
+── Schema Validation ──
+── Catalog Queries ──
+── Config + Redaction ──
+── Router ──
+── Quota Ledger ──
+── vLLM Utilities ──
+── Provider Registry ──
+── Provider Adapter ──
+── Integration Tests ──
+
+════════════════════════════════════════════
+FreeComputeCloud Tests: 72 passed, 0 failed, 3 skipped
+════════════════════════════════════════════
+
+RUN node tests/freecompute_registry_error_classification.test.js
+PASS classifyDispatchError: timeout
+PASS classifyDispatchError: auth/config/http
+RUN node tests/integrity_guard.test.js
+PASS integrity baseline is deterministic
+PASS integrity drift fails closed and explicit approval recovers
+PASS runtime identity override metadata is denied
+PASS integrity guard hook enforces baseline presence
+RUN node tests/lint_legacy_node_names.test.js
+PASS parseAddedLegacyMentions finds newly added System-1 references
+PASS lintLegacyNames ignores files with legacy header notice
+RUN node tests/memory_writer.test.js
+PASS memory writer sanitizes and appends workspace memory entries
+RUN node tests/model_routing_no_oauth.test.js
+PASS model routing no oauth/codex regression gate
+RUN node tests/module_resolution_gate.test.js
+PASS returns zero findings when relative require resolves
+PASS reports finding when relative require target is missing
+module_resolution_gate tests complete
+RUN node tests/moltbook_activity.test.js
+PASS moltbook activity aggregates monthly impact from local stub events
+RUN node tests/node_identity.test.js
+PASS loads system map with expected defaults
+PASS normalizes system1/system-1 aliases to dali
+PASS normalizes system2/system-2 aliases to c_lawd
+PASS resolves workspace and memory roots from alias
+RUN node tests/provider_diag_format.test.js
+PASS provider_diag includes grep-friendly providers_summary section
+provider_diag_format tests complete
+RUN node tests/providers/local_vllm_provider.test.js
+PASS healthProbe succeeds against mocked vLLM endpoint and normalizes /v1
+PASS healthProbe returns fail-closed result when endpoint is unreachable
+PASS generateChat returns expected output shape from vLLM response
+PASS normalizeBaseUrl appends /v1 only when missing
+RUN node tests/redact_audit_evidence.test.js
+PASS idempotent: applying rules twice yields same result
+PASS JSON validity preserved after redaction
+PASS no /Users/ or heathyeager remains after redaction
+PASS repo root path replaced correctly
+PASS openclaw config path replaced correctly
+PASS generic home path replaced correctly
+PASS ls -la line replaced correctly
+PASS standalone username replaced
+PASS timestamps, hashes, exit codes not redacted
+PASS placeholders are not themselves redactable patterns
+PASS CLI redacts synthetic fixtures and writes output bundle
+PASS CLI dry-run emits summary and does not write output files
+RUN node tests/secrets_bridge.test.js
+PASS provider mapping exposes required env vars
+PASS maskSecretFingerprint never returns raw secret value
+PASS bridge serialization does not expose env secret values
+PASS injectRuntimeEnv respects operator override and injects missing
+PASS injectRuntimeEnv propagates GROQ_API_KEY operator override to OPENCLAW_GROQ_API_KEY
+PASS config includes secrets bridge governance knobs
+PASS redaction covers mapped secret env vars
+PASS auto backend detection is platform deterministic
+PASS file backend requires explicit opt-in
+RUN node tests/secrets_cli_exec.test.js
+PASS secrets cli exec injects alias env keys without printing values
+RUN node tests/secrets_cli_plugin.test.js
+PASS plugin registers CLI command: secrets
+PASS secrets cli status prints enablement header (no secrets)
+secrets_cli_plugin tests complete
+RUN node tests/skill_composer.test.js
+PASS skill composer is disabled by default
+PASS skill composer respects tool governance decisions
+RUN node tests/system1_ignores_system2_env.test.js
+PASS createVllmProvider ignores SYSTEM2_VLLM_* when system2 is false
+PASS probeVllmServer ignores SYSTEM2_VLLM_* when system2 is false
+PASS probeVllmServer consults SYSTEM2_VLLM_* when system2 is true
+PASS probeVllmServer consults SYSTEM2_VLLM_* when nodeId alias resolves to c_lawd
+RUN node tests/system2_config_resolver.test.js
+PASS resolves with explicit args (highest precedence)
+PASS falls back to SYSTEM2_VLLM_* env vars
+PASS falls back to OPENCLAW_VLLM_* env vars
+PASS prefers SYSTEM2_VLLM_* over OPENCLAW_VLLM_*
+PASS uses node alias system-2 for c_lawd routing context
+PASS uses defaults when envs not set
+PASS emits diagnostic events (keys only)
+PASS resolves numeric config deterministically
+PASS invalid numeric env yields NaN (no throw)
+RUN node tests/system2_evidence_bundle.test.js
+PASS buildEvidenceBundle captures raw, writes redacted output, and emits manifest
+PASS buildEvidenceBundle preserves fail-closed snapshot status
+RUN node tests/system2_experiment.test.js
+PASS no-change fixture yields INCONCLUSIVE
+PASS improvement fixture yields KEEP
+PASS regression fixture yields REVERT
+PASS auth preset script maps to calibrated fail-on path
+PASS calibrated auth fail-on yields REVERT on regression fixture
+PASS failing subprocess writes UNAVAILABLE report and exits 3
+RUN node tests/system2_federation_observability_contract.test.js
+PASS FederatedEnvelopeV1 fixture validates (strict)
+PASS FederatedEnvelopeV1 rejects invalid schema (fail-closed)
+PASS System2EventV1 fixture validates
+PASS JSONL sink contract is deterministic (exact line match)
+PASS redaction-at-write is deterministic and idempotent
+PASS gating: disabled emitter is a no-op
+PASS gating: enabled emitter appends a redacted event
+PASS emitter does not throw on sink error by default (strict=false)
+PASS emitter fails closed on sink error when strict=true
+RUN node tests/system2_http_edge.test.js
+PASS edge rejects missing/invalid auth and does not log secrets
+PASS edge rate limits per identity
+PASS edge enforces body size limit (413)
+PASS rpc routes require approval (fail-closed)
+PASS malformed read tool payloads are denied at edge
+PASS websocket upgrade requires approval (fail-closed)
+PASS non-loopback bind requires explicit opt-in
+PASS HMAC signing auth (replay resistant)
+PASS HMAC mode can allow loopback Bearer (opt-in)
+PASS audit sink writes JSONL and rotates (no secrets)
+PASS tokens/hmac keys file mode is enforced (0600)
+PASS inflight caps + timeouts are enforced/configured
+system2_http_edge tests complete
+RUN node tests/system2_repair_auth_profiles_acceptance.test.js
+PASS system2 repair auth-profiles acceptance check
+RUN node tests/system2_repair_models_acceptance.test.js
+PASS system2 repair models acceptance check
+RUN node tests/system2_repair_scripts_regression.test.js
+PASS system2 repair scripts regression gate
+RUN node tests/system2_snapshot_capture.test.js
+PASS captureSnapshot writes stable files and summary shape
+PASS captureSnapshot fail-closed with partial outputs when command fails
+RUN node tests/system2_snapshot_diff.test.js
+PASS JSON output is stable and ignores timestamp fields by default
+PASS ignore list suppresses expected diff paths and exits 0
+PASS fail-on marks regressions and exits 2
+PASS human output includes summary counts and regression marker
+PASS computeDiff supports deterministic dotpath flattening
+RUN node tests/system2_snapshot_observability_seam.test.js
+PASS OFF: system2.observability.enabled=false emits nothing and writes no JSONL
+PASS ON: system2.observability.enabled=true writes exactly one deterministic JSONL line
+RUN node tests/tacticr_feedback_writer.test.js
+PASS tacticr feedback writer appends schema-valid sanitized JSONL entries
+PASS tacticr feedback writer enforces required schema fields
+RUN node tests/tool_governance.test.js
+PASS tool governance allows explicit allowlist actions
+PASS tool governance asks for exec/network/outside-workspace writes
+PASS tool governance denies explicit denylist actions
+RUN node tests/tool_governance_edge_hook.test.js
+PASS http edge governance hook maps approval/deny errors deterministically
+FAILURES: 1/38
+
+## Regression Fix: SOUL canonical sync (2026-02-21T23:47:31Z)
+Root cause: verify_goal_identity_invariants requires repo-root SOUL.md to byte-match workspace/governance/SOUL.md.
+Action: cp workspace/governance/SOUL.md SOUL.md
+```bash
+python3 -m unittest tests_unittest.test_goal_identity_invariants -v
+test_verifier_passes_in_repo (tests_unittest.test_goal_identity_invariants.TestGoalIdentityInvariants.test_verifier_passes_in_repo) ... ok
+test_verifier_strict_fails_on_fixture_warning (tests_unittest.test_goal_identity_invariants.TestGoalIdentityInvariants.test_verifier_strict_fails_on_fixture_warning) ... ok
+
+----------------------------------------------------------------------
+Ran 2 tests in 0.376s
+
+OK
+```
+
+### npm test (2026-02-21T23:48:36Z)
+```bash
+npm test
+
+> openclaw@0.0.0 test
+> node scripts/run_tests.js
+
+RUN python3  -m unittest discover -s tests_unittest -p test_*.py
+.............................................................................................................................................................................................
+----------------------------------------------------------------------
+Ran 189 tests in 4.803s
+
+OK
+==================================================
+🔍 PRE-COMMIT AUDIT
+==================================================
+✅ tests_pass: ok
+==================================================
+✅ AUDIT PASSED - Safe to commit
+==================================================
+==================================================
+🔍 PRE-COMMIT AUDIT
+==================================================
+✅ tests_pass: ok
+⚠️ witness ledger commit skipped: witness_error: boom
+==================================================
+✅ AUDIT PASSED - Safe to commit
+==================================================
+==================================================
+🔍 PRE-COMMIT AUDIT
+==================================================
+✅ tests_pass: ok
+❌ witness ledger commit failed (strict): witness_error: boom
+==================================================
+❌ AUDIT FAILED - Commit blocked
+==================================================
+system2_stray_auto_ingest: ok
+moved:
+- moltbook_registration_plan.md -> /private/var/folders/n7/1czk3b2d0_jbr7ngjp_6fth80000gn/T/tmp2_unpjpj/home/.openclaw/ingest/moltbook_registration_plan.md
+- .openclaw/workspace-state.json -> /private/var/folders/n7/1czk3b2d0_jbr7ngjp_6fth80000gn/T/tmp2_unpjpj/home/.openclaw/workspace-state.json
+backups:
+governance_auto_ingest: ok
+quarantined_files=['AGENTS.md', 'HEARTBEAT.md', 'IDENTITY.md', 'SOUL.md', 'TOOLS.md', 'USER.md']
+quarantine_dir=/var/folders/n7/1czk3b2d0_jbr7ngjp_6fth80000gn/T/tmp2_unpjpj/overlay/quarantine/20260222-094839/repo_root_governance
+STOP (fail-closed: known stray path exists as dir/symlink)
+path=.openclaw/workspace-state.json
+kind=dir
+STOP (fail-closed: known stray path exists as dir/symlink)
+path=.openclaw/workspace-state.json
+kind=symlink
+governance_auto_ingest: ok
+quarantined_files=['AGENTS.md', 'HEARTBEAT.md', 'IDENTITY.md', 'SOUL.md', 'TOOLS.md', 'USER.md']
+quarantine_dir=/var/folders/n7/1czk3b2d0_jbr7ngjp_6fth80000gn/T/tmpiluyfnox/overlay/quarantine/20260222-094841/repo_root_governance
+governance_auto_ingest: ok
+quarantined_files=['AGENTS.md', 'HEARTBEAT.md', 'IDENTITY.md', 'SOUL.md', 'TOOLS.md', 'USER.md']
+quarantine_dir=/var/folders/n7/1czk3b2d0_jbr7ngjp_6fth80000gn/T/tmpqidc0ksn/overlay/quarantine/20260222-094841/repo_root_governance
+STOP (unrelated workspace drift detected)
+untracked_disallowed_paths:
+- core/other/place.js
+governance_auto_ingest: ok
+quarantined_files=['AGENTS.md', 'HEARTBEAT.md', 'IDENTITY.md', 'SOUL.md', 'TOOLS.md', 'USER.md']
+quarantine_dir=/var/folders/n7/1czk3b2d0_jbr7ngjp_6fth80000gn/T/tmpz8aq8rzg/overlay/quarantine/20260222-094841/repo_root_governance
+STOP (unrelated workspace drift detected)
+untracked_disallowed_paths:
+- core/integration/other.bin
+governance_auto_ingest: ok
+quarantined_files=['AGENTS.md', 'HEARTBEAT.md', 'IDENTITY.md', 'SOUL.md', 'TOOLS.md', 'USER.md']
+quarantine_dir=/var/folders/n7/1czk3b2d0_jbr7ngjp_6fth80000gn/T/tmp8rq8qoqj/overlay/quarantine/20260222-094841/repo_root_governance
+STOP (teammate auto-ingest requires regular files; no symlinks/dirs)
+path=core/integration/econ_adapter.js
+governance_auto_ingest: ok
+quarantined_files=['AGENTS.md', 'HEARTBEAT.md', 'IDENTITY.md', 'SOUL.md', 'TOOLS.md', 'USER.md']
+quarantine_dir=/var/folders/n7/1czk3b2d0_jbr7ngjp_6fth80000gn/T/tmplws3y6s6/overlay/quarantine/20260222-094841/repo_root_governance
+STOP (teammate auto-ingest safety scan failed)
+flagged_paths:
+- core/integration/econ_adapter.js: rule_test
+quarantine_root=/var/folders/n7/1czk3b2d0_jbr7ngjp_6fth80000gn/T/tmplws3y6s6/quarantine/openclaw-quarantine-20260222-094841
+RUN node tests/analyze_session_patterns.test.js
+PASS analyze_session_patterns aggregates recurring inefficiency patterns
+RUN node tests/anticipate.test.js
+PASS anticipate module emits suggestion-only low-risk automation hints
+PASS anticipate feature flag disables suggestions
+RUN node tests/ask_first_tool_governance.test.js
+PASS ask_first enforces approval for exec
+PASS ask_first allows ask-decision action with operator approval
+PASS ask_first surfaces deny decisions as ToolDeniedError
+RUN node tests/audit_sink_hash_chain.test.js
+PASS audit sink hash chaining persists across rotation
+RUN node tests/budget_circuit_breaker.test.js
+PASS starts in closed state with zero usage
+PASS records usage and decrements remaining
+PASS trips on token cap exceeded
+PASS trips on call cap exceeded
+PASS rejects usage when open
+PASS canProceed returns false when open
+PASS canProceed returns false when estimate exceeds remaining
+PASS reset restores closed state
+PASS reset with new caps
+budget_circuit_breaker tests complete
+RUN node tests/context_sanitizer.test.js
+PASS context sanitizer redacts tool-shaped JSON payload
+PASS context sanitizer strips role/authority prefixes
+PASS context sanitizer preserves normal human text
+RUN node tests/freecompute_cloud.test.js
+
+── Schema Validation ──
+── Catalog Queries ──
+── Config + Redaction ──
+── Router ──
+── Quota Ledger ──
+── vLLM Utilities ──
+── Provider Registry ──
+── Provider Adapter ──
+── Integration Tests ──
+
+════════════════════════════════════════════
+FreeComputeCloud Tests: 72 passed, 0 failed, 3 skipped
+════════════════════════════════════════════
+
+RUN node tests/freecompute_registry_error_classification.test.js
+PASS classifyDispatchError: timeout
+PASS classifyDispatchError: auth/config/http
+RUN node tests/integrity_guard.test.js
+PASS integrity baseline is deterministic
+PASS integrity drift fails closed and explicit approval recovers
+PASS runtime identity override metadata is denied
+PASS integrity guard hook enforces baseline presence
+RUN node tests/lint_legacy_node_names.test.js
+PASS parseAddedLegacyMentions finds newly added System-1 references
+PASS lintLegacyNames ignores files with legacy header notice
+RUN node tests/memory_writer.test.js
+PASS memory writer sanitizes and appends workspace memory entries
+RUN node tests/model_routing_no_oauth.test.js
+PASS model routing no oauth/codex regression gate
+RUN node tests/module_resolution_gate.test.js
+PASS returns zero findings when relative require resolves
+PASS reports finding when relative require target is missing
+module_resolution_gate tests complete
+RUN node tests/moltbook_activity.test.js
+PASS moltbook activity aggregates monthly impact from local stub events
+RUN node tests/node_identity.test.js
+PASS loads system map with expected defaults
+PASS normalizes system1/system-1 aliases to dali
+PASS normalizes system2/system-2 aliases to c_lawd
+PASS resolves workspace and memory roots from alias
+RUN node tests/provider_diag_format.test.js
+PASS provider_diag includes grep-friendly providers_summary section
+provider_diag_format tests complete
+RUN node tests/providers/local_vllm_provider.test.js
+PASS healthProbe succeeds against mocked vLLM endpoint and normalizes /v1
+PASS healthProbe returns fail-closed result when endpoint is unreachable
+PASS generateChat returns expected output shape from vLLM response
+PASS normalizeBaseUrl appends /v1 only when missing
+RUN node tests/redact_audit_evidence.test.js
+PASS idempotent: applying rules twice yields same result
+PASS JSON validity preserved after redaction
+PASS no /Users/ or heathyeager remains after redaction
+PASS repo root path replaced correctly
+PASS openclaw config path replaced correctly
+PASS generic home path replaced correctly
+PASS ls -la line replaced correctly
+PASS standalone username replaced
+PASS timestamps, hashes, exit codes not redacted
+PASS placeholders are not themselves redactable patterns
+PASS CLI redacts synthetic fixtures and writes output bundle
+PASS CLI dry-run emits summary and does not write output files
+RUN node tests/secrets_bridge.test.js
+PASS provider mapping exposes required env vars
+PASS maskSecretFingerprint never returns raw secret value
+PASS bridge serialization does not expose env secret values
+PASS injectRuntimeEnv respects operator override and injects missing
+PASS injectRuntimeEnv propagates GROQ_API_KEY operator override to OPENCLAW_GROQ_API_KEY
+PASS config includes secrets bridge governance knobs
+PASS redaction covers mapped secret env vars
+PASS auto backend detection is platform deterministic
+PASS file backend requires explicit opt-in
+RUN node tests/secrets_cli_exec.test.js
+PASS secrets cli exec injects alias env keys without printing values
+RUN node tests/secrets_cli_plugin.test.js
+PASS plugin registers CLI command: secrets
+PASS secrets cli status prints enablement header (no secrets)
+secrets_cli_plugin tests complete
+RUN node tests/skill_composer.test.js
+PASS skill composer is disabled by default
+PASS skill composer respects tool governance decisions
+RUN node tests/system1_ignores_system2_env.test.js
+PASS createVllmProvider ignores SYSTEM2_VLLM_* when system2 is false
+PASS probeVllmServer ignores SYSTEM2_VLLM_* when system2 is false
+PASS probeVllmServer consults SYSTEM2_VLLM_* when system2 is true
+PASS probeVllmServer consults SYSTEM2_VLLM_* when nodeId alias resolves to c_lawd
+RUN node tests/system2_config_resolver.test.js
+PASS resolves with explicit args (highest precedence)
+PASS falls back to SYSTEM2_VLLM_* env vars
+PASS falls back to OPENCLAW_VLLM_* env vars
+PASS prefers SYSTEM2_VLLM_* over OPENCLAW_VLLM_*
+PASS uses node alias system-2 for c_lawd routing context
+PASS uses defaults when envs not set
+PASS emits diagnostic events (keys only)
+PASS resolves numeric config deterministically
+PASS invalid numeric env yields NaN (no throw)
+RUN node tests/system2_evidence_bundle.test.js
+PASS buildEvidenceBundle captures raw, writes redacted output, and emits manifest
+PASS buildEvidenceBundle preserves fail-closed snapshot status
+RUN node tests/system2_experiment.test.js
+PASS no-change fixture yields INCONCLUSIVE
+PASS improvement fixture yields KEEP
+PASS regression fixture yields REVERT
+PASS auth preset script maps to calibrated fail-on path
+PASS calibrated auth fail-on yields REVERT on regression fixture
+PASS failing subprocess writes UNAVAILABLE report and exits 3
+RUN node tests/system2_federation_observability_contract.test.js
+PASS FederatedEnvelopeV1 fixture validates (strict)
+PASS FederatedEnvelopeV1 rejects invalid schema (fail-closed)
+PASS System2EventV1 fixture validates
+PASS JSONL sink contract is deterministic (exact line match)
+PASS redaction-at-write is deterministic and idempotent
+PASS gating: disabled emitter is a no-op
+PASS gating: enabled emitter appends a redacted event
+PASS emitter does not throw on sink error by default (strict=false)
+PASS emitter fails closed on sink error when strict=true
+RUN node tests/system2_http_edge.test.js
+PASS edge rejects missing/invalid auth and does not log secrets
+PASS edge rate limits per identity
+PASS edge enforces body size limit (413)
+PASS rpc routes require approval (fail-closed)
+PASS malformed read tool payloads are denied at edge
+PASS websocket upgrade requires approval (fail-closed)
+PASS non-loopback bind requires explicit opt-in
+PASS HMAC signing auth (replay resistant)
+PASS HMAC mode can allow loopback Bearer (opt-in)
+PASS audit sink writes JSONL and rotates (no secrets)
+PASS tokens/hmac keys file mode is enforced (0600)
+PASS inflight caps + timeouts are enforced/configured
+system2_http_edge tests complete
+RUN node tests/system2_repair_auth_profiles_acceptance.test.js
+PASS system2 repair auth-profiles acceptance check
+RUN node tests/system2_repair_models_acceptance.test.js
+PASS system2 repair models acceptance check
+RUN node tests/system2_repair_scripts_regression.test.js
+PASS system2 repair scripts regression gate
+RUN node tests/system2_snapshot_capture.test.js
+PASS captureSnapshot writes stable files and summary shape
+PASS captureSnapshot fail-closed with partial outputs when command fails
+RUN node tests/system2_snapshot_diff.test.js
+PASS JSON output is stable and ignores timestamp fields by default
+PASS ignore list suppresses expected diff paths and exits 0
+PASS fail-on marks regressions and exits 2
+PASS human output includes summary counts and regression marker
+PASS computeDiff supports deterministic dotpath flattening
+RUN node tests/system2_snapshot_observability_seam.test.js
+PASS OFF: system2.observability.enabled=false emits nothing and writes no JSONL
+PASS ON: system2.observability.enabled=true writes exactly one deterministic JSONL line
+RUN node tests/tacticr_feedback_writer.test.js
+PASS tacticr feedback writer appends schema-valid sanitized JSONL entries
+PASS tacticr feedback writer enforces required schema fields
+RUN node tests/tool_governance.test.js
+PASS tool governance allows explicit allowlist actions
+PASS tool governance asks for exec/network/outside-workspace writes
+PASS tool governance denies explicit denylist actions
+RUN node tests/tool_governance_edge_hook.test.js
+PASS http edge governance hook maps approval/deny errors deterministically
+OK 38 test group(s)
+```
+
+### python3 -m unittest (2026-02-21T23:48:56Z)
+```bash
+python3 -m unittest
+.............................................................................................................................................................................................
+----------------------------------------------------------------------
+Ran 189 tests in 4.001s
+
+OK
+==================================================
+🔍 PRE-COMMIT AUDIT
+==================================================
+✅ tests_pass: ok
+==================================================
+✅ AUDIT PASSED - Safe to commit
+==================================================
+==================================================
+🔍 PRE-COMMIT AUDIT
+==================================================
+✅ tests_pass: ok
+⚠️ witness ledger commit skipped: witness_error: boom
+==================================================
+✅ AUDIT PASSED - Safe to commit
+==================================================
+==================================================
+🔍 PRE-COMMIT AUDIT
+==================================================
+✅ tests_pass: ok
+❌ witness ledger commit failed (strict): witness_error: boom
+==================================================
+❌ AUDIT FAILED - Commit blocked
+==================================================
+system2_stray_auto_ingest: ok
+moved:
+- moltbook_registration_plan.md -> /private/var/folders/n7/1czk3b2d0_jbr7ngjp_6fth80000gn/T/tmpycy_gg12/home/.openclaw/ingest/moltbook_registration_plan.md
+- .openclaw/workspace-state.json -> /private/var/folders/n7/1czk3b2d0_jbr7ngjp_6fth80000gn/T/tmpycy_gg12/home/.openclaw/workspace-state.json
+backups:
+governance_auto_ingest: ok
+quarantined_files=['AGENTS.md', 'HEARTBEAT.md', 'IDENTITY.md', 'SOUL.md', 'TOOLS.md', 'USER.md']
+quarantine_dir=/var/folders/n7/1czk3b2d0_jbr7ngjp_6fth80000gn/T/tmpycy_gg12/overlay/quarantine/20260222-094858/repo_root_governance
+STOP (fail-closed: known stray path exists as dir/symlink)
+path=.openclaw/workspace-state.json
+kind=dir
+STOP (fail-closed: known stray path exists as dir/symlink)
+path=.openclaw/workspace-state.json
+kind=symlink
+governance_auto_ingest: ok
+quarantined_files=['AGENTS.md', 'HEARTBEAT.md', 'IDENTITY.md', 'SOUL.md', 'TOOLS.md', 'USER.md']
+quarantine_dir=/var/folders/n7/1czk3b2d0_jbr7ngjp_6fth80000gn/T/tmpqmypssb_/overlay/quarantine/20260222-094859/repo_root_governance
+governance_auto_ingest: ok
+quarantined_files=['AGENTS.md', 'HEARTBEAT.md', 'IDENTITY.md', 'SOUL.md', 'TOOLS.md', 'USER.md']
+quarantine_dir=/var/folders/n7/1czk3b2d0_jbr7ngjp_6fth80000gn/T/tmpkc887s8x/overlay/quarantine/20260222-094859/repo_root_governance
+STOP (unrelated workspace drift detected)
+untracked_disallowed_paths:
+- core/other/place.js
+governance_auto_ingest: ok
+quarantined_files=['AGENTS.md', 'HEARTBEAT.md', 'IDENTITY.md', 'SOUL.md', 'TOOLS.md', 'USER.md']
+quarantine_dir=/var/folders/n7/1czk3b2d0_jbr7ngjp_6fth80000gn/T/tmpqtv5sgvc/overlay/quarantine/20260222-094900/repo_root_governance
+STOP (unrelated workspace drift detected)
+untracked_disallowed_paths:
+- core/integration/other.bin
+governance_auto_ingest: ok
+quarantined_files=['AGENTS.md', 'HEARTBEAT.md', 'IDENTITY.md', 'SOUL.md', 'TOOLS.md', 'USER.md']
+quarantine_dir=/var/folders/n7/1czk3b2d0_jbr7ngjp_6fth80000gn/T/tmppaz1pg9z/overlay/quarantine/20260222-094900/repo_root_governance
+STOP (teammate auto-ingest requires regular files; no symlinks/dirs)
+path=core/integration/econ_adapter.js
+governance_auto_ingest: ok
+quarantined_files=['AGENTS.md', 'HEARTBEAT.md', 'IDENTITY.md', 'SOUL.md', 'TOOLS.md', 'USER.md']
+quarantine_dir=/var/folders/n7/1czk3b2d0_jbr7ngjp_6fth80000gn/T/tmpmr4oz5d9/overlay/quarantine/20260222-094900/repo_root_governance
+STOP (teammate auto-ingest safety scan failed)
+flagged_paths:
+- core/integration/econ_adapter.js: rule_test
+quarantine_root=/var/folders/n7/1czk3b2d0_jbr7ngjp_6fth80000gn/T/tmpmr4oz5d9/quarantine/openclaw-quarantine-20260222-094900
+```
+
+## Pre-final Diff (2026-02-21T23:52:36Z)
+```bash
+git diff --name-status
+M	SOUL.md
+M	workspace/audit/stash_integration_20260222.md
+```
+
+## Residual Risks / Uncertainty
+- Ignored session file workspace/teamchat/sessions/tacti_architecture_review.jsonl was restored by stash but intentionally excluded from commits due .gitignore and ambiguity about whether it should be versioned.
+- Artifact workspace/mlx_audit.zip excluded from repo commits and moved to /tmp/wt_wirings_integration_excluded/mlx_audit.zip.
+
+## Revert Sequence (reverse order)
+1. git revert HEAD
+2. git revert 5a78788
+3. git revert 9ae463d
+4. git revert da84eba
+
+(Current HEAD commit hashes before final fix commit listed above; final exact list captured after commit/push.)
