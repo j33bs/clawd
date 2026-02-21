@@ -508,3 +508,80 @@ Observed log outcome:
   1. does not traverse the overlaid boundary hooks, or
   2. constructs/sends the payload through a different internal request path than the patched boundary.
 
+
+## Opt-in Outbound Trace Investigation (OPENCLAW_TRACE_VLLM_OUTBOUND)
+
+Date: 2026-02-21
+
+### Phase 1 — Node runtime trace instrumentation
+
+Tracked change:
+- `workspace/scripts/rebuild_runtime_openclaw.sh`
+
+What was added (env-gated):
+- `OPENCLAW_TRACE_VLLM_OUTBOUND=1` outbound trace in runtime overlay module
+- one-line JSON trace for vLLM-candidate targets with:
+  - `ts`, `target_url` (query redacted), `method`, `content_length`
+  - `payload_top_keys`, `has_tools`, `has_tool_choice`
+  - `callsite_tag`, `stack_fingerprint` (first non-internal frames)
+
+Noise controls:
+- trace only for vLLM candidate URLs (host includes `vllm` OR local host + vLLM ports + `/chat/completions`)
+- one line per request
+
+### Phase 2 — Python trace applicability
+
+- Real failing repro path is Node `openclaw agent` runtime.
+- No Python provider dispatch was involved in this repro; no Python trace patch applied in this cycle.
+
+### Phase 3 — Rebuild + restart
+
+Commands:
+- `./workspace/scripts/rebuild_runtime_openclaw.sh`
+- `systemctl --user daemon-reload`
+- `systemctl --user restart openclaw-gateway.service`
+
+Service env override updated (non-secret):
+- `~/.config/systemd/user/openclaw-gateway.service.d/override.conf`
+  - `Environment=OPENCLAW_STRICT_TOOL_PAYLOAD=1`
+  - `Environment=OPENCLAW_TRACE_VLLM_OUTBOUND=1`
+
+### Phase 4 — Repro with tracing enabled
+
+Service-context repro command:
+- `openclaw agent --to +10000000000 --message "trace probe" --json`
+
+Observed:
+- still returns vLLM 400 text
+- no `vllm_outbound_trace` in gateway journal for that attempt
+
+Interpretation:
+- that attempt can bypass service-executed patched runtime plane intermittently (fallback/alternate execution plane observed in prior runs), so no service trace line was emitted.
+
+Direct patched runtime repro command (same host, opt-in tracing enabled):
+- `OPENCLAW_TRACE_VLLM_OUTBOUND=1 OPENCLAW_STRICT_TOOL_PAYLOAD=1 /usr/bin/node /home/jeebs/src/clawd/.runtime/openclaw/dist/index.js agent --to +10000000000 --message "direct runtime trace" --json`
+
+Trace extraction command:
+- `rg -n -S "vllm_outbound_trace|tool-call-parser|auto\" tool choice" /tmp/openclaw/openclaw-2026-02-21.log`
+
+Key trace line captured:
+- `{"subsystem":"tool_payload_trace","event":"vllm_outbound_trace","ts":"2026-02-21T06:45:38.575Z","target_url":"http://127.0.0.1:8001/v1/chat/completions","method":"POST","content_length":106330,"payload_top_keys":["model","messages","stream","stream_options","store","max_completion_tokens","tools"],"has_tools":true,"has_tool_choice":false,"callsite_tag":"gateway.edge.final_dispatch","stack_fingerprint":"at OpenAI.fetchWithTimeout (file:///home/jeebs/src/clawd/.runtime/openclaw/node_modules/openai/src/client.ts:795:31) | at OpenAI.makeRequest (file:///home/jeebs/src/clawd/.runtime/openclaw/node_modules/openai/src/client.ts:626:33) | at file:///home/jeebs/src/clawd/.runtime/openclaw/node_modules/@mariozechner/pi-ai/src/providers/openai-completions.ts:109:25"}`
+
+Followed immediately by:
+- `400 "auto" tool choice requires --enable-auto-tool-choice and --tool-call-parser to be set`
+
+### Conclusion (exact dispatch plane/callsite)
+
+- Exact outbound callsite fingerprint is in OpenAI client flow used by:
+  - `@mariozechner/pi-ai/src/providers/openai-completions.ts:109`
+  - via `openai/src/client.ts` (`fetchWithTimeout` -> `makeRequest`)
+- At wire time, payload had:
+  - `has_tools=true`
+  - `has_tool_choice=false`
+- Therefore this failure is **not** `tool_choice without tools` at final wire.
+- The failing plane is OpenAI-compatible provider path sending `tools` to local vLLM endpoint (`127.0.0.1:8001/v1/chat/completions`), which still triggers vLLM tool-choice error when server tool-calling flags are not enabled.
+
+Next minimal patch location (from trace evidence):
+- provider path used by `@mariozechner/pi-ai/src/providers/openai-completions.ts` for local vLLM-targeted requests.
+- enforce capability gate there (strip `tools` for unsupported/disabled vLLM toolcalling), not just `tool_choice` invariant.
+
