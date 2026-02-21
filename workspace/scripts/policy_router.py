@@ -17,6 +17,14 @@ try:
 except ImportError:
     requests = None
 
+try:
+    from tool_payload_sanitizer import resolve_tool_call_capability, sanitize_tool_payload
+except ModuleNotFoundError:
+    _THIS_DIR = Path(__file__).resolve().parent
+    if str(_THIS_DIR) not in sys.path:
+        sys.path.insert(0, str(_THIS_DIR))
+    from tool_payload_sanitizer import resolve_tool_call_capability, sanitize_tool_payload
+
 def _resolve_repo_root(start: Path):
     current = start
     for _ in range(8):
@@ -604,14 +612,20 @@ def _provider_api_key_env(provider):
     return ""
 
 
-def _call_openai_compatible(base_url, api_key, model_id, payload, timeout=15):
+def _call_openai_compatible(base_url, api_key, model_id, payload, timeout=15, provider_caps=None):
     if requests is None:
         return {"ok": False, "reason_code": "no_requests_lib"}
     url = base_url.rstrip("/") + "/chat/completions"
     headers = {"Content-Type": "application/json"}
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
+    # /chat/completions requires `messages`; convert legacy `prompt` key if present
+    if "prompt" in payload and "messages" not in payload:
+        payload = dict(payload)
+        payload["messages"] = [{"role": "user", "content": payload.pop("prompt")}]
+    payload = sanitize_tool_payload(payload, provider_caps)
     try:
+        # Invariant: tool payload must be sanitized here; do not bypass.
         resp = requests.post(url, json={"model": model_id, **payload}, headers=headers, timeout=timeout)
         if resp.status_code == 429:
             return {"ok": False, "reason_code": "request_http_429"}
@@ -646,6 +660,7 @@ def _call_anthropic(base_url, api_key, model_id, payload, timeout=15):
         "x-api-key": api_key or "",
         "anthropic-version": "2023-06-01",
     }
+    payload = sanitize_tool_payload(payload, {"tool_calls_supported": False})
     body = {
         "model": model_id,
         "max_tokens": payload.get("max_tokens", 256),
@@ -653,6 +668,7 @@ def _call_anthropic(base_url, api_key, model_id, payload, timeout=15):
         "messages": payload.get("messages", []),
     }
     try:
+        # Invariant: tool payload must be sanitized here; do not bypass.
         resp = requests.post(url, json=body, headers=headers, timeout=timeout)
         if resp.status_code == 429:
             return {"ok": False, "reason_code": "request_http_429"}
@@ -679,6 +695,7 @@ def _call_ollama(base_url, model_id, payload, timeout=10):
     if requests is None:
         return {"ok": False, "reason_code": "no_requests_lib"}
     url = base_url.rstrip("/") + "/api/generate"
+    payload = sanitize_tool_payload(payload, {"tool_calls_supported": False})
     prompt = payload.get("prompt")
     if not prompt:
         prompt = _extract_text_from_payload(payload)
@@ -689,6 +706,7 @@ def _call_ollama(base_url, model_id, payload, timeout=10):
         "options": {"temperature": payload.get("temperature", 0.0), "num_predict": payload.get("max_tokens", 256)},
     }
     try:
+        # Invariant: tool payload must be sanitized here; do not bypass.
         resp = requests.post(url, json=body, timeout=timeout)
         if resp.status_code == 404:
             return {"ok": False, "reason_code": "request_http_404"}
@@ -1327,7 +1345,14 @@ class PolicyRouter:
                         api_key_env = _provider_api_key_env(provider)
                         if api_key_env:
                             api_key = read_env_or_secrets(api_key_env)
-                    result = _call_openai_compatible(provider.get("baseUrl", ""), api_key, model_id, payload)
+                    provider_caps = resolve_tool_call_capability(provider, model_id)
+                    result = _call_openai_compatible(
+                        provider.get("baseUrl", ""),
+                        api_key,
+                        model_id,
+                        payload,
+                        provider_caps=provider_caps,
+                    )
                 elif ptype == "anthropic":
                     api_key = read_env_or_secrets(provider.get("apiKeyEnv", ""))
                     result = _call_anthropic(provider.get("baseUrl", ""), api_key, model_id, payload)
