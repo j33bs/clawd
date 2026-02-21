@@ -1681,3 +1681,18 @@ Output:
 ?? workspace/artifacts/itc/events/itc_events.jsonl
 ```
 Only explicitly excluded untracked drift remains; no tracked glue files modified.
+
+### Phase 4 — PR open attempt (repeat)
+Command:
+```bash
+gh pr create --base main --head feat/dali-wire-existing-components-20260221T2015Z \
+  --title "feat(glue): wire existing subsystems (metrics, ITC, TACTI, GPU, vLLM, SSE)" \
+  --body-file workspace/audit/pr_body_dali_wire_existing_components_20260221.md
+```
+Output:
+```text
+error connecting to api.github.com
+check your internet connection or https://githubstatus.com
+```
+Browser fallback:
+- https://github.com/j33bs/clawd/compare/main...feat/dali-wire-existing-components-20260221T2015Z?expand=1
