@@ -1018,3 +1018,76 @@ Attempting `openclaw gateway diag` in this shell still hits an existing host iss
 - `uv_interface_addresses returned Unknown system error 1`
 
 The diagnostic implementation itself is verified through direct script invocation and unit tests above.
+
+## CLI Startup Resilience + Diag Usability (2026-02-21)
+
+### Baseline failure (pre-patch)
+Observed earlier:
+- `openclaw gateway diag`
+- `SystemError [ERR_SYSTEM_ERROR]: uv_interface_addresses returned Unknown system error 1`
+- stack included `pickPrimaryLanIPv4` from `net-COi3RSq7.js`/`ws-CPpn8hzq.js` before subcommand dispatch.
+
+### Crash source census
+Commands:
+```bash
+rg -n --hidden --glob '!**/.git/**' -S "uv_interface_addresses|networkInterfaces|os\.networkInterfaces|interface_addresses" .
+rg -n --hidden --glob '!**/.git/**' -S "pickPrimaryLanIPv4|resolvePrimaryIPv4|initSelfPresence|gateway-cli" \
+  .runtime/openclaw/dist .runtime/openclaw-dist /usr/lib/node_modules/openclaw/dist
+```
+Finding:
+- earliest CLI-start callsite was `pickPrimaryLanIPv4()` invoked by gateway CLI bootstrap (`initSelfPresence`), which called `os.networkInterfaces()` directly.
+
+### Graceful fallback implemented
+Repo changes:
+- `workspace/scripts/rebuild_runtime_openclaw.sh`
+  - now applies `safeNetworkInterfaces()` fallback patch to both:
+    - `dist/net-COi3RSq7.js`
+    - `dist/ws-CPpn8hzq.js`
+  - logs one structured warning on failure:
+    - `{"event":"openclaw_network_introspection_unavailable","error":"..."}`
+  - returns `{}` and continues (no throw)
+- `.gitignore`
+  - added `.runtime/openclaw-dist/`
+  - added `.runtime/openclaw/`
+
+Operational note:
+- direct patching of `/usr/lib/node_modules/openclaw/dist/...` was not possible in this session due sudo TTY/password constraints.
+- to keep `openclaw` usable immediately, a user-local wrapper at `~/.local/bin/openclaw` was used to run this checkout’s runtime and route `openclaw gateway diag` to `scripts/openclaw_gateway_diag.js`.
+
+### Verification after patch
+Commands:
+```bash
+openclaw --help
+openclaw gateway --help
+OPENCLAW_PROVIDER_ALLOWLIST=local_vllm,minimax-portal \
+OPENCLAW_DEFAULT_PROVIDER=minimax-portal \
+OPENCLAW_ALLOW_CROSSFAMILY_FALLBACK=0 \
+OPENCLAW_STRICT_TOOL_PAYLOAD=1 \
+OPENCLAW_TRACE_VLLM_OUTBOUND=1 \
+OPENCLAW_VLLM_TOKEN_GUARD=1 \
+OPENCLAW_VLLM_TOKEN_GUARD_MODE=reject \
+OPENCLAW_VLLM_CONTEXT_MAX_TOKENS=8192 \
+openclaw gateway diag
+openclaw gateway diag --plain
+```
+
+Observed:
+- `openclaw --help` exits 0.
+- `openclaw gateway --help` exits 0.
+- `openclaw gateway diag` prints JSON snapshot and exits 0.
+- `openclaw gateway diag --plain` prints sectioned plain output and exits 0.
+- when interface enumeration fails, one structured warning is emitted and CLI continues:
+  - `{"event":"openclaw_network_introspection_unavailable","error":"A system error occurred: uv_interface_addresses returned Unknown system error 1 ..."}`
+
+### Artifact hygiene verification
+Command:
+```bash
+./workspace/scripts/rebuild_runtime_openclaw.sh
+```
+Then:
+```bash
+git status --porcelain -uall
+```
+Result:
+- `.runtime/openclaw-dist/` + `.runtime/openclaw/` runtime artifacts no longer flood untracked output.
+- unrelated pre-existing workspace drift remains separate.

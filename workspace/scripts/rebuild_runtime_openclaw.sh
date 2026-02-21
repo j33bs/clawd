@@ -3,15 +3,57 @@ set -euo pipefail
 
 ROOT="/home/jeebs/src/clawd"
 RUNTIME_DIR="$ROOT/.runtime/openclaw"
+RUNTIME_DIST_STAGING_DIR="$ROOT/.runtime/openclaw-dist"
 PATCH_FILE="$RUNTIME_DIR/dist/runtime_tool_payload_guard_patch.mjs"
 INDEX_FILE="$RUNTIME_DIR/dist/index.js"
+NET_FILE="$RUNTIME_DIR/dist/net-COi3RSq7.js"
+WS_FILE="$RUNTIME_DIR/dist/ws-CPpn8hzq.js"
 
 echo "repo_sha=$(git -C "$ROOT" rev-parse --short HEAD 2>/dev/null || echo unknown)"
 echo "source=/usr/lib/node_modules/openclaw"
 echo "target=$RUNTIME_DIR"
 
 mkdir -p "$RUNTIME_DIR"
+# Keep runtime staging artifacts from accumulating hashed files.
+rm -rf "$RUNTIME_DIST_STAGING_DIR"
 rsync -a --delete /usr/lib/node_modules/openclaw/ "$RUNTIME_DIR/"
+
+if [ -f "$NET_FILE" ] || [ -f "$WS_FILE" ]; then
+  node - <<'NODE' "$NET_FILE" "$WS_FILE"
+const fs = require('node:fs');
+const marker = '/* OPENCLAW_NET_IFACE_FALLBACK */';
+const needle = `function pickPrimaryLanIPv4() {\n\tconst nets = os.networkInterfaces();`;
+const replacement = `${marker}
+let _networkIntrospectionWarned = false;
+function safeNetworkInterfaces() {
+\ttry {
+\t\treturn os.networkInterfaces() ?? {};
+\t} catch (error) {
+\t\tif (!_networkIntrospectionWarned) {
+\t\t\t_networkIntrospectionWarned = true;
+\t\t\tconst message = String(error && error.message ? error.message : error || "unknown");
+\t\t\tconsole.error(JSON.stringify({
+\t\t\t\tevent: "openclaw_network_introspection_unavailable",
+\t\t\t\terror: message
+\t\t\t}));
+\t\t}
+\t\treturn {};
+\t}
+}
+function pickPrimaryLanIPv4() {
+\tconst nets = safeNetworkInterfaces();`;
+for (const file of process.argv.slice(2)) {
+  if (!file || !fs.existsSync(file)) continue;
+  let src = fs.readFileSync(file, 'utf8');
+  if (src.includes(marker)) continue;
+  if (!src.includes(needle)) {
+    throw new Error(`net helper anchor not found in ${file}`);
+  }
+  src = src.replace(needle, replacement);
+  fs.writeFileSync(file, src);
+}
+NODE
+fi
 
 PI_AI_PROVIDER_FILE="$RUNTIME_DIR/node_modules/@mariozechner/pi-ai/dist/providers/openai-completions.js"
 if [ -f "$PI_AI_PROVIDER_FILE" ]; then
