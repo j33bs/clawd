@@ -83,8 +83,44 @@ async function testHashChainLinksAndPersistsAcrossRotation() {
   assert.equal(chainText, main[main.length - 1].entry_hash);
 }
 
+async function testTamperDetectionFailsClosed() {
+  if (process.platform === 'win32') {
+    console.log('SKIP audit hash chain tamper detection on win32');
+    return;
+  }
+
+  const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'openclaw-audit-chain-tamper-'));
+  const auditPath = path.join(tmpRoot, 'edge.jsonl');
+
+  const sink = createAuditSink({
+    path: auditPath,
+    rotateBytes: 0,
+    hashChain: '1',
+  });
+
+  sink.writeLine(JSON.stringify({ ts_utc: 't1', request_id: 'r1', status: 200 }));
+  sink.writeLine(JSON.stringify({ ts_utc: 't2', request_id: 'r2', status: 200 }));
+
+  const lines = fs.readFileSync(auditPath, 'utf8').trim().split('\n');
+  const first = JSON.parse(lines[0]);
+  first.status = 500; // mutate payload without repairing entry_hash
+  lines[0] = JSON.stringify(first);
+  fs.writeFileSync(auditPath, lines.join('\n') + '\n', 'utf8');
+
+  assert.throws(
+    () => createAuditSink({ path: auditPath, rotateBytes: 0, hashChain: '1' }),
+    (err) => err && err.code === 'AUDIT_CHAIN_TAMPERED'
+  );
+
+  const tamperLog = auditPath + '.tamper.jsonl';
+  assert.ok(fs.existsSync(tamperLog), 'tamper event log should be written');
+  const tamperEntry = JSON.parse(fs.readFileSync(tamperLog, 'utf8').trim().split('\n')[0]);
+  assert.equal(tamperEntry.event, 'audit_chain_tamper_detected');
+}
+
 async function main() {
   await testHashChainLinksAndPersistsAcrossRotation();
+  await testTamperDetectionFailsClosed();
   console.log('PASS audit sink hash chaining persists across rotation');
 }
 
@@ -92,4 +128,3 @@ main().catch((err) => {
   console.error(`FAIL audit_sink_hash_chain: ${err && err.message ? err.message : err}`);
   process.exitCode = 1;
 });
-
