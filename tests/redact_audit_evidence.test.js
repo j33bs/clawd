@@ -145,8 +145,8 @@ test('CLI redacts synthetic fixtures and writes output bundle', function () {
   const infoOut = fs.readFileSync(path.join(outputDir, 'system', 'info.md'), 'utf8');
   const metadataOut = fs.readFileSync(path.join(outputDir, 'metadata.json'), 'utf8');
 
-  assert.ok(!credentialsOut.includes('sk-TEST1234567890ABCDE'), 'OpenAI-like key should be redacted');
-  assert.ok(!credentialsOut.includes('ghp_FAKE123456789012345678901234567890'), 'GitHub-like key should be redacted');
+  assert.ok(!credentialsOut.includes('TEST_APIKEY_PLACEHOLDER_ALPHA'), 'fixture api key placeholder should be redacted');
+  assert.ok(!credentialsOut.includes('TEST_GH_TOKEN_PLACEHOLDER_ALPHA'), 'fixture github token placeholder should be redacted');
   assert.ok(!credentialsOut.includes('/Users/demo'), 'absolute macOS path should be redacted');
   assert.ok(credentialsOut.includes('{{SECRET_TOKEN}}'), 'token placeholder should be present');
   assert.ok(credentialsOut.includes('{{EMAIL}}'), 'email placeholder should be present');
@@ -155,7 +155,7 @@ test('CLI redacts synthetic fixtures and writes output bundle', function () {
   assert.ok(!infoOut.includes('heathyeager'), 'username should be redacted in markdown fixture');
   assert.ok(infoOut.includes('{{USER}}'), 'username placeholder should be present');
   assert.ok(validateJson(metadataOut), 'redacted JSON output should remain valid JSON');
-  assert.ok(!metadataOut.includes('sk-TESTABCDEFGHIJKLMN123456'), 'JSON token should be redacted');
+  assert.ok(!metadataOut.includes('TEST_JSON_TOKEN_PLACEHOLDER_ALPHA'), 'JSON fixture token should be redacted');
 
   fs.rmSync(tempRoot, { recursive: true, force: true });
 });
