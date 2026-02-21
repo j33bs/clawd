@@ -37,3 +37,9 @@ Broad actions require explicit operator approval (deny-by-default):
 - No `system2-litellm`.
 - No OpenAI/Codex provider lanes and no model IDs starting with `openai/` or `openai-codex/`.
 
+## Audit Artifact Secret Guard
+- Scanner: `workspace/scripts/scan_audit_secrets.sh`
+- Scope: staged changes under `workspace/audit/**` locally; PR-diff audit files (or tracked fallback) in CI.
+- Local install (opt-in): `bash workspace/scripts/install_git_hooks.sh`
+- Allowlist for safe placeholders/fixtures: `workspace/governance/audit_secret_allowlist.txt`
+- Failure guidance is fail-closed: redact, replace with placeholders, re-run.
