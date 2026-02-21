@@ -66,6 +66,40 @@ test('generateChat returns expected output shape from vLLM response', async func
   assert.ok(output.raw);
 });
 
+test('generateChat strips tool payload fields by default', async function () {
+  const provider = new LocalVllmProvider({
+    env: { OPENCLAW_VLLM_BASE_URL: 'http://localhost:18888' }
+  });
+  let seenBody = null;
+  provider._httpRequest = async function (_method, _url, body) {
+    seenBody = body;
+    return {
+      model: 'qwen2.5',
+      choices: [{ message: { content: 'ok' } }],
+      usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 }
+    };
+  };
+
+  await provider.generateChat({
+    messages: [{ role: 'user', content: 'hi' }],
+    options: {
+      model: 'qwen2.5',
+      tools: [{ type: 'function', function: { name: 'sum', parameters: { type: 'object' } } }],
+      tool_choice: 'auto',
+      parallel_tool_calls: true,
+      tool_calls: [{ id: 'call_1' }],
+      function_call: { name: 'sum' }
+    }
+  });
+
+  assert.ok(seenBody, 'expected request payload');
+  assert.ok(!Object.prototype.hasOwnProperty.call(seenBody, 'tools'));
+  assert.ok(!Object.prototype.hasOwnProperty.call(seenBody, 'tool_choice'));
+  assert.ok(!Object.prototype.hasOwnProperty.call(seenBody, 'parallel_tool_calls'));
+  assert.ok(!Object.prototype.hasOwnProperty.call(seenBody, 'tool_calls'));
+  assert.ok(!Object.prototype.hasOwnProperty.call(seenBody, 'function_call'));
+});
+
 test('normalizeBaseUrl appends /v1 only when missing', function () {
   assert.strictEqual(normalizeBaseUrl('http://localhost:18888'), 'http://localhost:18888/v1');
   assert.strictEqual(normalizeBaseUrl('http://localhost:18888/v1'), 'http://localhost:18888/v1');
