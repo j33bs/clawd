@@ -708,3 +708,84 @@ Additional correlated pairs (`mlvywr6z-002`, `mlvywr84-003`, `mlvywr9p-005`, `ml
 - In current runtime after this trace upgrade, the serialized outbound body at the proven callsite is not carrying `tool_choice` or `tools`.
 - Current 4xx responses correlate to context/max-token limits, not tool-call parser requirements.
 - The historical `"auto" tool choice requires ...` 400 did not reproduce in this post-upgrade run window; correlated traces indicate the present failure mode is different.
+
+## Opt-in Local vLLM Token Budget Preflight Guard (2026-02-21T08:10:14Z)
+
+Objective:
+- Prevent local vLLM context-limit/token-limit 400s before dispatch via an opt-in guard:
+  - estimate prompt size
+  - clamp/default completion budget
+  - reject or truncate by mode
+  - structured diagnostic line when modified/rejected
+
+### Code Changes
+
+Updated:
+- `core/system2/inference/openai_completions_local_vllm_gate.js`
+  - added `applyLocalVllmTokenGuard(baseUrl, payload, env)`
+  - conservative estimator: `ceil(chars / 4 * 1.2)`
+  - env controls:
+    - `OPENCLAW_VLLM_TOKEN_GUARD` (default off)
+    - `OPENCLAW_VLLM_CONTEXT_MAX_TOKENS` (default 8192)
+    - `OPENCLAW_VLLM_TOKEN_GUARD_MODE=reject|truncate` (default reject)
+  - reject throws structured error:
+    - `code=VLLM_CONTEXT_BUDGET_EXCEEDED`
+    - `prompt_est`, `context_max`, `requested_max_completion_tokens`
+- `tests/providers/openai_completions_local_vllm_gate.test.js`
+  - added reject-mode and truncate-mode regression tests
+- `workspace/scripts/rebuild_runtime_openclaw.sh`
+  - injected equivalent guard into runtime pi-ai provider patch:
+    - `applyLocalVllmTokenGuard(model.baseUrl, params)`
+  - logs one structured diagnostic line on modification/rejection:
+    - `event=vllm_token_guard_preflight`
+
+Runtime-injected markers present in rebuilt artifact:
+- `.runtime/openclaw/node_modules/@mariozechner/pi-ai/dist/providers/openai-completions.js`
+  - `applyLocalVllmTokenGuard` definition
+  - `VLLM_CONTEXT_BUDGET_EXCEEDED`
+  - `OPENCLAW_VLLM_TOKEN_GUARD` / `OPENCLAW_VLLM_CONTEXT_MAX_TOKENS` / `OPENCLAW_VLLM_TOKEN_GUARD_MODE`
+  - callsite invocation in `buildParams`
+
+### Commands Run
+
+```bash
+node tests/providers/openai_completions_local_vllm_gate.test.js
+./workspace/scripts/rebuild_runtime_openclaw.sh
+systemctl --user daemon-reload
+systemctl --user restart openclaw-gateway.service
+
+# marker proof in rebuilt runtime provider
+rg -n -S "applyLocalVllmTokenGuard|vllm_token_guard_preflight|VLLM_CONTEXT_BUDGET_EXCEEDED|OPENCLAW_VLLM_TOKEN_GUARD|OPENCLAW_VLLM_CONTEXT_MAX_TOKENS|OPENCLAW_VLLM_TOKEN_GUARD_MODE" \
+  .runtime/openclaw/node_modules/@mariozechner/pi-ai/dist/providers/openai-completions.js
+
+# deterministic guard behavior demo (unit-level)
+node - <<'NODE'
+const { applyLocalVllmTokenGuard } = require('./core/system2/inference/openai_completions_local_vllm_gate');
+// reject mode demo + truncate mode demo
+NODE
+```
+
+### Key Output
+
+Tests:
+- `tests 5`
+- `pass 5`
+- `fail 0`
+
+Deterministic guard behavior:
+- `reject_demo.code=VLLM_CONTEXT_BUDGET_EXCEEDED`
+- `reject_demo.prompt_est=2706`
+- `reject_demo.context_max=4096`
+- `reject_demo.requested_max_completion_tokens=3840`
+- `truncate_demo.action=truncate`
+- `truncate_demo.messages_after=1`
+- `truncate_demo.max_completion_tokens=3840`
+
+Service restart:
+- `openclaw-gateway.service` active with runtime entrypoint:
+  - `/usr/bin/node /home/jeebs/src/clawd/.runtime/openclaw/dist/index.js gateway --port 18789`
+
+### Verification Note
+
+- Guard is opt-in and defaults OFF, so without `OPENCLAW_VLLM_TOKEN_GUARD=1` in the gateway service environment, behavior is unchanged.
+- In this run window, service-level repro commands were influenced by existing session/provider state; deterministic reject/truncate evidence is captured via provider-level regression tests and runtime artifact marker proof.

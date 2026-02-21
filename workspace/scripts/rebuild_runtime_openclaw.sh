@@ -44,6 +44,134 @@ function applyLocalVllmToolPayloadGate(baseUrl, params) {
     delete params.tools;
     delete params.tool_choice;
 }
+function vllmTokenGuardEnabled() {
+    const value = String(process.env.OPENCLAW_VLLM_TOKEN_GUARD || "0").trim().toLowerCase();
+    return value === "1" || value === "true" || value === "yes" || value === "on";
+}
+function parsePositiveInt(value, fallback) {
+    const parsed = Number.parseInt(String(value ?? fallback), 10);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+function estimatePromptTokens(messages) {
+    if (!Array.isArray(messages))
+        return 0;
+    let chars = 0;
+    for (const msg of messages) {
+        if (!msg || typeof msg !== "object")
+            continue;
+        const roleLen = typeof msg.role === "string" ? msg.role.length : 0;
+        let contentLen = 0;
+        const content = msg.content;
+        if (typeof content === "string") {
+            contentLen = content.length;
+        } else if (Array.isArray(content)) {
+            for (const part of content) {
+                if (!part || typeof part !== "object")
+                    continue;
+                if (typeof part.text === "string")
+                    contentLen += part.text.length;
+                if (typeof part.input_text === "string")
+                    contentLen += part.input_text.length;
+            }
+        } else if (content && typeof content === "object") {
+            if (typeof content.text === "string")
+                contentLen += content.text.length;
+            if (typeof content.input_text === "string")
+                contentLen += content.input_text.length;
+        }
+        chars += roleLen + contentLen + 16;
+    }
+    return Math.ceil((chars / 4) * 1.2);
+}
+function truncateMessagesToBudget(messages, contextMax, completionTokens) {
+    if (!Array.isArray(messages))
+        return { messages: [], promptEstimate: 0 };
+    const system = [];
+    const other = [];
+    for (const msg of messages) {
+        if (msg && typeof msg === "object" && String(msg.role || "").toLowerCase() === "system")
+            system.push(msg);
+        else
+            other.push(msg);
+    }
+    for (let i = other.length - 1; i >= 0; i -= 1) {
+        const candidate = [...system, ...other.slice(i)];
+        const est = estimatePromptTokens(candidate);
+        if (est + completionTokens <= contextMax)
+            return { messages: candidate, promptEstimate: est };
+    }
+    return { messages: system, promptEstimate: estimatePromptTokens(system) };
+}
+function logVllmTokenGuard(event) {
+    try {
+        console.warn(JSON.stringify(event));
+    } catch {
+        // ignore logging failures
+    }
+}
+function applyLocalVllmTokenGuard(baseUrl, params) {
+    if (!isLocalVllmTarget(baseUrl))
+        return;
+    if (!vllmTokenGuardEnabled())
+        return;
+    const contextMax = parsePositiveInt(process.env.OPENCLAW_VLLM_CONTEXT_MAX_TOKENS, 8192);
+    const modeRaw = String(process.env.OPENCLAW_VLLM_TOKEN_GUARD_MODE || "reject").trim().toLowerCase();
+    const mode = modeRaw === "truncate" ? "truncate" : "reject";
+    const requestedCompletion = parsePositiveInt(params.max_completion_tokens, 512);
+    const maxAllowedCompletion = Math.max(1, contextMax - 256);
+    const clampedCompletion = Math.min(requestedCompletion, maxAllowedCompletion);
+    let modified = clampedCompletion !== params.max_completion_tokens;
+    params.max_completion_tokens = clampedCompletion;
+    const promptEstimate = estimatePromptTokens(params.messages);
+    if (promptEstimate + clampedCompletion <= contextMax) {
+        if (modified) {
+            logVllmTokenGuard({
+                subsystem: "tool_payload_trace",
+                event: "vllm_token_guard_preflight",
+                action: "clamp",
+                callsite_tag: "pi-ai.openai-completions.pre_dispatch",
+                context_max: contextMax,
+                prompt_est: promptEstimate,
+                max_completion_tokens: clampedCompletion
+            });
+        }
+        return;
+    }
+    if (mode === "truncate") {
+        const originalCount = Array.isArray(params.messages) ? params.messages.length : 0;
+        const truncated = truncateMessagesToBudget(params.messages, contextMax, clampedCompletion);
+        params.messages = truncated.messages;
+        modified = modified || (Array.isArray(params.messages) && params.messages.length < originalCount);
+        if (truncated.promptEstimate + clampedCompletion <= contextMax) {
+            logVllmTokenGuard({
+                subsystem: "tool_payload_trace",
+                event: "vllm_token_guard_preflight",
+                action: "truncate",
+                callsite_tag: "pi-ai.openai-completions.pre_dispatch",
+                context_max: contextMax,
+                prompt_est: truncated.promptEstimate,
+                max_completion_tokens: clampedCompletion,
+                message_count_after: Array.isArray(params.messages) ? params.messages.length : 0
+            });
+            return;
+        }
+    }
+    logVllmTokenGuard({
+        subsystem: "tool_payload_trace",
+        event: "vllm_token_guard_preflight",
+        action: "reject",
+        callsite_tag: "pi-ai.openai-completions.pre_dispatch",
+        context_max: contextMax,
+        prompt_est: promptEstimate,
+        requested_max_completion_tokens: clampedCompletion
+    });
+    const err = new Error("Local vLLM request exceeds context budget");
+    err.code = "VLLM_CONTEXT_BUDGET_EXCEEDED";
+    err.prompt_est = promptEstimate;
+    err.context_max = contextMax;
+    err.requested_max_completion_tokens = clampedCompletion;
+    throw err;
+}
 `;
   if (!src.includes(helperAnchor)) {
     throw new Error('openai-completions helper anchor not found');
@@ -51,7 +179,7 @@ function applyLocalVllmToolPayloadGate(baseUrl, params) {
   src = src.replace(helperAnchor, `${helperBlock}\n${helperAnchor}`);
 
   const applyAnchor = '    // OpenRouter provider routing preferences';
-  const applyBlock = '    applyLocalVllmToolPayloadGate(model.baseUrl, params);\n';
+  const applyBlock = '    applyLocalVllmToolPayloadGate(model.baseUrl, params);\n    applyLocalVllmTokenGuard(model.baseUrl, params);\n';
   if (!src.includes(applyAnchor)) {
     throw new Error('openai-completions apply anchor not found');
   }
