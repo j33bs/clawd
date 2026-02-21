@@ -1789,3 +1789,43 @@ error connecting to api.github.com
 check your internet connection or https://githubstatus.com
 ```
 Unable to verify Checks tab state from this environment due GitHub API connectivity.
+
+## Merge Conflict Resolution Attempt (2026-02-21)
+
+Merge command used:
+```bash
+git fetch origin
+git merge origin/main
+```
+Observed:
+- `git merge origin/main` returned: `Already up to date.`
+- No conflict was raised; `workspace/scripts/policy_router.py` had no conflict markers.
+
+Conflict file confirmation:
+```bash
+rg -n "^<<<<<<<|^=======|^>>>>>>>" workspace/scripts/policy_router.py
+```
+Observed: no matches.
+
+Sanity check:
+```bash
+python3 -m py_compile workspace/scripts/policy_router.py
+```
+PASS.
+
+Required suite run:
+```bash
+bash -n scripts/vllm_launch_optimal.sh
+python3 -m unittest tests_unittest.test_policy_router_tacti_main_flow tests_unittest.test_policy_router_glue_integrations tests_unittest.test_itc_ingestion_boundary_forwarding tests_unittest.test_source_ui_sse
+node tests/providers/local_vllm_provider.test.js
+node tests/router_gpu_guard.test.js
+```
+Observed:
+- Shell syntax check: PASS
+- Python unittest bundle: PASS (`Ran 9 tests ... OK`)
+- Node provider tests: PASS
+- Node router gpu guard test: PASS
+
+Result:
+- No conflict edits were required in `workspace/scripts/policy_router.py`.
+- Branch remained functionally valid with glue wiring behavior intact.
