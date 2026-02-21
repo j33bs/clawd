@@ -7204,3 +7204,893 @@ OK 38 test group(s)
 === Files changed (name-status) ===
 M	tests/system2_http_edge.test.js
 M	workspace/scripts/verify_llm_policy.sh
+
+## Phase 1 Reconnaissance (Sat Feb 21 11:53:36 UTC 2026)
+### Environment snapshot
+Sat Feb 21 11:53:36 UTC 2026
+ M workspace/audit/twenty_evolutions_impl_20260221T104827Z.md
+a8effbe
+
+### TWENTY_EVOLUTIONS.md (spec excerpt)
+
+### Spec file availability
+TWENTY_EVOLUTIONS.md not found in this worktree (searched repo and parent dirs); using dependency order from prompt and existing docs for implementation slices.
+
+### Message/event ingestion reconnaissance
+core/system2/security/integrity_guard.js:52:function integrityError(code, message, detail) {
+core/system2/security/integrity_guard.js:53:  const err = new Error(message);
+core/system2/security/integrity_guard.js:81:  digest.update(fs.readFileSync(absPath));
+core/system2/security/integrity_guard.js:155:      { baselinePath: baselinePath.relative, reason: error.message }
+workspace/TOOLS.md:36:Skills are shared. Your setup is yours. Keeping them apart means you can update skills without losing your notes, and share skills without leaking your infrastructure.
+workspace/CODEX_TASK_LIST.md:42:- Scale-free correlation implementation
+workspace/AGENTS.md:34:- You can **read, edit, and update** MEMORY.md freely in main sessions
+workspace/AGENTS.md:37:- Over time, review your daily files and update MEMORY.md with what's worth keeping
+workspace/AGENTS.md:43:- When someone says "remember this" → update `memory/YYYY-MM-DD.md` or relevant file
+workspace/AGENTS.md:44:- When you learn a lesson → update AGENTS.md, TOOLS.md, or the relevant skill
+workspace/AGENTS.md:75:In group chats where you receive every message, be **smart about when to contribute**:
+workspace/AGENTS.md:91:- Adding a message would interrupt the vibe
+workspace/AGENTS.md:93:**The human rule:** Humans in group chats don't respond to every single message. Neither should you. Quality > quantity. If you wouldn't send it in a real group chat with friends, don't send it.
+workspace/AGENTS.md:95:**Avoid the triple-tap:** Don't respond multiple times to the same message with different reactions. One thoughtful response beats three fragments.
+workspace/AGENTS.md:114:**Don't overdo it:** One reaction per message max. Pick the one that fits best.
+workspace/AGENTS.md:130:When you receive a heartbeat poll (message matches the configured heartbeat prompt), don't just reply `HEARTBEAT_OK` every time. Use heartbeats productively!
+workspace/AGENTS.md:195:- **Review and update MEMORY.md** (see below)
+workspace/briefs/itc_pipeline_integration.md:4:SIM_A currently runs pure regime logic and should remain unchanged. SIM_B currently derives ITC sentiment from tagged message JSONL without a stable source contract. This change adds a versioned ITC signal contract and ingestion boundary so SIM_B can consume deterministic, auditable sentiment/regime inputs now, and D_LIVE/E_SIM can reuse the same contract later.
+workspace/briefs/itc_pipeline_integration.md:22:- `source` (string, required): `telegram` | `file` | `manual`
+core/system2/security/ask_first.js:14:  constructor(message) {
+core/system2/security/ask_first.js:15:    super(message || 'operator approval required');
+core/system2/security/ask_first.js:22:  constructor(message) {
+core/system2/security/ask_first.js:23:    super(message || 'tool action denied by governance policy');
+workspace/policy/llm_policy.json:352:    "capability_router": {
+core/system2/inference/provider_adapter.js:102:      return { ok: false, reason: err.message };
+core/system2/inference/provider_adapter.js:141:        error: err.message,
+core/system2/inference/provider_adapter.js:206:      const msg = String((err && err.message) || '');
+core/system2/inference/provider_adapter.js:273:    const message = choice.message || {};
+core/system2/inference/provider_adapter.js:277:      text: message.content || '',
+core/system2/inference/provider_adapter.js:419:    if (this.providerId === 'openrouter') {
+core/system2/security/audit_sink.js:20:  return createHash('sha256').update(String(s), 'utf8').digest('hex');
+core/system2/inference/local_vllm_provider.js:66:    const message = choice.message || {};
+core/system2/inference/local_vllm_provider.js:70:      text: message.content || '',
+core/system2/inference/local_vllm_provider.js:86:      return { ok: false, reason: error.message };
+core/system2/inference/vllm_provider.js:160:        status.error = `inference probe failed: ${err.message}`;
+core/system2/inference/vllm_provider.js:164:    status.error = err.message;
+core/system2/context_sanitizer.js:3:const TOOL_JSON_PATTERN = /"tool"\s*:\s*"(?:exec|browser|message|cron|process|shell|write_file|read_file)"/gi;
+core/system2/inference/secrets_bridge.js:36:  openrouter: Object.freeze({
+core/system2/inference/secrets_bridge.js:39:    catalogProviderId: 'openrouter'
+core/system2/inference/secrets_bridge.js:81:  const hashPrefix = crypto.createHash('sha256').update(value).digest('hex').slice(0, 12);
+core/system2/inference/secrets_bridge.js:201:        backendError = error.message;
+core/system2/inference/secrets_bridge.js:484:      if (/could not be found/i.test(error.message)) {
+core/system2/inference/secrets_bridge.js:504:      if (/could not be found/i.test(error.message)) {
+core/system2/inference/secrets_bridge.js:614:      if (/No such secret collection|not found/i.test(error.message)) {
+core/system2/inference/secrets_bridge.js:632:      if (/No such secret collection|not found/i.test(error.message)) {
+core/system2/inference/secrets_bridge.js:666:      decipher.update(ciphertext),
+core/system2/inference/secrets_bridge.js:682:    const ciphertext = Buffer.concat([cipher.update(clear), cipher.final()]);
+workspace/time_management/self_care.md:28:- "Send a gratitude message"
+workspace/time_management/self_care.md:71:- Mood correlation
+core/system2/inference/provider_registry.js:19:const { routeRequest, explainRouting } = require('./router');
+core/system2/inference/provider_registry.js:33:  const msg = String((err && err.message) || '');
+core/system2/inference/provider_registry.js:172:  const msg = String((err && err.message) || '');
+core/system2/inference/provider_registry.js:214:function _truncateMessageToTotalBudget(message, totalBudget) {
+core/system2/inference/provider_registry.js:215:  const role = message && typeof message.role === 'string' ? message.role : '';
+core/system2/inference/provider_registry.js:222:    if (Array.isArray(message.content)) return { ...message, content: [] };
+core/system2/inference/provider_registry.js:223:    if (typeof message.content === 'string') return { ...message, content: '' };
+core/system2/inference/provider_registry.js:224:    return { ...message };
+core/system2/inference/provider_registry.js:227:  return { ...message, content: _truncateMessageContent(message.content, maxContent) };
+core/system2/inference/provider_registry.js:241:  // Decide which indices to keep; replacements holds truncated message objects.
+core/system2/inference/provider_registry.js:268:  // Tail budget: keep the newest messages, ensuring the latest user message survives if possible.
+core/system2/inference/provider_registry.js:282:  // Reserve a small note; we only apply it if we have a system message kept.
+core/system2/inference/provider_registry.js:307:  // Apply note by appending to the last kept system message if there is room.
+core/system2/inference/provider_registry.js:374:          error: error.message
+core/system2/inference/provider_registry.js:564:            error: err.message
+core/system2/inference/provider_registry.js:630:        const h = { ok: false, reason: err.message, checkedAt: Date.now() };
+workspace/itc_pipeline/allowlist.py:11:- Or credentials/telegram-allowFrom.json (fallback)
+workspace/itc_pipeline/allowlist.py:16:Target chats (by numeric ID - must be discovered via telegram_list_dialogs.py):
+workspace/itc_pipeline/allowlist.py:34:# Default allowlist - MUST be populated after running telegram_list_dialogs.py
+workspace/itc_pipeline/allowlist.py:39:# Default allowlist file (credentials/telegram-allowFrom.json)
+workspace/itc_pipeline/allowlist.py:40:ALLOWLIST_FILE_DEFAULT = Path(__file__).resolve().parents[2] / "credentials" / "telegram-allowFrom.json"
+workspace/itc_pipeline/allowlist.py:55:    def __init__(self, message: str, reason_code: str = "telegram_not_configured"):
+workspace/itc_pipeline/allowlist.py:56:        super().__init__(f"{reason_code}: {message}")
+workspace/itc_pipeline/allowlist.py:65:        super().__init__(f"telegram_chat_not_allowed: chat_id={chat_id} title='{title}'")
+workspace/itc_pipeline/allowlist.py:66:        self.reason_code = "telegram_chat_not_allowed"
+workspace/itc_pipeline/allowlist.py:106:            "Legacy allowFrom detected in credentials/telegram-allowFrom.json. "
+workspace/itc_pipeline/allowlist.py:118:    2) credentials/telegram-allowFrom.json
+workspace/itc_pipeline/allowlist.py:141:    falling back to credentials/telegram-allowFrom.json.
+workspace/itc_pipeline/allowlist.py:174:            "Set ALLOWED_CHAT_IDS or add allow_chat_ids to credentials/telegram-allowFrom.json."
+workspace/itc_pipeline/allowlist.py:217:                "Set ALLOWED_CHAT_IDS or edit credentials/telegram-allowFrom.json."
+workspace/itc_pipeline/allowlist.py:275:            "Run telegram_list_dialogs.py to discover chat IDs."
+workspace/itc_pipeline/allowlist.py:286:        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+core/system2/federation/signing.js:6:  constructor(message) {
+core/system2/federation/signing.js:7:    super(message || 'signing disabled');
+core/system2/federation/signing.js:14:  constructor(message) {
+core/system2/federation/signing.js:15:    super(message || 'insecure signing not allowed');
+core/system2/inference/index.js:17:const { routeRequest, explainRouting } = require('./router');
+workspace/itc_pipeline/VERIFICATION.md:7:3. **Telegram API credentials** from https://my.telegram.org/apps
+workspace/itc_pipeline/VERIFICATION.md:22:Create or update `secrets.env`:
+workspace/itc_pipeline/VERIFICATION.md:25:# Required - get from https://my.telegram.org/apps
+workspace/itc_pipeline/VERIFICATION.md:45:python -m itc_pipeline.telegram_reader_telethon --auth
+workspace/itc_pipeline/VERIFICATION.md:63:python scripts/itc/telegram_list_dialogs.py
+workspace/itc_pipeline/VERIFICATION.md:83:Output written to: C:/Users/heath/.openclaw/tmp/telegram_dialogs.tsv
+workspace/itc_pipeline/VERIFICATION.md:126:JSON allowlist example (`credentials/telegram-allowFrom.json`):
+workspace/itc_pipeline/VERIFICATION.md:164:python -m itc_pipeline.telegram_reader_telethon --run --dry-run -v
+workspace/itc_pipeline/VERIFICATION.md:174:2026-02-05 12:00:00 [INFO] itc_pipeline.telegram_reader_telethon: Connected as: YourName (@username) [ID: 123456789]
+workspace/itc_pipeline/VERIFICATION.md:185:Now send a test message to one of the allowed chats. You should see:
+workspace/itc_pipeline/VERIFICATION.md:189:2026-02-05 12:01:00 [INFO] itc_pipeline.ingestion_boundary: INGEST: source=telegram chat_id=-1001234567890 msg_id=12345 chat='ITC Lifetime Lounge' text_len=42
+workspace/itc_pipeline/VERIFICATION.md:190:2026-02-05 12:01:00 [INFO] itc_pipeline.ingestion_boundary: DRY-RUN: Would process message telegram:-1001234567890:12345
+workspace/itc_pipeline/VERIFICATION.md:195:Send a message to a chat NOT in the allowlist. You should see (with `-v` flag):
+workspace/itc_pipeline/VERIFICATION.md:207:python -m itc_pipeline.telegram_reader_telethon --run -v
+workspace/itc_pipeline/VERIFICATION.md:212:cat C:/Users/heath/.openclaw/telegram/itc_incoming_queue.jsonl
+workspace/itc_pipeline/VERIFICATION.md:217:{"source": "telegram", "chat_id": -1001234567890, "message_id": 12345, "date": "2026-02-05T12:00:00+00:00", "sender_id": 987654321, "sender_name": "User Name (@username)", "chat_title": "ITC Lifetime Lounge", "text": "Hello world", "raw_metadata": {...}, "classification": null, "authority_weight": null}
+workspace/itc_pipeline/VERIFICATION.md:234:rm -f C:/Users/heath/.openclaw/telegram/itc_*.json
+workspace/itc_pipeline/VERIFICATION.md:235:rm -f C:/Users/heath/.openclaw/telegram/itc_*.jsonl
+workspace/itc_pipeline/VERIFICATION.md:236:rm -rf C:/Users/heath/.openclaw/tmp/telegram_dialogs.tsv
+workspace/itc_pipeline/VERIFICATION.md:255:Run `telegram_list_dialogs.py` first to discover chat IDs, then set `ALLOWED_CHAT_IDS`.
+workspace/itc_pipeline/VERIFICATION.md:275:- [ ] Dialog listing works (`telegram_list_dialogs.py`)
+core/system2/inference/catalog.js:274:    provider_id: 'openrouter',
+core/system2/inference/catalog.js:279:      default: 'https://openrouter.ai/api/v1',
+core/system2/inference/catalog.js:331:        url: 'https://openrouter.ai/docs/api/reference/limits',
+workspace/itc_pipeline/__init__.py:7:- telegram_reader_telethon.py: Main Telethon-based message reader
+workspace/itc_pipeline/__init__.py:12:- TG_API_ID: Telegram API ID from https://my.telegram.org
+workspace/MODEL_ROUTING.md:9:All LLM calls must go through the policy router:
+workspace/MODEL_ROUTING.md:11:- Router: `workspace/scripts/policy_router.py`
+workspace/MODEL_ROUTING.md:13:- Router event log: `itc/llm_router_events.jsonl`
+workspace/MODEL_ROUTING.md:15:Routing, escalation, budgets, and circuit breakers are enforced centrally by the router. Local overrides are not allowed.
+workspace/MODEL_ROUTING.md:103:OpenClaw enforces LLM budgets for all intents via the policy router to reduce token burn and avoid rate-limit failures.
+workspace/MODEL_ROUTING.md:109:`workspace/scripts/policy_router.py` (all LLM calls, including `scripts/itc_classify.py`)
+workspace/MODEL_ROUTING.md:137:1. **Tag in request**: `#confidential` anywhere in the message
+workspace/MODEL_ROUTING.md:159:│ Telegram message arrives → main (Dessy) │
+workspace/scripts/intent_failure_scan.py:53:        "id": "telegram_not_configured",
+workspace/scripts/intent_failure_scan.py:54:        "match": re.compile(r"telegram_not_configured|No allowed Telegram chat IDs configured", re.I),
+workspace/scripts/intent_failure_scan.py:58:            "Or update credentials/telegram-allowFrom.json with allow_chat_ids",
+workspace/scripts/intent_failure_scan.py:59:            "Run workspace/scripts/itc/telegram_list_dialogs.py to discover IDs",
+workspace/scripts/intent_failure_scan.py:63:        "id": "telegram_chat_not_allowed",
+workspace/scripts/intent_failure_scan.py:64:        "match": re.compile(r"telegram_chat_not_allowed|not in allowlist", re.I),
+workspace/scripts/intent_failure_scan.py:68:            "Use numeric chat IDs from `workspace/scripts/itc/telegram_list_dialogs.py`",
+workspace/scripts/intent_failure_scan.py:72:        "id": "telegram_chat_not_found",
+workspace/scripts/intent_failure_scan.py:73:        "match": re.compile(r"telegram_chat_not_found|chat not found", re.I),
+workspace/scripts/intent_failure_scan.py:77:            "Use numeric chat IDs from `workspace/scripts/itc/telegram_list_dialogs.py`",
+workspace/scripts/intent_failure_scan.py:78:            "Verify allowlist in credentials/telegram-allowFrom.json",
+workspace/scripts/intent_failure_scan.py:97:ROUTER_EVENT_LOG = Path("itc/llm_router_events.jsonl")
+workspace/scripts/intent_failure_scan.py:196:                    if "errorMessage" not in line and "chat not found" not in line and "telegram_" not in line:
+workspace/scripts/intent_failure_scan.py:227:def scan_router_events(path: Path):
+workspace/scripts/intent_failure_scan.py:239:                if obj.get("event") not in ("router_fail", "router_escalate"):
+workspace/scripts/intent_failure_scan.py:269:    router_stats = scan_router_events(ROUTER_EVENT_LOG)
+workspace/scripts/intent_failure_scan.py:270:    lines.append(f"- router_failures: {router_stats.get('total', 0)}")
+workspace/scripts/intent_failure_scan.py:271:    if router_stats.get("by_reason"):
+workspace/scripts/intent_failure_scan.py:272:        lines.append("- router_failure_reasons:")
+workspace/scripts/intent_failure_scan.py:273:        for k, v in sorted(router_stats["by_reason"].items(), key=lambda x: -x[1]):
+workspace/scripts/intent_failure_scan.py:276:        lines.append("- router_failure_reasons: none")
+workspace/scripts/intent_failure_scan.py:280:    if router_stats.get("total", 0) > 0:
+workspace/scripts/intent_failure_scan.py:281:        for k, v in sorted(router_stats.get("by_reason", {}).items(), key=lambda x: -x[1]):
+workspace/scripts/intent_failure_scan.py:288:        lines.append("No router failures recorded.")
+workspace/scripts/verify_tacti_system.sh:11:  tests_unittest/test_hivemind_physarum_router.py \
+workspace/scripts/verify_tacti_system.sh:15:  tests_unittest/test_policy_router_active_inference_hook.py
+workspace/scripts/run_narrative_distill.py:30:    parser.add_argument("--fallback-source", default="itc/llm_router_events.jsonl", help="fallback episodic source")
+workspace/SOUL.md:36:_This file is yours to evolve. As you learn who you are, update it._
+workspace/itc_pipeline/telegram_reader_telethon.py:10:- TG_API_ID: Telegram API ID (from https://my.telegram.org)
+workspace/itc_pipeline/telegram_reader_telethon.py:18:    python telegram_reader_telethon.py --auth
+workspace/itc_pipeline/telegram_reader_telethon.py:21:    python telegram_reader_telethon.py --run
+workspace/itc_pipeline/telegram_reader_telethon.py:24:    python telegram_reader_telethon.py --run --dry-run
+workspace/itc_pipeline/telegram_reader_telethon.py:44:    ingest_message,
+workspace/itc_pipeline/telegram_reader_telethon.py:115:def normalize_message(event) -> Optional[IngestedMessage]:
+workspace/itc_pipeline/telegram_reader_telethon.py:117:    Convert a Telethon message event to normalized IngestedMessage.
+workspace/itc_pipeline/telegram_reader_telethon.py:123:        IngestedMessage or None if message should be skipped
+workspace/itc_pipeline/telegram_reader_telethon.py:125:    message = event.message
+workspace/itc_pipeline/telegram_reader_telethon.py:128:    if not message.text:
+workspace/itc_pipeline/telegram_reader_telethon.py:129:        logger.debug(f"Skipping non-text message: {message.id}")
+workspace/itc_pipeline/telegram_reader_telethon.py:145:    sender = message.sender
+workspace/itc_pipeline/telegram_reader_telethon.py:156:    # Build normalized message
+workspace/itc_pipeline/telegram_reader_telethon.py:158:        source="telegram",
+workspace/itc_pipeline/telegram_reader_telethon.py:160:        message_id=message.id,
+workspace/itc_pipeline/telegram_reader_telethon.py:161:        date=message.date.astimezone(timezone.utc).isoformat(),
+workspace/itc_pipeline/telegram_reader_telethon.py:165:        text=message.text,
+workspace/itc_pipeline/telegram_reader_telethon.py:167:            "reply_to_msg_id": message.reply_to_msg_id,
+workspace/itc_pipeline/telegram_reader_telethon.py:168:            "forwards": message.forwards,
+workspace/itc_pipeline/telegram_reader_telethon.py:169:            "views": message.views,
+workspace/itc_pipeline/telegram_reader_telethon.py:170:            "edit_date": message.edit_date.isoformat() if message.edit_date else None,
+workspace/itc_pipeline/telegram_reader_telethon.py:188:    # Get allowlist for handler
+workspace/itc_pipeline/telegram_reader_telethon.py:199:    async def handler(event):
+workspace/itc_pipeline/telegram_reader_telethon.py:205:            # Normalize message
+workspace/itc_pipeline/telegram_reader_telethon.py:206:            msg = normalize_message(event)
+workspace/itc_pipeline/telegram_reader_telethon.py:213:            ingest_message(msg, dry_run=dry_run)
+workspace/itc_pipeline/telegram_reader_telethon.py:216:            logger.error(f"Error processing message: {e}", exc_info=True)
+workspace/itc_pipeline/telegram_reader_telethon.py:246:def signal_handler(signum, frame):
+workspace/itc_pipeline/telegram_reader_telethon.py:270:  python telegram_reader_telethon.py --auth
+workspace/itc_pipeline/telegram_reader_telethon.py:273:  python telegram_reader_telethon.py --run
+workspace/itc_pipeline/telegram_reader_telethon.py:276:  python telegram_reader_telethon.py --run --dry-run
+workspace/itc_pipeline/telegram_reader_telethon.py:307:        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+workspace/itc_pipeline/telegram_reader_telethon.py:314:    # Register signal handlers
+workspace/itc_pipeline/telegram_reader_telethon.py:315:    signal.signal(signal.SIGINT, signal_handler)
+workspace/itc_pipeline/telegram_reader_telethon.py:316:    signal.signal(signal.SIGTERM, signal_handler)
+workspace/BOUNDARIES.md:65:- `telegram_health_log.json` - Health check logs
+workspace/BOUNDARIES.md:66:- `telegram_health_reports.json` - Health reports
+workspace/scripts/test_intent_failure_taxonomy.py:9:from intent_failure_scan import find_pattern, scan_router_events
+workspace/scripts/test_intent_failure_taxonomy.py:14:        "telegram_not_configured: No allowed Telegram chat IDs configured": "telegram_not_configured",
+workspace/scripts/test_intent_failure_taxonomy.py:15:        "telegram_chat_not_allowed target chat_id is not in allowlist": "telegram_chat_not_allowed",
+workspace/scripts/test_intent_failure_taxonomy.py:16:        "telegram_chat_not_found": "telegram_chat_not_found",
+workspace/scripts/test_intent_failure_taxonomy.py:17:        "chat not found": "telegram_chat_not_found",
+workspace/scripts/test_intent_failure_taxonomy.py:26:def test_router_reason_aggregation():
+workspace/scripts/test_intent_failure_taxonomy.py:28:        log_path = Path(td) / "router.jsonl"
+workspace/scripts/test_intent_failure_taxonomy.py:30:            {"event": "router_fail", "detail": {"reason_code": "request_http_429"}},
+workspace/scripts/test_intent_failure_taxonomy.py:31:            {"event": "router_escalate", "detail": {"reason_code": "request_http_429"}},
+workspace/scripts/test_intent_failure_taxonomy.py:32:            {"event": "router_escalate", "detail": {"reason_code": "request_timeout"}},
+workspace/scripts/test_intent_failure_taxonomy.py:33:            {"event": "router_skip", "detail": {"reason_code": "auth_login_required"}},
+workspace/scripts/test_intent_failure_taxonomy.py:38:        out = scan_router_events(log_path)
+workspace/scripts/test_intent_failure_taxonomy.py:46:    test_router_reason_aggregation()
+workspace/itc_pipeline/ingestion_boundary.py:18:    "source": "telegram",
+workspace/itc_pipeline/ingestion_boundary.py:45:    str(Path(__file__).parent.parent.parent / "telegram" / "itc_processed_messages.json")
+workspace/itc_pipeline/ingestion_boundary.py:54:    """Normalized message structure for the ITC pipeline."""
+workspace/itc_pipeline/ingestion_boundary.py:80:    Tracks processed message IDs to prevent duplicates.
+workspace/itc_pipeline/ingestion_boundary.py:90:        """Load processed message IDs from state file."""
+workspace/itc_pipeline/ingestion_boundary.py:104:        """Persist processed message IDs to state file."""
+workspace/itc_pipeline/ingestion_boundary.py:125:        """Check if message has already been processed."""
+workspace/itc_pipeline/ingestion_boundary.py:129:        """Mark a message as processed."""
+workspace/itc_pipeline/ingestion_boundary.py:152:def ingest_message(
+workspace/itc_pipeline/ingestion_boundary.py:153:    message: IngestedMessage,
+workspace/itc_pipeline/ingestion_boundary.py:167:        message: Normalized message to ingest
+workspace/itc_pipeline/ingestion_boundary.py:172:        True if message was accepted for processing, False if dropped
+workspace/itc_pipeline/ingestion_boundary.py:178:    if not is_chat_allowed(message.chat_id, message.chat_title, raise_on_fail=True):
+workspace/itc_pipeline/ingestion_boundary.py:182:    dedupe_key = message.dedupe_key()
+workspace/itc_pipeline/ingestion_boundary.py:185:            f"DEDUPE: Dropping duplicate message {dedupe_key}"
+workspace/itc_pipeline/ingestion_boundary.py:191:        f"INGEST: source={message.source} chat_id={message.chat_id} "
+workspace/itc_pipeline/ingestion_boundary.py:192:        f"msg_id={message.message_id} chat='{message.chat_title}' "
+workspace/itc_pipeline/ingestion_boundary.py:193:        f"text_len={len(message.text)}"
+workspace/itc_pipeline/ingestion_boundary.py:197:        logger.info(f"DRY-RUN: Would process message {dedupe_key}")
+workspace/itc_pipeline/ingestion_boundary.py:205:    _forward_to_pipeline(message)
+workspace/itc_pipeline/ingestion_boundary.py:210:def _forward_to_pipeline(message: IngestedMessage):
+workspace/itc_pipeline/ingestion_boundary.py:212:    Forward accepted message to downstream ITC pipeline processing.
+workspace/itc_pipeline/ingestion_boundary.py:214:    Currently logs the message; will be extended to:
+workspace/itc_pipeline/ingestion_boundary.py:224:            f.write(json.dumps(message.to_dict()) + "\n")
+workspace/itc_pipeline/ingestion_boundary.py:225:        logger.debug(f"Queued message to {output_path}")
+workspace/itc_pipeline/ingestion_boundary.py:227:        logger.error(f"Failed to queue message: {e}")
+workspace/itc_pipeline/ingestion_boundary.py:244:        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+workspace/scripts/message_load_balancer.py:34:    """A message to be processed."""
+workspace/scripts/message_load_balancer.py:75:    def route_message(self, message: Message) -> dict[str, Any]:
+workspace/scripts/message_load_balancer.py:76:        """Route a message to the appropriate agent."""
+workspace/scripts/message_load_balancer.py:80:            "message_id": message.id,
+workspace/scripts/message_load_balancer.py:92:            self._log_fallback(message, decision)
+workspace/scripts/message_load_balancer.py:109:    def _log_fallback(self, message: Message, decision: dict):
+workspace/scripts/message_load_balancer.py:112:            "message_id": message.id,
+workspace/scripts/message_load_balancer.py:116:            "sender": message.sender,
+workspace/scripts/message_load_balancer.py:156:    """Check if system is overloaded. Use this in your message handler."""
+workspace/scripts/message_load_balancer.py:160:def route_message(message: dict) -> dict:
+workspace/scripts/message_load_balancer.py:161:    """Route a message. Returns routing decision with agent to use."""
+workspace/scripts/message_load_balancer.py:163:        id=message.get("id", str(time.time())),
+workspace/scripts/message_load_balancer.py:164:        content=message.get("content", ""),
+workspace/scripts/message_load_balancer.py:165:        sender=message.get("sender", "unknown"),
+workspace/scripts/message_load_balancer.py:166:        timestamp=message.get("timestamp", datetime.now(timezone.utc).isoformat()),
+workspace/scripts/message_load_balancer.py:167:        priority=message.get("priority", "normal"),
+workspace/scripts/message_load_balancer.py:169:    return get_load_balancer().route_message(msg)
+workspace/scripts/message_load_balancer.py:177:    you'd call this when route_message() returns route: "chatgpt".
+workspace/scripts/message_load_balancer.py:207:                    "content": f"Test message {i}",
+workspace/scripts/message_load_balancer.py:210:                decision = route_message(msg)
+workspace/CLAUDE_CODE.md:67:Before auditing, read `AUDIT_README.md` and `AUDIT_SCOPE.md` (repo root). Audit outputs go to `workspace/handoffs/audit_YYYY-MM-DD.md`. After completing, update `AUDIT_SNAPSHOT.md`.
+workspace/scripts/narrative_distill.py:78:    for key in ("text", "content", "message", "summary"):
+workspace/scripts/itc/telegram_list_dialogs.py:11:- File: tmp/telegram_dialogs.tsv (tab-separated)
+workspace/scripts/itc/telegram_list_dialogs.py:14:    python telegram_list_dialogs.py
+workspace/scripts/itc/telegram_list_dialogs.py:43:OUTPUT_FILE = OUTPUT_DIR / "telegram_dialogs.tsv"
+workspace/scripts/failure_archaeology.py:26:    log_failure("missing_api_key", "TeamChat planning")
+workspace/scripts/verify_allowlist.py:31:            "Set ALLOWED_CHAT_IDS or add allow_chat_ids to credentials/telegram-allowFrom.json."
+workspace/scripts/temporal_beacon_update.py:2:"""Explicit temporal beacon touch/update command (no daemon)."""
+workspace/tacti_cr/semantic_immune.py:210:    # update healthy distribution
+workspace/tacti_cr/semantic_immune.py:216:    stats.update({"count": new_count, "centroid": centroid, "distances": distances[-400:]})
+workspace/scripts/verify.sh:145:echo "[Step 11] Checking policy router..."
+workspace/scripts/verify.sh:146:if [ -x "workspace/scripts/verify_policy_router.sh" ]; then
+workspace/scripts/verify.sh:147:    if ./workspace/scripts/verify_policy_router.sh; then
+workspace/scripts/verify.sh:150:        check_fail "Policy router verification failed"
+workspace/scripts/verify.sh:153:    check_fail "verify_policy_router.sh missing or not executable"
+
+### Session lifecycle reconnaissance
+core/system2/anticipate.js:27:  if (/\b(daily|every day)\b.*\b(report|summary|digest)\b/.test(text)) {
+core/system2/security/audit_sink.js:4: * Append-only JSONL audit sink with simple size-based rotation.
+core/system2/inference/quota_ledger.js:10: * Storage: append-only JSONL (one file per day) for auditability.
+core/system2/memory/memory_writer.js:18:  const redactionSummary = redactions.length > 0
+core/system2/memory/memory_writer.js:24:    `  redactions: ${redactionSummary}`,
+workspace/briefs/itc_pipeline_integration.md:46:- Events: `workspace/artifacts/itc/events/itc_events.jsonl`
+workspace/AUDIT_AIF_PHASE1_20260219.md:3:## 1) Summary (2h timebox)
+workspace/AUDIT_AIF_PHASE1_20260219.md:4:- Shipped P1: append-only external memory event store (JSONL backend) at `workspace/tacti_cr/external_memory.py`.
+workspace/AUDIT_AIF_PHASE1_20260219.md:35:- `workspace/artifacts/external_memory/events.jsonl`
+workspace/AUDIT_AIF_PHASE1_20260219.md:68:- Add fsync/atomic append strategy and optional file lock for concurrent writers to `events.jsonl`.
+workspace/AUDIT_AIF_PHASE1_20260219.md:77:- Add retention/rotation policy for `events.jsonl` and companion index.
+workspace/teamchat/README.md:3:TeamChat runs a two-agent loop with shared local memory and append-only evidence:
+workspace/teamchat/README.md:13:- `workspace/teamchat/sessions/<id>.jsonl`
+workspace/teamchat/README.md:14:- `workspace/teamchat/summaries/<id>.md`
+workspace/fixtures/novel10/teamchat/session_stub.json:2:  "session_id": "fixture-session",
+workspace/teamchat/summaries/source-ui-v2.md:1:# TeamChat Summary source-ui-v2
+workspace/itc/ingest/interfaces.py:127:    with open(events_dir / "itc_events.jsonl", "a", encoding="utf-8") as f:
+workspace/scripts/verify_tacti_cr_novel10_fixture.py:16:from tacti_cr.events import summarize_by_type, read_events
+workspace/scripts/verify_tacti_cr_novel10_fixture.py:21:    counts = summarize_by_type(path)
+workspace/scripts/verify_tacti_cr_novel10_fixture.py:31:def _print_summary(counts: dict[str, int]) -> None:
+workspace/scripts/verify_tacti_cr_novel10_fixture.py:39:    parser.add_argument("--events-path", default="workspace/state/tacti_cr/events.jsonl")
+workspace/scripts/verify_tacti_cr_novel10_fixture.py:59:    _print_summary(counts)
+workspace/teamchat/summaries/efficiency-impl.md:1:# TeamChat Summary efficiency-impl
+workspace/automation/cron_jobs.json:39:      "command": "Run HiveMind ingest pipelines:\n1. PYTHONPATH=workspace/hivemind python3 -m hivemind.ingest.memory_md\n2. PYTHONPATH=workspace/hivemind python3 -m hivemind.ingest.handoffs\n3. PYTHONPATH=workspace/hivemind python3 -m hivemind.ingest.git_commits\n4. Summarize stored/skipped/error counts.\n\nWrite a short ingest note to reports/automation/hivemind_ingest.log."
+workspace/teamchat/summaries/load-balancer-impl.md:1:# TeamChat Summary load-balancer-impl
+workspace/handoffs/audit_2026-02-08.md:6:## Architecture Summary
+workspace/artifacts/system2_audit_20260217T203648Z/status.json:38:  "error_summary_24h": {
+workspace/knowledge_base/data/graph.jsonl:28:{"id": "tacti_workspace_hivemind_TACTI_CR.md", "name": "TACTI(C)-R System Synthesis", "entity_type": "research:tacti", "content": "# TACTI(C)-R System Synthesis (HiveMind Integration)\n\n## Integration Map\n- `workspace/hivemind/hivemind/peer_graph.py`: Murmuration local peer topology and interaction updates.\n- `workspace/hivemind/hivemind/reservoir.py`: Echo-state reservoir + deterministic readout hints.\n- `workspace/hivemind/hivemind/physarum_router.py`: Conductance/path exploration and pruning.\n- `workspace/hivemind/hivemind/trails.py`: External trail memory with decay, reinforcement, and similarity query.\n- `workspace/hivemind/hivemind/dynamics_pipeline.py`: Composition layer for Tasks 1-4.\n- `workspace/hivemind/hivemind/integrations/main_flow_hook.py`: Main-flow adapter (flag checks, agent-id resolution, routing enhancement, outcome updates).\n- `scripts/memory_tool.py`: Optional Task 1-4 runtime hook for memory query consult-order/path bias.\n- `workspace/hivemind/hivemind/active_inference.py`: Preference priors + prediction-error updates.\n- `workspace/scripts/policy_router.py`: Real response routing hook site (`PolicyRouter.execute_with_escalation`) for Tasks 1-4 + Task 5.\n\n## Feature Flags\nAll modules are optional and off by default.\n\n- `ENABLE_MURMURATION=1`\n- `ENABLE_RESERVOIR=1`\n- `ENABLE_PHYSARUM_ROUTER=1`\n- `ENABLE_TRAIL_MEMORY=1`\n- `ENABLE_ACTIVE_INFERENCE=1`\n\n## Module APIs\n### Task 1: Murmuration\n- `PeerGraph.init(agent_ids, k, seed)`\n- `PeerGraph.peers(agent_id) -> list[str]`\n- `PeerGraph.observe_interaction(src, dst, signal)`\n- `PeerGraph.tick(dt)`\n- `PeerGraph.snapshot() / PeerGraph.load(payload)`\n\n### Task 2: Reservoir\n- `Reservoir.init(dim, leak, spectral_scale, seed)`\n- `Reservoir.step(input_features, agent_features, adjacency_features) -> state`\n- `Reservoir.readout(state) -> dict`\n- `Reservoir.reset(session_id=None)`\n- `Reservoir.snapshot() / Reservoir.load(payload)`\n\n### Task 3: Physarum\n- `PhysarumRouter.propose_paths(src_agent, target_intent, peer_graph, n_paths) -> list[list[str]]`\n- `PhysarumRouter.update(path, reward_signal)`\n- `PhysarumRouter.prune(min_k, max_k)`\n- `PhysarumRouter.snapshot() / PhysarumRouter.load(payload)`\n\n### Task 4: External Trails\n- `TrailStore.add(trail) -> trail_id`\n- `TrailStore.query(text_or_embedding, k, now=None) -> list[dict]`\n- `TrailStore.decay(now=None) -> dict`\n- `TrailStore.reinforce(trail_id, delta) -> bool`\n- `TrailStore.snapshot() / TrailStore.load(payload)`\n\n### Task 5: Active Inference\n- `PreferenceModel.predict(context) -> (preference_params, confidence)`\n- `PreferenceModel.update(feedback, observed_outcome) -> dict`\n- `PredictionError.compute(predicted, observed) -> float`\n- `PreferenceModel.snapshot() / PreferenceModel.load(payload)`\n- `PreferenceModel.save_path(path) / PreferenceModel.load_path(path)`\n\n## Integration Behavior\n### Tasks 1-4 (HiveMind memory query path)\nWhen any of the first four flags is enabled, `scripts/memory_tool.py query`:\n1. Loads `TactiDynamicsPipeline` state from `workspace/hivemind/data/tacti_dynamics_snapshot.json` if present.\n2. Resolves agent IDs from runtime candidates and canoni", "source": "workspace/hivemind/TACTI_CR.md", "metadata": {"topic": "tacti"}}
+workspace/teamchat/summaries/skill-graph-impl.md:1:# TeamChat Summary skill-graph-impl
+workspace/teamchat/state/desktop-app.json:2:  "session_id": "desktop-app",
+workspace/teamchat/state/efficiency-impl.json:2:  "session_id": "efficiency-impl",
+workspace/teamchat/state/efficiency-impl.json:6:  "task": "Implement multi-chat response system with ChatGPT fallback and efficiency optimizations.\n\n1. **Multi-Chat Response System**:\n   - The message_load_balancer.py already exists at workspace/scripts/message_load_balancer.py\n   - Integrate it into the OpenClaw message handling flow\n   - When MiniMax is overloaded (queue depth > 5 or latency > 30s), spawn a ChatGPT subagent via OpenClaw sessions_spawn\n   - Use model: openai-codex/gpt-5.3-codex with openai-codex:default auth\n   - Each message should be replied to directly using replyTo with the message_id from the inbound context\n\n2. **Efficiency Optimizations**:\n   - Add prompt caching: Put static system instructions at the top of prompts so API caches them\n   - Add model tiering: Simple queries \u2192 fast/cheap model, complex \u2192 main model\n   - Add context summarization: Summarize old conversation history instead of sending full context\n   - Implement streaming for responses\n\n3. **Telegram Reply Integration**:\n   - Ensure all replies use replyTo parameter with the incoming message_id\n   - This makes replies appear as threads under the original message\n\nCreate the integration at workspace/scripts/message_handler.py that:\n- Loads the message_load_balancer\n- Checks load on each message\n- Routes to appropriate agent (MiniMax or ChatGPT)\n- Uses replyTo for Telegram replies\n\nThis is for the OpenClaw gateway running at localhost:18789.",
+workspace/teamchat/summaries/source-ui-improve.md:1:# TeamChat Summary source-ui-improve
+workspace/knowledge_base/data/chatgpt_response.md:3:**Question:** What is the circumplex model of emotion? Give me a brief summary.
+workspace/teamchat/summaries/desktop-app.md:1:# TeamChat Summary desktop-app
+workspace/teamchat/state/load-balancer-impl.json:2:  "session_id": "load-balancer-impl",
+workspace/scripts/verify_policy_router.sh:62:    event_log = Path(tmpdir) / "events.jsonl"
+workspace/scripts/verify_policy_router.sh:130:        events = Path(tmpdir, "events.jsonl").read_text(encoding="utf-8").splitlines()
+workspace/scripts/verify_policy_router.sh:232:            events = Path(tmpdir, "events.jsonl").read_text(encoding="utf-8").splitlines()
+workspace/teamchat/state/skill-graph-impl.json:2:  "session_id": "skill-graph-impl",
+workspace/teamchat/state/source-ui-v2.json:2:  "session_id": "source-ui-v2",
+workspace/research/WIM_HOF_AI_ENHANCEMENTS_BRIEF_2026-02-18.md:14:- Summarize daily/weekly patterns:
+workspace/research/WIM_HOF_AI_ENHANCEMENTS_BRIEF_2026-02-18.md:26:- AI summarizes trends and provides micro-adjustments for next session.
+workspace/research/WIM_HOF_AI_ENHANCEMENTS_BRIEF_2026-02-18.md:36:- Implement weekly insight summary generator.
+workspace/research/WIM_HOF_AI_ENHANCEMENTS_BRIEF_2026-02-18.md:40:- Add in-app reflection capture + trend summary.
+workspace/scripts/system_health_monitor.py:92:        "summary": "\n".join(out.splitlines()[:6]),
+workspace/teamchat/orchestrator.py:64:            "session_id": self.session.session_id,
+workspace/teamchat/orchestrator.py:71:                session_id=self.session.session_id,
+workspace/teamchat/orchestrator.py:92:                "teamchat_session_id": self.session.session_id,
+workspace/teamchat/orchestrator.py:106:        return {"ok": True, "session_id": self.session.session_id, "replies": replies, "turns": len(replies)}
+workspace/teamchat/state/source-ui-improve.json:2:  "session_id": "source-ui-improve",
+workspace/teamchat/witness_verify.py:41:    session_id: str
+workspace/teamchat/witness_verify.py:52:def _session_id_from_path(session_path: Path) -> str:
+workspace/teamchat/witness_verify.py:88:        session_id = str(meta.get("session_id", "")).strip()
+workspace/teamchat/witness_verify.py:89:        if not session_id:
+workspace/teamchat/witness_verify.py:95:        key = (session_id, turn, role)
+workspace/teamchat/witness_verify.py:102:def _expected_hashes(message_row: dict[str, Any], *, session_id: str, turn: int) -> dict[str, str]:
+workspace/teamchat/witness_verify.py:104:        MESSAGE_HASH_VERSION_V2: canonical_message_hash_v2(message_row, session_id=session_id, turn=turn),
+workspace/teamchat/witness_verify.py:113:    session_id = _session_id_from_path(session_path)
+workspace/teamchat/witness_verify.py:115:        return VerificationResult(False, session_id, 0, "", "session_missing", str(session_path))
+workspace/teamchat/witness_verify.py:117:        return VerificationResult(False, session_id, 0, "", "ledger_missing", str(ledger_path))
+workspace/teamchat/witness_verify.py:124:            session_id,
+workspace/teamchat/witness_verify.py:136:        return VerificationResult(False, session_id, 0, str(chain.get("head_hash", "") or ""), "parse_error", type(exc).__name__)
+workspace/teamchat/witness_verify.py:146:        ref_session_id = str(record.get("session_id", "")).strip()
+workspace/teamchat/witness_verify.py:147:        if not ref_session_id:
+workspace/teamchat/witness_verify.py:150:                session_id,
+workspace/teamchat/witness_verify.py:156:        if not (sessions_dir / f"{ref_session_id}.jsonl").exists():
+workspace/teamchat/witness_verify.py:159:                session_id,
+workspace/teamchat/witness_verify.py:163:                ref_session_id,
+workspace/teamchat/witness_verify.py:165:        if str(record.get("session_id", "")).strip() != session_id:
+workspace/teamchat/witness_verify.py:170:        return VerificationResult(False, session_id, 0, str(chain.get("head_hash", "") or ""), "no_session_events", "")
+workspace/teamchat/witness_verify.py:174:        ref_session_id = str(record.get("session_id", "")).strip()
+workspace/teamchat/witness_verify.py:175:        if ref_session_id != session_id:
+workspace/teamchat/witness_verify.py:176:            return VerificationResult(False, session_id, idx - 1, str(chain.get("head_hash", "") or ""), "session_reference_mismatch", ref_session_id)
+workspace/teamchat/witness_verify.py:180:            return VerificationResult(False, session_id, idx - 1, str(chain.get("head_hash", "") or ""), "invalid_turn", str(record.get("turn")))
+workspace/teamchat/witness_verify.py:182:            return VerificationResult(False, session_id, idx - 1, str(chain.get("head_hash", "") or ""), "session_turn_order_invalid", f"turn={turn}")
+workspace/teamchat/witness_verify.py:185:        key = (session_id, turn, f"agent:{agent}")
+workspace/teamchat/witness_verify.py:188:            return VerificationResult(False, session_id, idx - 1, str(chain.get("head_hash", "") or ""), "session_message_missing", str(key))
+workspace/teamchat/witness_verify.py:190:            return VerificationResult(False, session_id, idx - 1, str(chain.get("head_hash", "") or ""), "timestamp_mismatch", f"turn={turn}")
+workspace/teamchat/witness_verify.py:194:        expected = _expected_hashes(message_row, session_id=session_id, turn=turn)
+workspace/teamchat/witness_verify.py:197:                return VerificationResult(False, session_id, idx - 1, str(chain.get("head_hash", "") or ""), "message_hash_mismatch", f"turn={turn}")
+workspace/teamchat/witness_verify.py:201:                return VerificationResult(False, session_id, idx - 1, str(chain.get("head_hash", "") or ""), "message_hash_mismatch", f"turn={turn}")
+workspace/teamchat/witness_verify.py:210:        return VerificationResult(False, session_id, idx - 1, str(chain.get("head_hash", "") or ""), "message_hash_mismatch", f"turn={turn}")
+workspace/teamchat/witness_verify.py:214:        session_id,
+workspace/teamchat/witness_verify.py:238:            f"FAIL session={result.session_id} witnessed_events={result.witnessed_events} "
+workspace/teamchat/witness_verify.py:243:        f"PASS session={result.session_id} witnessed_events={result.witnessed_events} "
+workspace/teamchat/message.py:51:def canonical_message_payload(message: dict[str, Any], *, session_id: str | None = None, turn: int | None = None) -> dict[str, Any]:
+workspace/teamchat/message.py:54:    chosen_session_id = str(session_id if session_id is not None else meta.get("session_id", "")).strip()
+workspace/teamchat/message.py:61:        "session_id": chosen_session_id,
+workspace/teamchat/message.py:70:def canonical_message_hash_v2(message: dict[str, Any], *, session_id: str | None = None, turn: int | None = None) -> str:
+workspace/teamchat/message.py:71:    payload = canonical_message_payload(message, session_id=session_id, turn=turn)
+workspace/teamchat/__init__.py:1:"""Team Chat package: append-only multi-agent conversational workspace."""
+workspace/teamchat/session.py:11:    """Session state + append-only message log management."""
+workspace/teamchat/session.py:16:        session_id: str,
+workspace/teamchat/session.py:31:        self.session_id = str(session_id).strip() or "teamchat"
+workspace/teamchat/session.py:34:        self.store = TeamChatStore(Path(store_path) if store_path else default_session_path(self.repo_root, self.session_id))
+workspace/teamchat/session.py:38:        row = make_message(role="user", content=str(content), meta={"session_id": self.session_id})
+workspace/teamchat/session.py:52:        payload_meta.setdefault("session_id", self.session_id)
+workspace/knowledge_base/agentic/synthesize.py:82:            return summarize_content(decision_contents[0], "decision")
+workspace/knowledge_base/agentic/synthesize.py:87:            return summarize_content(contents[0], "explanation")
+workspace/knowledge_base/agentic/synthesize.py:93:def summarize_content(content: str, mode: str = "general") -> str:
+workspace/knowledge_base/agentic/synthesize.py:94:    """Summarize content for response."""
+workspace/knowledge_base/agentic/synthesize.py:96:    summary = content[:300]
+workspace/knowledge_base/agentic/synthesize.py:100:        last = summary.rfind(end)
+workspace/knowledge_base/agentic/synthesize.py:102:            summary = summary[:last + 1]
+workspace/knowledge_base/agentic/synthesize.py:105:    if len(content) > len(summary):
+workspace/knowledge_base/agentic/synthesize.py:106:        summary += "..."
+workspace/knowledge_base/agentic/synthesize.py:108:    return summary
+workspace/knowledge_base/agentic/synthesize.py:117:        return summarize_content(contents[0])
+workspace/knowledge_base/agentic/synthesize.py:136:    return summarize_content(contents[0])
+workspace/scripts/run_novel10_fixture.py:25:from tacti_cr.events import DEFAULT_PATH, summarize_by_type
+workspace/scripts/run_novel10_fixture.py:176:    counts = summarize_by_type(events_path)
+workspace/teamchat/sessions/load-balancer-impl.jsonl:1:{"ts": "2026-02-19T11:10:26Z", "session_id": "load-balancer-impl", "cycle": 0, "actor": "system", "event": "session_start", "data": {"task": "Implement a concurrent message handling system with ChatGPT fallback.\n\nWhen MiniMax is overwhelmed (too many concurrent messages), spawn a ChatGPT subagent to handle the overflow. The system should:\n\n1. Monitor message queue depth and response latency\n2. Detect when MiniMax is overwhelmed (configurable threshold)\n3. Automatically spawn a ChatGPT subagent to handle overflow messages\n4. Ensure messages are answered in order (coordinate between MiniMax and ChatGPT)\n5. Log all fallback events for auditing\n\nCreate:\n- workspace/scripts/message_load_balancer.py: Main module with LoadBalancer class\n- Has method check_load() that returns true if overloaded\n- Has method route_message() that decides MiniMax vs ChatGPT subagent\n- Spawns subagent via OpenClaw's sessions_spawn when needed\n\nThe subagent should use model: openai-codex/gpt-5.3-codex or similar with the openai-codex:default auth profile.\n\nMake it configurable via environment variables:\n- MAX_QUEUE_DEPTH (default 5)\n- MAX_LATENCY_MS (default 30000)\n- ENABLE_FALLBACK (default true)", "live": true, "limits": {"max_cycles": 3, "max_commands_per_cycle": 4, "max_consecutive_failures": 0}}, "meta": {"route": {}}}
+workspace/teamchat/sessions/load-balancer-impl.jsonl:2:{"ts": "2026-02-19T11:10:26Z", "session_id": "load-balancer-impl", "cycle": 1, "actor": "planner", "event": "planner_plan_failed", "data": {"error": "missing_api_key"}, "meta": {"route": {"mode": "live", "intent": "coding", "trigger_phrase": "use chatgpt", "selected_provider": null, "selected_model": null, "reason_code": "missing_api_key", "route_explain": {"intent": "coding", "matched_trigger": "explicit_phrase", "matched_detail": "use chatgpt", "reason": "explicit trigger \"use chatgpt\"", "base_order": ["local_vllm_coder", "local_vllm_assistant", "ollama", "groq", "qwen", "openai_auth", "claude_auth", "grok_api", "openai_api", "claude_api"], "evaluated_order": ["openai_gpt52_chat", "local_vllm_coder", "local_vllm_assistant", "ollama", "groq", "qwen", "openai_auth", "claude_auth", "grok_api", "openai_api", "claude_api"], "chosen": {"provider": "local_vllm_coder", "model": "local-coder"}, "unavailable": {"openai_gpt52_chat": "missing_api_key"}, "fallback_candidates": ["openai_gpt52_chat", "local_vllm_assistant", "ollama", "groq", "qwen", "openai_auth", "claude_auth", "grok_api", "openai_api", "claude_api"], "local_context_window_tokens": 16384}}}}
+workspace/teamchat/sessions/load-balancer-impl.jsonl:3:{"ts": "2026-02-19T11:10:26Z", "session_id": "load-balancer-impl", "cycle": 2, "actor": "planner", "event": "planner_plan_failed", "data": {"error": "missing_api_key"}, "meta": {"route": {"mode": "live", "intent": "coding", "trigger_phrase": "use chatgpt", "selected_provider": null, "selected_model": null, "reason_code": "missing_api_key", "route_explain": {"intent": "coding", "matched_trigger": "explicit_phrase", "matched_detail": "use chatgpt", "reason": "explicit trigger \"use chatgpt\"", "base_order": ["local_vllm_coder", "local_vllm_assistant", "ollama", "groq", "qwen", "openai_auth", "claude_auth", "grok_api", "openai_api", "claude_api"], "evaluated_order": ["openai_gpt52_chat", "local_vllm_coder", "local_vllm_assistant", "ollama", "groq", "qwen", "openai_auth", "claude_auth", "grok_api", "openai_api", "claude_api"], "chosen": {"provider": "local_vllm_coder", "model": "local-coder"}, "unavailable": {"openai_gpt52_chat": "missing_api_key"}, "fallback_candidates": ["openai_gpt52_chat", "local_vllm_assistant", "ollama", "groq", "qwen", "openai_auth", "claude_auth", "grok_api", "openai_api", "claude_api"], "local_context_window_tokens": 16384}}}}
+workspace/teamchat/sessions/load-balancer-impl.jsonl:4:{"ts": "2026-02-19T11:10:26Z", "session_id": "load-balancer-impl", "cycle": 2, "actor": "system", "event": "session_end", "data": {"status": "stopped:repeated_failures"}, "meta": {"route": {}}}
+workspace/scripts/run_narrative_distill.py:30:    parser.add_argument("--fallback-source", default="itc/llm_router_events.jsonl", help="fallback episodic source")
+workspace/scripts/run_narrative_distill.py:75:    summary = {
+workspace/scripts/run_narrative_distill.py:84:    print(json.dumps(summary, ensure_ascii=True))
+workspace/teamchat/store.py:8:def default_session_path(repo_root: Path, session_id: str) -> Path:
+workspace/teamchat/store.py:15:        / f"{str(session_id).strip()}.jsonl"
+workspace/teamchat/store.py:20:    """Append-only JSONL store for Team Chat sessions."""
+workspace/sources/itc/regression/fixed_seed_dataset.json:28:        "source": "Ben Cowen Newsletter - Weekly Summary",
+workspace/teamchat/sessions/desktop-app.jsonl:1:{"ts": "2026-02-19T11:49:38Z", "session_id": "desktop-app", "cycle": 0, "actor": "system", "event": "session_start", "data": {"task": "Create a standalone Ubuntu desktop app wrapper for Source UI.\n\nSource UI is already running as a web service at localhost:18990. Create a simple Ubuntu desktop application that:\n\n1. Uses WebView (PyWebView or python-pywebview) to display the Source UI\n2. Has window controls (minimize, maximize, close)\n3. Runs the Python backend automatically\n4. Shows in system tray\n5. Has app icon and title 'Source'\n\nCreate:\n- workspace/source-ui/app_launcher.py: Python script that starts the web server and opens a webview window\n- Or use Electron for a proper .deb package\n\nThe app should:\n- Start the Source UI backend on launch\n- Display the web interface in a native window\n- Have proper window decorations\n- Handle quit gracefully (stop backend)", "live": true, "limits": {"max_cycles": 3, "max_commands_per_cycle": 4, "max_consecutive_failures": 0}}, "meta": {"route": {}}}
+workspace/teamchat/sessions/desktop-app.jsonl:2:{"ts": "2026-02-19T11:49:53Z", "session_id": "desktop-app", "cycle": 1, "actor": "planner", "event": "planner_plan_failed", "data": {"error": "missing_api_key"}, "meta": {"route": {"mode": "live", "intent": "coding", "trigger_phrase": "use chatgpt", "selected_provider": null, "selected_model": null, "reason_code": "missing_api_key", "route_explain": {"intent": "coding", "matched_trigger": "explicit_phrase", "matched_detail": "use chatgpt", "reason": "explicit trigger \"use chatgpt\"", "base_order": ["local_vllm_coder", "local_vllm_assistant", "ollama", "groq", "qwen", "openai_auth", "claude_auth", "grok_api", "openai_api", "claude_api"], "evaluated_order": ["openai_gpt52_chat", "local_vllm_coder", "local_vllm_assistant", "ollama", "groq", "qwen", "openai_auth", "claude_auth", "grok_api", "openai_api", "claude_api"], "chosen": {"provider": "local_vllm_coder", "model": "local-coder"}, "unavailable": {"openai_gpt52_chat": "missing_api_key"}, "fallback_candidates": ["openai_gpt52_chat", "local_vllm_assistant", "ollama", "groq", "qwen", "openai_auth", "claude_auth", "grok_api", "openai_api", "claude_api"], "local_context_window_tokens": 16384}}}}
+workspace/teamchat/sessions/desktop-app.jsonl:3:{"ts": "2026-02-19T11:50:08Z", "session_id": "desktop-app", "cycle": 2, "actor": "planner", "event": "planner_plan_failed", "data": {"error": "missing_api_key"}, "meta": {"route": {"mode": "live", "intent": "coding", "trigger_phrase": "use chatgpt", "selected_provider": null, "selected_model": null, "reason_code": "missing_api_key", "route_explain": {"intent": "coding", "matched_trigger": "explicit_phrase", "matched_detail": "use chatgpt", "reason": "explicit trigger \"use chatgpt\"", "base_order": ["local_vllm_coder", "local_vllm_assistant", "ollama", "groq", "qwen", "openai_auth", "claude_auth", "grok_api", "openai_api", "claude_api"], "evaluated_order": ["openai_gpt52_chat", "local_vllm_coder", "local_vllm_assistant", "ollama", "groq", "qwen", "openai_auth", "claude_auth", "grok_api", "openai_api", "claude_api"], "chosen": {"provider": "local_vllm_coder", "model": "local-coder"}, "unavailable": {"openai_gpt52_chat": "missing_api_key"}, "fallback_candidates": ["openai_gpt52_chat", "local_vllm_assistant", "ollama", "groq", "qwen", "openai_auth", "claude_auth", "grok_api", "openai_api", "claude_api"], "local_context_window_tokens": 16384}}}}
+workspace/teamchat/sessions/desktop-app.jsonl:4:{"ts": "2026-02-19T11:50:08Z", "session_id": "desktop-app", "cycle": 2, "actor": "system", "event": "session_end", "data": {"status": "stopped:repeated_failures"}, "meta": {"route": {}}}
+workspace/teamchat/sessions/source-ui-v2.jsonl:1:{"ts": "2026-02-20T09:38:59Z", "session_id": "source-ui-v2", "cycle": 0, "actor": "system", "event": "session_start", "data": {"task": "Improve Source UI: 1) Add mood widget to sidebar, 2) Add agent state API endpoint, 3) Test and commit", "live": true, "limits": {"max_cycles": 0, "max_commands_per_cycle": 4, "max_consecutive_failures": 0}}, "meta": {"route": {}}}
+workspace/teamchat/sessions/source-ui-v2.jsonl:2:{"ts": "2026-02-20T09:38:59Z", "session_id": "source-ui-v2", "cycle": 0, "actor": "system", "event": "teamchat.guard.dirty_tree", "data": {"reason": "dirty_tree_requires_TEAMCHAT_ALLOW_DIRTY=1", "requested_auto_commit": true, "requested_accept_patches": true, "final_auto_commit": false, "final_accept_patches": true, "repo_dirty": true, "allow_dirty": false, "branch": "fix/dali-audit-remediation-20260220"}, "meta": {"route": {}}}
+workspace/teamchat/sessions/source-ui-v2.jsonl:3:{"ts": "2026-02-20T09:39:14Z", "session_id": "source-ui-v2", "cycle": 1, "actor": "planner", "event": "planner_plan_failed", "data": {"error": "missing_api_key"}, "meta": {"route": {"mode": "live", "intent": "coding", "trigger_phrase": "use chatgpt", "selected_provider": null, "selected_model": null, "reason_code": "missing_api_key", "route_explain": {"intent": "coding", "matched_trigger": "explicit_phrase", "matched_detail": "use chatgpt", "reason": "explicit trigger \"use chatgpt\"", "base_order": ["local_vllm_coder", "local_vllm_assistant", "ollama", "groq", "qwen", "openai_auth", "claude_auth", "grok_api", "openai_api", "claude_api"], "evaluated_order": ["openai_gpt52_chat", "local_vllm_coder", "local_vllm_assistant", "ollama", "groq", "qwen", "openai_auth", "claude_auth", "grok_api", "openai_api", "claude_api"], "chosen": {"provider": "local_vllm_coder", "model": "local-coder"}, "unavailable": {"openai_gpt52_chat": "missing_api_key"}, "fallback_candidates": ["openai_gpt52_chat", "local_vllm_assistant", "ollama", "groq", "qwen", "openai_auth", "claude_auth", "grok_api", "openai_api", "claude_api"], "local_context_window_tokens": 16384}}}}
+workspace/teamchat/sessions/source-ui-v2.jsonl:4:{"ts": "2026-02-20T09:39:29Z", "session_id": "source-ui-v2", "cycle": 2, "actor": "planner", "event": "planner_plan_failed", "data": {"error": "missing_api_key"}, "meta": {"route": {"mode": "live", "intent": "coding", "trigger_phrase": "use chatgpt", "selected_provider": null, "selected_model": null, "reason_code": "missing_api_key", "route_explain": {"intent": "coding", "matched_trigger": "explicit_phrase", "matched_detail": "use chatgpt", "reason": "explicit trigger \"use chatgpt\"", "base_order": ["local_vllm_coder", "local_vllm_assistant", "ollama", "groq", "qwen", "openai_auth", "claude_auth", "grok_api", "openai_api", "claude_api"], "evaluated_order": ["openai_gpt52_chat", "local_vllm_coder", "local_vllm_assistant", "ollama", "groq", "qwen", "openai_auth", "claude_auth", "grok_api", "openai_api", "claude_api"], "chosen": {"provider": "local_vllm_coder", "model": "local-coder"}, "unavailable": {"openai_gpt52_chat": "missing_api_key"}, "fallback_candidates": ["openai_gpt52_chat", "local_vllm_assistant", "ollama", "groq", "qwen", "openai_auth", "claude_auth", "grok_api", "openai_api", "claude_api"], "local_context_window_tokens": 16384}}}}
+workspace/teamchat/sessions/source-ui-v2.jsonl:5:{"ts": "2026-02-20T09:39:29Z", "session_id": "source-ui-v2", "cycle": 2, "actor": "system", "event": "session_end", "data": {"status": "stopped:repeated_failures"}, "meta": {"route": {}}}
+workspace/teamchat/sessions/source-ui-improve.jsonl:1:{"ts": "2026-02-20T09:38:15Z", "session_id": "source-ui-improve", "cycle": 0, "actor": "system", "event": "session_start", "data": {"task": "Improve Source UI: 1) Add mood widget to sidebar, 2) Fix any remaining CSS issues, 3) Add agent state API endpoint, 4) Test and commit", "live": false, "limits": {"max_cycles": 0, "max_commands_per_cycle": 4, "max_consecutive_failures": 0}}, "meta": {"route": {}}}
+workspace/teamchat/sessions/source-ui-improve.jsonl:2:{"ts": "2026-02-20T09:38:15Z", "session_id": "source-ui-improve", "cycle": 0, "actor": "system", "event": "teamchat.guard.dirty_tree", "data": {"reason": "dirty_tree_requires_TEAMCHAT_ALLOW_DIRTY=1", "requested_auto_commit": true, "requested_accept_patches": true, "final_auto_commit": false, "final_accept_patches": true, "repo_dirty": true, "allow_dirty": false, "branch": "fix/dali-audit-remediation-20260220"}, "meta": {"route": {}}}
+workspace/teamchat/sessions/source-ui-improve.jsonl:3:{"ts": "2026-02-20T09:38:15Z", "session_id": "source-ui-improve", "cycle": 1, "actor": "planner", "event": "planner_plan", "data": {"plan": {"summary": "Perform one low-risk verification cycle", "session_prompt": "Improve Source UI: 1) Add mood widget to sidebar, 2) Fix any remaining CSS issues, 3) Add agent state API endpoint, 4) Test and commit", "risk_level": "low"}, "work_orders": [{"id": "wo-1", "title": "Run deterministic checks", "goal": "Collect lightweight evidence without mutating routing logic", "commands": ["git status --porcelain -uall", "python3 -m py_compile workspace/scripts/policy_router.py"], "tests": ["bash workspace/scripts/verify_policy_router.sh"], "notes": "Offline deterministic planning"}]}, "meta": {"route": {"mode": "offline", "intent": "teamchat_planner", "provider": "fake_planner", "model": "fake/planner"}}}
+workspace/teamchat/sessions/source-ui-improve.jsonl:4:{"ts": "2026-02-20T09:38:15Z", "session_id": "source-ui-improve", "cycle": 1, "actor": "coder", "event": "work_order_start", "data": {"work_order": {"id": "wo-1", "title": "Run deterministic checks", "goal": "Collect lightweight evidence without mutating routing logic", "commands": ["git status --porcelain -uall", "python3 -m py_compile workspace/scripts/policy_router.py"], "tests": ["bash workspace/scripts/verify_policy_router.sh"], "notes": "Offline deterministic planning"}}, "meta": {"route": {}}}
+workspace/teamchat/sessions/source-ui-improve.jsonl:5:{"ts": "2026-02-20T09:38:15Z", "session_id": "source-ui-improve", "cycle": 1, "actor": "coder", "event": "tool_call", "data": {"command": "git status --porcelain -uall", "allowed": true, "exit_code": 0, "stdout": "offline-ok", "stderr": ""}, "meta": {"route": {"mode": "offline", "intent": "teamchat_coder", "provider": "fake_coder", "model": "fake/coder"}}}
+workspace/teamchat/sessions/source-ui-improve.jsonl:6:{"ts": "2026-02-20T09:38:15Z", "session_id": "source-ui-improve", "cycle": 1, "actor": "coder", "event": "tool_call", "data": {"command": "python3 -m py_compile workspace/scripts/policy_router.py", "allowed": true, "exit_code": 0, "stdout": "offline-ok", "stderr": ""}, "meta": {"route": {"mode": "offline", "intent": "teamchat_coder", "provider": "fake_coder", "model": "fake/coder"}}}
+workspace/teamchat/sessions/source-ui-improve.jsonl:7:{"ts": "2026-02-20T09:38:15Z", "session_id": "source-ui-improve", "cycle": 1, "actor": "coder", "event": "patch_report", "data": {"work_order_id": "wo-1", "status": "ok", "files_changed": [], "commands_run": ["git status --porcelain -uall", "python3 -m py_compile workspace/scripts/policy_router.py"], "results": [{"command": "git status --porcelain -uall", "exit_code": 0}, {"command": "python3 -m py_compile workspace/scripts/policy_router.py", "exit_code": 0}], "notes": "offline coder simulation"}, "meta": {"route": {"mode": "offline", "intent": "teamchat_coder", "provider": "fake_coder", "model": "fake/coder"}}}
+workspace/teamchat/sessions/source-ui-improve.jsonl:8:{"ts": "2026-02-20T09:38:15Z", "session_id": "source-ui-improve", "cycle": 1, "actor": "planner", "event": "planner_review", "data": {"decision": "accept", "reason": "offline review", "next_work_orders": []}, "meta": {"route": {"mode": "offline", "intent": "teamchat_planner_review", "provider": "fake_planner", "model": "fake/planner"}}}
+workspace/teamchat/sessions/source-ui-improve.jsonl:9:{"ts": "2026-02-20T09:38:15Z", "session_id": "source-ui-improve", "cycle": 1, "actor": "system", "event": "session_end", "data": {"status": "accepted"}, "meta": {"route": {}}}
+workspace/teamchat/sessions/skill-graph-impl.jsonl:1:{"ts": "2026-02-19T10:55:13Z", "session_id": "skill-graph-impl", "cycle": 0, "actor": "system", "event": "session_start", "data": {"task": "Implement a skill graph system for OpenClaw.\n\nThe skill graph should:\n1. Use many small markdown files instead of one big SKILL.md\n2. Each file has YAML frontmatter with: name, description, tags, links (to other skill files via wikilinks)\n3. An index file that maps skills and their connections\n4. Support progressive disclosure: scan descriptions first, then follow wikilinks for deeper context\n5. Include MOCs (Maps of Content) to organize clusters of related skills\n\nThe system should be in workspace/skill-graph/ with:\n- index.md (entry point listing all skills)\n- skills/ folder with individual skill files\n- mocs/ folder for maps of content\n- A reader script that can load a skill and its transitive dependencies\n\nThis is inspired by the Zettelkasten method - atomic notes linked together.", "live": true, "limits": {"max_cycles": 5, "max_commands_per_cycle": 4, "max_consecutive_failures": 0}}, "meta": {"route": {}}}
+workspace/teamchat/sessions/skill-graph-impl.jsonl:2:{"ts": "2026-02-19T10:55:28Z", "session_id": "skill-graph-impl", "cycle": 1, "actor": "planner", "event": "planner_plan_failed", "data": {"error": "missing_api_key"}, "meta": {"route": {"mode": "live", "intent": "coding", "trigger_phrase": "use chatgpt", "selected_provider": null, "selected_model": null, "reason_code": "missing_api_key", "route_explain": {"intent": "coding", "matched_trigger": "explicit_phrase", "matched_detail": "use chatgpt", "reason": "explicit trigger \"use chatgpt\"", "base_order": ["local_vllm_coder", "local_vllm_assistant", "ollama", "groq", "qwen", "openai_auth", "claude_auth", "grok_api", "openai_api", "claude_api"], "evaluated_order": ["openai_gpt52_chat", "local_vllm_coder", "local_vllm_assistant", "ollama", "groq", "qwen", "openai_auth", "claude_auth", "grok_api", "openai_api", "claude_api"], "chosen": {"provider": "local_vllm_coder", "model": "local-coder"}, "unavailable": {"openai_gpt52_chat": "missing_api_key"}, "fallback_candidates": ["openai_gpt52_chat", "local_vllm_assistant", "ollama", "groq", "qwen", "openai_auth", "claude_auth", "grok_api", "openai_api", "claude_api"], "local_context_window_tokens": 16384}}}}
+workspace/teamchat/sessions/skill-graph-impl.jsonl:3:{"ts": "2026-02-19T10:55:43Z", "session_id": "skill-graph-impl", "cycle": 2, "actor": "planner", "event": "planner_plan_failed", "data": {"error": "missing_api_key"}, "meta": {"route": {"mode": "live", "intent": "coding", "trigger_phrase": "use chatgpt", "selected_provider": null, "selected_model": null, "reason_code": "missing_api_key", "route_explain": {"intent": "coding", "matched_trigger": "explicit_phrase", "matched_detail": "use chatgpt", "reason": "explicit trigger \"use chatgpt\"", "base_order": ["local_vllm_coder", "local_vllm_assistant", "ollama", "groq", "qwen", "openai_auth", "claude_auth", "grok_api", "openai_api", "claude_api"], "evaluated_order": ["openai_gpt52_chat", "local_vllm_coder", "local_vllm_assistant", "ollama", "groq", "qwen", "openai_auth", "claude_auth", "grok_api", "openai_api", "claude_api"], "chosen": {"provider": "local_vllm_coder", "model": "local-coder"}, "unavailable": {"openai_gpt52_chat": "missing_api_key"}, "fallback_candidates": ["openai_gpt52_chat", "local_vllm_assistant", "ollama", "groq", "qwen", "openai_auth", "claude_auth", "grok_api", "openai_api", "claude_api"], "local_context_window_tokens": 16384}}}}
+workspace/teamchat/sessions/skill-graph-impl.jsonl:4:{"ts": "2026-02-19T10:55:43Z", "session_id": "skill-graph-impl", "cycle": 2, "actor": "system", "event": "session_end", "data": {"status": "stopped:repeated_failures"}, "meta": {"route": {}}}
+workspace/teamchat/sessions/efficiency-impl.jsonl:1:{"ts": "2026-02-19T11:55:22Z", "session_id": "efficiency-impl", "cycle": 0, "actor": "system", "event": "session_start", "data": {"task": "Implement multi-chat response system with ChatGPT fallback and efficiency optimizations.\n\n1. **Multi-Chat Response System**:\n   - The message_load_balancer.py already exists at workspace/scripts/message_load_balancer.py\n   - Integrate it into the OpenClaw message handling flow\n   - When MiniMax is overloaded (queue depth > 5 or latency > 30s), spawn a ChatGPT subagent via OpenClaw sessions_spawn\n   - Use model: openai-codex/gpt-5.3-codex with openai-codex:default auth\n   - Each message should be replied to directly using replyTo with the message_id from the inbound context\n\n2. **Efficiency Optimizations**:\n   - Add prompt caching: Put static system instructions at the top of prompts so API caches them\n   - Add model tiering: Simple queries \u2192 fast/cheap model, complex \u2192 main model\n   - Add context summarization: Summarize old conversation history instead of sending full context\n   - Implement streaming for responses\n\n3. **Telegram Reply Integration**:\n   - Ensure all replies use replyTo parameter with the incoming message_id\n   - This makes replies appear as threads under the original message\n\nCreate the integration at workspace/scripts/message_handler.py that:\n- Loads the message_load_balancer\n- Checks load on each message\n- Routes to appropriate agent (MiniMax or ChatGPT)\n- Uses replyTo for Telegram replies\n\nThis is for the OpenClaw gateway running at localhost:18789.", "live": true, "limits": {"max_cycles": 5, "max_commands_per_cycle": 4, "max_consecutive_failures": 0}}, "meta": {"route": {}}}
+workspace/teamchat/sessions/efficiency-impl.jsonl:2:{"ts": "2026-02-19T11:55:37Z", "session_id": "efficiency-impl", "cycle": 1, "actor": "planner", "event": "planner_plan_failed", "data": {"error": "missing_api_key"}, "meta": {"route": {"mode": "live", "intent": "coding", "trigger_phrase": "use chatgpt", "selected_provider": null, "selected_model": null, "reason_code": "missing_api_key", "route_explain": {"intent": "coding", "matched_trigger": "explicit_phrase", "matched_detail": "use chatgpt", "reason": "explicit trigger \"use chatgpt\"", "base_order": ["local_vllm_coder", "local_vllm_assistant", "ollama", "groq", "qwen", "openai_auth", "claude_auth", "grok_api", "openai_api", "claude_api"], "evaluated_order": ["openai_gpt52_chat", "local_vllm_coder", "local_vllm_assistant", "ollama", "groq", "qwen", "openai_auth", "claude_auth", "grok_api", "openai_api", "claude_api"], "chosen": {"provider": "local_vllm_coder", "model": "local-coder"}, "unavailable": {"openai_gpt52_chat": "missing_api_key"}, "fallback_candidates": ["openai_gpt52_chat", "local_vllm_assistant", "ollama", "groq", "qwen", "openai_auth", "claude_auth", "grok_api", "openai_api", "claude_api"], "local_context_window_tokens": 16384}}}}
+workspace/teamchat/sessions/efficiency-impl.jsonl:3:{"ts": "2026-02-19T11:55:37Z", "session_id": "efficiency-impl", "cycle": 2, "actor": "planner", "event": "planner_plan_failed", "data": {"error": "missing_api_key"}, "meta": {"route": {"mode": "live", "intent": "coding", "trigger_phrase": "use chatgpt", "selected_provider": null, "selected_model": null, "reason_code": "missing_api_key", "route_explain": {"intent": "coding", "matched_trigger": "explicit_phrase", "matched_detail": "use chatgpt", "reason": "explicit trigger \"use chatgpt\"", "base_order": ["local_vllm_coder", "local_vllm_assistant", "ollama", "groq", "qwen", "openai_auth", "claude_auth", "grok_api", "openai_api", "claude_api"], "evaluated_order": ["openai_gpt52_chat", "local_vllm_coder", "local_vllm_assistant", "ollama", "groq", "qwen", "openai_auth", "claude_auth", "grok_api", "openai_api", "claude_api"], "chosen": {"provider": "local_vllm_coder", "model": "local-coder"}, "unavailable": {"openai_gpt52_chat": "missing_api_key"}, "fallback_candidates": ["openai_gpt52_chat", "local_vllm_assistant", "ollama", "groq", "qwen", "openai_auth", "claude_auth", "grok_api", "openai_api", "claude_api"], "local_context_window_tokens": 16384}}}}
+workspace/teamchat/sessions/efficiency-impl.jsonl:4:{"ts": "2026-02-19T11:55:37Z", "session_id": "efficiency-impl", "cycle": 2, "actor": "system", "event": "session_end", "data": {"status": "stopped:repeated_failures"}, "meta": {"route": {}}}
+workspace/scripts/report_token_burn.py:3:Summarize token burn from session and router event logs.
+workspace/scripts/report_token_burn.py:82:    files = sorted((root / "agents").glob("*/sessions/*.jsonl"), key=lambda p: p.stat().st_mtime, reverse=True)
+workspace/scripts/report_token_burn.py:140:    path = root / "itc" / "llm_router_events.jsonl"
+workspace/sources/itc/regression/itc_operations_runbook.md:59:   - Resume normal operations only after both gates pass
+workspace/sources/itc/regression/itc_operations_runbook.md:75:   - Resume normal operations only after both gates pass
+workspace/sources/itc/regression/itc_operations_runbook.md:91:   - Resume normal operations only after both gates pass
+workspace/sources/itc/regression/itc_operations_runbook.md:107:   - Resume normal operations only after both gates pass
+workspace/scripts/metacognitive_loop.py:51:    """Return a summary of recent thinking."""
+workspace/scripts/metacognitive_loop.py:56:    summary = "I'm thinking about:\n"
+workspace/scripts/metacognitive_loop.py:58:        summary += f"- {t.get('about', 'unknown')}: {t.get('reason', '')}\n"
+workspace/scripts/metacognitive_loop.py:59:    return summary
+workspace/scripts/preflight_check.py:448:    Returns a summary dict if ingestion was performed, else None.
+workspace/scripts/verify_team_chat.sh:6:SESSION_ID="verify_teamchat_offline"
+workspace/scripts/verify_team_chat.sh:16:  --session-id "$SESSION_ID" \
+workspace/scripts/verify_team_chat.sh:29:summary = out / 'summaries' / 'verify_teamchat_offline.md'
+workspace/scripts/verify_team_chat.sh:33:assert summary.exists(), summary
+workspace/scripts/verify_tacti_cr_events.py:2:"""Deterministic summary verifier for unified TACTI-CR events."""
+workspace/scripts/verify_tacti_cr_events.py:15:from tacti_cr.events import DEFAULT_PATH, read_events, summarize_by_type
+workspace/scripts/verify_tacti_cr_events.py:35:    parser = argparse.ArgumentParser(description="Verify and summarize TACTI-CR events")
+workspace/scripts/verify_tacti_cr_events.py:50:        counts = summarize_by_type(path)
+workspace/source-ui/static/js/components.js:77:                        ${agent.status === 'working' ? '⏸ Pause' : '▶ Resume'}
+workspace/scripts/team_chat_adapters.py:127:                    "summary": "Perform one low-risk verification cycle",
+workspace/scripts/team_chat_adapters.py:236:            "plan requires summary and risk_level. work_orders is array of small testable tasks with "
+workspace/sources/itc/regression/itc_governance_admission_log.md:82:## Incident Drill Summary
+workspace/sources/itc/regression/itc_governance_admission_log.md:106:## Validation Summary
+workspace/scripts/message_handler.py:95:    def summarize_context(self, history: list, max_tokens: int = 2000) -> str:
+workspace/scripts/message_handler.py:96:        """Summarize conversation history to save tokens.
+workspace/scripts/message_handler.py:103:        # Keep last N messages, summarize the rest
+workspace/scripts/message_handler.py:108:        summary = f"[Earlier conversation summarized from {len(older)} messages]"
+workspace/scripts/message_handler.py:116:            summary += f" ({roles.get('user', 0)} user messages, {roles.get('assistant', 0)} assistant responses)"
+workspace/scripts/message_handler.py:119:        context = summary + "\n\nRecent messages:\n"
+workspace/scripts/message_handler.py:189:    context = handler.summarize_context(history)
+workspace/scripts/dream_consolidation.py:14:    events_file = REPO_ROOT / "workspace" / "state" / "tacti_cr" / "events.jsonl"
+workspace/scripts/ensure_cron_jobs.py:246:    summary = ensure_jobs(
+workspace/scripts/ensure_cron_jobs.py:251:    print(json.dumps(summary, ensure_ascii=False, indent=2))
+workspace/sources/itc/regression/itc_regression_run_006.md:67:## Verification Summary
+workspace/research/research_ingest.py:299:        summary = " ".join(entry.findtext("atom:summary", default="", namespaces=ns).split())
+workspace/research/research_ingest.py:301:        if not title or not summary:
+workspace/research/research_ingest.py:307:                "summary": summary,
+workspace/research/research_ingest.py:347:                content = f"{entry['title']}\n\n{entry['summary']}"
+workspace/scripts/verify_policy_provider_aliases.py:141:    print(f"summary: checked={checked} unknown={len(unknown)}")
+workspace/MODEL_ROUTING.md:13:- Router event log: `itc/llm_router_events.jsonl`
+workspace/scripts/team_chat.py:2:"""TeamChat planner+coder loop with append-only evidence and shared local memory."""
+workspace/scripts/team_chat.py:64:    session_id: str,
+workspace/scripts/team_chat.py:81:            f"- rationale: session `{session_id}` cycle `{cycle}` accepted patch",
+workspace/scripts/team_chat.py:92:            f"git commit -m teamchat({session_id}): cycle {cycle} accepted patch : ok",
+workspace/scripts/team_chat.py:113:    session_id: str,
+workspace/scripts/team_chat.py:155:            session_id=session_id,
+workspace/scripts/team_chat.py:166:        msg = f"teamchat({session_id}): cycle {cycle} accepted patch"
+workspace/scripts/team_chat.py:324:def write_summary(path: Path, state: dict[str, Any]) -> None:
+workspace/scripts/team_chat.py:326:        f"# TeamChat Summary {state['session_id']}",
+workspace/scripts/team_chat.py:348:    session_id: str,
+workspace/scripts/team_chat.py:357:        "session_id": session_id,
+workspace/scripts/team_chat.py:373:                session_id=session_id,
+workspace/scripts/team_chat.py:395:    session_id = args.session_id or datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+workspace/scripts/team_chat.py:397:    sessions_file = base_dir / "sessions" / f"{session_id}.jsonl"
+workspace/scripts/team_chat.py:398:    summary_file = base_dir / "summaries" / f"{session_id}.md"
+workspace/scripts/team_chat.py:399:    state_file = base_dir / "state" / f"{session_id}.json"
+workspace/scripts/team_chat.py:401:    # Check for existing session to resume
+workspace/scripts/team_chat.py:405:        if existing_state.get("session_id") == session_id:
+workspace/scripts/team_chat.py:407:                if args.resume or args.task is None:
+workspace/scripts/team_chat.py:408:                    print(f"Resuming session {session_id} (cycle {existing_state.get('cycle', 0)}, status: {existing_state.get('status')})")
+workspace/scripts/team_chat.py:410:            elif args.resume:
+workspace/scripts/team_chat.py:411:                print(f"Session {session_id} is not resumable (status: {existing_state.get('status')}). Use --force to start fresh.")
+workspace/scripts/team_chat.py:428:            "session_id": session_id,
+workspace/scripts/team_chat.py:444:    # Build adapters (both for new and resumed sessions)
+workspace/scripts/team_chat.py:473:    # Log session_start only for new sessions (not resumes)
+workspace/scripts/team_chat.py:477:        session_id=session_id,
+workspace/scripts/team_chat.py:495:                session_id=session_id,
+workspace/scripts/team_chat.py:505:                session_id=session_id,
+workspace/scripts/team_chat.py:523:                session_id=session_id,
+workspace/scripts/team_chat.py:558:                    session_id=session_id,
+workspace/scripts/team_chat.py:566:                write_summary(summary_file, state)
+workspace/scripts/team_chat.py:571:                session_id=session_id,
+workspace/scripts/team_chat.py:586:            session_id=session_id,
+workspace/scripts/team_chat.py:599:                session_id=session_id,
+workspace/scripts/team_chat.py:607:            write_summary(summary_file, state)
+workspace/scripts/team_chat.py:614:                session_id=session_id,
+workspace/scripts/team_chat.py:625:            session_id=session_id,
+workspace/scripts/team_chat.py:638:                    session_id=session_id,
+workspace/scripts/team_chat.py:658:                write_summary(summary_file, state)
+workspace/scripts/team_chat.py:666:                session_id=session_id,
+workspace/scripts/team_chat.py:674:            write_summary(summary_file, state)
+workspace/scripts/team_chat.py:681:                session_id=session_id,
+workspace/scripts/team_chat.py:702:                    session_id,
+workspace/scripts/team_chat.py:727:            session_id=session_id,
+workspace/scripts/team_chat.py:740:        write_summary(summary_file, state)
+workspace/scripts/team_chat.py:749:    write_summary(summary_file, state)
+workspace/scripts/team_chat.py:752:        session_id=session_id,
+workspace/scripts/team_chat.py:761:        "session_id": session_id,
+workspace/scripts/team_chat.py:766:            "summary_md": str(summary_file),
+workspace/scripts/team_chat.py:785:    parser.add_argument("--resume", action="store_true", help="Resume existing session if available")
+workspace/scripts/team_chat.py:809:    session_name = str(getattr(args, "session", "") or getattr(args, "session_id", "") or "teamchat")
+workspace/scripts/team_chat.py:821:    session = TeamChatSession(session_id=session_name, agents=agents, repo_root=root)
+workspace/BOUNDARIES.md:25:- `governance/GOVERNANCE_LOG.md` - Append-only event log
+workspace/BOUNDARIES.md:56:- `agents/*/sessions/*.jsonl` - Conversation logs
+workspace/scripts/regression.sh:370:# SUMMARY
+workspace/scripts/automation_status.py:115:        "summary": args.summary,
+workspace/scripts/automation_status.py:147:        "summary": latest.get("summary"),
+workspace/scripts/automation_status.py:185:        "summary": state.get("lastSummary"),
+workspace/scripts/automation_status.py:403:    record.add_argument("--summary")
+workspace/scripts/verify.sh:168:# SUMMARY
+workspace/sources/itc/regression/itc_incident_run_008.md:87:**Remediation Steps**: Complete dual authorization, execute post-incident checks, resume normal operations
+workspace/sources/itc/regression/itc_incident_run_008.md:114:- Normal operations resumed only after successful re-running of Run-006 and Run-007 post-incident
+workspace/sources/itc/regression/itc_incident_run_008.md:121:✅ Normal operations resume only after re-running Run-006 and Run-007 successfully
+workspace/scripts/consciousness_timer.py:23:    events_file = REPO_ROOT / "workspace" / "state" / "tacti_cr" / "events.jsonl"
+workspace/scripts/verify_tacti_cr_novel10_fixture.sh:25:  --events-path workspace/state/tacti_cr/events.jsonl \
+workspace/scripts/verify_tacti_cr_novel10_fixture.sh:31:  --events-path workspace/state/tacti_cr/events.jsonl
+workspace/scripts/intent_failure_scan.py:97:ROUTER_EVENT_LOG = Path("itc/llm_router_events.jsonl")
+workspace/scripts/intent_failure_scan.py:146:    files = list(base.glob("*/sessions/*.jsonl"))
+workspace/scripts/intent_failure_scan.py:254:    lines = [f"# Intent Failure Report {date}", "", "## Summary"]
+
+### Memory subsystem reconnaissance
+./AUDIT_SCOPE.md:22:- `workspace/MEMORY.md` — Architecture docs, cron jobs, regression details
+./AUDIT_SCOPE.md:36:- `workspace/memory/.gitkeep` — Memory directory marker
+./docs/AFK_RUN_REPORT_2026-02-08_1357.md:21:  - workspace/MEMORY.md
+./workspace/policy/expression_manifest.json:11:      "feature_name": "dream_consolidation",
+./workspace/handoffs/audit_protocol_impl_2026-02-06.md:26:3. **Cron guardrails** (HEARTBEAT.md): Observe/report only. Allowed writes limited to `workspace/handoffs/*` and `workspace/memory/*.md`. No code edits, git commits, deploys, or exfil.
+./tests_unittest/test_oscillatory_attention.py:21:            {"dream_consolidation", "knowledge_graph"},
+./tests_unittest/test_oscillatory_attention.py:22:            {"dream_consolidation", "knowledge_graph"},
+./tests_unittest/test_oscillatory_attention.py:33:                for subsystem in ["collapse_detect", "collapse_repair", "dream_consolidation", "knowledge_graph", "peer_graph_updates"]
+./tests_unittest/test_oscillatory_attention.py:41:        for subsystem in ["collapse_detect", "collapse_repair", "dream_consolidation", "knowledge_graph", "peer_graph_updates"]:
+./docs/claude/UPDATE_PLAN_20260217.md:79:- Target files: `workspace/memory/tacticr_feedback.jsonl`, `core/system2/memory/tacticr_feedback_writer.js`
+./docs/AFK_MEGA_REPORT_2026-02-08_2253.md:13:  - `workspace/MEMORY.md`
+./docs/INDEX.json:312:    "workspace/MEMORY.md",
+./docs/INDEX.json:457:    "workspace/memory/.gitkeep",
+./tests/system2_http_edge.test.js:368:      body: Buffer.from(JSON.stringify({ tool: 'read', args: { path: 'workspace/MEMORY.md' } }), 'utf8'),
+./tests_unittest/test_tacti_cr_novel_10.py:21:from tacti_cr.dream_consolidation import run_consolidation
+./tests_unittest/test_tacti_cr_novel_10.py:94:    def test_dream_consolidation_stable(self):
+./tests_unittest/test_tacti_cr_novel_10.py:105:            os.environ["TACTI_CR_DREAM_CONSOLIDATION"] = "1"
+./tests_unittest/test_dream_consolidation_pruning.py:5:from workspace.tacti_cr.dream_consolidation import prune_competing_clusters
+./tests_unittest/test_dream_consolidation_pruning.py:12:        os.environ["TACTI_CR_DREAM_CONSOLIDATION"] = "1"
+./tests_unittest/test_evolution_scaffolds.py:19:from tacti_cr.dream_consolidation import prune_competing_clusters
+./tests_unittest/test_evolution_scaffolds.py:38:        os.environ["TACTI_CR_DREAM_CONSOLIDATION"] = "1"
+./workspace/scripts/verify_dream_consolidation.sh:5:TMPDIR="/tmp/verify_dream_consolidation"
+./workspace/scripts/verify_dream_consolidation.sh:7:mkdir -p "$TMPDIR/workspace/memory"
+./workspace/scripts/verify_dream_consolidation.sh:9:cat > "$TMPDIR/workspace/memory/2026-02-19.md" <<'MD'
+./workspace/scripts/verify_dream_consolidation.sh:18:TACTI_CR_ENABLE=1 TACTI_CR_DREAM_CONSOLIDATION=1 \
+./workspace/scripts/verify_dream_consolidation.sh:24:from tacti_cr.dream_consolidation import run_consolidation
+./workspace/scripts/daily_brief_generator.py:74:- Memory: workspace/MEMORY.md
+./workspace/scripts/run_novel10_fixture.py:30:from tacti_cr.dream_consolidation import run_consolidation
+./workspace/hivemind/hivemind/active_inference.py:213:        novelty_penalty = 0.06 * idx
+./workspace/hivemind/hivemind/active_inference.py:214:        predicted = max(0.0, min(1.0, prior - novelty_penalty))
+./workspace/scripts/dream_consolidation.sh:8:TACTI_CR_ENABLE=1 TACTI_CR_DREAM_CONSOLIDATION=1 \
+./workspace/scripts/dream_consolidation.sh:13:from tacti_cr.dream_consolidation import run_consolidation
+./workspace/scripts/hooks/pre-commit:8:#         See workspace/MEMORY.md "Secret Overlay Pattern" for rationale.
+./workspace/governance/SECURITY_GOVERNANCE_CONTRACT.md:22:  - `workspace/MEMORY.md`
+./workspace/scripts/dream_consolidation.py:41:def dream_consolidation():
+./workspace/scripts/dream_consolidation.py:56:    dream_consolidation()
+./core/system2/memory/tacticr_feedback_writer.js:8:const DEFAULT_RELATIVE_PATH = 'workspace/memory/tacticr_feedback.jsonl';
+./workspace/scripts/verify_tacti_cr_novel10_fixture.sh:13:export TACTI_CR_DREAM_CONSOLIDATION=1
+./workspace/scripts/verify_tacti_cr_novel_10.sh:30:run_step "verify:dream_consolidation" bash workspace/scripts/verify_dream_consolidation.sh
+./workspace/scripts/verify_tacti_cr_novel_10.sh:39:  workspace/tacti_cr/dream_consolidation.py \
+./workspace/tacti_cr/oscillatory_gating.py:12:    1: {"dream_consolidation", "knowledge_graph"},
+./workspace/tacti_cr/README.md:84:- `TACTI_CR_DREAM_CONSOLIDATION=1`
+./workspace/tacti_cr/README.md:107:bash workspace/scripts/dream_consolidation.sh 2026-02-19
+./workspace/tacti_cr/novel10_contract.py:11:    "dream_consolidation": ["tacti_cr.dream.consolidation_started", "tacti_cr.dream.report_written"],
+./workspace/tacti_cr/novel10_contract.py:23:    "TACTI_CR_DREAM_CONSOLIDATION": "0",
+./workspace/tacti_cr/__init__.py:21:from .dream_consolidation import run_consolidation
+./memory/literature/The-Gay-Science.txt:8662:desire for destruction, for change, for novelty, for future, for becoming. 
+./workspace/tacti_cr/dream_consolidation.py:226:    if not is_enabled("dream_consolidation"):
+./workspace/tacti_cr/dream_consolidation.py:289:    if not is_enabled("dream_consolidation"):
+./workspace/tacti_cr/dream_consolidation.py:290:        return {"ok": False, "reason": "dream_consolidation_disabled"}
+./workspace/tacti_cr/config.py:83:    "dream_consolidation": "TACTI_CR_DREAM_CONSOLIDATION",
+
+## Phase 1 Hook Map (recon summary)
+
+### Ingestion hook candidates (top 5)
+1. `workspace/teamchat/session.py:37` `append_user()`
+   - Canonical TeamChat user message append point before JSONL persistence.
+2. `workspace/teamchat/session.py:42` `append_agent()`
+   - Canonical TeamChat agent reply append point before JSONL persistence.
+3. `workspace/teamchat/orchestrator.py:78` `run_cycle()`
+   - Main TeamChat runtime path invoking `append_user` + `append_agent` exactly once per turn.
+4. `workspace/itc_pipeline/ingestion_boundary.py:152` `ingest_message()`
+   - ITC/Telegram normalized message ingestion boundary (allowlist + dedupe + forward).
+5. `workspace/itc_pipeline/telegram_reader_telethon.py:199` `handler(event)`
+   - Telegram event entrypoint, normalizes event then forwards to ingestion boundary.
+
+### Session open/close hooks
+- Open candidate: `workspace/scripts/team_chat.py:392` `run(args)` after state load/build.
+- Close candidate: `workspace/scripts/team_chat.py:750` existing `session_end` event emission.
+
+### Session state + summary persistence today
+- Session JSONL events: `workspace/teamchat/sessions/<session_id>.jsonl` from `workspace/scripts/team_chat.py`.
+- Session state JSON: `workspace/teamchat/state/<session_id>.json` from `save_state()`.
+- Session summary markdown: `workspace/teamchat/summaries/<session_id>.md` from `write_summary()`.
+- TeamChat runtime message JSONL: `workspace/state_runtime/teamchat/sessions/<session_id>.jsonl` via `workspace/teamchat/store.py`.
+
+### Existing event schema used
+- `workspace/tacti_cr/events.py` append-only JSONL rows:
+  - `ts`, `type`, `payload`, `schema`, optional `session_id`.
+- Reuse this for new handshake/collapse events.
+
+### Test attachment points
+- Unit: new tracker modules + handshake helper + impasse/collapse manager.
+- Integration-ish: `workspace/teamchat/session.py`/`workspace/teamchat/orchestrator.py` path verifies hooks fire exactly once per append.
+
+=== Phase 2.1/2.2 implementation file status ===
+warning: in the working copy of 'workspace/audit/twenty_evolutions_impl_20260221T104827Z.md', CRLF will be replaced by LF the next time Git touches it
+M	workspace/audit/twenty_evolutions_impl_20260221T104827Z.md
+M	workspace/itc_pipeline/ingestion_boundary.py
+M	workspace/scripts/team_chat.py
+M	workspace/teamchat/session.py
+
+=== bash -n workspace/scripts/team_chat.py ===
+workspace/scripts/team_chat.py: line 18: syntax error near unexpected token `('
+workspace/scripts/team_chat.py: line 18: `WORKSPACE_ROOT = Path(__file__).resolve().parents[1]'
+
+=== python -m unittest targeted ===
+...........
+----------------------------------------------------------------------
+Ran 11 tests in 0.163s
+
+OK
+
+=== python -m py_compile modified python files ===
+PASS
+
+=== Gate: verify_llm_policy ===
+ok
+
+=== Gate: verify_coding_ladder ===
+ok
+
+=== Gate: verify_dream_consolidation ===
+ok
+
+=== Gate: verify_intent_failure_scan ===
+ok
+
+=== Gate: npm test (captured) ===
+log_path=/tmp/twenty_evolutions_npm_test_20260221.log
+PASS injectRuntimeEnv respects operator override and injects missing
+PASS injectRuntimeEnv propagates GROQ_API_KEY operator override to OPENCLAW_GROQ_API_KEY
+PASS config includes secrets bridge governance knobs
+PASS redaction covers mapped secret env vars
+PASS auto backend detection is platform deterministic
+PASS file backend requires explicit opt-in
+RUN node tests/secrets_cli_exec.test.js
+PASS secrets cli exec injects alias env keys without printing values
+RUN node tests/secrets_cli_plugin.test.js
+PASS plugin registers CLI command: secrets
+PASS secrets cli status prints enablement header (no secrets)
+secrets_cli_plugin tests complete
+RUN node tests/skill_composer.test.js
+PASS skill composer is disabled by default
+PASS skill composer respects tool governance decisions
+RUN node tests/system1_ignores_system2_env.test.js
+PASS createVllmProvider ignores SYSTEM2_VLLM_* when system2 is false
+PASS probeVllmServer ignores SYSTEM2_VLLM_* when system2 is false
+PASS probeVllmServer consults SYSTEM2_VLLM_* when system2 is true
+PASS probeVllmServer consults SYSTEM2_VLLM_* when nodeId alias resolves to c_lawd
+RUN node tests/system2_config_resolver.test.js
+PASS resolves with explicit args (highest precedence)
+PASS falls back to SYSTEM2_VLLM_* env vars
+PASS falls back to OPENCLAW_VLLM_* env vars
+PASS prefers SYSTEM2_VLLM_* over OPENCLAW_VLLM_*
+PASS uses node alias system-2 for c_lawd routing context
+PASS uses defaults when envs not set
+PASS emits diagnostic events (keys only)
+PASS resolves numeric config deterministically
+PASS invalid numeric env yields NaN (no throw)
+RUN node tests/system2_evidence_bundle.test.js
+PASS buildEvidenceBundle captures raw, writes redacted output, and emits manifest
+PASS buildEvidenceBundle preserves fail-closed snapshot status
+RUN node tests/system2_experiment.test.js
+PASS no-change fixture yields INCONCLUSIVE
+PASS improvement fixture yields KEEP
+PASS regression fixture yields REVERT
+PASS auth preset script maps to calibrated fail-on path
+PASS calibrated auth fail-on yields REVERT on regression fixture
+PASS failing subprocess writes UNAVAILABLE report and exits 3
+RUN node tests/system2_federation_observability_contract.test.js
+PASS FederatedEnvelopeV1 fixture validates (strict)
+PASS FederatedEnvelopeV1 rejects invalid schema (fail-closed)
+PASS System2EventV1 fixture validates
+PASS JSONL sink contract is deterministic (exact line match)
+PASS redaction-at-write is deterministic and idempotent
+PASS gating: disabled emitter is a no-op
+PASS gating: enabled emitter appends a redacted event
+PASS emitter does not throw on sink error by default (strict=false)
+PASS emitter fails closed on sink error when strict=true
+RUN node tests/system2_http_edge.test.js
+SKIP system2_http_edge: loopback bind not permitted in this environment
+RUN node tests/system2_repair_auth_profiles_acceptance.test.js
+PASS system2 repair auth-profiles acceptance check
+RUN node tests/system2_repair_models_acceptance.test.js
+PASS system2 repair models acceptance check
+RUN node tests/system2_repair_scripts_regression.test.js
+PASS system2 repair scripts regression gate
+RUN node tests/system2_snapshot_capture.test.js
+PASS captureSnapshot writes stable files and summary shape
+PASS captureSnapshot fail-closed with partial outputs when command fails
+RUN node tests/system2_snapshot_diff.test.js
+PASS JSON output is stable and ignores timestamp fields by default
+PASS ignore list suppresses expected diff paths and exits 0
+PASS fail-on marks regressions and exits 2
+PASS human output includes summary counts and regression marker
+PASS computeDiff supports deterministic dotpath flattening
+RUN node tests/system2_snapshot_observability_seam.test.js
+PASS OFF: system2.observability.enabled=false emits nothing and writes no JSONL
+PASS ON: system2.observability.enabled=true writes exactly one deterministic JSONL line
+RUN node tests/tacticr_feedback_writer.test.js
+PASS tacticr feedback writer appends schema-valid sanitized JSONL entries
+PASS tacticr feedback writer enforces required schema fields
+RUN node tests/tool_governance.test.js
+PASS tool governance allows explicit allowlist actions
+PASS tool governance asks for exec/network/outside-workspace writes
+PASS tool governance denies explicit denylist actions
+RUN node tests/tool_governance_edge_hook.test.js
+PASS http edge governance hook maps approval/deny errors deterministically
+OK 38 test group(s)
+
+=== Commit 1 pre-gate ===
+..
+----------------------------------------------------------------------
+Ran 2 tests in 0.004s
+
+OK
+
+=== Commit 1 evidence ===
+6d28a5d feat(memory): hook arousal + relationship trackers into message flow
+
+=== Commit 2 pre-gate ===
+.........
+----------------------------------------------------------------------
+Ran 9 tests in 0.246s
+
+OK
+
+=== Commit 2 evidence ===
+9dd1e50 feat(session): add continuity handshake events and repairable impasse mode
+
+=== Post-commit targeted tests ===
+...........
+----------------------------------------------------------------------
+Ran 11 tests in 0.175s
+
+OK
+
+=== Post-commit verify gates ===
+ok
+ok
+ok
+ok
+
+=== Post-commit npm test (captured) ===
+log_path=/tmp/twenty_evolutions_npm_test_post_commit_20260221.log
+PASS injectRuntimeEnv respects operator override and injects missing
+PASS injectRuntimeEnv propagates GROQ_API_KEY operator override to OPENCLAW_GROQ_API_KEY
+PASS config includes secrets bridge governance knobs
+PASS redaction covers mapped secret env vars
+PASS auto backend detection is platform deterministic
+PASS file backend requires explicit opt-in
+RUN node tests/secrets_cli_exec.test.js
+PASS secrets cli exec injects alias env keys without printing values
+RUN node tests/secrets_cli_plugin.test.js
+PASS plugin registers CLI command: secrets
+PASS secrets cli status prints enablement header (no secrets)
+secrets_cli_plugin tests complete
+RUN node tests/skill_composer.test.js
+PASS skill composer is disabled by default
+PASS skill composer respects tool governance decisions
+RUN node tests/system1_ignores_system2_env.test.js
+PASS createVllmProvider ignores SYSTEM2_VLLM_* when system2 is false
+PASS probeVllmServer ignores SYSTEM2_VLLM_* when system2 is false
+PASS probeVllmServer consults SYSTEM2_VLLM_* when system2 is true
+PASS probeVllmServer consults SYSTEM2_VLLM_* when nodeId alias resolves to c_lawd
+RUN node tests/system2_config_resolver.test.js
+PASS resolves with explicit args (highest precedence)
+PASS falls back to SYSTEM2_VLLM_* env vars
+PASS falls back to OPENCLAW_VLLM_* env vars
+PASS prefers SYSTEM2_VLLM_* over OPENCLAW_VLLM_*
+PASS uses node alias system-2 for c_lawd routing context
+PASS uses defaults when envs not set
+PASS emits diagnostic events (keys only)
+PASS resolves numeric config deterministically
+PASS invalid numeric env yields NaN (no throw)
+RUN node tests/system2_evidence_bundle.test.js
+PASS buildEvidenceBundle captures raw, writes redacted output, and emits manifest
+PASS buildEvidenceBundle preserves fail-closed snapshot status
+RUN node tests/system2_experiment.test.js
+PASS no-change fixture yields INCONCLUSIVE
+PASS improvement fixture yields KEEP
+PASS regression fixture yields REVERT
+PASS auth preset script maps to calibrated fail-on path
+PASS calibrated auth fail-on yields REVERT on regression fixture
+PASS failing subprocess writes UNAVAILABLE report and exits 3
+RUN node tests/system2_federation_observability_contract.test.js
+PASS FederatedEnvelopeV1 fixture validates (strict)
+PASS FederatedEnvelopeV1 rejects invalid schema (fail-closed)
+PASS System2EventV1 fixture validates
+PASS JSONL sink contract is deterministic (exact line match)
+PASS redaction-at-write is deterministic and idempotent
+PASS gating: disabled emitter is a no-op
+PASS gating: enabled emitter appends a redacted event
+PASS emitter does not throw on sink error by default (strict=false)
+PASS emitter fails closed on sink error when strict=true
+RUN node tests/system2_http_edge.test.js
+SKIP system2_http_edge: loopback bind not permitted in this environment
+RUN node tests/system2_repair_auth_profiles_acceptance.test.js
+PASS system2 repair auth-profiles acceptance check
+RUN node tests/system2_repair_models_acceptance.test.js
+PASS system2 repair models acceptance check
+RUN node tests/system2_repair_scripts_regression.test.js
+PASS system2 repair scripts regression gate
+RUN node tests/system2_snapshot_capture.test.js
+PASS captureSnapshot writes stable files and summary shape
+PASS captureSnapshot fail-closed with partial outputs when command fails
+RUN node tests/system2_snapshot_diff.test.js
+PASS JSON output is stable and ignores timestamp fields by default
+PASS ignore list suppresses expected diff paths and exits 0
+PASS fail-on marks regressions and exits 2
+PASS human output includes summary counts and regression marker
+PASS computeDiff supports deterministic dotpath flattening
+RUN node tests/system2_snapshot_observability_seam.test.js
+PASS OFF: system2.observability.enabled=false emits nothing and writes no JSONL
+PASS ON: system2.observability.enabled=true writes exactly one deterministic JSONL line
+RUN node tests/tacticr_feedback_writer.test.js
+PASS tacticr feedback writer appends schema-valid sanitized JSONL entries
+PASS tacticr feedback writer enforces required schema fields
+RUN node tests/tool_governance.test.js
+PASS tool governance allows explicit allowlist actions
+PASS tool governance asks for exec/network/outside-workspace writes
+PASS tool governance denies explicit denylist actions
+RUN node tests/tool_governance_edge_hook.test.js
+PASS http edge governance hook maps approval/deny errors deterministically
+OK 38 test group(s)
+
+## Phase 1→2 Progress Summary (this execution)
+
+### Implemented now
+- Item 1 (message hooks): wired safe message-event hooks at TeamChat append points and ITC ingestion boundary.
+- Item 19 (session continuity): added open/close handshake helper with deterministic open/close artifacts and session events.
+- Item 12/3 thin slice (impasse + repairable collapse): added impasse ladder manager, integrated failure-path state transitions, collapse-mode bounded behavior, and recovery on stable successes.
+
+### New/updated files (code)
+- `workspace/memory/message_hooks.py`
+- `workspace/memory/arousal_tracker.py`
+- `workspace/memory/relationship_tracker.py`
+- `workspace/memory/session_handshake.py`
+- `workspace/tacti_cr/impasse.py`
+- `workspace/teamchat/session.py`
+- `workspace/itc_pipeline/ingestion_boundary.py`
+- `workspace/scripts/team_chat.py`
+- `tests_unittest/test_memory_message_hooks.py`
+- `tests_unittest/test_session_handshake.py`
+- `tests_unittest/test_tacti_cr_impasse.py`
+
+### Commit checkpoints
+- `6d28a5d` feat(memory): hook arousal + relationship trackers into message flow
+- `9dd1e50` feat(session): add continuity handshake events and repairable impasse mode
+
+### Verification summary
+- Targeted unit tests: PASS
+  - `tests_unittest.test_memory_message_hooks`
+  - `tests_unittest.test_session_handshake`
+  - `tests_unittest.test_tacti_cr_impasse`
+  - `tests_unittest.test_tacti_cr_collapse`
+- Verification scripts: PASS
+  - `workspace/scripts/verify_llm_policy.sh`
+  - `workspace/scripts/verify_coding_ladder.sh`
+  - `workspace/scripts/verify_dream_consolidation.sh`
+  - `workspace/scripts/verify_intent_failure_scan.sh`
+- `npm test`: PASS (captured logs recorded above)
