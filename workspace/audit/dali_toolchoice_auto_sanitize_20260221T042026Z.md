@@ -1778,3 +1778,14 @@ Observed: all PASS.
 
 Note:
 - `actionlint` was not installed locally; YAML syntax validated via command execution and workflow file review.
+
+GitHub UI/checks validation attempt:
+```bash
+gh pr view 39 --json url,title,body,statusCheckRollup
+```
+Observed:
+```text
+error connecting to api.github.com
+check your internet connection or https://githubstatus.com
+```
+Unable to verify Checks tab state from this environment due GitHub API connectivity.
