@@ -27,6 +27,17 @@ jobs:
         run: python3 -m pip install pyyaml
       - name: Install dependencies
         run: npm ci
+      - name: Audit artifact secret scan
+        run: |
+          BASE_SHA="${{ github.event.before }}"
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          fi
+          if [ -n "${BASE_SHA}" ] && [ "${BASE_SHA}" != "0000000000000000000000000000000000000000" ]; then
+            bash workspace/scripts/scan_audit_secrets.sh "${BASE_SHA}" "${{ github.sha }}"
+          else
+            bash workspace/scripts/scan_audit_secrets.sh
+          fi
       - name: Governance log guard
         run: |
           BASE_SHA="${{ github.event.before }}"
