@@ -20,19 +20,19 @@ if str(WORKSPACE_ROOT) not in sys.path:
     sys.path.insert(0, str(WORKSPACE_ROOT))
 
 try:
-    from tacti_cr.temporal_watchdog import temporal_reset_event
+    from tacti.temporal_watchdog import temporal_reset_event
 except Exception:  # pragma: no cover
     temporal_reset_event = None
 try:
-    from tacti_cr.events import emit as tacti_emit
+    from tacti.events import emit as tacti_emit
 except Exception:  # pragma: no cover
     tacti_emit = None
 try:
-    from tacti_cr.mirror import update_from_event as mirror_update_from_event
+    from tacti.mirror import update_from_event as mirror_update_from_event
 except Exception:  # pragma: no cover
     mirror_update_from_event = None
 try:
-    from tacti_cr.valence import update_valence as valence_update
+    from tacti.valence import update_valence as valence_update
 except Exception:  # pragma: no cover
     valence_update = None
 try:
@@ -41,7 +41,7 @@ except Exception:  # pragma: no cover
     close_session_handshake = None
     load_session_handshake = None
 try:
-    from tacti_cr.impasse import ImpasseManager
+    from tacti.impasse import ImpasseManager
 except Exception:  # pragma: no cover
     ImpasseManager = None
 try:

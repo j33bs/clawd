@@ -10,7 +10,7 @@ from .relationship_tracker import load_state as load_relationship_state
 from .relationship_tracker import record_session_close, record_session_open
 
 try:
-    from tacti_cr.events import emit as tacti_emit
+    from tacti.events import emit as tacti_emit
 except Exception:  # pragma: no cover
     tacti_emit = None
 

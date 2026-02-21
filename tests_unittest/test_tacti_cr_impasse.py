@@ -5,7 +5,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "workspace"))
 
-from tacti_cr.impasse import ImpasseManager  # noqa: E402
+from tacti.impasse import ImpasseManager  # noqa: E402
 
 
 class TestImpasseManager(unittest.TestCase):
@@ -37,6 +37,11 @@ class TestImpasseManager(unittest.TestCase):
         recovered = manager.on_success()
         self.assertEqual("healthy", recovered["status"])
         self.assertEqual(0, recovered["consecutive_failures"])
+
+    def test_legacy_shim_import_still_resolves(self):
+        from tacti_cr.impasse import ImpasseManager as LegacyImpasseManager
+
+        self.assertIsNotNone(LegacyImpasseManager)
 
 
 if __name__ == "__main__":

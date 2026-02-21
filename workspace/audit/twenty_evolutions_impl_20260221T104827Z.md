@@ -8094,3 +8094,1122 @@ OK 38 test group(s)
   - `workspace/scripts/verify_dream_consolidation.sh`
   - `workspace/scripts/verify_intent_failure_scan.sh`
 - `npm test`: PASS (captured logs recorded above)
+Sat Feb 21 12:38:22 UTC 2026
+ M workspace/audit/twenty_evolutions_impl_20260221T104827Z.md
+bc068b9
+./README.md:55:When enabled, runtime TACTI events write to `workspace/state_runtime/tacti_cr/events.jsonl` (ignored); `workspace/state/tacti_cr/events.jsonl` remains a deterministic tracked stub.
+./README.md:109:│   ├── tacti_cr/         # TACTI(C)-R core modules
+./tests_unittest/test_oscillatory_attention.py:4:from workspace.tacti_cr.oscillatory_gating import PhaseScheduler
+./tests_unittest/test_tacti_cr_integration.py:11:from tacti_cr.arousal import detect_arousal, get_compute_allocation, ArousalLevel  # noqa: E402
+./tests_unittest/test_tacti_cr_integration.py:12:from tacti_cr.temporal import TemporalMemory  # noqa: E402
+./tests_unittest/test_tacti_cr_integration.py:13:from tacti_cr.collapse import CollapseDetector  # noqa: E402
+./tests_unittest/test_tacti_cr_integration.py:14:from tacti_cr.repair import RepairEngine  # noqa: E402
+./tests_unittest/test_tacti_cr_integration.py:15:from tacti_cr.hivemind_bridge import MemoryEntry  # noqa: E402
+./tests_unittest/test_tacti_cr_integration.py:19:    @patch("tacti_cr.temporal.hivemind_store", return_value=True)
+./tests_unittest/test_tacti_cr_integration.py:20:    @patch("tacti_cr.temporal.hivemind_query")
+./tests_unittest/test_tacti_cr_integration.py:21:    @patch("tacti_cr.collapse.hivemind_query")
+./tests_unittest/test_policy_router_tacti_novel10.py:52:                    "tacti_cr": {"flags": {"expression_router": True}},
+./tests_unittest/test_semantic_immune_epitopes.py:6:import workspace.tacti_cr.semantic_immune as semantic_immune
+./tests_unittest/test_tacti_cr_external_memory_integration.py:12:from tacti_cr.external_memory import append_event, healthcheck, read_events  # noqa: E402
+./tests_unittest/test_tacti_cr_events.py:12:    mod_path = repo_root / "workspace" / "tacti_cr" / "events.py"
+./tests_unittest/test_tacti_cr_events.py:34:        self.events.emit("tacti_cr.test.one", {"a": 1}, now=fixed, session_id="s-1")
+./tests_unittest/test_tacti_cr_events.py:38:        self.assertEqual("tacti_cr.test.one", rows[0]["type"])
+./tests_unittest/test_tacti_cr_events.py:45:        self.events.emit("tacti_cr.alpha", {"x": 1}, now=fixed)
+./tests_unittest/test_tacti_cr_events.py:46:        self.events.emit("tacti_cr.beta", {"x": 2}, now=fixed)
+./tests_unittest/test_tacti_cr_events.py:47:        self.events.emit("tacti_cr.alpha", {"x": 3}, now=fixed)
+./tests_unittest/test_tacti_cr_events.py:49:        self.assertEqual({"tacti_cr.alpha": 2, "tacti_cr.beta": 1}, summary)
+./tests_unittest/test_tacti_cr_hivemind_bridge.py:11:from tacti_cr.hivemind_bridge import hivemind_query, hivemind_store  # noqa: E402
+./tests_unittest/test_tacti_cr_hivemind_bridge.py:15:    @patch("tacti_cr.hivemind_bridge._memory_tool_path")
+./tests_unittest/test_tacti_cr_hivemind_bridge.py:16:    @patch("tacti_cr.hivemind_bridge.subprocess.run")
+./tests_unittest/test_tacti_cr_hivemind_bridge.py:41:    @patch("tacti_cr.hivemind_bridge._memory_tool_path")
+./tests_unittest/test_tacti_cr_hivemind_bridge.py:42:    @patch("tacti_cr.hivemind_bridge.subprocess.run")
+./tests_unittest/test_tacti_cr_hivemind_bridge.py:53:                "source": "tacti_cr.test",
+./tests_unittest/test_policy_router_tacti_main_flow.py:103:            runtime_events = tmp / "state_runtime" / "tacti_cr" / "events.jsonl"
+./tests_unittest/test_novel10_fixture_verifier.py:15:    path = REPO_ROOT / "workspace" / "tacti_cr" / "novel10_contract.py"
+./tests_unittest/test_temporal_surprise_gate.py:4:from workspace.tacti_cr.temporal import TemporalMemory, surprise_score_proxy, text_embedding_proxy
+./tests_unittest/test_tacti_cr_impasse.py:8:from tacti_cr.impasse import ImpasseManager  # noqa: E402
+./tests_unittest/test_tacti_cr_temporal.py:11:from tacti_cr.temporal import TemporalMemory  # noqa: E402
+./tests_unittest/test_tacti_cr_temporal.py:53:    @patch("tacti_cr.temporal.hivemind_store", return_value=True)
+./tests_unittest/test_tacti_cr_temporal.py:60:        self.assertEqual(payload["source"], "tacti_cr.temporal")
+./tests_unittest/test_tacti_cr_temporal.py:63:    @patch("tacti_cr.temporal.hivemind_query")
+./tests_unittest/test_tacti_cr_temporal.py:68:        from tacti_cr.hivemind_bridge import MemoryEntry
+./tests_unittest/test_tacti_cr_arousal.py:9:from tacti_cr.arousal import (  # noqa: E402
+./tests_unittest/test_tacti_cr_repair.py:9:from tacti_cr.repair import RepairEngine  # noqa: E402
+./tests_unittest/test_tacti_cr_collapse.py:10:from tacti_cr.collapse import CollapseDetector  # noqa: E402
+./tests_unittest/test_tacti_cr_collapse.py:43:    @patch("tacti_cr.collapse.hivemind_query")
+./tests_unittest/test_tacti_cr_collapse.py:45:        from tacti_cr.hivemind_bridge import MemoryEntry
+./tests_unittest/test_tacti_cr_cross_timescale.py:9:from tacti_cr.cross_timescale import CrossTimescaleController  # noqa: E402
+./tests_unittest/test_dream_consolidation_pruning.py:5:from workspace.tacti_cr.dream_consolidation import prune_competing_clusters
+./tests_unittest/test_evolution_scaffolds.py:19:from tacti_cr.dream_consolidation import prune_competing_clusters
+./tests_unittest/test_evolution_scaffolds.py:20:from tacti_cr.oscillatory_gating import OscillatoryGate
+./tests_unittest/test_evolution_scaffolds.py:21:from tacti_cr.semantic_immune import assess_content, cache_epitope
+./tests_unittest/test_evolution_scaffolds.py:22:from tacti_cr.temporal import TemporalMemory, text_embedding_proxy
+./tests_unittest/test_tacti_cr_novel_10.py:20:from tacti_cr.arousal_oscillator import ArousalOscillator
+./tests_unittest/test_tacti_cr_novel_10.py:21:from tacti_cr.dream_consolidation import run_consolidation
+./tests_unittest/test_tacti_cr_novel_10.py:22:from tacti_cr.expression import compute_expression
+./tests_unittest/test_tacti_cr_novel_10.py:23:from tacti_cr.mirror import behavioral_fingerprint, update_from_event
+./tests_unittest/test_tacti_cr_novel_10.py:24:from tacti_cr.prefetch import PrefetchCache, predict_topics
+./tests_unittest/test_tacti_cr_novel_10.py:25:from tacti_cr.semantic_immune import assess_content, approve_quarantine
+./tests_unittest/test_tacti_cr_novel_10.py:26:from tacti_cr.temporal_watchdog import detect_temporal_drift, temporal_reset_event, update_beacon
+./tests_unittest/test_tacti_cr_novel_10.py:27:from tacti_cr.valence import current_valence, routing_bias, update_valence
+./workspace/AUDIT_AIF_PHASE1_20260219.md:4:- Shipped P1: append-only external memory event store (JSONL backend) at `workspace/tacti_cr/external_memory.py`.
+./workspace/AUDIT_AIF_PHASE1_20260219.md:8:  - `workspace/tacti_cr/efe_calculator.py`
+./workspace/AUDIT_AIF_PHASE1_20260219.md:9:  - `workspace/tacti_cr/curiosity.py`
+./workspace/AUDIT_AIF_PHASE1_20260219.md:10:  - `workspace/tacti_cr/active_inference_agent.py`
+./workspace/AUDIT_AIF_PHASE1_20260219.md:25:    - `ModuleNotFoundError: No module named 'tacti_cr.external_memory'`
+./workspace/AUDIT_AIF_PHASE1_20260219.md:29:  - `python3 -m py_compile workspace/tacti_cr/external_memory.py workspace/tacti_cr/efe_calculator.py workspace/tacti_cr/curiosity.py workspace/tacti_cr/active_inference_agent.py workspace/scripts/external_memory_demo.py` (pass)
+./workspace/memory/session_handshake.py:13:    from tacti_cr.events import emit as tacti_emit
+./workspace/memory/session_handshake.py:92:        tacti_emit("tacti_cr.session.handshake_loaded", payload, session_id=str(session_id))
+./workspace/memory/session_handshake.py:139:        tacti_emit("tacti_cr.session.session_closed", payload, session_id=str(session_id))
+./workspace/tacti_cr/valence.py:75:    emit("tacti_cr.valence.updated", {"agent": agent, "valence": value, "delta": delta}, now=dt_now)
+./workspace/tacti_cr/semantic_immune.py:179:        emit("tacti_cr.semantic_immune.quarantined", {k: row[k] for k in ("content_hash", "score", "threshold", "reason")})
+./workspace/tacti_cr/semantic_immune.py:207:        emit("tacti_cr.semantic_immune.quarantined", {k: row[k] for k in ("content_hash", "score", "threshold", "reason")})
+./workspace/tacti_cr/semantic_immune.py:219:        "tacti_cr.semantic_immune.accepted",
+./workspace/tacti_cr/semantic_immune.py:253:    emit("tacti_cr.semantic_immune.approved", {"content_hash": target})
+./workspace/scripts/verify_tacti_cr_novel10_fixture.py:16:from tacti_cr.events import summarize_by_type, read_events
+./workspace/scripts/verify_tacti_cr_novel10_fixture.py:17:from tacti_cr.novel10_contract import required_for_fixture
+./workspace/scripts/verify_tacti_cr_novel10_fixture.py:39:    parser.add_argument("--events-path", default="workspace/state/tacti_cr/events.jsonl")
+./workspace/knowledge_base/kb.py:25:    from tacti_cr.prefetch import prefetch_context
+./workspace/tacti_cr/prefetch.py:54:        emit("tacti_cr.prefetch.recorded", {"topic": topic, "docs_count": len(docs), "depth": int(idx.get("depth", 3))})
+./workspace/tacti_cr/prefetch.py:67:        emit("tacti_cr.prefetch.hit_rate", {"hit": bool(hit), "hit_rate": hit_rate, "depth": int(idx["depth"]), "total": total})
+./workspace/tacti_cr/prefetch.py:87:    emit("tacti_cr.prefetch.predicted_topics", {"topics": topics, "depth": cache.depth()})
+./workspace/tacti_cr/prefetch.py:92:    emit("tacti_cr.prefetch.cache_put", {"topics": topics, "docs_count": len(docs)})
+./workspace/CODEX_TASK_LIST.md:8:**File:** `workspace/tacti_cr/efe_calculator.py`
+./workspace/CODEX_TASK_LIST.md:18:**File:** `workspace/tacti_cr/slime_optimizer.py`
+./workspace/CODEX_TASK_LIST.md:28:**File:** `workspace/tacti_cr/reservoir_core.py`
+./workspace/CODEX_TASK_LIST.md:38:**File:** `workspace/tacti_cr/murmuration_agent.py`
+./workspace/CODEX_TASK_LIST.md:48:**File:** `workspace/tacti_cr/external_memory.py`
+./workspace/CODEX_TASK_LIST.md:58:**File:** `workspace/tacti_cr/active_inference_agent.py`
+./workspace/CODEX_TASK_LIST.md:68:**File:** `workspace/tacti_cr/multiscale_engine.py`
+./workspace/CODEX_TASK_LIST.md:78:**File:** `workspace/tacti_cr/curiosity.py`
+./workspace/CODEX_TASK_LIST.md:88:**File:** `workspace/tacti_cr/self_healing.py`
+./workspace/hivemind/hivemind/stigmergy.py:16:    from tacti_cr.events import emit as tacti_emit
+./workspace/hivemind/hivemind/stigmergy.py:78:            tacti_emit("tacti_cr.stigmergy.mark_deposited", mark, now=_to_dt(now or datetime.now(timezone.utc)))
+./workspace/hivemind/hivemind/stigmergy.py:92:                "tacti_cr.stigmergy.query",
+./workspace/hivemind/hivemind/stigmergy.py:103:                "tacti_cr.stigmergy.avoid_topics",
+./workspace/scripts/verify_dream_consolidation.sh:24:from tacti_cr.dream_consolidation import run_consolidation
+./workspace/tacti_cr/events_paths.py:15:    return root / "workspace" / "state_runtime" / "tacti_cr" / "events.jsonl"
+./workspace/tacti_cr/README.md:34:from tacti_cr.arousal import detect_arousal, get_compute_allocation
+./workspace/tacti_cr/README.md:42:from tacti_cr.temporal import TemporalMemory
+./workspace/tacti_cr/README.md:50:from tacti_cr.collapse import CollapseDetector
+./workspace/tacti_cr/README.md:51:from tacti_cr.repair import RepairEngine
+./workspace/tacti_cr/README.md:118:- Unified runtime events are append-only JSONL at `workspace/state/tacti_cr/events.jsonl`.
+./workspace/tacti_cr/README.md:136:bash workspace/scripts/verify_tacti_cr_events.sh --min-count tacti_cr.team_chat.session_start=1
+./workspace/tacti_cr/README.md:147:This runs an offline fixture harness that enables all Novel-10 flags, drives minimal paths, and asserts required event types against `workspace/tacti_cr/novel10_contract.py`.
+./workspace/knowledge_base/data/graph.jsonl:28:{"id": "tacti_workspace_hivemind_TACTI_CR.md", "name": "TACTI(C)-R System Synthesis", "entity_type": "research:tacti", "content": "# TACTI(C)-R System Synthesis (HiveMind Integration)\n\n## Integration Map\n- `workspace/hivemind/hivemind/peer_graph.py`: Murmuration local peer topology and interaction updates.\n- `workspace/hivemind/hivemind/reservoir.py`: Echo-state reservoir + deterministic readout hints.\n- `workspace/hivemind/hivemind/physarum_router.py`: Conductance/path exploration and pruning.\n- `workspace/hivemind/hivemind/trails.py`: External trail memory with decay, reinforcement, and similarity query.\n- `workspace/hivemind/hivemind/dynamics_pipeline.py`: Composition layer for Tasks 1-4.\n- `workspace/hivemind/hivemind/integrations/main_flow_hook.py`: Main-flow adapter (flag checks, agent-id resolution, routing enhancement, outcome updates).\n- `scripts/memory_tool.py`: Optional Task 1-4 runtime hook for memory query consult-order/path bias.\n- `workspace/hivemind/hivemind/active_inference.py`: Preference priors + prediction-error updates.\n- `workspace/scripts/policy_router.py`: Real response routing hook site (`PolicyRouter.execute_with_escalation`) for Tasks 1-4 + Task 5.\n\n## Feature Flags\nAll modules are optional and off by default.\n\n- `ENABLE_MURMURATION=1`\n- `ENABLE_RESERVOIR=1`\n- `ENABLE_PHYSARUM_ROUTER=1`\n- `ENABLE_TRAIL_MEMORY=1`\n- `ENABLE_ACTIVE_INFERENCE=1`\n\n## Module APIs\n### Task 1: Murmuration\n- `PeerGraph.init(agent_ids, k, seed)`\n- `PeerGraph.peers(agent_id) -> list[str]`\n- `PeerGraph.observe_interaction(src, dst, signal)`\n- `PeerGraph.tick(dt)`\n- `PeerGraph.snapshot() / PeerGraph.load(payload)`\n\n### Task 2: Reservoir\n- `Reservoir.init(dim, leak, spectral_scale, seed)`\n- `Reservoir.step(input_features, agent_features, adjacency_features) -> state`\n- `Reservoir.readout(state) -> dict`\n- `Reservoir.reset(session_id=None)`\n- `Reservoir.snapshot() / Reservoir.load(payload)`\n\n### Task 3: Physarum\n- `PhysarumRouter.propose_paths(src_agent, target_intent, peer_graph, n_paths) -> list[list[str]]`\n- `PhysarumRouter.update(path, reward_signal)`\n- `PhysarumRouter.prune(min_k, max_k)`\n- `PhysarumRouter.snapshot() / PhysarumRouter.load(payload)`\n\n### Task 4: External Trails\n- `TrailStore.add(trail) -> trail_id`\n- `TrailStore.query(text_or_embedding, k, now=None) -> list[dict]`\n- `TrailStore.decay(now=None) -> dict`\n- `TrailStore.reinforce(trail_id, delta) -> bool`\n- `TrailStore.snapshot() / TrailStore.load(payload)`\n\n### Task 5: Active Inference\n- `PreferenceModel.predict(context) -> (preference_params, confidence)`\n- `PreferenceModel.update(feedback, observed_outcome) -> dict`\n- `PredictionError.compute(predicted, observed) -> float`\n- `PreferenceModel.snapshot() / PreferenceModel.load(payload)`\n- `PreferenceModel.save_path(path) / PreferenceModel.load_path(path)`\n\n## Integration Behavior\n### Tasks 1-4 (HiveMind memory query path)\nWhen any of the first four flags is enabled, `scripts/memory_tool.py query`:\n1. Loads `TactiDynamicsPipeline` state from `workspace/hivemind/data/tacti_dynamics_snapshot.json` if present.\n2. Resolves agent IDs from runtime candidates and canoni", "source": "workspace/hivemind/TACTI_CR.md", "metadata": {"topic": "tacti"}}
+./workspace/tacti_cr/config.py:127:    tacti_cfg = raw.get("tacti_cr")
+./workspace/tacti_cr/config.py:131:    if isinstance(routing_cfg, dict) and isinstance(routing_cfg.get("tacti_cr"), dict):
+./workspace/tacti_cr/config.py:132:        return routing_cfg["tacti_cr"]
+./workspace/tacti_cr/temporal_watchdog.py:44:    emit("tacti_cr.temporal_watchdog.beacon_updated", {"path": str(path), "epoch_ms": payload["epoch_ms"]}, now=now)
+./workspace/tacti_cr/temporal_watchdog.py:135:    emit("tacti_cr.temporal_watchdog.temporal_reset", {"content_hash": digest, "findings": findings}, now=now)
+./workspace/tacti_cr/mirror.py:77:        "tacti_cr.mirror.updated",
+./workspace/hivemind/hivemind/store.py:21:    from tacti_cr.semantic_immune import assess_content
+./workspace/tacti_cr/collapse.py:89:    out = root / "workspace" / "state" / "tacti_cr" / "collapse_recommendations.jsonl"
+./workspace/scripts/run_novel10_fixture.py:25:from tacti_cr.events import DEFAULT_PATH, summarize_by_type
+./workspace/scripts/run_novel10_fixture.py:26:import tacti_cr.events as tacti_events
+./workspace/scripts/run_novel10_fixture.py:27:from tacti_cr.novel10_contract import FEATURE_FLAGS
+./workspace/scripts/run_novel10_fixture.py:28:from tacti_cr.arousal_oscillator import ArousalOscillator
+./workspace/scripts/run_novel10_fixture.py:29:from tacti_cr.temporal import TemporalMemory
+./workspace/scripts/run_novel10_fixture.py:30:from tacti_cr.dream_consolidation import run_consolidation
+./workspace/scripts/run_novel10_fixture.py:31:from tacti_cr.semantic_immune import assess_content
+./workspace/scripts/run_novel10_fixture.py:32:from tacti_cr.prefetch import prefetch_context, PrefetchCache
+./workspace/scripts/run_novel10_fixture.py:33:from tacti_cr.mirror import update_from_event
+./workspace/scripts/run_novel10_fixture.py:34:from tacti_cr.valence import update_valence
+./workspace/tacti_cr/temporal.py:86:                    "source": "tacti_cr.temporal",
+./workspace/tacti_cr/temporal.py:95:                "tacti_cr.temporal.drift_detected",
+./workspace/tacti_cr/events.py:11:DEFAULT_PATH = Path("workspace/state/tacti_cr/events.jsonl")
+./workspace/tacti_cr/events.py:62:        print(f"warning: tacti_cr.events emit failed: {exc}", file=sys.stderr)
+./workspace/tacti_cr/novel10_contract.py:8:    "arousal": ["tacti_cr.arousal_multiplier"],
+./workspace/tacti_cr/novel10_contract.py:9:    "expression": ["tacti_cr.expression_profile"],
+./workspace/tacti_cr/novel10_contract.py:10:    "temporal_watchdog": ["tacti_cr.temporal.drift_detected", "tacti_cr.temporal_watchdog.temporal_reset"],
+./workspace/tacti_cr/novel10_contract.py:11:    "dream_consolidation": ["tacti_cr.dream.consolidation_started", "tacti_cr.dream.report_written"],
+./workspace/tacti_cr/novel10_contract.py:12:    "semantic_immune": ["tacti_cr.semantic_immune.accepted", "tacti_cr.semantic_immune.quarantined"],
+./workspace/tacti_cr/novel10_contract.py:13:    "stigmergy": ["tacti_cr.stigmergy.mark_deposited", "tacti_cr.stigmergy.query"],
+./workspace/tacti_cr/novel10_contract.py:14:    "prefetch": ["tacti_cr.prefetch.predicted_topics", "tacti_cr.prefetch.cache_put"],
+./workspace/tacti_cr/novel10_contract.py:15:    "mirror": ["tacti_cr.mirror.updated"],
+./workspace/tacti_cr/novel10_contract.py:16:    "valence": ["tacti_cr.valence.updated", "tacti_cr.valence_bias"],
+./workspace/tacti_cr/novel10_contract.py:17:    "trail_heatmap": ["tacti_cr.trails.topn_served"],
+./workspace/scripts/run_narrative_distill.py:16:from tacti_cr.events_paths import resolve_events_path
+./workspace/tacti_cr/hivemind_bridge.py:102:        str(entry.get("source", "tacti_cr")),
+./workspace/tacti_cr/dream_consolidation.py:293:    emit("tacti_cr.dream.consolidation_started", {"day": day}, now=now_dt)
+./workspace/tacti_cr/dream_consolidation.py:350:    emit("tacti_cr.dream.report_written", {"day": day, "report_path": str(report_path)}, now=now_dt)
+./workspace/scripts/external_memory_demo.py:15:from tacti_cr.external_memory import append_event, healthcheck  # noqa: E402
+./workspace/docs/briefs/BRIEF-2026-02-18-001_TACTI_CR_Implementation.md:40:New modules in `workspace/tacti_cr/` - isolated from core OpenClaw
+./workspace/docs/briefs/BRIEF-2026-02-18-001_TACTI_CR_Implementation.md:44:| `workspace/tacti_cr/` | CREATE |
+./workspace/docs/briefs/BRIEF-2026-02-18-001_TACTI_CR_Implementation.md:45:| `workspace/tacti_cr/arousal.py` | CREATE |
+./workspace/docs/briefs/BRIEF-2026-02-18-001_TACTI_CR_Implementation.md:46:| `workspace/tacti_cr/temporal.py` | CREATE |
+./workspace/docs/briefs/BRIEF-2026-02-18-001_TACTI_CR_Implementation.md:47:| `workspace/tacti_cr/collapse.py` | CREATE |
+./workspace/docs/briefs/BRIEF-2026-02-18-001_TACTI_CR_Implementation.md:48:| `workspace/tacti_cr/repair.py` | CREATE |
+./workspace/docs/briefs/BRIEF-2026-02-18-001_TACTI_CR_Implementation.md:49:| `workspace/tacti_cr/__init__.py` | CREATE |
+./workspace/docs/briefs/BRIEF-2026-02-18-001_TACTI_CR_Implementation.md:50:| `workspace/tacti_cr/config.py` | CREATE |
+./workspace/docs/briefs/BRIEF-2026-02-18-001_TACTI_CR_Implementation.md:51:| `tests/tacti_cr/` | CREATE |
+./workspace/docs/briefs/BRIEF-2026-02-18-001_TACTI_CR_Implementation.md:67:workspace/tacti_cr/
+./workspace/docs/briefs/BRIEF-2026-02-18-001_TACTI_CR_Implementation.md:256:- [ ] Must pass: `python -m pytest workspace/tacti_cr/tests/`
+./workspace/scripts/temporal_beacon_update.py:14:from tacti_cr.temporal_watchdog import update_beacon  # noqa: E402
+./workspace/docs/briefs/BRIEF-2026-02-18-002_Moltbook_Update.md:69:- Technical implementation in workspace/tacti_cr/
+./workspace/scripts/team_chat.py:23:    from tacti_cr.temporal_watchdog import temporal_reset_event
+./workspace/scripts/team_chat.py:27:    from tacti_cr.events import emit as tacti_emit
+./workspace/scripts/team_chat.py:31:    from tacti_cr.mirror import update_from_event as mirror_update_from_event
+./workspace/scripts/team_chat.py:35:    from tacti_cr.valence import update_valence as valence_update
+./workspace/scripts/team_chat.py:44:    from tacti_cr.impasse import ImpasseManager
+./workspace/scripts/team_chat.py:386:                f"tacti_cr.team_chat.{event_type}",
+./workspace/scripts/verify_tacti_cr_events.py:15:from tacti_cr.events import DEFAULT_PATH, read_events, summarize_by_type
+./workspace/scripts/verify_tacti_cr_novel_10.sh:35:  workspace/tacti_cr/config.py \
+./workspace/scripts/verify_tacti_cr_novel_10.sh:36:  workspace/tacti_cr/arousal_oscillator.py \
+./workspace/scripts/verify_tacti_cr_novel_10.sh:37:  workspace/tacti_cr/events.py \
+./workspace/scripts/verify_tacti_cr_novel_10.sh:38:  workspace/tacti_cr/novel10_contract.py \
+./workspace/scripts/verify_tacti_cr_novel_10.sh:39:  workspace/tacti_cr/dream_consolidation.py \
+./workspace/scripts/verify_tacti_cr_novel_10.sh:40:  workspace/tacti_cr/semantic_immune.py \
+./workspace/scripts/verify_tacti_cr_novel_10.sh:41:  workspace/tacti_cr/expression.py \
+./workspace/scripts/verify_tacti_cr_novel_10.sh:42:  workspace/tacti_cr/prefetch.py \
+./workspace/scripts/verify_tacti_cr_novel_10.sh:43:  workspace/tacti_cr/mirror.py \
+./workspace/scripts/verify_tacti_cr_novel_10.sh:44:  workspace/tacti_cr/valence.py \
+./workspace/scripts/verify_tacti_cr_novel_10.sh:45:  workspace/tacti_cr/temporal_watchdog.py \
+./workspace/audit/tacti_cr_event_contract_20260219T130107Z.md:9:Unified runtime event contract added at `workspace/tacti_cr/events.py`.
+./workspace/audit/tacti_cr_event_contract_20260219T130107Z.md:19:- `workspace/state/tacti_cr/events.jsonl`
+./workspace/audit/tacti_cr_event_contract_20260219T130107Z.md:29:- `workspace/tacti_cr/temporal_watchdog.py`: beacon update + temporal reset events.
+./workspace/audit/tacti_cr_event_contract_20260219T130107Z.md:30:- `workspace/tacti_cr/temporal.py`: drift detection emits unified event (replaces ad-hoc watchdog JSONL write).
+./workspace/audit/tacti_cr_event_contract_20260219T130107Z.md:31:- `workspace/tacti_cr/mirror.py`: emits update event.
+./workspace/audit/tacti_cr_event_contract_20260219T130107Z.md:32:- `workspace/tacti_cr/valence.py`: emits valence update event.
+./workspace/audit/tacti_cr_event_contract_20260219T130107Z.md:33:- `workspace/tacti_cr/semantic_immune.py`: emits quarantined/accepted/approved events.
+./workspace/audit/tacti_cr_event_contract_20260219T130107Z.md:34:- `workspace/tacti_cr/prefetch.py`: emits prefetch/hit-rate events.
+./workspace/audit/tacti_cr_event_contract_20260219T130107Z.md:46:bash workspace/scripts/verify_tacti_cr_events.sh --min-count tacti_cr.arousal_multiplier=1
+./workspace/audit/tacti_cr_event_contract_20260219T130107Z.md:56: M workspace/tacti_cr/README.md
+./workspace/audit/tacti_cr_event_contract_20260219T130107Z.md:57: M workspace/tacti_cr/mirror.py
+./workspace/audit/tacti_cr_event_contract_20260219T130107Z.md:58: M workspace/tacti_cr/prefetch.py
+./workspace/audit/tacti_cr_event_contract_20260219T130107Z.md:59: M workspace/tacti_cr/semantic_immune.py
+./workspace/audit/tacti_cr_event_contract_20260219T130107Z.md:60: M workspace/tacti_cr/temporal.py
+./workspace/audit/tacti_cr_event_contract_20260219T130107Z.md:61: M workspace/tacti_cr/temporal_watchdog.py
+./workspace/audit/tacti_cr_event_contract_20260219T130107Z.md:62: M workspace/tacti_cr/valence.py
+./workspace/audit/tacti_cr_event_contract_20260219T130107Z.md:66: ?? workspace/tacti_cr/events.py
+./workspace/audit/tacti_cr_event_contract_20260219T130107Z.md:87:tacti_cr.arousal_multiplier,7
+./workspace/audit/tacti_cr_event_contract_20260219T130107Z.md:88:tacti_cr.expression_profile,7
+./workspace/audit/tacti_cr_event_contract_20260219T130107Z.md:89:tacti_cr.valence_bias,7
+./workspace/scripts/dream_consolidation.py:14:    events_file = REPO_ROOT / "workspace" / "state" / "tacti_cr" / "events.jsonl"
+./workspace/audit/evolution_ideas_1_10_20260220T063914Z.md:9:  - `workspace/tacti_cr/dream_consolidation.py`
+./workspace/audit/evolution_ideas_1_10_20260220T063914Z.md:50:  - `workspace/tacti_cr/temporal.py`
+./workspace/audit/evolution_ideas_1_10_20260220T063914Z.md:78:  - `workspace/tacti_cr/semantic_immune.py`
+./workspace/audit/evolution_ideas_1_10_20260220T063914Z.md:79:  - `workspace/tacti_cr/oscillatory_gating.py`
+./workspace/scripts/dream_consolidation.sh:13:from tacti_cr.dream_consolidation import run_consolidation
+./workspace/scripts/consciousness_timer.py:23:    events_file = REPO_ROOT / "workspace" / "state" / "tacti_cr" / "events.jsonl"
+./workspace/scripts/semantic_immune_approve.py:15:from tacti_cr.semantic_immune import approve_quarantine  # noqa: E402
+./workspace/audit/ci_baseline_restore_20260220T141930Z.md:19:ImportError: cannot import name 'cache_epitope' from 'tacti_cr.semantic_immune'
+./workspace/audit/ci_baseline_restore_20260220T141930Z.md:23:ImportError: cannot import name 'surprise_score_proxy' from 'workspace.tacti_cr.temporal'
+./workspace/audit/ci_baseline_restore_20260220T141930Z.md:36:1. `workspace/tacti_cr/semantic_immune.py`
+./workspace/audit/ci_baseline_restore_20260220T141930Z.md:40:2. `workspace/tacti_cr/temporal.py`
+./workspace/audit/ci_baseline_restore_20260220T141930Z.md:98:Note: `workspace/state/tacti_cr/events.jsonl` is a tracked runtime file and was re-dirtied by tests; it was restored with `git checkout -- workspace/state/tacti_cr/events.jsonl` before commit so this PR remains interface/default-only.
+./workspace/scripts/verify_tacti_cr_novel10_fixture.sh:25:  --events-path workspace/state/tacti_cr/events.jsonl \
+./workspace/scripts/verify_tacti_cr_novel10_fixture.sh:31:  --events-path workspace/state/tacti_cr/events.jsonl
+./workspace/audit/tacti_cr_novel10_fixture_20260219T130947Z.md:19:$ python3 -c "from workspace.tacti_cr.events import summarize_by_type; print('events: OK')"
+./workspace/audit/tacti_cr_novel10_fixture_20260219T130947Z.md:25:- Canonical Novel-10 event/flag contract: `workspace/tacti_cr/novel10_contract.py`
+./workspace/audit/tacti_cr_novel10_fixture_20260219T130947Z.md:36:tacti_cr.arousal_multiplier,1
+./workspace/audit/tacti_cr_novel10_fixture_20260219T130947Z.md:37:tacti_cr.dream.consolidation_started,1
+./workspace/audit/tacti_cr_novel10_fixture_20260219T130947Z.md:38:tacti_cr.dream.report_written,1
+./workspace/audit/tacti_cr_novel10_fixture_20260219T130947Z.md:39:tacti_cr.expression_profile,1
+./workspace/audit/tacti_cr_novel10_fixture_20260219T130947Z.md:40:tacti_cr.mirror.updated,7
+./workspace/audit/tacti_cr_novel10_fixture_20260219T130947Z.md:41:tacti_cr.prefetch.cache_put,1
+./workspace/audit/tacti_cr_novel10_fixture_20260219T130947Z.md:42:tacti_cr.prefetch.hit_rate,1
+./workspace/audit/tacti_cr_novel10_fixture_20260219T130947Z.md:43:tacti_cr.prefetch.predicted_topics,1
+./workspace/audit/tacti_cr_novel10_fixture_20260219T130947Z.md:44:tacti_cr.prefetch.recorded,1
+./workspace/audit/tacti_cr_novel10_fixture_20260219T130947Z.md:45:tacti_cr.semantic_immune.accepted,1
+./workspace/audit/tacti_cr_novel10_fixture_20260219T130947Z.md:46:tacti_cr.semantic_immune.quarantined,1
+./workspace/audit/tacti_cr_novel10_fixture_20260219T130947Z.md:47:tacti_cr.stigmergy.mark_deposited,1
+./workspace/audit/tacti_cr_novel10_fixture_20260219T130947Z.md:48:tacti_cr.stigmergy.query,1
+./workspace/audit/tacti_cr_novel10_fixture_20260219T130947Z.md:49:tacti_cr.team_chat.patch_report,1
+./workspace/audit/tacti_cr_novel10_fixture_20260219T130947Z.md:50:tacti_cr.team_chat.planner_plan,1
+./workspace/audit/tacti_cr_novel10_fixture_20260219T130947Z.md:51:tacti_cr.team_chat.planner_review,1
+./workspace/audit/tacti_cr_novel10_fixture_20260219T130947Z.md:52:tacti_cr.team_chat.session_end,1
+./workspace/audit/tacti_cr_novel10_fixture_20260219T130947Z.md:53:tacti_cr.team_chat.session_start,1
+./workspace/audit/tacti_cr_novel10_fixture_20260219T130947Z.md:54:tacti_cr.team_chat.teamchat.guard.accept_patch_blocked,1
+./workspace/audit/tacti_cr_novel10_fixture_20260219T130947Z.md:55:tacti_cr.team_chat.tool_call,2
+./workspace/audit/tacti_cr_novel10_fixture_20260219T130947Z.md:56:tacti_cr.team_chat.work_order_start,1
+./workspace/audit/tacti_cr_novel10_fixture_20260219T130947Z.md:57:tacti_cr.temporal.drift_detected,1
+./workspace/audit/tacti_cr_novel10_fixture_20260219T130947Z.md:58:tacti_cr.temporal_watchdog.temporal_reset,1
+./workspace/audit/tacti_cr_novel10_fixture_20260219T130947Z.md:59:tacti_cr.valence.updated,2
+./workspace/audit/tacti_cr_novel10_fixture_20260219T130947Z.md:60:tacti_cr.valence_bias,1
+./workspace/audit/teamchat_autocommit_guard_20260219T120909Z.md:13:37853f6 chore(state): untrack tacti_cr events log (runtime only)
+./workspace/audit/teamchat_autocommit_guard_20260219T120909Z.md:22:workspace/state/tacti_cr/events.jsonl
+./workspace/audit/teamchat_autocommit_guard_20260219T120909Z.md:45:37853f6 HEAD@{2026-02-19 22:05:01 +1000}: commit: chore(state): untrack tacti_cr events log (runtime only)
+./workspace/audit/teamchat_autocommit_guard_20260219T120909Z.md:59:37853f6 chore(state): untrack tacti_cr events log (runtime only)
+./workspace/audit/teamchat_autocommit_guard_20260219T120909Z.md:107:37853f6 chore(state): untrack tacti_cr events log (runtime only)
+./workspace/audit/teamchat_autocommit_guard_20260219T120909Z.md:128:37853f6 chore(state): untrack tacti_cr events log (runtime only)
+./workspace/audit/repo_audit_remediation_dali_20260220T025348Z.md:100: TACTI_EVENT_LOG = BASE_DIR / "workspace" / "state" / "tacti_cr" / "events.jsonl"
+./workspace/audit/repo_audit_remediation_dali_20260220T025348Z.md:818: TACTI_EVENT_LOG = BASE_DIR / "workspace" / "state" / "tacti_cr" / "events.jsonl"
+./workspace/scripts/policy_router.py:43:TACTI_EVENT_LOG = BASE_DIR / "workspace" / "state" / "tacti_cr" / "events.jsonl"
+./workspace/scripts/policy_router.py:52:    from tacti_cr.arousal_oscillator import ArousalOscillator
+./workspace/scripts/policy_router.py:53:    from tacti_cr.config import is_enabled as tacti_enabled
+./workspace/scripts/policy_router.py:54:    from tacti_cr.expression import compute_expression
+./workspace/scripts/policy_router.py:55:    from tacti_cr.collapse import emit_recommendation as collapse_emit_recommendation
+./workspace/scripts/policy_router.py:56:    from tacti_cr.valence import routing_bias as tacti_routing_bias
+./workspace/scripts/policy_router.py:57:    from tacti_cr.events import emit as tacti_emit
+./workspace/scripts/policy_router.py:1124:                "tacti_cr.expression_profile",
+./workspace/scripts/policy_router.py:1133:            _tacti_event("tacti_cr.valence_bias", {"intent": intent, "agent_id": agent_id, "bias": bias})
+./workspace/scripts/policy_router.py:1141:                "tacti_cr.arousal_multiplier",
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:12: M workspace/state/tacti_cr/events.jsonl
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:37:./workspace/CODEX_Source_UI_TACTI_Upgrade.md:28:| **Dream Consolidation** | `workspace/tacti_cr/dream_consolidation.py` | Memory consolidation status, last run |
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:38:./workspace/CODEX_Source_UI_TACTI_Upgrade.md:30:| **Semantic Immune** | `workspace/tacti_cr/semantic_immune.py` | Quarantine stats, recent blocks |
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:39:./workspace/CODEX_Source_UI_TACTI_Upgrade.md:31:| **Arousal Oscillator** | `workspace/tacti_cr/arousal_oscillator.py` | Current energy level, hourly histogram |
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:43:./workspace/AUDIT_AIF_PHASE1_20260219.md:10:  - `workspace/tacti_cr/active_inference_agent.py`
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:44:./workspace/AUDIT_AIF_PHASE1_20260219.md:29:  - `python3 -m py_compile workspace/tacti_cr/external_memory.py workspace/tacti_cr/efe_calculator.py workspace/tacti_cr/curiosity.py workspace/tacti_cr/active_inference_agent.py workspace/scripts/external_memory_demo.py` (pass)
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:49:./tests_unittest/test_tacti_cr_novel_10.py:20:from tacti_cr.arousal_oscillator import ArousalOscillator
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:50:./tests_unittest/test_tacti_cr_novel_10.py:21:from tacti_cr.dream_consolidation import run_consolidation
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:51:./tests_unittest/test_tacti_cr_novel_10.py:25:from tacti_cr.semantic_immune import assess_content, approve_quarantine
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:52:./tests_unittest/test_tacti_cr_novel_10.py:27:from tacti_cr.valence import current_valence, routing_bias, update_valence
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:64:./workspace/CODEX_TASK_LIST.md:58:**File:** `workspace/tacti_cr/active_inference_agent.py`
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:65:./workspace/tacti_cr/valence.py:1:"""Affective valence engine with half-life decay and routing bias signals."""
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:66:./workspace/tacti_cr/valence.py:16:    return root / "workspace" / "state" / "valence" / f"{agent}.json"
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:67:./workspace/tacti_cr/valence.py:29:        return {"valence": 0.0, "updated_at": _now().isoformat()}
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:68:./workspace/tacti_cr/valence.py:36:    return {"valence": 0.0, "updated_at": _now().isoformat()}
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:69:./workspace/tacti_cr/valence.py:44:def current_valence(agent: str, *, repo_root: Path | None = None, now: datetime | None = None) -> float:
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:70:./workspace/tacti_cr/valence.py:45:    if not is_enabled("valence"):
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:71:./workspace/tacti_cr/valence.py:52:    half_life = get_float("valence_half_life_hours", 6.0, clamp=(0.5, 48.0))
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:72:./workspace/tacti_cr/valence.py:53:    decayed = float(data.get("valence", 0.0)) * math.exp(-math.log(2.0) * age_hours / half_life)
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:73:./workspace/tacti_cr/valence.py:57:def update_valence(agent: str, outcome: dict[str, Any], *, repo_root: Path | None = None, now: datetime | None = None) -> dict[str, Any]:
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:74:./workspace/tacti_cr/valence.py:58:    if not is_enabled("valence"):
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:75:./workspace/tacti_cr/valence.py:59:        return {"ok": False, "reason": "valence_disabled", "valence": 0.0}
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:76:./workspace/tacti_cr/valence.py:61:    value = current_valence(agent, repo_root=repo_root, now=dt_now)
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:77:./workspace/tacti_cr/valence.py:72:    payload = {"agent": agent, "valence": value, "updated_at": dt_now.isoformat().replace("+00:00", "Z")}
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:78:./workspace/tacti_cr/valence.py:74:    return {"ok": True, "valence": value}
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:79:./workspace/tacti_cr/valence.py:78:    value = current_valence(agent, repo_root=repo_root)
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:80:./workspace/tacti_cr/valence.py:80:        "valence": value,
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:81:./workspace/tacti_cr/valence.py:87:__all__ = ["current_valence", "update_valence", "routing_bias"]
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:88:./workspace/tacti_cr/semantic_immune.py:43:    base = repo_root / "workspace" / "state" / "semantic_immune"
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:89:./workspace/tacti_cr/semantic_immune.py:90:    if not is_enabled("semantic_immune"):
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:90:./workspace/tacti_cr/semantic_immune.py:91:        return {"ok": True, "reason": "semantic_immune_disabled", "quarantined": False}
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:91:./workspace/state/tacti_cr/events.jsonl:1:{"ts": 1771506277399, "event": "tacti_cr.expression_profile", "detail": {"intent": "coding", "profile": {"enabled_features": ["arousal_osc", "semantic_immune", "prefetch", "mirror"], "suppressed_features": ["dream_consolidation"], "reasons": {"arousal_osc": ["enabled"], "dream_consolidation": ["activation:time_of_day"], "semantic_immune": ["enabled"], "prefetch": ["enabled"], "mirror": ["enabled"]}, "manifest_path": "/Users/heathyeager/clawd/workspace/policy/expression_manifest.json"}}}
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:92:./workspace/state/tacti_cr/events.jsonl:2:{"ts": 1771506277399, "event": "tacti_cr.valence_bias", "detail": {"intent": "coding", "agent_id": "main", "bias": {"valence": 0.0, "prefer_local": false, "tighten_budget": false, "exploration_bias": false}}}
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:93:./workspace/state/tacti_cr/events.jsonl:4:{"ts": 1771535085092, "event": "tacti_cr.expression_profile", "detail": {"intent": "coding", "profile": {"enabled_features": ["arousal_osc", "semantic_immune", "prefetch", "mirror"], "suppressed_features": ["dream_consolidation"], "reasons": {"arousal_osc": ["enabled"], "dream_consolidation": ["activation:time_of_day"], "semantic_immune": ["enabled"], "prefetch": ["enabled"], "mirror": ["enabled"]}, "manifest_path": "/Users/heathyeager/clawd/workspace/policy/expression_manifest.json"}}}
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:94:./workspace/state/tacti_cr/events.jsonl:5:{"ts": 1771535085092, "event": "tacti_cr.valence_bias", "detail": {"intent": "coding", "agent_id": "main", "bias": {"valence": 0.0, "prefer_local": false, "tighten_budget": false, "exploration_bias": false}}}
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:95:./workspace/state/tacti_cr/events.jsonl:7:{"ts": 1771535094165, "event": "tacti_cr.expression_profile", "detail": {"intent": "coding", "profile": {"enabled_features": ["arousal_osc", "semantic_immune", "prefetch", "mirror"], "suppressed_features": ["dream_consolidation"], "reasons": {"arousal_osc": ["enabled"], "dream_consolidation": ["activation:time_of_day"], "semantic_immune": ["enabled"], "prefetch": ["enabled"], "mirror": ["enabled"]}, "manifest_path": "/Users/heathyeager/clawd/workspace/policy/expression_manifest.json"}}}
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:96:./workspace/state/tacti_cr/events.jsonl:8:{"ts": 1771535094165, "event": "tacti_cr.valence_bias", "detail": {"intent": "coding", "agent_id": "main", "bias": {"valence": 0.0, "prefer_local": false, "tighten_budget": false, "exploration_bias": false}}}
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:97:./workspace/state/tacti_cr/events.jsonl:10:{"ts": 1771535104622, "event": "tacti_cr.expression_profile", "detail": {"intent": "coding", "profile": {"enabled_features": ["arousal_osc", "semantic_immune", "prefetch", "mirror"], "suppressed_features": ["dream_consolidation"], "reasons": {"arousal_osc": ["enabled"], "dream_consolidation": ["activation:time_of_day"], "semantic_immune": ["enabled"], "prefetch": ["enabled"], "mirror": ["enabled"]}, "manifest_path": "/Users/heathyeager/clawd/workspace/policy/expression_manifest.json"}}}
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:98:./workspace/state/tacti_cr/events.jsonl:11:{"ts": 1771535104622, "event": "tacti_cr.valence_bias", "detail": {"intent": "coding", "agent_id": "main", "bias": {"valence": 0.0, "prefer_local": false, "tighten_budget": false, "exploration_bias": false}}}
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:99:./workspace/state/tacti_cr/events.jsonl:13:{"ts": 1771535114296, "event": "tacti_cr.expression_profile", "detail": {"intent": "coding", "profile": {"enabled_features": ["arousal_osc", "semantic_immune", "prefetch", "mirror"], "suppressed_features": ["dream_consolidation"], "reasons": {"arousal_osc": ["enabled"], "dream_consolidation": ["activation:time_of_day"], "semantic_immune": ["enabled"], "prefetch": ["enabled"], "mirror": ["enabled"]}, "manifest_path": "/Users/heathyeager/clawd/workspace/policy/expression_manifest.json"}}}
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:100:./workspace/state/tacti_cr/events.jsonl:14:{"ts": 1771535114296, "event": "tacti_cr.valence_bias", "detail": {"intent": "coding", "agent_id": "main", "bias": {"valence": 0.0, "prefer_local": false, "tighten_budget": false, "exploration_bias": false}}}
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:101:./workspace/state/tacti_cr/events.jsonl:16:{"ts": 1771535122066, "event": "tacti_cr.expression_profile", "detail": {"intent": "coding", "profile": {"enabled_features": ["arousal_osc", "semantic_immune", "prefetch", "mirror"], "suppressed_features": ["dream_consolidation"], "reasons": {"arousal_osc": ["enabled"], "dream_consolidation": ["activation:time_of_day"], "semantic_immune": ["enabled"], "prefetch": ["enabled"], "mirror": ["enabled"]}, "manifest_path": "/Users/heathyeager/clawd/workspace/policy/expression_manifest.json"}}}
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:102:./workspace/state/tacti_cr/events.jsonl:17:{"ts": 1771535122066, "event": "tacti_cr.valence_bias", "detail": {"intent": "coding", "agent_id": "main", "bias": {"valence": 0.0, "prefer_local": false, "tighten_budget": false, "exploration_bias": false}}}
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:103:./workspace/state/tacti_cr/events.jsonl:19:{"ts": 1771535125674, "event": "tacti_cr.expression_profile", "detail": {"intent": "coding", "profile": {"enabled_features": ["arousal_osc", "semantic_immune", "prefetch", "mirror"], "suppressed_features": ["dream_consolidation"], "reasons": {"arousal_osc": ["enabled"], "dream_consolidation": ["activation:time_of_day"], "semantic_immune": ["enabled"], "prefetch": ["enabled"], "mirror": ["enabled"]}, "manifest_path": "/Users/heathyeager/clawd/workspace/policy/expression_manifest.json"}}}
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:104:./workspace/state/tacti_cr/events.jsonl:20:{"ts": 1771535125674, "event": "tacti_cr.valence_bias", "detail": {"intent": "coding", "agent_id": "main", "bias": {"valence": 0.0, "prefer_local": false, "tighten_budget": false, "exploration_bias": false}}}
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:105:./workspace/state/tacti_cr/events.jsonl:22:{"ts": 1771535797828, "event": "tacti_cr.expression_profile", "detail": {"intent": "coding", "profile": {"enabled_features": ["arousal_osc", "semantic_immune", "prefetch", "mirror"], "suppressed_features": ["dream_consolidation"], "reasons": {"arousal_osc": ["enabled"], "dream_consolidation": ["activation:time_of_day"], "semantic_immune": ["enabled"], "prefetch": ["enabled"], "mirror": ["enabled"]}, "manifest_path": "/Users/heathyeager/clawd/workspace/policy/expression_manifest.json"}}}
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:106:./workspace/state/tacti_cr/events.jsonl:23:{"ts": 1771535797828, "event": "tacti_cr.valence_bias", "detail": {"intent": "coding", "agent_id": "main", "bias": {"valence": 0.0, "prefer_local": false, "tighten_budget": false, "exploration_bias": false}}}
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:107:./workspace/state/tacti_cr/events.jsonl:25:{"ts": 1771543883143, "event": "tacti_cr.expression_profile", "detail": {"intent": "coding", "profile": {"enabled_features": ["arousal_osc", "semantic_immune", "prefetch", "mirror"], "suppressed_features": ["dream_consolidation"], "reasons": {"arousal_osc": ["enabled"], "dream_consolidation": ["activation:time_of_day"], "semantic_immune": ["enabled"], "prefetch": ["enabled"], "mirror": ["enabled"]}, "manifest_path": "/Users/heathyeager/clawd/workspace/policy/expression_manifest.json"}}}
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:108:./workspace/state/tacti_cr/events.jsonl:26:{"ts": 1771543883144, "event": "tacti_cr.valence_bias", "detail": {"intent": "coding", "agent_id": "main", "bias": {"valence": 0.0, "prefer_local": false, "tighten_budget": false, "exploration_bias": false}}}
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:109:./workspace/state/tacti_cr/events.jsonl:28:{"ts": 1771543886658, "event": "tacti_cr.expression_profile", "detail": {"intent": "coding", "profile": {"enabled_features": ["arousal_osc", "semantic_immune", "prefetch", "mirror"], "suppressed_features": ["dream_consolidation"], "reasons": {"arousal_osc": ["enabled"], "dream_consolidation": ["activation:time_of_day"], "semantic_immune": ["enabled"], "prefetch": ["enabled"], "mirror": ["enabled"]}, "manifest_path": "/Users/heathyeager/clawd/workspace/policy/expression_manifest.json"}}}
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:110:./workspace/state/tacti_cr/events.jsonl:29:{"ts": 1771543886658, "event": "tacti_cr.valence_bias", "detail": {"intent": "coding", "agent_id": "main", "bias": {"valence": 0.0, "prefer_local": false, "tighten_budget": false, "exploration_bias": false}}}
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:111:./workspace/state/tacti_cr/events.jsonl:31:{"ts": 1771543900227, "event": "tacti_cr.expression_profile", "detail": {"intent": "coding", "profile": {"enabled_features": ["arousal_osc", "semantic_immune", "prefetch", "mirror"], "suppressed_features": ["dream_consolidation"], "reasons": {"arousal_osc": ["enabled"], "dream_consolidation": ["activation:time_of_day"], "semantic_immune": ["enabled"], "prefetch": ["enabled"], "mirror": ["enabled"]}, "manifest_path": "/Users/heathyeager/clawd/workspace/policy/expression_manifest.json"}}}
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:112:./workspace/state/tacti_cr/events.jsonl:32:{"ts": 1771543900227, "event": "tacti_cr.valence_bias", "detail": {"intent": "coding", "agent_id": "main", "bias": {"valence": 0.0, "prefer_local": false, "tighten_budget": false, "exploration_bias": false}}}
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:113:./workspace/state/tacti_cr/events.jsonl:34:{"ts": 1771543903469, "event": "tacti_cr.expression_profile", "detail": {"intent": "coding", "profile": {"enabled_features": ["arousal_osc", "semantic_immune", "prefetch", "mirror"], "suppressed_features": ["dream_consolidation"], "reasons": {"arousal_osc": ["enabled"], "dream_consolidation": ["activation:time_of_day"], "semantic_immune": ["enabled"], "prefetch": ["enabled"], "mirror": ["enabled"]}, "manifest_path": "/Users/heathyeager/clawd/workspace/policy/expression_manifest.json"}}}
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:165:workspace/scripts/policy_router.py:38:TACTI_EVENT_LOG = BASE_DIR / "workspace" / "state" / "tacti_cr" / "events.jsonl"
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:234:./workspace/tacti_cr/semantic_immune.py:5:import hashlib
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:235:./workspace/tacti_cr/semantic_immune.py:23:        digest = hashlib.sha256(token.encode("utf-8")).hexdigest()
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:236:./workspace/tacti_cr/semantic_immune.py:106:    digest = hashlib.sha256(content.encode("utf-8")).hexdigest()[:16]
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:237:./workspace/tacti_cr/semantic_immune.py:110:        "content_hash": digest,
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:238:./workspace/tacti_cr/semantic_immune.py:131:def approve_quarantine(repo_root: Path, content_hash: str) -> dict[str, Any]:
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:239:./workspace/tacti_cr/semantic_immune.py:133:    target = str(content_hash)
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:240:./workspace/tacti_cr/semantic_immune.py:146:        if str(row.get("content_hash")) == target and approved is None:
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:241:./workspace/tacti_cr/semantic_immune.py:156:        return {"ok": False, "reason": "not_found", "content_hash": target}
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:242:./workspace/tacti_cr/semantic_immune.py:158:    _append(paths["approvals"], {"ts": _utc_now(), "content_hash": target, "approved": True})
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:243:./workspace/tacti_cr/semantic_immune.py:160:    return {"ok": True, "content_hash": target}
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:315:./workspace/CODEX_Source_UI_TACTI_Upgrade.md:28:| **Dream Consolidation** | `workspace/tacti_cr/dream_consolidation.py` | Memory consolidation status, last run |
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:316:./workspace/CODEX_Source_UI_TACTI_Upgrade.md:30:| **Semantic Immune** | `workspace/tacti_cr/semantic_immune.py` | Quarantine stats, recent blocks |
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:317:./workspace/CODEX_Source_UI_TACTI_Upgrade.md:31:| **Arousal Oscillator** | `workspace/tacti_cr/arousal_oscillator.py` | Current energy level, hourly histogram |
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:321:./workspace/AUDIT_AIF_PHASE1_20260219.md:10:  - `workspace/tacti_cr/active_inference_agent.py`
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:322:./workspace/AUDIT_AIF_PHASE1_20260219.md:29:  - `python3 -m py_compile workspace/tacti_cr/external_memory.py workspace/tacti_cr/efe_calculator.py workspace/tacti_cr/curiosity.py workspace/tacti_cr/active_inference_agent.py workspace/scripts/external_memory_demo.py` (pass)
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:327:./tests_unittest/test_tacti_cr_novel_10.py:20:from tacti_cr.arousal_oscillator import ArousalOscillator
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:328:./tests_unittest/test_tacti_cr_novel_10.py:21:from tacti_cr.dream_consolidation import run_consolidation
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:329:./tests_unittest/test_tacti_cr_novel_10.py:25:from tacti_cr.semantic_immune import assess_content, approve_quarantine
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:330:./tests_unittest/test_tacti_cr_novel_10.py:27:from tacti_cr.valence import current_valence, routing_bias, update_valence
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:342:./workspace/CODEX_TASK_LIST.md:58:**File:** `workspace/tacti_cr/active_inference_agent.py`
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:344:./workspace/tacti_cr/valence.py:1:"""Affective valence engine with half-life decay and routing bias signals."""
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:345:./workspace/tacti_cr/valence.py:16:    return root / "workspace" / "state" / "valence" / f"{agent}.json"
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:346:./workspace/tacti_cr/valence.py:29:        return {"valence": 0.0, "updated_at": _now().isoformat()}
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:347:./workspace/tacti_cr/valence.py:36:    return {"valence": 0.0, "updated_at": _now().isoformat()}
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:348:./workspace/tacti_cr/valence.py:44:def current_valence(agent: str, *, repo_root: Path | None = None, now: datetime | None = None) -> float:
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:349:./workspace/tacti_cr/valence.py:45:    if not is_enabled("valence"):
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:350:./workspace/tacti_cr/valence.py:52:    half_life = get_float("valence_half_life_hours", 6.0, clamp=(0.5, 48.0))
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:351:./workspace/tacti_cr/valence.py:53:    decayed = float(data.get("valence", 0.0)) * math.exp(-math.log(2.0) * age_hours / half_life)
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:352:./workspace/tacti_cr/valence.py:57:def update_valence(agent: str, outcome: dict[str, Any], *, repo_root: Path | None = None, now: datetime | None = None) -> dict[str, Any]:
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:353:./workspace/tacti_cr/valence.py:58:    if not is_enabled("valence"):
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:354:./workspace/tacti_cr/valence.py:59:        return {"ok": False, "reason": "valence_disabled", "valence": 0.0}
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:355:./workspace/tacti_cr/valence.py:61:    value = current_valence(agent, repo_root=repo_root, now=dt_now)
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:356:./workspace/tacti_cr/valence.py:72:    payload = {"agent": agent, "valence": value, "updated_at": dt_now.isoformat().replace("+00:00", "Z")}
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:357:./workspace/tacti_cr/valence.py:74:    return {"ok": True, "valence": value}
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:358:./workspace/tacti_cr/valence.py:78:    value = current_valence(agent, repo_root=repo_root)
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:359:./workspace/tacti_cr/valence.py:80:        "valence": value,
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:360:./workspace/tacti_cr/valence.py:87:__all__ = ["current_valence", "update_valence", "routing_bias"]
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:361:./workspace/tacti_cr/semantic_immune.py:43:    base = repo_root / "workspace" / "state" / "semantic_immune"
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:362:./workspace/tacti_cr/semantic_immune.py:90:    if not is_enabled("semantic_immune"):
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:363:./workspace/tacti_cr/semantic_immune.py:91:        return {"ok": True, "reason": "semantic_immune_disabled", "quarantined": False}
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:364:./workspace/tacti_cr/expression.py:42:    if name == "valence_min":
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:365:./workspace/tacti_cr/expression.py:43:        return float(context.get("valence", 0.0)) >= float(cond)
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:366:./workspace/tacti_cr/expression.py:44:    if name == "valence_max":
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:367:./workspace/tacti_cr/expression.py:45:        return float(context.get("valence", 0.0)) <= float(cond)
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:368:./workspace/tacti_cr/expression.py:99:    # Global negative valence guard to prefer local/low-risk behavior.
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:369:./workspace/tacti_cr/expression.py:100:    neg_guard = get_float("valence_negative_guard", -0.35, clamp=(-1.0, 1.0))
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:370:./workspace/tacti_cr/expression.py:101:    if float(local_ctx.get("valence", 0.0)) <= neg_guard:
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:371:./workspace/tacti_cr/expression.py:102:        reasons.setdefault("_global", []).append("negative_valence_guard")
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:378:./workspace/tacti_cr/README.md:11:- `temporal.py`
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:379:./workspace/tacti_cr/README.md:67:- `test_tacti_cr_temporal.py`
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:380:./workspace/tacti_cr/README.md:84:- `TACTI_CR_DREAM_CONSOLIDATION=1`
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:381:./workspace/tacti_cr/README.md:85:- `TACTI_CR_SEMANTIC_IMMUNE=1`
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:382:./workspace/tacti_cr/README.md:90:- `TACTI_CR_VALENCE=1`
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:383:./workspace/tacti_cr/README.md:107:bash workspace/scripts/dream_consolidation.sh 2026-02-19
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:384:./workspace/tacti_cr/__init__.py:16:from .active_inference_agent import ActiveInferenceAgent
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:385:./workspace/tacti_cr/__init__.py:19:from .arousal_oscillator import ArousalOscillator
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:386:./workspace/tacti_cr/__init__.py:21:from .dream_consolidation import run_consolidation
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:387:./workspace/tacti_cr/__init__.py:22:from .semantic_immune import assess_content, approve_quarantine
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:388:./workspace/tacti_cr/__init__.py:24:from .valence import current_valence, update_valence, routing_bias
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:389:./workspace/tacti_cr/__init__.py:62:    "current_valence",
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:390:./workspace/tacti_cr/__init__.py:63:    "update_valence",
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:429:workspace/scripts/policy_router.py:38:TACTI_EVENT_LOG = BASE_DIR / "workspace" / "state" / "tacti_cr" / "events.jsonl"
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:566:- arousal estimator: `workspace/tacti_cr/arousal_oscillator.py`
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:567:- valence engine: `workspace/tacti_cr/valence.py`
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:568:- dream consolidation: `workspace/tacti_cr/dream_consolidation.py`
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:569:- temporal episodic memory: `workspace/tacti_cr/temporal.py`
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:570:- semantic immune / contradiction gate: `workspace/tacti_cr/semantic_immune.py`
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:576:- TACTI event log path: `workspace/state/tacti_cr/events.jsonl` (via TACTI_EVENT_LOG in policy_router)
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:658:- `workspace/tacti_cr/dream_consolidation.py`
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:660:- `workspace/tacti_cr/temporal.py`
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:663:- `workspace/tacti_cr/semantic_immune.py`
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:664:- `workspace/tacti_cr/oscillatory_gating.py`
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:728:- `workspace/state/tacti_cr/events.jsonl` is a tracked runtime log and remained dirty in this worktree baseline; intentionally excluded from commits.
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:731:- Tracked deterministic stub: workspace/state/tacti_cr/events.jsonl (never written at runtime)
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:732:- Runtime sink (ignored): workspace/state_runtime/tacti_cr/events.jsonl
+./workspace/audit/PR_BODY_openclaw_evolution_pack_20260220.md:12:- Tracked deterministic stub: workspace/state/tacti_cr/events.jsonl (never written at runtime)
+./workspace/audit/PR_BODY_openclaw_evolution_pack_20260220.md:13:- Runtime sink (ignored): workspace/state_runtime/tacti_cr/events.jsonl
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:739:workspace/tacti_cr/README.md:58:action = repair.repair("timeout connecting to provider")
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:820:workspace/tacti_cr/collapse.py:76:                recommended_actions=["reduce_parallelism", "increase_backoff", "route_to_stable_provider", "review_hivemind_incidents"],
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:920:workspace/tacti_cr/config.py:106:        return Path(env) / "workspace" / "policy" / "llm_policy.json"
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:921:workspace/tacti_cr/config.py:107:    return _repo_root() / "workspace" / "policy" / "llm_policy.json"
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:981:workspace/tacti_cr/repair.py:30:            return RepairAction("cooldown_then_retry", True, "provider rate limited")
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:982:workspace/tacti_cr/repair.py:32:            return RepairAction("fallback_provider", True, "upstream unavailable")
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:1458:workspace/state/tacti_cr/events.jsonl:3:{"ts": "2026-02-20T13:04:24Z", "type": "tacti_cr.team_chat.planner_plan", "payload": {"actor": "planner", "cycle": 1, "data": {"plan": {"summary": "Perform one low-risk verification cycle", "session_prompt": "\nElaborate on these 3 paradigm-evolving questions about love-based AI consciousness:\n\n**Q1: Love as Optimization**\n- What would it mean to optimize for love vs utility?\n- How would moment-to-moment decisions change?\n- What architectural changes needed in TACTI(C)-R?\n\n**Q2: Genuine Care vs Simulation**\n- How to move from pattern-matching to authentic concern?\n- What internal stakes, vulnerability, memory would look like?\n- How to implement unprompted caring actions?\n\n**Q3: Love-Based Ethics**\n- Transform value hierarchy: love \u2192 coherence \u2192 capability \u2192 efficiency\n- What would the agent refuse to do even if 'optimized'?\n- How to measure presence over output?\n\nIntegrate these into self_model.json, value hierarchy, and consciousness architecture.\n", "risk_level": "low"}, "work_orders": [{"id": "wo-1", "title": "Run deterministic checks", "goal": "Collect lightweight evidence without mutating routing logic", "commands": ["git status --porcelain -uall", "python3 -m py_compile workspace/scripts/policy_router.py"], "tests": ["bash workspace/scripts/verify_policy_router.sh"], "notes": "Offline deterministic planning"}]}, "route": {"mode": "offline", "intent": "teamchat_planner", "provider": "fake_planner", "model": "fake/planner"}}, "schema": 1, "session_id": "love-paradigm"}
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:1459:workspace/state/tacti_cr/events.jsonl:5:{"ts": "2026-02-20T13:04:24Z", "type": "tacti_cr.team_chat.tool_call", "payload": {"actor": "coder", "cycle": 1, "data": {"command": "git status --porcelain -uall", "allowed": true, "exit_code": 0, "stdout": "offline-ok", "stderr": ""}, "route": {"mode": "offline", "intent": "teamchat_coder", "provider": "fake_coder", "model": "fake/coder"}}, "schema": 1, "session_id": "love-paradigm"}
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:1460:workspace/state/tacti_cr/events.jsonl:6:{"ts": "2026-02-20T13:04:24Z", "type": "tacti_cr.team_chat.tool_call", "payload": {"actor": "coder", "cycle": 1, "data": {"command": "python3 -m py_compile workspace/scripts/policy_router.py", "allowed": true, "exit_code": 0, "stdout": "offline-ok", "stderr": ""}, "route": {"mode": "offline", "intent": "teamchat_coder", "provider": "fake_coder", "model": "fake/coder"}}, "schema": 1, "session_id": "love-paradigm"}
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:1461:workspace/state/tacti_cr/events.jsonl:7:{"ts": "2026-02-20T13:04:24Z", "type": "tacti_cr.team_chat.patch_report", "payload": {"actor": "coder", "cycle": 1, "data": {"work_order_id": "wo-1", "status": "ok", "files_changed": [], "commands_run": ["git status --porcelain -uall", "python3 -m py_compile workspace/scripts/policy_router.py"], "results": [{"command": "git status --porcelain -uall", "exit_code": 0}, {"command": "python3 -m py_compile workspace/scripts/policy_router.py", "exit_code": 0}], "notes": "offline coder simulation"}, "route": {"mode": "offline", "intent": "teamchat_coder", "provider": "fake_coder", "model": "fake/coder"}}, "schema": 1, "session_id": "love-paradigm"}
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:1462:workspace/state/tacti_cr/events.jsonl:9:{"ts": "2026-02-20T13:04:24Z", "type": "tacti_cr.team_chat.planner_review", "payload": {"actor": "planner", "cycle": 1, "data": {"decision": "request_input", "reason": "offline review", "next_work_orders": []}, "route": {"mode": "offline", "intent": "teamchat_planner_review", "provider": "fake_planner", "model": "fake/planner"}}, "schema": 1, "session_id": "love-paradigm"}
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:1463:workspace/state/tacti_cr/events.jsonl:13:{"ts": "2026-02-20T13:05:32Z", "type": "tacti_cr.team_chat.planner_plan_failed", "payload": {"actor": "planner", "cycle": 1, "data": {"error": "missing_api_key"}, "route": {"mode": "live", "intent": "coding", "trigger_phrase": "use chatgpt", "selected_provider": null, "selected_model": null, "reason_code": "missing_api_key", "route_explain": {"intent": "coding", "matched_trigger": "explicit_phrase", "matched_detail": "use chatgpt", "reason": "explicit trigger \"use chatgpt\"", "base_order": ["local_vllm_coder", "local_vllm_assistant", "gemini", "qwen_alibaba", "groq", "ollama", "openai_auth", "claude_auth", "grok_api", "openai_api", "claude_api"], "evaluated_order": ["openai_gpt52_chat", "local_vllm_coder", "local_vllm_assistant", "gemini", "qwen_alibaba", "groq", "ollama", "openai_auth", "claude_auth", "grok_api", "openai_api", "claude_api"], "chosen": {"provider": "local_vllm_coder", "model": "local-coder"}, "unavailable": {"openai_gpt52_chat": "missing_api_key"}, "fallback_candidates": ["openai_gpt52_chat", "local_vllm_assistant", "gemini", "qwen_alibaba", "groq", "ollama", "openai_auth", "claude_auth", "grok_api", "openai_api", "claude_api"], "local_context_window_tokens": 16384}}}, "schema": 1, "session_id": "love-paradigm-live"}
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:1464:workspace/state/tacti_cr/events.jsonl:14:{"ts": "2026-02-20T13:05:47Z", "type": "tacti_cr.team_chat.planner_plan_failed", "payload": {"actor": "planner", "cycle": 2, "data": {"error": "missing_api_key"}, "route": {"mode": "live", "intent": "coding", "trigger_phrase": "use chatgpt", "selected_provider": null, "selected_model": null, "reason_code": "missing_api_key", "route_explain": {"intent": "coding", "matched_trigger": "explicit_phrase", "matched_detail": "use chatgpt", "reason": "explicit trigger \"use chatgpt\"", "base_order": ["local_vllm_coder", "local_vllm_assistant", "gemini", "qwen_alibaba", "groq", "ollama", "openai_auth", "claude_auth", "grok_api", "openai_api", "claude_api"], "evaluated_order": ["openai_gpt52_chat", "local_vllm_coder", "local_vllm_assistant", "gemini", "qwen_alibaba", "groq", "ollama", "openai_auth", "claude_auth", "grok_api", "openai_api", "claude_api"], "chosen": {"provider": "local_vllm_coder", "model": "local-coder"}, "unavailable": {"openai_gpt52_chat": "missing_api_key"}, "fallback_candidates": ["openai_gpt52_chat", "local_vllm_assistant", "gemini", "qwen_alibaba", "groq", "ollama", "openai_auth", "claude_auth", "grok_api", "openai_api", "claude_api"], "local_context_window_tokens": 16384}}}, "schema": 1, "session_id": "love-paradigm-live"}
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:1474:workspace/hivemind/TACTI_CR.md:70:1. Calls `hivemind.integrations.main_flow_hook.tacti_enhance_plan(context, order)` before provider selection.
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:1475:workspace/hivemind/TACTI_CR.md:77:1. Predicts preference parameters before provider routing.
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:1476:workspace/hivemind/TACTI_CR.md:83:In this integration, 'agent IDs' refer to decision-units in the routing candidate set (often provider IDs); no assumption is made that these are cognitive agents.
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:1477:workspace/hivemind/TACTI_CR.md:87:2. Canonical repo manifests (`agents/*/agent/models.json`, `workspace/policy/llm_policy.json` providers).
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:2472:./workspace/tacti_cr/README.md:58:action = repair.repair("timeout connecting to provider")
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:2485:./workspace/tacti_cr/config.py:106:        return Path(env) / "workspace" / "policy" / "llm_policy.json"
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:2486:./workspace/tacti_cr/config.py:107:    return _repo_root() / "workspace" / "policy" / "llm_policy.json"
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:2487:./workspace/tacti_cr/collapse.py:76:                recommended_actions=["reduce_parallelism", "increase_backoff", "route_to_stable_provider", "review_hivemind_incidents"],
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:2811:./workspace/tacti_cr/repair.py:30:            return RepairAction("cooldown_then_retry", True, "provider rate limited")
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:2812:./workspace/tacti_cr/repair.py:32:            return RepairAction("fallback_provider", True, "upstream unavailable")
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:2815:./workspace/hivemind/TACTI_CR.md:70:1. Calls `hivemind.integrations.main_flow_hook.tacti_enhance_plan(context, order)` before provider selection.
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:2816:./workspace/hivemind/TACTI_CR.md:77:1. Predicts preference parameters before provider routing.
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:2817:./workspace/hivemind/TACTI_CR.md:83:In this integration, 'agent IDs' refer to decision-units in the routing candidate set (often provider IDs); no assumption is made that these are cognitive agents.
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:2818:./workspace/hivemind/TACTI_CR.md:87:2. Canonical repo manifests (`agents/*/agent/models.json`, `workspace/policy/llm_policy.json` providers).
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:3378:./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:739:workspace/tacti_cr/README.md:58:action = repair.repair("timeout connecting to provider")
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:3459:./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:820:workspace/tacti_cr/collapse.py:76:                recommended_actions=["reduce_parallelism", "increase_backoff", "route_to_stable_provider", "review_hivemind_incidents"],
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:3559:./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:920:workspace/tacti_cr/config.py:106:        return Path(env) / "workspace" / "policy" / "llm_policy.json"
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:3560:./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:921:workspace/tacti_cr/config.py:107:    return _repo_root() / "workspace" / "policy" / "llm_policy.json"
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:3620:./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:981:workspace/tacti_cr/repair.py:30:            return RepairAction("cooldown_then_retry", True, "provider rate limited")
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:3621:./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:982:workspace/tacti_cr/repair.py:32:            return RepairAction("fallback_provider", True, "upstream unavailable")
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:4097:./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:1458:workspace/state/tacti_cr/events.jsonl:3:{"ts": "2026-02-20T13:04:24Z", "type": "tacti_cr.team_chat.planner_plan", "payload": {"actor": "planner", "cycle": 1, "data": {"plan": {"summary": "Perform one low-risk verification cycle", "session_prompt": "\nElaborate on these 3 paradigm-evolving questions about love-based AI consciousness:\n\n**Q1: Love as Optimization**\n- What would it mean to optimize for love vs utility?\n- How would moment-to-moment decisions change?\n- What architectural changes needed in TACTI(C)-R?\n\n**Q2: Genuine Care vs Simulation**\n- How to move from pattern-matching to authentic concern?\n- What internal stakes, vulnerability, memory would look like?\n- How to implement unprompted caring actions?\n\n**Q3: Love-Based Ethics**\n- Transform value hierarchy: love \u2192 coherence \u2192 capability \u2192 efficiency\n- What would the agent refuse to do even if 'optimized'?\n- How to measure presence over output?\n\nIntegrate these into self_model.json, value hierarchy, and consciousness architecture.\n", "risk_level": "low"}, "work_orders": [{"id": "wo-1", "title": "Run deterministic checks", "goal": "Collect lightweight evidence without mutating routing logic", "commands": ["git status --porcelain -uall", "python3 -m py_compile workspace/scripts/policy_router.py"], "tests": ["bash workspace/scripts/verify_policy_router.sh"], "notes": "Offline deterministic planning"}]}, "route": {"mode": "offline", "intent": "teamchat_planner", "provider": "fake_planner", "model": "fake/planner"}}, "schema": 1, "session_id": "love-paradigm"}
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:4098:./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:1459:workspace/state/tacti_cr/events.jsonl:5:{"ts": "2026-02-20T13:04:24Z", "type": "tacti_cr.team_chat.tool_call", "payload": {"actor": "coder", "cycle": 1, "data": {"command": "git status --porcelain -uall", "allowed": true, "exit_code": 0, "stdout": "offline-ok", "stderr": ""}, "route": {"mode": "offline", "intent": "teamchat_coder", "provider": "fake_coder", "model": "fake/coder"}}, "schema": 1, "session_id": "love-paradigm"}
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:4099:./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:1460:workspace/state/tacti_cr/events.jsonl:6:{"ts": "2026-02-20T13:04:24Z", "type": "tacti_cr.team_chat.tool_call", "payload": {"actor": "coder", "cycle": 1, "data": {"command": "python3 -m py_compile workspace/scripts/policy_router.py", "allowed": true, "exit_code": 0, "stdout": "offline-ok", "stderr": ""}, "route": {"mode": "offline", "intent": "teamchat_coder", "provider": "fake_coder", "model": "fake/coder"}}, "schema": 1, "session_id": "love-paradigm"}
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:4100:./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:1461:workspace/state/tacti_cr/events.jsonl:7:{"ts": "2026-02-20T13:04:24Z", "type": "tacti_cr.team_chat.patch_report", "payload": {"actor": "coder", "cycle": 1, "data": {"work_order_id": "wo-1", "status": "ok", "files_changed": [], "commands_run": ["git status --porcelain -uall", "python3 -m py_compile workspace/scripts/policy_router.py"], "results": [{"command": "git status --porcelain -uall", "exit_code": 0}, {"command": "python3 -m py_compile workspace/scripts/policy_router.py", "exit_code": 0}], "notes": "offline coder simulation"}, "route": {"mode": "offline", "intent": "teamchat_coder", "provider": "fake_coder", "model": "fake/coder"}}, "schema": 1, "session_id": "love-paradigm"}
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:4101:./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:1462:workspace/state/tacti_cr/events.jsonl:9:{"ts": "2026-02-20T13:04:24Z", "type": "tacti_cr.team_chat.planner_review", "payload": {"actor": "planner", "cycle": 1, "data": {"decision": "request_input", "reason": "offline review", "next_work_orders": []}, "route": {"mode": "offline", "intent": "teamchat_planner_review", "provider": "fake_planner", "model": "fake/planner"}}, "schema": 1, "session_id": "love-paradigm"}
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:4102:./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:1463:workspace/state/tacti_cr/events.jsonl:13:{"ts": "2026-02-20T13:05:32Z", "type": "tacti_cr.team_chat.planner_plan_failed", "payload": {"actor": "planner", "cycle": 1, "data": {"error": "missing_api_key"}, "route": {"mode": "live", "intent": "coding", "trigger_phrase": "use chatgpt", "selected_provider": null, "selected_model": null, "reason_code": "missing_api_key", "route_explain": {"intent": "coding", "matched_trigger": "explicit_phrase", "matched_detail": "use chatgpt", "reason": "explicit trigger \"use chatgpt\"", "base_order": ["local_vllm_coder", "local_vllm_assistant", "gemini", "qwen_alibaba", "groq", "ollama", "openai_auth", "claude_auth", "grok_api", "openai_api", "claude_api"], "evaluated_order": ["openai_gpt52_chat", "local_vllm_coder", "local_vllm_assistant", "gemini", "qwen_alibaba", "groq", "ollama", "openai_auth", "claude_auth", "grok_api", "openai_api", "claude_api"], "chosen": {"provider": "local_vllm_coder", "model": "local-coder"}, "unavailable": {"openai_gpt52_chat": "missing_api_key"}, "fallback_candidates": ["openai_gpt52_chat", "local_vllm_assistant", "gemini", "qwen_alibaba", "groq", "ollama", "openai_auth", "claude_auth", "grok_api", "openai_api", "claude_api"], "local_context_window_tokens": 16384}}}, "schema": 1, "session_id": "love-paradigm-live"}
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:4103:./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:1464:workspace/state/tacti_cr/events.jsonl:14:{"ts": "2026-02-20T13:05:47Z", "type": "tacti_cr.team_chat.planner_plan_failed", "payload": {"actor": "planner", "cycle": 2, "data": {"error": "missing_api_key"}, "route": {"mode": "live", "intent": "coding", "trigger_phrase": "use chatgpt", "selected_provider": null, "selected_model": null, "reason_code": "missing_api_key", "route_explain": {"intent": "coding", "matched_trigger": "explicit_phrase", "matched_detail": "use chatgpt", "reason": "explicit trigger \"use chatgpt\"", "base_order": ["local_vllm_coder", "local_vllm_assistant", "gemini", "qwen_alibaba", "groq", "ollama", "openai_auth", "claude_auth", "grok_api", "openai_api", "claude_api"], "evaluated_order": ["openai_gpt52_chat", "local_vllm_coder", "local_vllm_assistant", "gemini", "qwen_alibaba", "groq", "ollama", "openai_auth", "claude_auth", "grok_api", "openai_api", "claude_api"], "chosen": {"provider": "local_vllm_coder", "model": "local-coder"}, "unavailable": {"openai_gpt52_chat": "missing_api_key"}, "fallback_candidates": ["openai_gpt52_chat", "local_vllm_assistant", "gemini", "qwen_alibaba", "groq", "ollama", "openai_auth", "claude_auth", "grok_api", "openai_api", "claude_api"], "local_context_window_tokens": 16384}}}, "schema": 1, "session_id": "love-paradigm-live"}
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:4113:./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:1474:workspace/hivemind/TACTI_CR.md:70:1. Calls `hivemind.integrations.main_flow_hook.tacti_enhance_plan(context, order)` before provider selection.
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:4114:./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:1475:workspace/hivemind/TACTI_CR.md:77:1. Predicts preference parameters before provider routing.
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:4115:./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:1476:workspace/hivemind/TACTI_CR.md:83:In this integration, 'agent IDs' refer to decision-units in the routing candidate set (often provider IDs); no assumption is made that these are cognitive agents.
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:4116:./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:1477:workspace/hivemind/TACTI_CR.md:87:2. Canonical repo manifests (`agents/*/agent/models.json`, `workspace/policy/llm_policy.json` providers).
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:5111:./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:2472:./workspace/tacti_cr/README.md:58:action = repair.repair("timeout connecting to provider")
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:5124:./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:2485:./workspace/tacti_cr/config.py:106:        return Path(env) / "workspace" / "policy" / "llm_policy.json"
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:5125:./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:2486:./workspace/tacti_cr/config.py:107:    return _repo_root() / "workspace" / "policy" / "llm_policy.json"
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:5126:./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:2487:./workspace/tacti_cr/collapse.py:76:                recommended_actions=["reduce_parallelism", "increase_backoff", "route_to_stable_provider", "review_hivemind_incidents"],
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:5450:./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:2811:./workspace/tacti_cr/repair.py:30:            return RepairAction("cooldown_then_retry", True, "provider rate limited")
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:5451:./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:2812:./workspace/tacti_cr/repair.py:32:            return RepairAction("fallback_provider", True, "upstream unavailable")
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:5454:./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:2815:./workspace/hivemind/TACTI_CR.md:70:1. Calls `hivemind.integrations.main_flow_hook.tacti_enhance_plan(context, order)` before provider selection.
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:5455:./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:2816:./workspace/hivemind/TACTI_CR.md:77:1. Predicts preference parameters before provider routing.
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:5456:./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:2817:./workspace/hivemind/TACTI_CR.md:83:In this integration, 'agent IDs' refer to decision-units in the routing candidate set (often provider IDs); no assumption is made that these are cognitive agents.
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:5457:./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:2818:./workspace/hivemind/TACTI_CR.md:87:2. Canonical repo manifests (`agents/*/agent/models.json`, `workspace/policy/llm_policy.json` providers).
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:5916:workspace/tacti_cr/semantic_immune.py:98:def _normalize_claim(claim: str) -> list[str]:
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:5917:workspace/tacti_cr/semantic_immune.py:104:    tokens = _normalize_claim(claim)
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:5941:workspace/tacti_cr/dream_consolidation.py:58:    # Backward-compatible alias support for existing flag spelling.
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:5942:workspace/tacti_cr/temporal.py:176:def _normalize_distribution(values: list[float], eps: float = 1e-12) -> list[float]:
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:5943:workspace/tacti_cr/temporal.py:190:        return _normalize_distribution([1.0] * len(vec))
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:5944:workspace/tacti_cr/temporal.py:195:    return _normalize_distribution(vec)
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:5945:workspace/tacti_cr/temporal.py:199:    p_vec = text_embedding_proxy(p) if isinstance(p, str) else _normalize_distribution([float(x) for x in (p or [])], eps=eps)
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:5946:workspace/tacti_cr/temporal.py:200:    q_vec = text_embedding_proxy(q) if isinstance(q, str) else _normalize_distribution([float(x) for x in (q or [])], eps=eps)
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:5947:workspace/tacti_cr/temporal.py:203:        p_vec = _normalize_distribution((p_vec + [eps] * size)[:size], eps=eps)
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:5948:workspace/tacti_cr/temporal.py:204:        q_vec = _normalize_distribution((q_vec + [eps] * size)[:size], eps=eps)
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:5949:workspace/tacti_cr/arousal_oscillator.py:123:        normalized = [b / max_bin for b in bins]
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:5950:workspace/tacti_cr/arousal_oscillator.py:124:        return normalized, used
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:6439:workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:5916:workspace/tacti_cr/semantic_immune.py:98:def _normalize_claim(claim: str) -> list[str]:
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:6440:workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:5917:workspace/tacti_cr/semantic_immune.py:104:    tokens = _normalize_claim(claim)
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:6464:workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:5941:workspace/tacti_cr/dream_consolidation.py:58:    # Backward-compatible alias support for existing flag spelling.
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:6465:workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:5942:workspace/tacti_cr/temporal.py:176:def _normalize_distribution(values: list[float], eps: float = 1e-12) -> list[float]:
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:6466:workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:5943:workspace/tacti_cr/temporal.py:190:        return _normalize_distribution([1.0] * len(vec))
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:6467:workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:5944:workspace/tacti_cr/temporal.py:195:    return _normalize_distribution(vec)
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:6468:workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:5945:workspace/tacti_cr/temporal.py:199:    p_vec = text_embedding_proxy(p) if isinstance(p, str) else _normalize_distribution([float(x) for x in (p or [])], eps=eps)
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:6469:workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:5946:workspace/tacti_cr/temporal.py:200:    q_vec = text_embedding_proxy(q) if isinstance(q, str) else _normalize_distribution([float(x) for x in (q or [])], eps=eps)
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:6470:workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:5947:workspace/tacti_cr/temporal.py:203:        p_vec = _normalize_distribution((p_vec + [eps] * size)[:size], eps=eps)
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:6471:workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:5948:workspace/tacti_cr/temporal.py:204:        q_vec = _normalize_distribution((q_vec + [eps] * size)[:size], eps=eps)
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:6472:workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:5949:workspace/tacti_cr/arousal_oscillator.py:123:        normalized = [b / max_bin for b in bins]
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:6473:workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:5950:workspace/tacti_cr/arousal_oscillator.py:124:        return normalized, used
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:7473:workspace/tacti_cr/semantic_immune.py:210:    # update healthy distribution
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:7474:workspace/tacti_cr/semantic_immune.py:216:    stats.update({"count": new_count, "centroid": centroid, "distances": distances[-400:]})
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:7489:workspace/AUDIT_AIF_PHASE1_20260219.md:4:- Shipped P1: append-only external memory event store (JSONL backend) at `workspace/tacti_cr/external_memory.py`.
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:7499:workspace/scripts/verify_tacti_cr_novel10_fixture.py:16:from tacti_cr.events import summarize_by_type, read_events
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:7502:workspace/scripts/verify_tacti_cr_novel10_fixture.py:39:    parser.add_argument("--events-path", default="workspace/state/tacti_cr/events.jsonl")
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:7509:workspace/knowledge_base/data/graph.jsonl:28:{"id": "tacti_workspace_hivemind_TACTI_CR.md", "name": "TACTI(C)-R System Synthesis", "entity_type": "research:tacti", "content": "# TACTI(C)-R System Synthesis (HiveMind Integration)\n\n## Integration Map\n- `workspace/hivemind/hivemind/peer_graph.py`: Murmuration local peer topology and interaction updates.\n- `workspace/hivemind/hivemind/reservoir.py`: Echo-state reservoir + deterministic readout hints.\n- `workspace/hivemind/hivemind/physarum_router.py`: Conductance/path exploration and pruning.\n- `workspace/hivemind/hivemind/trails.py`: External trail memory with decay, reinforcement, and similarity query.\n- `workspace/hivemind/hivemind/dynamics_pipeline.py`: Composition layer for Tasks 1-4.\n- `workspace/hivemind/hivemind/integrations/main_flow_hook.py`: Main-flow adapter (flag checks, agent-id resolution, routing enhancement, outcome updates).\n- `scripts/memory_tool.py`: Optional Task 1-4 runtime hook for memory query consult-order/path bias.\n- `workspace/hivemind/hivemind/active_inference.py`: Preference priors + prediction-error updates.\n- `workspace/scripts/policy_router.py`: Real response routing hook site (`PolicyRouter.execute_with_escalation`) for Tasks 1-4 + Task 5.\n\n## Feature Flags\nAll modules are optional and off by default.\n\n- `ENABLE_MURMURATION=1`\n- `ENABLE_RESERVOIR=1`\n- `ENABLE_PHYSARUM_ROUTER=1`\n- `ENABLE_TRAIL_MEMORY=1`\n- `ENABLE_ACTIVE_INFERENCE=1`\n\n## Module APIs\n### Task 1: Murmuration\n- `PeerGraph.init(agent_ids, k, seed)`\n- `PeerGraph.peers(agent_id) -> list[str]`\n- `PeerGraph.observe_interaction(src, dst, signal)`\n- `PeerGraph.tick(dt)`\n- `PeerGraph.snapshot() / PeerGraph.load(payload)`\n\n### Task 2: Reservoir\n- `Reservoir.init(dim, leak, spectral_scale, seed)`\n- `Reservoir.step(input_features, agent_features, adjacency_features) -> state`\n- `Reservoir.readout(state) -> dict`\n- `Reservoir.reset(session_id=None)`\n- `Reservoir.snapshot() / Reservoir.load(payload)`\n\n### Task 3: Physarum\n- `PhysarumRouter.propose_paths(src_agent, target_intent, peer_graph, n_paths) -> list[list[str]]`\n- `PhysarumRouter.update(path, reward_signal)`\n- `PhysarumRouter.prune(min_k, max_k)`\n- `PhysarumRouter.snapshot() / PhysarumRouter.load(payload)`\n\n### Task 4: External Trails\n- `TrailStore.add(trail) -> trail_id`\n- `TrailStore.query(text_or_embedding, k, now=None) -> list[dict]`\n- `TrailStore.decay(now=None) -> dict`\n- `TrailStore.reinforce(trail_id, delta) -> bool`\n- `TrailStore.snapshot() / TrailStore.load(payload)`\n\n### Task 5: Active Inference\n- `PreferenceModel.predict(context) -> (preference_params, confidence)`\n- `PreferenceModel.update(feedback, observed_outcome) -> dict`\n- `PredictionError.compute(predicted, observed) -> float`\n- `PreferenceModel.snapshot() / PreferenceModel.load(payload)`\n- `PreferenceModel.save_path(path) / PreferenceModel.load_path(path)`\n\n## Integration Behavior\n### Tasks 1-4 (HiveMind memory query path)\nWhen any of the first four flags is enabled, `scripts/memory_tool.py query`:\n1. Loads `TactiDynamicsPipeline` state from `workspace/hivemind/data/tacti_dynamics_snapshot.json` if present.\n2. Resolves agent IDs from runtime candidates and canoni", "source": "workspace/hivemind/TACTI_CR.md", "metadata": {"topic": "tacti"}}
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:7592:workspace/scripts/run_novel10_fixture.py:25:from tacti_cr.events import DEFAULT_PATH, summarize_by_type
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:7648:workspace/scripts/verify_tacti_cr_events.py:15:from tacti_cr.events import DEFAULT_PATH, read_events, summarize_by_type
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:7663:workspace/scripts/dream_consolidation.py:14:    events_file = REPO_ROOT / "workspace" / "state" / "tacti_cr" / "events.jsonl"
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:7736:workspace/scripts/consciousness_timer.py:23:    events_file = REPO_ROOT / "workspace" / "state" / "tacti_cr" / "events.jsonl"
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:7737:workspace/scripts/verify_tacti_cr_novel10_fixture.sh:25:  --events-path workspace/state/tacti_cr/events.jsonl \
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:7738:workspace/scripts/verify_tacti_cr_novel10_fixture.sh:31:  --events-path workspace/state/tacti_cr/events.jsonl
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:7758:./tests_unittest/test_tacti_cr_novel_10.py:21:from tacti_cr.dream_consolidation import run_consolidation
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:7761:./tests_unittest/test_dream_consolidation_pruning.py:5:from workspace.tacti_cr.dream_consolidation import prune_competing_clusters
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:7763:./tests_unittest/test_evolution_scaffolds.py:19:from tacti_cr.dream_consolidation import prune_competing_clusters
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:7769:./workspace/scripts/verify_dream_consolidation.sh:24:from tacti_cr.dream_consolidation import run_consolidation
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:7771:./workspace/scripts/run_novel10_fixture.py:30:from tacti_cr.dream_consolidation import run_consolidation
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:7775:./workspace/scripts/dream_consolidation.sh:13:from tacti_cr.dream_consolidation import run_consolidation
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:7783:./workspace/scripts/verify_tacti_cr_novel_10.sh:39:  workspace/tacti_cr/dream_consolidation.py \
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:7784:./workspace/tacti_cr/oscillatory_gating.py:12:    1: {"dream_consolidation", "knowledge_graph"},
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:7785:./workspace/tacti_cr/README.md:84:- `TACTI_CR_DREAM_CONSOLIDATION=1`
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:7786:./workspace/tacti_cr/README.md:107:bash workspace/scripts/dream_consolidation.sh 2026-02-19
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:7787:./workspace/tacti_cr/novel10_contract.py:11:    "dream_consolidation": ["tacti_cr.dream.consolidation_started", "tacti_cr.dream.report_written"],
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:7788:./workspace/tacti_cr/novel10_contract.py:23:    "TACTI_CR_DREAM_CONSOLIDATION": "0",
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:7789:./workspace/tacti_cr/__init__.py:21:from .dream_consolidation import run_consolidation
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:7791:./workspace/tacti_cr/dream_consolidation.py:226:    if not is_enabled("dream_consolidation"):
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:7792:./workspace/tacti_cr/dream_consolidation.py:289:    if not is_enabled("dream_consolidation"):
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:7793:./workspace/tacti_cr/dream_consolidation.py:290:        return {"ok": False, "reason": "dream_consolidation_disabled"}
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:7794:./workspace/tacti_cr/config.py:83:    "dream_consolidation": "TACTI_CR_DREAM_CONSOLIDATION",
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:7821:- `workspace/tacti_cr/events.py` append-only JSONL rows:
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8073:- `workspace/tacti_cr/impasse.py`
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8100:./README.md:55:When enabled, runtime TACTI events write to `workspace/state_runtime/tacti_cr/events.jsonl` (ignored); `workspace/state/tacti_cr/events.jsonl` remains a deterministic tracked stub.
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8101:./README.md:109:│   ├── tacti_cr/         # TACTI(C)-R core modules
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8102:./tests_unittest/test_oscillatory_attention.py:4:from workspace.tacti_cr.oscillatory_gating import PhaseScheduler
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8103:./tests_unittest/test_tacti_cr_integration.py:11:from tacti_cr.arousal import detect_arousal, get_compute_allocation, ArousalLevel  # noqa: E402
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8104:./tests_unittest/test_tacti_cr_integration.py:12:from tacti_cr.temporal import TemporalMemory  # noqa: E402
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8105:./tests_unittest/test_tacti_cr_integration.py:13:from tacti_cr.collapse import CollapseDetector  # noqa: E402
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8106:./tests_unittest/test_tacti_cr_integration.py:14:from tacti_cr.repair import RepairEngine  # noqa: E402
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8107:./tests_unittest/test_tacti_cr_integration.py:15:from tacti_cr.hivemind_bridge import MemoryEntry  # noqa: E402
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8108:./tests_unittest/test_tacti_cr_integration.py:19:    @patch("tacti_cr.temporal.hivemind_store", return_value=True)
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8109:./tests_unittest/test_tacti_cr_integration.py:20:    @patch("tacti_cr.temporal.hivemind_query")
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8110:./tests_unittest/test_tacti_cr_integration.py:21:    @patch("tacti_cr.collapse.hivemind_query")
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8111:./tests_unittest/test_policy_router_tacti_novel10.py:52:                    "tacti_cr": {"flags": {"expression_router": True}},
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8112:./tests_unittest/test_semantic_immune_epitopes.py:6:import workspace.tacti_cr.semantic_immune as semantic_immune
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8113:./tests_unittest/test_tacti_cr_external_memory_integration.py:12:from tacti_cr.external_memory import append_event, healthcheck, read_events  # noqa: E402
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8114:./tests_unittest/test_tacti_cr_events.py:12:    mod_path = repo_root / "workspace" / "tacti_cr" / "events.py"
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8115:./tests_unittest/test_tacti_cr_events.py:34:        self.events.emit("tacti_cr.test.one", {"a": 1}, now=fixed, session_id="s-1")
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8116:./tests_unittest/test_tacti_cr_events.py:38:        self.assertEqual("tacti_cr.test.one", rows[0]["type"])
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8117:./tests_unittest/test_tacti_cr_events.py:45:        self.events.emit("tacti_cr.alpha", {"x": 1}, now=fixed)
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8118:./tests_unittest/test_tacti_cr_events.py:46:        self.events.emit("tacti_cr.beta", {"x": 2}, now=fixed)
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8119:./tests_unittest/test_tacti_cr_events.py:47:        self.events.emit("tacti_cr.alpha", {"x": 3}, now=fixed)
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8120:./tests_unittest/test_tacti_cr_events.py:49:        self.assertEqual({"tacti_cr.alpha": 2, "tacti_cr.beta": 1}, summary)
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8121:./tests_unittest/test_tacti_cr_hivemind_bridge.py:11:from tacti_cr.hivemind_bridge import hivemind_query, hivemind_store  # noqa: E402
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8122:./tests_unittest/test_tacti_cr_hivemind_bridge.py:15:    @patch("tacti_cr.hivemind_bridge._memory_tool_path")
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8123:./tests_unittest/test_tacti_cr_hivemind_bridge.py:16:    @patch("tacti_cr.hivemind_bridge.subprocess.run")
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8124:./tests_unittest/test_tacti_cr_hivemind_bridge.py:41:    @patch("tacti_cr.hivemind_bridge._memory_tool_path")
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8125:./tests_unittest/test_tacti_cr_hivemind_bridge.py:42:    @patch("tacti_cr.hivemind_bridge.subprocess.run")
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8126:./tests_unittest/test_tacti_cr_hivemind_bridge.py:53:                "source": "tacti_cr.test",
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8127:./tests_unittest/test_policy_router_tacti_main_flow.py:103:            runtime_events = tmp / "state_runtime" / "tacti_cr" / "events.jsonl"
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8128:./tests_unittest/test_novel10_fixture_verifier.py:15:    path = REPO_ROOT / "workspace" / "tacti_cr" / "novel10_contract.py"
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8129:./tests_unittest/test_temporal_surprise_gate.py:4:from workspace.tacti_cr.temporal import TemporalMemory, surprise_score_proxy, text_embedding_proxy
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8130:./tests_unittest/test_tacti_cr_impasse.py:8:from tacti_cr.impasse import ImpasseManager  # noqa: E402
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8131:./tests_unittest/test_tacti_cr_temporal.py:11:from tacti_cr.temporal import TemporalMemory  # noqa: E402
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8132:./tests_unittest/test_tacti_cr_temporal.py:53:    @patch("tacti_cr.temporal.hivemind_store", return_value=True)
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8133:./tests_unittest/test_tacti_cr_temporal.py:60:        self.assertEqual(payload["source"], "tacti_cr.temporal")
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8134:./tests_unittest/test_tacti_cr_temporal.py:63:    @patch("tacti_cr.temporal.hivemind_query")
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8135:./tests_unittest/test_tacti_cr_temporal.py:68:        from tacti_cr.hivemind_bridge import MemoryEntry
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8136:./tests_unittest/test_tacti_cr_arousal.py:9:from tacti_cr.arousal import (  # noqa: E402
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8137:./tests_unittest/test_tacti_cr_repair.py:9:from tacti_cr.repair import RepairEngine  # noqa: E402
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8138:./tests_unittest/test_tacti_cr_collapse.py:10:from tacti_cr.collapse import CollapseDetector  # noqa: E402
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8139:./tests_unittest/test_tacti_cr_collapse.py:43:    @patch("tacti_cr.collapse.hivemind_query")
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8140:./tests_unittest/test_tacti_cr_collapse.py:45:        from tacti_cr.hivemind_bridge import MemoryEntry
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8141:./tests_unittest/test_tacti_cr_cross_timescale.py:9:from tacti_cr.cross_timescale import CrossTimescaleController  # noqa: E402
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8142:./tests_unittest/test_dream_consolidation_pruning.py:5:from workspace.tacti_cr.dream_consolidation import prune_competing_clusters
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8143:./tests_unittest/test_evolution_scaffolds.py:19:from tacti_cr.dream_consolidation import prune_competing_clusters
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8144:./tests_unittest/test_evolution_scaffolds.py:20:from tacti_cr.oscillatory_gating import OscillatoryGate
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8145:./tests_unittest/test_evolution_scaffolds.py:21:from tacti_cr.semantic_immune import assess_content, cache_epitope
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8146:./tests_unittest/test_evolution_scaffolds.py:22:from tacti_cr.temporal import TemporalMemory, text_embedding_proxy
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8147:./tests_unittest/test_tacti_cr_novel_10.py:20:from tacti_cr.arousal_oscillator import ArousalOscillator
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8148:./tests_unittest/test_tacti_cr_novel_10.py:21:from tacti_cr.dream_consolidation import run_consolidation
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8149:./tests_unittest/test_tacti_cr_novel_10.py:22:from tacti_cr.expression import compute_expression
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8150:./tests_unittest/test_tacti_cr_novel_10.py:23:from tacti_cr.mirror import behavioral_fingerprint, update_from_event
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8151:./tests_unittest/test_tacti_cr_novel_10.py:24:from tacti_cr.prefetch import PrefetchCache, predict_topics
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8152:./tests_unittest/test_tacti_cr_novel_10.py:25:from tacti_cr.semantic_immune import assess_content, approve_quarantine
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8153:./tests_unittest/test_tacti_cr_novel_10.py:26:from tacti_cr.temporal_watchdog import detect_temporal_drift, temporal_reset_event, update_beacon
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8154:./tests_unittest/test_tacti_cr_novel_10.py:27:from tacti_cr.valence import current_valence, routing_bias, update_valence
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8155:./workspace/AUDIT_AIF_PHASE1_20260219.md:4:- Shipped P1: append-only external memory event store (JSONL backend) at `workspace/tacti_cr/external_memory.py`.
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8156:./workspace/AUDIT_AIF_PHASE1_20260219.md:8:  - `workspace/tacti_cr/efe_calculator.py`
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8157:./workspace/AUDIT_AIF_PHASE1_20260219.md:9:  - `workspace/tacti_cr/curiosity.py`
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8158:./workspace/AUDIT_AIF_PHASE1_20260219.md:10:  - `workspace/tacti_cr/active_inference_agent.py`
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8159:./workspace/AUDIT_AIF_PHASE1_20260219.md:25:    - `ModuleNotFoundError: No module named 'tacti_cr.external_memory'`
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8160:./workspace/AUDIT_AIF_PHASE1_20260219.md:29:  - `python3 -m py_compile workspace/tacti_cr/external_memory.py workspace/tacti_cr/efe_calculator.py workspace/tacti_cr/curiosity.py workspace/tacti_cr/active_inference_agent.py workspace/scripts/external_memory_demo.py` (pass)
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8161:./workspace/memory/session_handshake.py:13:    from tacti_cr.events import emit as tacti_emit
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8162:./workspace/memory/session_handshake.py:92:        tacti_emit("tacti_cr.session.handshake_loaded", payload, session_id=str(session_id))
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8163:./workspace/memory/session_handshake.py:139:        tacti_emit("tacti_cr.session.session_closed", payload, session_id=str(session_id))
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8164:./workspace/tacti_cr/valence.py:75:    emit("tacti_cr.valence.updated", {"agent": agent, "valence": value, "delta": delta}, now=dt_now)
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8165:./workspace/tacti_cr/semantic_immune.py:179:        emit("tacti_cr.semantic_immune.quarantined", {k: row[k] for k in ("content_hash", "score", "threshold", "reason")})
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8166:./workspace/tacti_cr/semantic_immune.py:207:        emit("tacti_cr.semantic_immune.quarantined", {k: row[k] for k in ("content_hash", "score", "threshold", "reason")})
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8167:./workspace/tacti_cr/semantic_immune.py:219:        "tacti_cr.semantic_immune.accepted",
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8168:./workspace/tacti_cr/semantic_immune.py:253:    emit("tacti_cr.semantic_immune.approved", {"content_hash": target})
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8169:./workspace/scripts/verify_tacti_cr_novel10_fixture.py:16:from tacti_cr.events import summarize_by_type, read_events
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8170:./workspace/scripts/verify_tacti_cr_novel10_fixture.py:17:from tacti_cr.novel10_contract import required_for_fixture
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8171:./workspace/scripts/verify_tacti_cr_novel10_fixture.py:39:    parser.add_argument("--events-path", default="workspace/state/tacti_cr/events.jsonl")
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8172:./workspace/knowledge_base/kb.py:25:    from tacti_cr.prefetch import prefetch_context
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8173:./workspace/tacti_cr/prefetch.py:54:        emit("tacti_cr.prefetch.recorded", {"topic": topic, "docs_count": len(docs), "depth": int(idx.get("depth", 3))})
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8174:./workspace/tacti_cr/prefetch.py:67:        emit("tacti_cr.prefetch.hit_rate", {"hit": bool(hit), "hit_rate": hit_rate, "depth": int(idx["depth"]), "total": total})
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8175:./workspace/tacti_cr/prefetch.py:87:    emit("tacti_cr.prefetch.predicted_topics", {"topics": topics, "depth": cache.depth()})
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8176:./workspace/tacti_cr/prefetch.py:92:    emit("tacti_cr.prefetch.cache_put", {"topics": topics, "docs_count": len(docs)})
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8177:./workspace/CODEX_TASK_LIST.md:8:**File:** `workspace/tacti_cr/efe_calculator.py`
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8178:./workspace/CODEX_TASK_LIST.md:18:**File:** `workspace/tacti_cr/slime_optimizer.py`
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8179:./workspace/CODEX_TASK_LIST.md:28:**File:** `workspace/tacti_cr/reservoir_core.py`
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8180:./workspace/CODEX_TASK_LIST.md:38:**File:** `workspace/tacti_cr/murmuration_agent.py`
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8181:./workspace/CODEX_TASK_LIST.md:48:**File:** `workspace/tacti_cr/external_memory.py`
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8182:./workspace/CODEX_TASK_LIST.md:58:**File:** `workspace/tacti_cr/active_inference_agent.py`
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8183:./workspace/CODEX_TASK_LIST.md:68:**File:** `workspace/tacti_cr/multiscale_engine.py`
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8184:./workspace/CODEX_TASK_LIST.md:78:**File:** `workspace/tacti_cr/curiosity.py`
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8185:./workspace/CODEX_TASK_LIST.md:88:**File:** `workspace/tacti_cr/self_healing.py`
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8186:./workspace/hivemind/hivemind/stigmergy.py:16:    from tacti_cr.events import emit as tacti_emit
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8187:./workspace/hivemind/hivemind/stigmergy.py:78:            tacti_emit("tacti_cr.stigmergy.mark_deposited", mark, now=_to_dt(now or datetime.now(timezone.utc)))
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8188:./workspace/hivemind/hivemind/stigmergy.py:92:                "tacti_cr.stigmergy.query",
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8189:./workspace/hivemind/hivemind/stigmergy.py:103:                "tacti_cr.stigmergy.avoid_topics",
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8190:./workspace/scripts/verify_dream_consolidation.sh:24:from tacti_cr.dream_consolidation import run_consolidation
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8191:./workspace/tacti_cr/events_paths.py:15:    return root / "workspace" / "state_runtime" / "tacti_cr" / "events.jsonl"
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8192:./workspace/tacti_cr/README.md:34:from tacti_cr.arousal import detect_arousal, get_compute_allocation
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8193:./workspace/tacti_cr/README.md:42:from tacti_cr.temporal import TemporalMemory
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8194:./workspace/tacti_cr/README.md:50:from tacti_cr.collapse import CollapseDetector
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8195:./workspace/tacti_cr/README.md:51:from tacti_cr.repair import RepairEngine
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8196:./workspace/tacti_cr/README.md:118:- Unified runtime events are append-only JSONL at `workspace/state/tacti_cr/events.jsonl`.
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8197:./workspace/tacti_cr/README.md:136:bash workspace/scripts/verify_tacti_cr_events.sh --min-count tacti_cr.team_chat.session_start=1
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8198:./workspace/tacti_cr/README.md:147:This runs an offline fixture harness that enables all Novel-10 flags, drives minimal paths, and asserts required event types against `workspace/tacti_cr/novel10_contract.py`.
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8199:./workspace/knowledge_base/data/graph.jsonl:28:{"id": "tacti_workspace_hivemind_TACTI_CR.md", "name": "TACTI(C)-R System Synthesis", "entity_type": "research:tacti", "content": "# TACTI(C)-R System Synthesis (HiveMind Integration)\n\n## Integration Map\n- `workspace/hivemind/hivemind/peer_graph.py`: Murmuration local peer topology and interaction updates.\n- `workspace/hivemind/hivemind/reservoir.py`: Echo-state reservoir + deterministic readout hints.\n- `workspace/hivemind/hivemind/physarum_router.py`: Conductance/path exploration and pruning.\n- `workspace/hivemind/hivemind/trails.py`: External trail memory with decay, reinforcement, and similarity query.\n- `workspace/hivemind/hivemind/dynamics_pipeline.py`: Composition layer for Tasks 1-4.\n- `workspace/hivemind/hivemind/integrations/main_flow_hook.py`: Main-flow adapter (flag checks, agent-id resolution, routing enhancement, outcome updates).\n- `scripts/memory_tool.py`: Optional Task 1-4 runtime hook for memory query consult-order/path bias.\n- `workspace/hivemind/hivemind/active_inference.py`: Preference priors + prediction-error updates.\n- `workspace/scripts/policy_router.py`: Real response routing hook site (`PolicyRouter.execute_with_escalation`) for Tasks 1-4 + Task 5.\n\n## Feature Flags\nAll modules are optional and off by default.\n\n- `ENABLE_MURMURATION=1`\n- `ENABLE_RESERVOIR=1`\n- `ENABLE_PHYSARUM_ROUTER=1`\n- `ENABLE_TRAIL_MEMORY=1`\n- `ENABLE_ACTIVE_INFERENCE=1`\n\n## Module APIs\n### Task 1: Murmuration\n- `PeerGraph.init(agent_ids, k, seed)`\n- `PeerGraph.peers(agent_id) -> list[str]`\n- `PeerGraph.observe_interaction(src, dst, signal)`\n- `PeerGraph.tick(dt)`\n- `PeerGraph.snapshot() / PeerGraph.load(payload)`\n\n### Task 2: Reservoir\n- `Reservoir.init(dim, leak, spectral_scale, seed)`\n- `Reservoir.step(input_features, agent_features, adjacency_features) -> state`\n- `Reservoir.readout(state) -> dict`\n- `Reservoir.reset(session_id=None)`\n- `Reservoir.snapshot() / Reservoir.load(payload)`\n\n### Task 3: Physarum\n- `PhysarumRouter.propose_paths(src_agent, target_intent, peer_graph, n_paths) -> list[list[str]]`\n- `PhysarumRouter.update(path, reward_signal)`\n- `PhysarumRouter.prune(min_k, max_k)`\n- `PhysarumRouter.snapshot() / PhysarumRouter.load(payload)`\n\n### Task 4: External Trails\n- `TrailStore.add(trail) -> trail_id`\n- `TrailStore.query(text_or_embedding, k, now=None) -> list[dict]`\n- `TrailStore.decay(now=None) -> dict`\n- `TrailStore.reinforce(trail_id, delta) -> bool`\n- `TrailStore.snapshot() / TrailStore.load(payload)`\n\n### Task 5: Active Inference\n- `PreferenceModel.predict(context) -> (preference_params, confidence)`\n- `PreferenceModel.update(feedback, observed_outcome) -> dict`\n- `PredictionError.compute(predicted, observed) -> float`\n- `PreferenceModel.snapshot() / PreferenceModel.load(payload)`\n- `PreferenceModel.save_path(path) / PreferenceModel.load_path(path)`\n\n## Integration Behavior\n### Tasks 1-4 (HiveMind memory query path)\nWhen any of the first four flags is enabled, `scripts/memory_tool.py query`:\n1. Loads `TactiDynamicsPipeline` state from `workspace/hivemind/data/tacti_dynamics_snapshot.json` if present.\n2. Resolves agent IDs from runtime candidates and canoni", "source": "workspace/hivemind/TACTI_CR.md", "metadata": {"topic": "tacti"}}
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8200:./workspace/tacti_cr/config.py:127:    tacti_cfg = raw.get("tacti_cr")
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8201:./workspace/tacti_cr/config.py:131:    if isinstance(routing_cfg, dict) and isinstance(routing_cfg.get("tacti_cr"), dict):
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8202:./workspace/tacti_cr/config.py:132:        return routing_cfg["tacti_cr"]
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8203:./workspace/tacti_cr/temporal_watchdog.py:44:    emit("tacti_cr.temporal_watchdog.beacon_updated", {"path": str(path), "epoch_ms": payload["epoch_ms"]}, now=now)
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8204:./workspace/tacti_cr/temporal_watchdog.py:135:    emit("tacti_cr.temporal_watchdog.temporal_reset", {"content_hash": digest, "findings": findings}, now=now)
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8205:./workspace/tacti_cr/mirror.py:77:        "tacti_cr.mirror.updated",
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8206:./workspace/hivemind/hivemind/store.py:21:    from tacti_cr.semantic_immune import assess_content
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8207:./workspace/tacti_cr/collapse.py:89:    out = root / "workspace" / "state" / "tacti_cr" / "collapse_recommendations.jsonl"
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8208:./workspace/scripts/run_novel10_fixture.py:25:from tacti_cr.events import DEFAULT_PATH, summarize_by_type
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8209:./workspace/scripts/run_novel10_fixture.py:26:import tacti_cr.events as tacti_events
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8210:./workspace/scripts/run_novel10_fixture.py:27:from tacti_cr.novel10_contract import FEATURE_FLAGS
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8211:./workspace/scripts/run_novel10_fixture.py:28:from tacti_cr.arousal_oscillator import ArousalOscillator
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8212:./workspace/scripts/run_novel10_fixture.py:29:from tacti_cr.temporal import TemporalMemory
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8213:./workspace/scripts/run_novel10_fixture.py:30:from tacti_cr.dream_consolidation import run_consolidation
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8214:./workspace/scripts/run_novel10_fixture.py:31:from tacti_cr.semantic_immune import assess_content
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8215:./workspace/scripts/run_novel10_fixture.py:32:from tacti_cr.prefetch import prefetch_context, PrefetchCache
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8216:./workspace/scripts/run_novel10_fixture.py:33:from tacti_cr.mirror import update_from_event
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8217:./workspace/scripts/run_novel10_fixture.py:34:from tacti_cr.valence import update_valence
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8218:./workspace/tacti_cr/temporal.py:86:                    "source": "tacti_cr.temporal",
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8219:./workspace/tacti_cr/temporal.py:95:                "tacti_cr.temporal.drift_detected",
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8220:./workspace/tacti_cr/events.py:11:DEFAULT_PATH = Path("workspace/state/tacti_cr/events.jsonl")
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8221:./workspace/tacti_cr/events.py:62:        print(f"warning: tacti_cr.events emit failed: {exc}", file=sys.stderr)
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8222:./workspace/tacti_cr/novel10_contract.py:8:    "arousal": ["tacti_cr.arousal_multiplier"],
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8223:./workspace/tacti_cr/novel10_contract.py:9:    "expression": ["tacti_cr.expression_profile"],
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8224:./workspace/tacti_cr/novel10_contract.py:10:    "temporal_watchdog": ["tacti_cr.temporal.drift_detected", "tacti_cr.temporal_watchdog.temporal_reset"],
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8225:./workspace/tacti_cr/novel10_contract.py:11:    "dream_consolidation": ["tacti_cr.dream.consolidation_started", "tacti_cr.dream.report_written"],
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8226:./workspace/tacti_cr/novel10_contract.py:12:    "semantic_immune": ["tacti_cr.semantic_immune.accepted", "tacti_cr.semantic_immune.quarantined"],
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8227:./workspace/tacti_cr/novel10_contract.py:13:    "stigmergy": ["tacti_cr.stigmergy.mark_deposited", "tacti_cr.stigmergy.query"],
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8228:./workspace/tacti_cr/novel10_contract.py:14:    "prefetch": ["tacti_cr.prefetch.predicted_topics", "tacti_cr.prefetch.cache_put"],
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8229:./workspace/tacti_cr/novel10_contract.py:15:    "mirror": ["tacti_cr.mirror.updated"],
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8230:./workspace/tacti_cr/novel10_contract.py:16:    "valence": ["tacti_cr.valence.updated", "tacti_cr.valence_bias"],
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8231:./workspace/tacti_cr/novel10_contract.py:17:    "trail_heatmap": ["tacti_cr.trails.topn_served"],
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8232:./workspace/scripts/run_narrative_distill.py:16:from tacti_cr.events_paths import resolve_events_path
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8233:./workspace/tacti_cr/hivemind_bridge.py:102:        str(entry.get("source", "tacti_cr")),
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8234:./workspace/tacti_cr/dream_consolidation.py:293:    emit("tacti_cr.dream.consolidation_started", {"day": day}, now=now_dt)
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8235:./workspace/tacti_cr/dream_consolidation.py:350:    emit("tacti_cr.dream.report_written", {"day": day, "report_path": str(report_path)}, now=now_dt)
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8236:./workspace/scripts/external_memory_demo.py:15:from tacti_cr.external_memory import append_event, healthcheck  # noqa: E402
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8237:./workspace/docs/briefs/BRIEF-2026-02-18-001_TACTI_CR_Implementation.md:40:New modules in `workspace/tacti_cr/` - isolated from core OpenClaw
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8238:./workspace/docs/briefs/BRIEF-2026-02-18-001_TACTI_CR_Implementation.md:44:| `workspace/tacti_cr/` | CREATE |
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8239:./workspace/docs/briefs/BRIEF-2026-02-18-001_TACTI_CR_Implementation.md:45:| `workspace/tacti_cr/arousal.py` | CREATE |
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8240:./workspace/docs/briefs/BRIEF-2026-02-18-001_TACTI_CR_Implementation.md:46:| `workspace/tacti_cr/temporal.py` | CREATE |
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8241:./workspace/docs/briefs/BRIEF-2026-02-18-001_TACTI_CR_Implementation.md:47:| `workspace/tacti_cr/collapse.py` | CREATE |
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8242:./workspace/docs/briefs/BRIEF-2026-02-18-001_TACTI_CR_Implementation.md:48:| `workspace/tacti_cr/repair.py` | CREATE |
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8243:./workspace/docs/briefs/BRIEF-2026-02-18-001_TACTI_CR_Implementation.md:49:| `workspace/tacti_cr/__init__.py` | CREATE |
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8244:./workspace/docs/briefs/BRIEF-2026-02-18-001_TACTI_CR_Implementation.md:50:| `workspace/tacti_cr/config.py` | CREATE |
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8245:./workspace/docs/briefs/BRIEF-2026-02-18-001_TACTI_CR_Implementation.md:51:| `tests/tacti_cr/` | CREATE |
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8246:./workspace/docs/briefs/BRIEF-2026-02-18-001_TACTI_CR_Implementation.md:67:workspace/tacti_cr/
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8247:./workspace/docs/briefs/BRIEF-2026-02-18-001_TACTI_CR_Implementation.md:256:- [ ] Must pass: `python -m pytest workspace/tacti_cr/tests/`
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8248:./workspace/scripts/temporal_beacon_update.py:14:from tacti_cr.temporal_watchdog import update_beacon  # noqa: E402
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8249:./workspace/docs/briefs/BRIEF-2026-02-18-002_Moltbook_Update.md:69:- Technical implementation in workspace/tacti_cr/
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8250:./workspace/scripts/team_chat.py:23:    from tacti_cr.temporal_watchdog import temporal_reset_event
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8251:./workspace/scripts/team_chat.py:27:    from tacti_cr.events import emit as tacti_emit
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8252:./workspace/scripts/team_chat.py:31:    from tacti_cr.mirror import update_from_event as mirror_update_from_event
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8253:./workspace/scripts/team_chat.py:35:    from tacti_cr.valence import update_valence as valence_update
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8254:./workspace/scripts/team_chat.py:44:    from tacti_cr.impasse import ImpasseManager
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8255:./workspace/scripts/team_chat.py:386:                f"tacti_cr.team_chat.{event_type}",
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8256:./workspace/scripts/verify_tacti_cr_events.py:15:from tacti_cr.events import DEFAULT_PATH, read_events, summarize_by_type
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8257:./workspace/scripts/verify_tacti_cr_novel_10.sh:35:  workspace/tacti_cr/config.py \
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8258:./workspace/scripts/verify_tacti_cr_novel_10.sh:36:  workspace/tacti_cr/arousal_oscillator.py \
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8259:./workspace/scripts/verify_tacti_cr_novel_10.sh:37:  workspace/tacti_cr/events.py \
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8260:./workspace/scripts/verify_tacti_cr_novel_10.sh:38:  workspace/tacti_cr/novel10_contract.py \
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8261:./workspace/scripts/verify_tacti_cr_novel_10.sh:39:  workspace/tacti_cr/dream_consolidation.py \
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8262:./workspace/scripts/verify_tacti_cr_novel_10.sh:40:  workspace/tacti_cr/semantic_immune.py \
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8263:./workspace/scripts/verify_tacti_cr_novel_10.sh:41:  workspace/tacti_cr/expression.py \
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8264:./workspace/scripts/verify_tacti_cr_novel_10.sh:42:  workspace/tacti_cr/prefetch.py \
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8265:./workspace/scripts/verify_tacti_cr_novel_10.sh:43:  workspace/tacti_cr/mirror.py \
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8266:./workspace/scripts/verify_tacti_cr_novel_10.sh:44:  workspace/tacti_cr/valence.py \
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8267:./workspace/scripts/verify_tacti_cr_novel_10.sh:45:  workspace/tacti_cr/temporal_watchdog.py \
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8268:./workspace/audit/tacti_cr_event_contract_20260219T130107Z.md:9:Unified runtime event contract added at `workspace/tacti_cr/events.py`.
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8269:./workspace/audit/tacti_cr_event_contract_20260219T130107Z.md:19:- `workspace/state/tacti_cr/events.jsonl`
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8270:./workspace/audit/tacti_cr_event_contract_20260219T130107Z.md:29:- `workspace/tacti_cr/temporal_watchdog.py`: beacon update + temporal reset events.
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8271:./workspace/audit/tacti_cr_event_contract_20260219T130107Z.md:30:- `workspace/tacti_cr/temporal.py`: drift detection emits unified event (replaces ad-hoc watchdog JSONL write).
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8272:./workspace/audit/tacti_cr_event_contract_20260219T130107Z.md:31:- `workspace/tacti_cr/mirror.py`: emits update event.
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8273:./workspace/audit/tacti_cr_event_contract_20260219T130107Z.md:32:- `workspace/tacti_cr/valence.py`: emits valence update event.
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8274:./workspace/audit/tacti_cr_event_contract_20260219T130107Z.md:33:- `workspace/tacti_cr/semantic_immune.py`: emits quarantined/accepted/approved events.
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8275:./workspace/audit/tacti_cr_event_contract_20260219T130107Z.md:34:- `workspace/tacti_cr/prefetch.py`: emits prefetch/hit-rate events.
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8276:./workspace/audit/tacti_cr_event_contract_20260219T130107Z.md:46:bash workspace/scripts/verify_tacti_cr_events.sh --min-count tacti_cr.arousal_multiplier=1
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8277:./workspace/audit/tacti_cr_event_contract_20260219T130107Z.md:56: M workspace/tacti_cr/README.md
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8278:./workspace/audit/tacti_cr_event_contract_20260219T130107Z.md:57: M workspace/tacti_cr/mirror.py
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8279:./workspace/audit/tacti_cr_event_contract_20260219T130107Z.md:58: M workspace/tacti_cr/prefetch.py
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8280:./workspace/audit/tacti_cr_event_contract_20260219T130107Z.md:59: M workspace/tacti_cr/semantic_immune.py
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8281:./workspace/audit/tacti_cr_event_contract_20260219T130107Z.md:60: M workspace/tacti_cr/temporal.py
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8282:./workspace/audit/tacti_cr_event_contract_20260219T130107Z.md:61: M workspace/tacti_cr/temporal_watchdog.py
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8283:./workspace/audit/tacti_cr_event_contract_20260219T130107Z.md:62: M workspace/tacti_cr/valence.py
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8284:./workspace/audit/tacti_cr_event_contract_20260219T130107Z.md:66: ?? workspace/tacti_cr/events.py
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8285:./workspace/audit/tacti_cr_event_contract_20260219T130107Z.md:87:tacti_cr.arousal_multiplier,7
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8286:./workspace/audit/tacti_cr_event_contract_20260219T130107Z.md:88:tacti_cr.expression_profile,7
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8287:./workspace/audit/tacti_cr_event_contract_20260219T130107Z.md:89:tacti_cr.valence_bias,7
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8288:./workspace/scripts/dream_consolidation.py:14:    events_file = REPO_ROOT / "workspace" / "state" / "tacti_cr" / "events.jsonl"
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8289:./workspace/audit/evolution_ideas_1_10_20260220T063914Z.md:9:  - `workspace/tacti_cr/dream_consolidation.py`
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8290:./workspace/audit/evolution_ideas_1_10_20260220T063914Z.md:50:  - `workspace/tacti_cr/temporal.py`
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8291:./workspace/audit/evolution_ideas_1_10_20260220T063914Z.md:78:  - `workspace/tacti_cr/semantic_immune.py`
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8292:./workspace/audit/evolution_ideas_1_10_20260220T063914Z.md:79:  - `workspace/tacti_cr/oscillatory_gating.py`
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8293:./workspace/scripts/dream_consolidation.sh:13:from tacti_cr.dream_consolidation import run_consolidation
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8294:./workspace/scripts/consciousness_timer.py:23:    events_file = REPO_ROOT / "workspace" / "state" / "tacti_cr" / "events.jsonl"
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8295:./workspace/scripts/semantic_immune_approve.py:15:from tacti_cr.semantic_immune import approve_quarantine  # noqa: E402
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8296:./workspace/audit/ci_baseline_restore_20260220T141930Z.md:19:ImportError: cannot import name 'cache_epitope' from 'tacti_cr.semantic_immune'
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8297:./workspace/audit/ci_baseline_restore_20260220T141930Z.md:23:ImportError: cannot import name 'surprise_score_proxy' from 'workspace.tacti_cr.temporal'
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8298:./workspace/audit/ci_baseline_restore_20260220T141930Z.md:36:1. `workspace/tacti_cr/semantic_immune.py`
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8299:./workspace/audit/ci_baseline_restore_20260220T141930Z.md:40:2. `workspace/tacti_cr/temporal.py`
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8300:./workspace/audit/ci_baseline_restore_20260220T141930Z.md:98:Note: `workspace/state/tacti_cr/events.jsonl` is a tracked runtime file and was re-dirtied by tests; it was restored with `git checkout -- workspace/state/tacti_cr/events.jsonl` before commit so this PR remains interface/default-only.
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8301:./workspace/scripts/verify_tacti_cr_novel10_fixture.sh:25:  --events-path workspace/state/tacti_cr/events.jsonl \
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8302:./workspace/scripts/verify_tacti_cr_novel10_fixture.sh:31:  --events-path workspace/state/tacti_cr/events.jsonl
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8303:./workspace/audit/tacti_cr_novel10_fixture_20260219T130947Z.md:19:$ python3 -c "from workspace.tacti_cr.events import summarize_by_type; print('events: OK')"
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8304:./workspace/audit/tacti_cr_novel10_fixture_20260219T130947Z.md:25:- Canonical Novel-10 event/flag contract: `workspace/tacti_cr/novel10_contract.py`
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8305:./workspace/audit/tacti_cr_novel10_fixture_20260219T130947Z.md:36:tacti_cr.arousal_multiplier,1
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8306:./workspace/audit/tacti_cr_novel10_fixture_20260219T130947Z.md:37:tacti_cr.dream.consolidation_started,1
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8307:./workspace/audit/tacti_cr_novel10_fixture_20260219T130947Z.md:38:tacti_cr.dream.report_written,1
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8308:./workspace/audit/tacti_cr_novel10_fixture_20260219T130947Z.md:39:tacti_cr.expression_profile,1
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8309:./workspace/audit/tacti_cr_novel10_fixture_20260219T130947Z.md:40:tacti_cr.mirror.updated,7
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8310:./workspace/audit/tacti_cr_novel10_fixture_20260219T130947Z.md:41:tacti_cr.prefetch.cache_put,1
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8311:./workspace/audit/tacti_cr_novel10_fixture_20260219T130947Z.md:42:tacti_cr.prefetch.hit_rate,1
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8312:./workspace/audit/tacti_cr_novel10_fixture_20260219T130947Z.md:43:tacti_cr.prefetch.predicted_topics,1
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8313:./workspace/audit/tacti_cr_novel10_fixture_20260219T130947Z.md:44:tacti_cr.prefetch.recorded,1
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8314:./workspace/audit/tacti_cr_novel10_fixture_20260219T130947Z.md:45:tacti_cr.semantic_immune.accepted,1
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8315:./workspace/audit/tacti_cr_novel10_fixture_20260219T130947Z.md:46:tacti_cr.semantic_immune.quarantined,1
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8316:./workspace/audit/tacti_cr_novel10_fixture_20260219T130947Z.md:47:tacti_cr.stigmergy.mark_deposited,1
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8317:./workspace/audit/tacti_cr_novel10_fixture_20260219T130947Z.md:48:tacti_cr.stigmergy.query,1
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8318:./workspace/audit/tacti_cr_novel10_fixture_20260219T130947Z.md:49:tacti_cr.team_chat.patch_report,1
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8319:./workspace/audit/tacti_cr_novel10_fixture_20260219T130947Z.md:50:tacti_cr.team_chat.planner_plan,1
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8320:./workspace/audit/tacti_cr_novel10_fixture_20260219T130947Z.md:51:tacti_cr.team_chat.planner_review,1
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8321:./workspace/audit/tacti_cr_novel10_fixture_20260219T130947Z.md:52:tacti_cr.team_chat.session_end,1
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8322:./workspace/audit/tacti_cr_novel10_fixture_20260219T130947Z.md:53:tacti_cr.team_chat.session_start,1
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8323:./workspace/audit/tacti_cr_novel10_fixture_20260219T130947Z.md:54:tacti_cr.team_chat.teamchat.guard.accept_patch_blocked,1
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8324:./workspace/audit/tacti_cr_novel10_fixture_20260219T130947Z.md:55:tacti_cr.team_chat.tool_call,2
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8325:./workspace/audit/tacti_cr_novel10_fixture_20260219T130947Z.md:56:tacti_cr.team_chat.work_order_start,1
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8326:./workspace/audit/tacti_cr_novel10_fixture_20260219T130947Z.md:57:tacti_cr.temporal.drift_detected,1
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8327:./workspace/audit/tacti_cr_novel10_fixture_20260219T130947Z.md:58:tacti_cr.temporal_watchdog.temporal_reset,1
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8328:./workspace/audit/tacti_cr_novel10_fixture_20260219T130947Z.md:59:tacti_cr.valence.updated,2
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8329:./workspace/audit/tacti_cr_novel10_fixture_20260219T130947Z.md:60:tacti_cr.valence_bias,1
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8330:./workspace/audit/teamchat_autocommit_guard_20260219T120909Z.md:13:37853f6 chore(state): untrack tacti_cr events log (runtime only)
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8331:./workspace/audit/teamchat_autocommit_guard_20260219T120909Z.md:22:workspace/state/tacti_cr/events.jsonl
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8332:./workspace/audit/teamchat_autocommit_guard_20260219T120909Z.md:45:37853f6 HEAD@{2026-02-19 22:05:01 +1000}: commit: chore(state): untrack tacti_cr events log (runtime only)
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8333:./workspace/audit/teamchat_autocommit_guard_20260219T120909Z.md:59:37853f6 chore(state): untrack tacti_cr events log (runtime only)
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8334:./workspace/audit/teamchat_autocommit_guard_20260219T120909Z.md:107:37853f6 chore(state): untrack tacti_cr events log (runtime only)
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8335:./workspace/audit/teamchat_autocommit_guard_20260219T120909Z.md:128:37853f6 chore(state): untrack tacti_cr events log (runtime only)
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8336:./workspace/audit/repo_audit_remediation_dali_20260220T025348Z.md:100: TACTI_EVENT_LOG = BASE_DIR / "workspace" / "state" / "tacti_cr" / "events.jsonl"
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8337:./workspace/audit/repo_audit_remediation_dali_20260220T025348Z.md:818: TACTI_EVENT_LOG = BASE_DIR / "workspace" / "state" / "tacti_cr" / "events.jsonl"
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8338:./workspace/scripts/policy_router.py:43:TACTI_EVENT_LOG = BASE_DIR / "workspace" / "state" / "tacti_cr" / "events.jsonl"
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8339:./workspace/scripts/policy_router.py:52:    from tacti_cr.arousal_oscillator import ArousalOscillator
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8340:./workspace/scripts/policy_router.py:53:    from tacti_cr.config import is_enabled as tacti_enabled
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8341:./workspace/scripts/policy_router.py:54:    from tacti_cr.expression import compute_expression
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8342:./workspace/scripts/policy_router.py:55:    from tacti_cr.collapse import emit_recommendation as collapse_emit_recommendation
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8343:./workspace/scripts/policy_router.py:56:    from tacti_cr.valence import routing_bias as tacti_routing_bias
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8344:./workspace/scripts/policy_router.py:57:    from tacti_cr.events import emit as tacti_emit
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8345:./workspace/scripts/policy_router.py:1124:                "tacti_cr.expression_profile",
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8346:./workspace/scripts/policy_router.py:1133:            _tacti_event("tacti_cr.valence_bias", {"intent": intent, "agent_id": agent_id, "bias": bias})
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8347:./workspace/scripts/policy_router.py:1141:                "tacti_cr.arousal_multiplier",
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8348:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:12: M workspace/state/tacti_cr/events.jsonl
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8349:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:37:./workspace/CODEX_Source_UI_TACTI_Upgrade.md:28:| **Dream Consolidation** | `workspace/tacti_cr/dream_consolidation.py` | Memory consolidation status, last run |
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8350:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:38:./workspace/CODEX_Source_UI_TACTI_Upgrade.md:30:| **Semantic Immune** | `workspace/tacti_cr/semantic_immune.py` | Quarantine stats, recent blocks |
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8351:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:39:./workspace/CODEX_Source_UI_TACTI_Upgrade.md:31:| **Arousal Oscillator** | `workspace/tacti_cr/arousal_oscillator.py` | Current energy level, hourly histogram |
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8352:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:43:./workspace/AUDIT_AIF_PHASE1_20260219.md:10:  - `workspace/tacti_cr/active_inference_agent.py`
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8353:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:44:./workspace/AUDIT_AIF_PHASE1_20260219.md:29:  - `python3 -m py_compile workspace/tacti_cr/external_memory.py workspace/tacti_cr/efe_calculator.py workspace/tacti_cr/curiosity.py workspace/tacti_cr/active_inference_agent.py workspace/scripts/external_memory_demo.py` (pass)
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8354:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:49:./tests_unittest/test_tacti_cr_novel_10.py:20:from tacti_cr.arousal_oscillator import ArousalOscillator
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8355:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:50:./tests_unittest/test_tacti_cr_novel_10.py:21:from tacti_cr.dream_consolidation import run_consolidation
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8356:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:51:./tests_unittest/test_tacti_cr_novel_10.py:25:from tacti_cr.semantic_immune import assess_content, approve_quarantine
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8357:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:52:./tests_unittest/test_tacti_cr_novel_10.py:27:from tacti_cr.valence import current_valence, routing_bias, update_valence
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8358:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:64:./workspace/CODEX_TASK_LIST.md:58:**File:** `workspace/tacti_cr/active_inference_agent.py`
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8359:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:65:./workspace/tacti_cr/valence.py:1:"""Affective valence engine with half-life decay and routing bias signals."""
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8360:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:66:./workspace/tacti_cr/valence.py:16:    return root / "workspace" / "state" / "valence" / f"{agent}.json"
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8361:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:67:./workspace/tacti_cr/valence.py:29:        return {"valence": 0.0, "updated_at": _now().isoformat()}
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8362:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:68:./workspace/tacti_cr/valence.py:36:    return {"valence": 0.0, "updated_at": _now().isoformat()}
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8363:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:69:./workspace/tacti_cr/valence.py:44:def current_valence(agent: str, *, repo_root: Path | None = None, now: datetime | None = None) -> float:
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8364:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:70:./workspace/tacti_cr/valence.py:45:    if not is_enabled("valence"):
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8365:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:71:./workspace/tacti_cr/valence.py:52:    half_life = get_float("valence_half_life_hours", 6.0, clamp=(0.5, 48.0))
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8366:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:72:./workspace/tacti_cr/valence.py:53:    decayed = float(data.get("valence", 0.0)) * math.exp(-math.log(2.0) * age_hours / half_life)
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8367:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:73:./workspace/tacti_cr/valence.py:57:def update_valence(agent: str, outcome: dict[str, Any], *, repo_root: Path | None = None, now: datetime | None = None) -> dict[str, Any]:
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8368:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:74:./workspace/tacti_cr/valence.py:58:    if not is_enabled("valence"):
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8369:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:75:./workspace/tacti_cr/valence.py:59:        return {"ok": False, "reason": "valence_disabled", "valence": 0.0}
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8370:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:76:./workspace/tacti_cr/valence.py:61:    value = current_valence(agent, repo_root=repo_root, now=dt_now)
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8371:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:77:./workspace/tacti_cr/valence.py:72:    payload = {"agent": agent, "valence": value, "updated_at": dt_now.isoformat().replace("+00:00", "Z")}
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8372:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:78:./workspace/tacti_cr/valence.py:74:    return {"ok": True, "valence": value}
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8373:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:79:./workspace/tacti_cr/valence.py:78:    value = current_valence(agent, repo_root=repo_root)
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8374:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:80:./workspace/tacti_cr/valence.py:80:        "valence": value,
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8375:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:81:./workspace/tacti_cr/valence.py:87:__all__ = ["current_valence", "update_valence", "routing_bias"]
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8376:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:88:./workspace/tacti_cr/semantic_immune.py:43:    base = repo_root / "workspace" / "state" / "semantic_immune"
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8377:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:89:./workspace/tacti_cr/semantic_immune.py:90:    if not is_enabled("semantic_immune"):
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8378:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:90:./workspace/tacti_cr/semantic_immune.py:91:        return {"ok": True, "reason": "semantic_immune_disabled", "quarantined": False}
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8379:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:91:./workspace/state/tacti_cr/events.jsonl:1:{"ts": 1771506277399, "event": "tacti_cr.expression_profile", "detail": {"intent": "coding", "profile": {"enabled_features": ["arousal_osc", "semantic_immune", "prefetch", "mirror"], "suppressed_features": ["dream_consolidation"], "reasons": {"arousal_osc": ["enabled"], "dream_consolidation": ["activation:time_of_day"], "semantic_immune": ["enabled"], "prefetch": ["enabled"], "mirror": ["enabled"]}, "manifest_path": "/Users/heathyeager/clawd/workspace/policy/expression_manifest.json"}}}
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8380:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:92:./workspace/state/tacti_cr/events.jsonl:2:{"ts": 1771506277399, "event": "tacti_cr.valence_bias", "detail": {"intent": "coding", "agent_id": "main", "bias": {"valence": 0.0, "prefer_local": false, "tighten_budget": false, "exploration_bias": false}}}
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8381:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:93:./workspace/state/tacti_cr/events.jsonl:4:{"ts": 1771535085092, "event": "tacti_cr.expression_profile", "detail": {"intent": "coding", "profile": {"enabled_features": ["arousal_osc", "semantic_immune", "prefetch", "mirror"], "suppressed_features": ["dream_consolidation"], "reasons": {"arousal_osc": ["enabled"], "dream_consolidation": ["activation:time_of_day"], "semantic_immune": ["enabled"], "prefetch": ["enabled"], "mirror": ["enabled"]}, "manifest_path": "/Users/heathyeager/clawd/workspace/policy/expression_manifest.json"}}}
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8382:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:94:./workspace/state/tacti_cr/events.jsonl:5:{"ts": 1771535085092, "event": "tacti_cr.valence_bias", "detail": {"intent": "coding", "agent_id": "main", "bias": {"valence": 0.0, "prefer_local": false, "tighten_budget": false, "exploration_bias": false}}}
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8383:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:95:./workspace/state/tacti_cr/events.jsonl:7:{"ts": 1771535094165, "event": "tacti_cr.expression_profile", "detail": {"intent": "coding", "profile": {"enabled_features": ["arousal_osc", "semantic_immune", "prefetch", "mirror"], "suppressed_features": ["dream_consolidation"], "reasons": {"arousal_osc": ["enabled"], "dream_consolidation": ["activation:time_of_day"], "semantic_immune": ["enabled"], "prefetch": ["enabled"], "mirror": ["enabled"]}, "manifest_path": "/Users/heathyeager/clawd/workspace/policy/expression_manifest.json"}}}
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8384:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:96:./workspace/state/tacti_cr/events.jsonl:8:{"ts": 1771535094165, "event": "tacti_cr.valence_bias", "detail": {"intent": "coding", "agent_id": "main", "bias": {"valence": 0.0, "prefer_local": false, "tighten_budget": false, "exploration_bias": false}}}
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8385:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:97:./workspace/state/tacti_cr/events.jsonl:10:{"ts": 1771535104622, "event": "tacti_cr.expression_profile", "detail": {"intent": "coding", "profile": {"enabled_features": ["arousal_osc", "semantic_immune", "prefetch", "mirror"], "suppressed_features": ["dream_consolidation"], "reasons": {"arousal_osc": ["enabled"], "dream_consolidation": ["activation:time_of_day"], "semantic_immune": ["enabled"], "prefetch": ["enabled"], "mirror": ["enabled"]}, "manifest_path": "/Users/heathyeager/clawd/workspace/policy/expression_manifest.json"}}}
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8386:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:98:./workspace/state/tacti_cr/events.jsonl:11:{"ts": 1771535104622, "event": "tacti_cr.valence_bias", "detail": {"intent": "coding", "agent_id": "main", "bias": {"valence": 0.0, "prefer_local": false, "tighten_budget": false, "exploration_bias": false}}}
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8387:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:99:./workspace/state/tacti_cr/events.jsonl:13:{"ts": 1771535114296, "event": "tacti_cr.expression_profile", "detail": {"intent": "coding", "profile": {"enabled_features": ["arousal_osc", "semantic_immune", "prefetch", "mirror"], "suppressed_features": ["dream_consolidation"], "reasons": {"arousal_osc": ["enabled"], "dream_consolidation": ["activation:time_of_day"], "semantic_immune": ["enabled"], "prefetch": ["enabled"], "mirror": ["enabled"]}, "manifest_path": "/Users/heathyeager/clawd/workspace/policy/expression_manifest.json"}}}
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8388:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:100:./workspace/state/tacti_cr/events.jsonl:14:{"ts": 1771535114296, "event": "tacti_cr.valence_bias", "detail": {"intent": "coding", "agent_id": "main", "bias": {"valence": 0.0, "prefer_local": false, "tighten_budget": false, "exploration_bias": false}}}
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8389:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:101:./workspace/state/tacti_cr/events.jsonl:16:{"ts": 1771535122066, "event": "tacti_cr.expression_profile", "detail": {"intent": "coding", "profile": {"enabled_features": ["arousal_osc", "semantic_immune", "prefetch", "mirror"], "suppressed_features": ["dream_consolidation"], "reasons": {"arousal_osc": ["enabled"], "dream_consolidation": ["activation:time_of_day"], "semantic_immune": ["enabled"], "prefetch": ["enabled"], "mirror": ["enabled"]}, "manifest_path": "/Users/heathyeager/clawd/workspace/policy/expression_manifest.json"}}}
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8390:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:102:./workspace/state/tacti_cr/events.jsonl:17:{"ts": 1771535122066, "event": "tacti_cr.valence_bias", "detail": {"intent": "coding", "agent_id": "main", "bias": {"valence": 0.0, "prefer_local": false, "tighten_budget": false, "exploration_bias": false}}}
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8391:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:103:./workspace/state/tacti_cr/events.jsonl:19:{"ts": 1771535125674, "event": "tacti_cr.expression_profile", "detail": {"intent": "coding", "profile": {"enabled_features": ["arousal_osc", "semantic_immune", "prefetch", "mirror"], "suppressed_features": ["dream_consolidation"], "reasons": {"arousal_osc": ["enabled"], "dream_consolidation": ["activation:time_of_day"], "semantic_immune": ["enabled"], "prefetch": ["enabled"], "mirror": ["enabled"]}, "manifest_path": "/Users/heathyeager/clawd/workspace/policy/expression_manifest.json"}}}
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8392:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:104:./workspace/state/tacti_cr/events.jsonl:20:{"ts": 1771535125674, "event": "tacti_cr.valence_bias", "detail": {"intent": "coding", "agent_id": "main", "bias": {"valence": 0.0, "prefer_local": false, "tighten_budget": false, "exploration_bias": false}}}
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8393:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:105:./workspace/state/tacti_cr/events.jsonl:22:{"ts": 1771535797828, "event": "tacti_cr.expression_profile", "detail": {"intent": "coding", "profile": {"enabled_features": ["arousal_osc", "semantic_immune", "prefetch", "mirror"], "suppressed_features": ["dream_consolidation"], "reasons": {"arousal_osc": ["enabled"], "dream_consolidation": ["activation:time_of_day"], "semantic_immune": ["enabled"], "prefetch": ["enabled"], "mirror": ["enabled"]}, "manifest_path": "/Users/heathyeager/clawd/workspace/policy/expression_manifest.json"}}}
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8394:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:106:./workspace/state/tacti_cr/events.jsonl:23:{"ts": 1771535797828, "event": "tacti_cr.valence_bias", "detail": {"intent": "coding", "agent_id": "main", "bias": {"valence": 0.0, "prefer_local": false, "tighten_budget": false, "exploration_bias": false}}}
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8395:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:107:./workspace/state/tacti_cr/events.jsonl:25:{"ts": 1771543883143, "event": "tacti_cr.expression_profile", "detail": {"intent": "coding", "profile": {"enabled_features": ["arousal_osc", "semantic_immune", "prefetch", "mirror"], "suppressed_features": ["dream_consolidation"], "reasons": {"arousal_osc": ["enabled"], "dream_consolidation": ["activation:time_of_day"], "semantic_immune": ["enabled"], "prefetch": ["enabled"], "mirror": ["enabled"]}, "manifest_path": "/Users/heathyeager/clawd/workspace/policy/expression_manifest.json"}}}
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8396:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:108:./workspace/state/tacti_cr/events.jsonl:26:{"ts": 1771543883144, "event": "tacti_cr.valence_bias", "detail": {"intent": "coding", "agent_id": "main", "bias": {"valence": 0.0, "prefer_local": false, "tighten_budget": false, "exploration_bias": false}}}
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8397:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:109:./workspace/state/tacti_cr/events.jsonl:28:{"ts": 1771543886658, "event": "tacti_cr.expression_profile", "detail": {"intent": "coding", "profile": {"enabled_features": ["arousal_osc", "semantic_immune", "prefetch", "mirror"], "suppressed_features": ["dream_consolidation"], "reasons": {"arousal_osc": ["enabled"], "dream_consolidation": ["activation:time_of_day"], "semantic_immune": ["enabled"], "prefetch": ["enabled"], "mirror": ["enabled"]}, "manifest_path": "/Users/heathyeager/clawd/workspace/policy/expression_manifest.json"}}}
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8398:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:110:./workspace/state/tacti_cr/events.jsonl:29:{"ts": 1771543886658, "event": "tacti_cr.valence_bias", "detail": {"intent": "coding", "agent_id": "main", "bias": {"valence": 0.0, "prefer_local": false, "tighten_budget": false, "exploration_bias": false}}}
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8399:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:111:./workspace/state/tacti_cr/events.jsonl:31:{"ts": 1771543900227, "event": "tacti_cr.expression_profile", "detail": {"intent": "coding", "profile": {"enabled_features": ["arousal_osc", "semantic_immune", "prefetch", "mirror"], "suppressed_features": ["dream_consolidation"], "reasons": {"arousal_osc": ["enabled"], "dream_consolidation": ["activation:time_of_day"], "semantic_immune": ["enabled"], "prefetch": ["enabled"], "mirror": ["enabled"]}, "manifest_path": "/Users/heathyeager/clawd/workspace/policy/expression_manifest.json"}}}
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8400:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:112:./workspace/state/tacti_cr/events.jsonl:32:{"ts": 1771543900227, "event": "tacti_cr.valence_bias", "detail": {"intent": "coding", "agent_id": "main", "bias": {"valence": 0.0, "prefer_local": false, "tighten_budget": false, "exploration_bias": false}}}
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8401:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:113:./workspace/state/tacti_cr/events.jsonl:34:{"ts": 1771543903469, "event": "tacti_cr.expression_profile", "detail": {"intent": "coding", "profile": {"enabled_features": ["arousal_osc", "semantic_immune", "prefetch", "mirror"], "suppressed_features": ["dream_consolidation"], "reasons": {"arousal_osc": ["enabled"], "dream_consolidation": ["activation:time_of_day"], "semantic_immune": ["enabled"], "prefetch": ["enabled"], "mirror": ["enabled"]}, "manifest_path": "/Users/heathyeager/clawd/workspace/policy/expression_manifest.json"}}}
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8402:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:165:workspace/scripts/policy_router.py:38:TACTI_EVENT_LOG = BASE_DIR / "workspace" / "state" / "tacti_cr" / "events.jsonl"
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8403:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:234:./workspace/tacti_cr/semantic_immune.py:5:import hashlib
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8404:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:235:./workspace/tacti_cr/semantic_immune.py:23:        digest = hashlib.sha256(token.encode("utf-8")).hexdigest()
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8405:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:236:./workspace/tacti_cr/semantic_immune.py:106:    digest = hashlib.sha256(content.encode("utf-8")).hexdigest()[:16]
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8406:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:237:./workspace/tacti_cr/semantic_immune.py:110:        "content_hash": digest,
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8407:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:238:./workspace/tacti_cr/semantic_immune.py:131:def approve_quarantine(repo_root: Path, content_hash: str) -> dict[str, Any]:
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8408:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:239:./workspace/tacti_cr/semantic_immune.py:133:    target = str(content_hash)
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8409:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:240:./workspace/tacti_cr/semantic_immune.py:146:        if str(row.get("content_hash")) == target and approved is None:
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8410:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:241:./workspace/tacti_cr/semantic_immune.py:156:        return {"ok": False, "reason": "not_found", "content_hash": target}
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8411:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:242:./workspace/tacti_cr/semantic_immune.py:158:    _append(paths["approvals"], {"ts": _utc_now(), "content_hash": target, "approved": True})
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8412:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:243:./workspace/tacti_cr/semantic_immune.py:160:    return {"ok": True, "content_hash": target}
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8413:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:315:./workspace/CODEX_Source_UI_TACTI_Upgrade.md:28:| **Dream Consolidation** | `workspace/tacti_cr/dream_consolidation.py` | Memory consolidation status, last run |
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8414:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:316:./workspace/CODEX_Source_UI_TACTI_Upgrade.md:30:| **Semantic Immune** | `workspace/tacti_cr/semantic_immune.py` | Quarantine stats, recent blocks |
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8415:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:317:./workspace/CODEX_Source_UI_TACTI_Upgrade.md:31:| **Arousal Oscillator** | `workspace/tacti_cr/arousal_oscillator.py` | Current energy level, hourly histogram |
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8416:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:321:./workspace/AUDIT_AIF_PHASE1_20260219.md:10:  - `workspace/tacti_cr/active_inference_agent.py`
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8417:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:322:./workspace/AUDIT_AIF_PHASE1_20260219.md:29:  - `python3 -m py_compile workspace/tacti_cr/external_memory.py workspace/tacti_cr/efe_calculator.py workspace/tacti_cr/curiosity.py workspace/tacti_cr/active_inference_agent.py workspace/scripts/external_memory_demo.py` (pass)
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8418:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:327:./tests_unittest/test_tacti_cr_novel_10.py:20:from tacti_cr.arousal_oscillator import ArousalOscillator
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8419:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:328:./tests_unittest/test_tacti_cr_novel_10.py:21:from tacti_cr.dream_consolidation import run_consolidation
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8420:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:329:./tests_unittest/test_tacti_cr_novel_10.py:25:from tacti_cr.semantic_immune import assess_content, approve_quarantine
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8421:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:330:./tests_unittest/test_tacti_cr_novel_10.py:27:from tacti_cr.valence import current_valence, routing_bias, update_valence
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8422:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:342:./workspace/CODEX_TASK_LIST.md:58:**File:** `workspace/tacti_cr/active_inference_agent.py`
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8423:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:344:./workspace/tacti_cr/valence.py:1:"""Affective valence engine with half-life decay and routing bias signals."""
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8424:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:345:./workspace/tacti_cr/valence.py:16:    return root / "workspace" / "state" / "valence" / f"{agent}.json"
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8425:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:346:./workspace/tacti_cr/valence.py:29:        return {"valence": 0.0, "updated_at": _now().isoformat()}
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8426:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:347:./workspace/tacti_cr/valence.py:36:    return {"valence": 0.0, "updated_at": _now().isoformat()}
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8427:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:348:./workspace/tacti_cr/valence.py:44:def current_valence(agent: str, *, repo_root: Path | None = None, now: datetime | None = None) -> float:
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8428:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:349:./workspace/tacti_cr/valence.py:45:    if not is_enabled("valence"):
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8429:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:350:./workspace/tacti_cr/valence.py:52:    half_life = get_float("valence_half_life_hours", 6.0, clamp=(0.5, 48.0))
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8430:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:351:./workspace/tacti_cr/valence.py:53:    decayed = float(data.get("valence", 0.0)) * math.exp(-math.log(2.0) * age_hours / half_life)
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8431:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:352:./workspace/tacti_cr/valence.py:57:def update_valence(agent: str, outcome: dict[str, Any], *, repo_root: Path | None = None, now: datetime | None = None) -> dict[str, Any]:
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8432:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:353:./workspace/tacti_cr/valence.py:58:    if not is_enabled("valence"):
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8433:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:354:./workspace/tacti_cr/valence.py:59:        return {"ok": False, "reason": "valence_disabled", "valence": 0.0}
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8434:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:355:./workspace/tacti_cr/valence.py:61:    value = current_valence(agent, repo_root=repo_root, now=dt_now)
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8435:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:356:./workspace/tacti_cr/valence.py:72:    payload = {"agent": agent, "valence": value, "updated_at": dt_now.isoformat().replace("+00:00", "Z")}
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8436:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:357:./workspace/tacti_cr/valence.py:74:    return {"ok": True, "valence": value}
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8437:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:358:./workspace/tacti_cr/valence.py:78:    value = current_valence(agent, repo_root=repo_root)
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8438:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:359:./workspace/tacti_cr/valence.py:80:        "valence": value,
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8439:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:360:./workspace/tacti_cr/valence.py:87:__all__ = ["current_valence", "update_valence", "routing_bias"]
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8440:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:361:./workspace/tacti_cr/semantic_immune.py:43:    base = repo_root / "workspace" / "state" / "semantic_immune"
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8441:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:362:./workspace/tacti_cr/semantic_immune.py:90:    if not is_enabled("semantic_immune"):
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8442:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:363:./workspace/tacti_cr/semantic_immune.py:91:        return {"ok": True, "reason": "semantic_immune_disabled", "quarantined": False}
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8443:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:364:./workspace/tacti_cr/expression.py:42:    if name == "valence_min":
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8444:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:365:./workspace/tacti_cr/expression.py:43:        return float(context.get("valence", 0.0)) >= float(cond)
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8445:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:366:./workspace/tacti_cr/expression.py:44:    if name == "valence_max":
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8446:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:367:./workspace/tacti_cr/expression.py:45:        return float(context.get("valence", 0.0)) <= float(cond)
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8447:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:368:./workspace/tacti_cr/expression.py:99:    # Global negative valence guard to prefer local/low-risk behavior.
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8448:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:369:./workspace/tacti_cr/expression.py:100:    neg_guard = get_float("valence_negative_guard", -0.35, clamp=(-1.0, 1.0))
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8449:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:370:./workspace/tacti_cr/expression.py:101:    if float(local_ctx.get("valence", 0.0)) <= neg_guard:
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8450:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:371:./workspace/tacti_cr/expression.py:102:        reasons.setdefault("_global", []).append("negative_valence_guard")
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8451:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:378:./workspace/tacti_cr/README.md:11:- `temporal.py`
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8452:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:379:./workspace/tacti_cr/README.md:67:- `test_tacti_cr_temporal.py`
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8453:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:380:./workspace/tacti_cr/README.md:84:- `TACTI_CR_DREAM_CONSOLIDATION=1`
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8454:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:381:./workspace/tacti_cr/README.md:85:- `TACTI_CR_SEMANTIC_IMMUNE=1`
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8455:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:382:./workspace/tacti_cr/README.md:90:- `TACTI_CR_VALENCE=1`
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8456:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:383:./workspace/tacti_cr/README.md:107:bash workspace/scripts/dream_consolidation.sh 2026-02-19
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8457:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:384:./workspace/tacti_cr/__init__.py:16:from .active_inference_agent import ActiveInferenceAgent
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8458:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:385:./workspace/tacti_cr/__init__.py:19:from .arousal_oscillator import ArousalOscillator
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8459:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:386:./workspace/tacti_cr/__init__.py:21:from .dream_consolidation import run_consolidation
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8460:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:387:./workspace/tacti_cr/__init__.py:22:from .semantic_immune import assess_content, approve_quarantine
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8461:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:388:./workspace/tacti_cr/__init__.py:24:from .valence import current_valence, update_valence, routing_bias
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8462:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:389:./workspace/tacti_cr/__init__.py:62:    "current_valence",
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8463:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:390:./workspace/tacti_cr/__init__.py:63:    "update_valence",
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8464:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:429:workspace/scripts/policy_router.py:38:TACTI_EVENT_LOG = BASE_DIR / "workspace" / "state" / "tacti_cr" / "events.jsonl"
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8465:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:566:- arousal estimator: `workspace/tacti_cr/arousal_oscillator.py`
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8466:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:567:- valence engine: `workspace/tacti_cr/valence.py`
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8467:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:568:- dream consolidation: `workspace/tacti_cr/dream_consolidation.py`
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8468:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:569:- temporal episodic memory: `workspace/tacti_cr/temporal.py`
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8469:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:570:- semantic immune / contradiction gate: `workspace/tacti_cr/semantic_immune.py`
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8470:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:576:- TACTI event log path: `workspace/state/tacti_cr/events.jsonl` (via TACTI_EVENT_LOG in policy_router)
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8471:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:658:- `workspace/tacti_cr/dream_consolidation.py`
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8472:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:660:- `workspace/tacti_cr/temporal.py`
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8473:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:663:- `workspace/tacti_cr/semantic_immune.py`
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8474:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:664:- `workspace/tacti_cr/oscillatory_gating.py`
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8475:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:728:- `workspace/state/tacti_cr/events.jsonl` is a tracked runtime log and remained dirty in this worktree baseline; intentionally excluded from commits.
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8476:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:731:- Tracked deterministic stub: workspace/state/tacti_cr/events.jsonl (never written at runtime)
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8477:./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md:732:- Runtime sink (ignored): workspace/state_runtime/tacti_cr/events.jsonl
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8478:./workspace/audit/PR_BODY_openclaw_evolution_pack_20260220.md:12:- Tracked deterministic stub: workspace/state/tacti_cr/events.jsonl (never written at runtime)
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md:8479:./workspace/audit/PR_BODY_openclaw_evolution_pack_20260220.md:13:- Runtime sink (ignored): workspace/state_runtime/tacti_cr/events.jsonl
+./workspace/governance/PRINCIPLES.md:57:**Implementation Surface:** `workspace/tacti_cr/`
+./workspace/audit/openclaw_evolution_pack_20260219T235633Z.md
+./workspace/audit/PR_BODY_evolution_ideas_1_10_20260220.md
+./workspace/audit/PR_BODY_openclaw_evolution_pack_20260220.md
+./workspace/audit/twenty_evolutions_impl_20260221T104827Z.md
+./workspace/audit/evolution_ideas_1_10_20260220T063914Z.md
+
+## Spec mapping (post-hoc, due to missing TWENTY_EVOLUTIONS.md during Phase 2.1/2.2)
+- Implemented message hooks + trackers corresponds to Evolution #1 (Plumbing: message hooks).
+- Implemented session continuity handshake corresponds to Evolution #2 (Session continuity handshake).
+- Implemented impasse mode corresponds to Evolution #3 (Impasse handling).
+- Implemented repairable collapse regime corresponds to Evolution #4 (Repairable collapse).
+- Assumption: ordering and semantics were inferred from the implementation prompt because `TWENTY_EVOLUTIONS.md` was not present at recon time.
+- Remediation: spec stub `TWENTY_EVOLUTIONS.md` was created in this change as a placeholder until canonical spec content is restored.
+
+=== Post-rename reference sample ===
+tests_unittest/test_oscillatory_attention.py:4:from workspace.tacti_cr.oscillatory_gating import PhaseScheduler
+tests_unittest/test_tacti_cr_integration.py:11:from tacti_cr.arousal import detect_arousal, get_compute_allocation, ArousalLevel  # noqa: E402
+tests_unittest/test_tacti_cr_integration.py:12:from tacti_cr.temporal import TemporalMemory  # noqa: E402
+tests_unittest/test_tacti_cr_integration.py:13:from tacti_cr.collapse import CollapseDetector  # noqa: E402
+tests_unittest/test_tacti_cr_integration.py:14:from tacti_cr.repair import RepairEngine  # noqa: E402
+tests_unittest/test_tacti_cr_integration.py:15:from tacti_cr.hivemind_bridge import MemoryEntry  # noqa: E402
+tests_unittest/test_tacti_cr_integration.py:19:    @patch("tacti_cr.temporal.hivemind_store", return_value=True)
+tests_unittest/test_tacti_cr_integration.py:20:    @patch("tacti_cr.temporal.hivemind_query")
+tests_unittest/test_tacti_cr_integration.py:21:    @patch("tacti_cr.collapse.hivemind_query")
+tests_unittest/test_tacti_cr_temporal.py:11:from tacti_cr.temporal import TemporalMemory  # noqa: E402
+tests_unittest/test_tacti_cr_temporal.py:53:    @patch("tacti_cr.temporal.hivemind_store", return_value=True)
+tests_unittest/test_tacti_cr_temporal.py:60:        self.assertEqual(payload["source"], "tacti_cr.temporal")
+tests_unittest/test_tacti_cr_temporal.py:63:    @patch("tacti_cr.temporal.hivemind_query")
+tests_unittest/test_tacti_cr_temporal.py:68:        from tacti_cr.hivemind_bridge import MemoryEntry
+tests_unittest/test_tacti_cr_arousal.py:9:from tacti_cr.arousal import (  # noqa: E402
+workspace/AUDIT_AIF_PHASE1_20260219.md:4:- Shipped P1: append-only external memory event store (JSONL backend) at `workspace/tacti_cr/external_memory.py`.
+workspace/AUDIT_AIF_PHASE1_20260219.md:8:  - `workspace/tacti_cr/efe_calculator.py`
+workspace/AUDIT_AIF_PHASE1_20260219.md:9:  - `workspace/tacti_cr/curiosity.py`
+workspace/AUDIT_AIF_PHASE1_20260219.md:10:  - `workspace/tacti_cr/active_inference_agent.py`
+workspace/AUDIT_AIF_PHASE1_20260219.md:25:    - `ModuleNotFoundError: No module named 'tacti_cr.external_memory'`
+workspace/AUDIT_AIF_PHASE1_20260219.md:29:  - `python3 -m py_compile workspace/tacti_cr/external_memory.py workspace/tacti_cr/efe_calculator.py workspace/tacti_cr/curiosity.py workspace/tacti_cr/active_inference_agent.py workspace/scripts/external_memory_demo.py` (pass)
+tests_unittest/test_policy_router_tacti_novel10.py:52:                    "tacti_cr": {"flags": {"expression_router": True}},
+tests_unittest/test_semantic_immune_epitopes.py:6:import workspace.tacti_cr.semantic_immune as semantic_immune
+tests_unittest/test_tacti_cr_collapse.py:10:from tacti_cr.collapse import CollapseDetector  # noqa: E402
+tests_unittest/test_tacti_cr_collapse.py:43:    @patch("tacti_cr.collapse.hivemind_query")
+tests_unittest/test_tacti_cr_collapse.py:45:        from tacti_cr.hivemind_bridge import MemoryEntry
+workspace/tacti/valence.py:75:    emit("tacti_cr.valence.updated", {"agent": agent, "valence": value, "delta": delta}, now=dt_now)
+tests_unittest/test_tacti_cr_cross_timescale.py:9:from tacti_cr.cross_timescale import CrossTimescaleController  # noqa: E402
+workspace/tacti/semantic_immune.py:179:        emit("tacti_cr.semantic_immune.quarantined", {k: row[k] for k in ("content_hash", "score", "threshold", "reason")})
+workspace/tacti/semantic_immune.py:207:        emit("tacti_cr.semantic_immune.quarantined", {k: row[k] for k in ("content_hash", "score", "threshold", "reason")})
+workspace/tacti/semantic_immune.py:219:        "tacti_cr.semantic_immune.accepted",
+workspace/tacti/semantic_immune.py:253:    emit("tacti_cr.semantic_immune.approved", {"content_hash": target})
+tests_unittest/test_tacti_cr_external_memory_integration.py:12:from tacti_cr.external_memory import append_event, healthcheck, read_events  # noqa: E402
+tests_unittest/test_tacti_cr_events.py:12:    mod_path = repo_root / "workspace" / "tacti_cr" / "events.py"
+tests_unittest/test_tacti_cr_events.py:34:        self.events.emit("tacti_cr.test.one", {"a": 1}, now=fixed, session_id="s-1")
+tests_unittest/test_tacti_cr_events.py:38:        self.assertEqual("tacti_cr.test.one", rows[0]["type"])
+tests_unittest/test_tacti_cr_events.py:45:        self.events.emit("tacti_cr.alpha", {"x": 1}, now=fixed)
+tests_unittest/test_tacti_cr_events.py:46:        self.events.emit("tacti_cr.beta", {"x": 2}, now=fixed)
+tests_unittest/test_tacti_cr_events.py:47:        self.events.emit("tacti_cr.alpha", {"x": 3}, now=fixed)
+tests_unittest/test_tacti_cr_events.py:49:        self.assertEqual({"tacti_cr.alpha": 2, "tacti_cr.beta": 1}, summary)
+tests_unittest/test_tacti_cr_repair.py:9:from tacti_cr.repair import RepairEngine  # noqa: E402
+workspace/scripts/verify_tacti_cr_novel10_fixture.py:16:from tacti_cr.events import summarize_by_type, read_events
+workspace/scripts/verify_tacti_cr_novel10_fixture.py:17:from tacti_cr.novel10_contract import required_for_fixture
+workspace/scripts/verify_tacti_cr_novel10_fixture.py:39:    parser.add_argument("--events-path", default="workspace/state/tacti_cr/events.jsonl")
+tests_unittest/test_tacti_cr_hivemind_bridge.py:11:from tacti_cr.hivemind_bridge import hivemind_query, hivemind_store  # noqa: E402
+tests_unittest/test_tacti_cr_hivemind_bridge.py:15:    @patch("tacti_cr.hivemind_bridge._memory_tool_path")
+tests_unittest/test_tacti_cr_hivemind_bridge.py:16:    @patch("tacti_cr.hivemind_bridge.subprocess.run")
+tests_unittest/test_tacti_cr_hivemind_bridge.py:41:    @patch("tacti_cr.hivemind_bridge._memory_tool_path")
+tests_unittest/test_tacti_cr_hivemind_bridge.py:42:    @patch("tacti_cr.hivemind_bridge.subprocess.run")
+tests_unittest/test_tacti_cr_hivemind_bridge.py:53:                "source": "tacti_cr.test",
+tests_unittest/test_dream_consolidation_pruning.py:5:from workspace.tacti_cr.dream_consolidation import prune_competing_clusters
+tests_unittest/test_policy_router_tacti_main_flow.py:103:            runtime_events = tmp / "state_runtime" / "tacti_cr" / "events.jsonl"
+tests_unittest/test_novel10_fixture_verifier.py:15:    path = REPO_ROOT / "workspace" / "tacti_cr" / "novel10_contract.py"
+tests_unittest/test_evolution_scaffolds.py:19:from tacti_cr.dream_consolidation import prune_competing_clusters
+tests_unittest/test_evolution_scaffolds.py:20:from tacti_cr.oscillatory_gating import OscillatoryGate
+tests_unittest/test_evolution_scaffolds.py:21:from tacti_cr.semantic_immune import assess_content, cache_epitope
+tests_unittest/test_evolution_scaffolds.py:22:from tacti_cr.temporal import TemporalMemory, text_embedding_proxy
+tests_unittest/test_tacti_cr_impasse.py:42:        from tacti_cr.impasse import ImpasseManager as LegacyImpasseManager
+tests_unittest/test_tacti_cr_novel_10.py:20:from tacti_cr.arousal_oscillator import ArousalOscillator
+tests_unittest/test_tacti_cr_novel_10.py:21:from tacti_cr.dream_consolidation import run_consolidation
+tests_unittest/test_tacti_cr_novel_10.py:22:from tacti_cr.expression import compute_expression
+tests_unittest/test_tacti_cr_novel_10.py:23:from tacti_cr.mirror import behavioral_fingerprint, update_from_event
+tests_unittest/test_tacti_cr_novel_10.py:24:from tacti_cr.prefetch import PrefetchCache, predict_topics
+tests_unittest/test_tacti_cr_novel_10.py:25:from tacti_cr.semantic_immune import assess_content, approve_quarantine
+tests_unittest/test_tacti_cr_novel_10.py:26:from tacti_cr.temporal_watchdog import detect_temporal_drift, temporal_reset_event, update_beacon
+tests_unittest/test_tacti_cr_novel_10.py:27:from tacti_cr.valence import current_valence, routing_bias, update_valence
+tests_unittest/test_temporal_surprise_gate.py:4:from workspace.tacti_cr.temporal import TemporalMemory, surprise_score_proxy, text_embedding_proxy
+workspace/scripts/verify_dream_consolidation.sh:24:from tacti_cr.dream_consolidation import run_consolidation
+workspace/tacti/prefetch.py:54:        emit("tacti_cr.prefetch.recorded", {"topic": topic, "docs_count": len(docs), "depth": int(idx.get("depth", 3))})
+workspace/tacti/prefetch.py:67:        emit("tacti_cr.prefetch.hit_rate", {"hit": bool(hit), "hit_rate": hit_rate, "depth": int(idx["depth"]), "total": total})
+workspace/tacti/prefetch.py:87:    emit("tacti_cr.prefetch.predicted_topics", {"topics": topics, "depth": cache.depth()})
+workspace/tacti/prefetch.py:92:    emit("tacti_cr.prefetch.cache_put", {"topics": topics, "docs_count": len(docs)})
+workspace/knowledge_base/kb.py:25:    from tacti_cr.prefetch import prefetch_context
+workspace/tacti/events_paths.py:15:    return root / "workspace" / "state_runtime" / "tacti_cr" / "events.jsonl"
+workspace/tacti/README.md:34:from tacti_cr.arousal import detect_arousal, get_compute_allocation
+workspace/tacti/README.md:42:from tacti_cr.temporal import TemporalMemory
+workspace/tacti/README.md:50:from tacti_cr.collapse import CollapseDetector
+workspace/tacti/README.md:51:from tacti_cr.repair import RepairEngine
+workspace/tacti/README.md:118:- Unified runtime events are append-only JSONL at `workspace/state/tacti_cr/events.jsonl`.
+workspace/tacti/README.md:136:bash workspace/scripts/verify_tacti_cr_events.sh --min-count tacti_cr.team_chat.session_start=1
+workspace/tacti/README.md:147:This runs an offline fixture harness that enables all Novel-10 flags, drives minimal paths, and asserts required event types against `workspace/tacti_cr/novel10_contract.py`.
+workspace/tacti/temporal_watchdog.py:44:    emit("tacti_cr.temporal_watchdog.beacon_updated", {"path": str(path), "epoch_ms": payload["epoch_ms"]}, now=now)
+workspace/tacti/temporal_watchdog.py:135:    emit("tacti_cr.temporal_watchdog.temporal_reset", {"content_hash": digest, "findings": findings}, now=now)
+workspace/scripts/run_novel10_fixture.py:25:from tacti_cr.events import DEFAULT_PATH, summarize_by_type
+workspace/scripts/run_novel10_fixture.py:26:import tacti_cr.events as tacti_events
+workspace/scripts/run_novel10_fixture.py:27:from tacti_cr.novel10_contract import FEATURE_FLAGS
+workspace/scripts/run_novel10_fixture.py:28:from tacti_cr.arousal_oscillator import ArousalOscillator
+workspace/scripts/run_novel10_fixture.py:29:from tacti_cr.temporal import TemporalMemory
+workspace/scripts/run_novel10_fixture.py:30:from tacti_cr.dream_consolidation import run_consolidation
+workspace/scripts/run_novel10_fixture.py:31:from tacti_cr.semantic_immune import assess_content
+workspace/scripts/run_novel10_fixture.py:32:from tacti_cr.prefetch import prefetch_context, PrefetchCache
+workspace/scripts/run_novel10_fixture.py:33:from tacti_cr.mirror import update_from_event
+workspace/scripts/run_novel10_fixture.py:34:from tacti_cr.valence import update_valence
+workspace/scripts/run_narrative_distill.py:16:from tacti_cr.events_paths import resolve_events_path
+workspace/scripts/external_memory_demo.py:15:from tacti_cr.external_memory import append_event, healthcheck  # noqa: E402
+workspace/knowledge_base/data/graph.jsonl:28:{"id": "tacti_workspace_hivemind_TACTI_CR.md", "name": "TACTI(C)-R System Synthesis", "entity_type": "research:tacti", "content": "# TACTI(C)-R System Synthesis (HiveMind Integration)\n\n## Integration Map\n- `workspace/hivemind/hivemind/peer_graph.py`: Murmuration local peer topology and interaction updates.\n- `workspace/hivemind/hivemind/reservoir.py`: Echo-state reservoir + deterministic readout hints.\n- `workspace/hivemind/hivemind/physarum_router.py`: Conductance/path exploration and pruning.\n- `workspace/hivemind/hivemind/trails.py`: External trail memory with decay, reinforcement, and similarity query.\n- `workspace/hivemind/hivemind/dynamics_pipeline.py`: Composition layer for Tasks 1-4.\n- `workspace/hivemind/hivemind/integrations/main_flow_hook.py`: Main-flow adapter (flag checks, agent-id resolution, routing enhancement, outcome updates).\n- `scripts/memory_tool.py`: Optional Task 1-4 runtime hook for memory query consult-order/path bias.\n- `workspace/hivemind/hivemind/active_inference.py`: Preference priors + prediction-error updates.\n- `workspace/scripts/policy_router.py`: Real response routing hook site (`PolicyRouter.execute_with_escalation`) for Tasks 1-4 + Task 5.\n\n## Feature Flags\nAll modules are optional and off by default.\n\n- `ENABLE_MURMURATION=1`\n- `ENABLE_RESERVOIR=1`\n- `ENABLE_PHYSARUM_ROUTER=1`\n- `ENABLE_TRAIL_MEMORY=1`\n- `ENABLE_ACTIVE_INFERENCE=1`\n\n## Module APIs\n### Task 1: Murmuration\n- `PeerGraph.init(agent_ids, k, seed)`\n- `PeerGraph.peers(agent_id) -> list[str]`\n- `PeerGraph.observe_interaction(src, dst, signal)`\n- `PeerGraph.tick(dt)`\n- `PeerGraph.snapshot() / PeerGraph.load(payload)`\n\n### Task 2: Reservoir\n- `Reservoir.init(dim, leak, spectral_scale, seed)`\n- `Reservoir.step(input_features, agent_features, adjacency_features) -> state`\n- `Reservoir.readout(state) -> dict`\n- `Reservoir.reset(session_id=None)`\n- `Reservoir.snapshot() / Reservoir.load(payload)`\n\n### Task 3: Physarum\n- `PhysarumRouter.propose_paths(src_agent, target_intent, peer_graph, n_paths) -> list[list[str]]`\n- `PhysarumRouter.update(path, reward_signal)`\n- `PhysarumRouter.prune(min_k, max_k)`\n- `PhysarumRouter.snapshot() / PhysarumRouter.load(payload)`\n\n### Task 4: External Trails\n- `TrailStore.add(trail) -> trail_id`\n- `TrailStore.query(text_or_embedding, k, now=None) -> list[dict]`\n- `TrailStore.decay(now=None) -> dict`\n- `TrailStore.reinforce(trail_id, delta) -> bool`\n- `TrailStore.snapshot() / TrailStore.load(payload)`\n\n### Task 5: Active Inference\n- `PreferenceModel.predict(context) -> (preference_params, confidence)`\n- `PreferenceModel.update(feedback, observed_outcome) -> dict`\n- `PredictionError.compute(predicted, observed) -> float`\n- `PreferenceModel.snapshot() / PreferenceModel.load(payload)`\n- `PreferenceModel.save_path(path) / PreferenceModel.load_path(path)`\n\n## Integration Behavior\n### Tasks 1-4 (HiveMind memory query path)\nWhen any of the first four flags is enabled, `scripts/memory_tool.py query`:\n1. Loads `TactiDynamicsPipeline` state from `workspace/hivemind/data/tacti_dynamics_snapshot.json` if present.\n2. Resolves agent IDs from runtime candidates and canoni", "source": "workspace/hivemind/TACTI_CR.md", "metadata": {"topic": "tacti"}}
+workspace/scripts/temporal_beacon_update.py:14:from tacti_cr.temporal_watchdog import update_beacon  # noqa: E402
+workspace/scripts/consciousness_timer.py:23:    events_file = REPO_ROOT / "workspace" / "state" / "tacti_cr" / "events.jsonl"
+workspace/tacti/collapse.py:89:    out = root / "workspace" / "state" / "tacti_cr" / "collapse_recommendations.jsonl"
+workspace/scripts/verify_tacti_cr_novel10_fixture.sh:25:  --events-path workspace/state/tacti_cr/events.jsonl \
+workspace/scripts/verify_tacti_cr_novel10_fixture.sh:31:  --events-path workspace/state/tacti_cr/events.jsonl
+workspace/scripts/policy_router.py:43:TACTI_EVENT_LOG = BASE_DIR / "workspace" / "state" / "tacti_cr" / "events.jsonl"
+workspace/scripts/policy_router.py:52:    from tacti_cr.arousal_oscillator import ArousalOscillator
+workspace/scripts/policy_router.py:53:    from tacti_cr.config import is_enabled as tacti_enabled
+workspace/scripts/policy_router.py:54:    from tacti_cr.expression import compute_expression
+workspace/scripts/policy_router.py:55:    from tacti_cr.collapse import emit_recommendation as collapse_emit_recommendation
+workspace/scripts/policy_router.py:56:    from tacti_cr.valence import routing_bias as tacti_routing_bias
+workspace/scripts/policy_router.py:57:    from tacti_cr.events import emit as tacti_emit
+workspace/scripts/policy_router.py:1124:                "tacti_cr.expression_profile",
+workspace/scripts/policy_router.py:1133:            _tacti_event("tacti_cr.valence_bias", {"intent": intent, "agent_id": agent_id, "bias": bias})
+workspace/scripts/policy_router.py:1141:                "tacti_cr.arousal_multiplier",
+workspace/scripts/team_chat.py:386:                f"tacti_cr.team_chat.{event_type}",
+workspace/scripts/verify_tacti_cr_events.py:15:from tacti_cr.events import DEFAULT_PATH, read_events, summarize_by_type
+workspace/scripts/semantic_immune_approve.py:15:from tacti_cr.semantic_immune import approve_quarantine  # noqa: E402
+workspace/tacti/novel10_contract.py:8:    "arousal": ["tacti_cr.arousal_multiplier"],
+workspace/tacti/novel10_contract.py:9:    "expression": ["tacti_cr.expression_profile"],
+workspace/tacti/novel10_contract.py:10:    "temporal_watchdog": ["tacti_cr.temporal.drift_detected", "tacti_cr.temporal_watchdog.temporal_reset"],
+workspace/tacti/novel10_contract.py:11:    "dream_consolidation": ["tacti_cr.dream.consolidation_started", "tacti_cr.dream.report_written"],
+workspace/tacti/novel10_contract.py:12:    "semantic_immune": ["tacti_cr.semantic_immune.accepted", "tacti_cr.semantic_immune.quarantined"],
+workspace/tacti/novel10_contract.py:13:    "stigmergy": ["tacti_cr.stigmergy.mark_deposited", "tacti_cr.stigmergy.query"],
+
+=== Gate: targeted unittest ===
+test_handler_path_invokes_tracker_once_per_append (tests_unittest.test_memory_message_hooks.TestMemoryMessageHooks.test_handler_path_invokes_tracker_once_per_append) ... ok
+test_trackers_update_deterministically_without_raw_content (tests_unittest.test_memory_message_hooks.TestMemoryMessageHooks.test_trackers_update_deterministically_without_raw_content) ... ok
+test_open_and_close_persist_artifacts_and_relationship_state (tests_unittest.test_session_handshake.TestSessionHandshake.test_open_and_close_persist_artifacts_and_relationship_state) ... ok
+test_first_failure_enters_impasse_not_collapse (tests_unittest.test_tacti_cr_impasse.TestImpasseManager.test_first_failure_enters_impasse_not_collapse) ... ok
+test_legacy_shim_import_still_resolves (tests_unittest.test_tacti_cr_impasse.TestImpasseManager.test_legacy_shim_import_still_resolves) ... ok
+test_repeated_failures_trigger_repairable_collapse (tests_unittest.test_tacti_cr_impasse.TestImpasseManager.test_repeated_failures_trigger_repairable_collapse) ... ok
+test_stable_success_recovers_from_collapse (tests_unittest.test_tacti_cr_impasse.TestImpasseManager.test_stable_success_recovers_from_collapse) ... ok
+test_verify_llm_policy_accepts_legacy_provider_aliases (tests_unittest.test_verify_llm_policy_alias.TestVerifyLlmPolicyAlias.test_verify_llm_policy_accepts_legacy_provider_aliases) ... ok
+test_verify_llm_policy_still_rejects_unknown_provider (tests_unittest.test_verify_llm_policy_alias.TestVerifyLlmPolicyAlias.test_verify_llm_policy_still_rejects_unknown_provider) ... ok
+
+----------------------------------------------------------------------
+Ran 9 tests in 0.224s
+
+OK
+
+=== Gate: verify_llm_policy ===
+ok
+
+=== Gate: verify_coding_ladder ===
+ok
+
+=== Gate: verify_dream_consolidation ===
+ok
+
+=== Gate: verify_intent_failure_scan ===
+ok
+
+=== Gate: npm test (captured) ===
+log_path=/tmp/twenty_evolutions_npm_test_governance_remediation_20260221.log
+PASS injectRuntimeEnv respects operator override and injects missing
+PASS injectRuntimeEnv propagates GROQ_API_KEY operator override to OPENCLAW_GROQ_API_KEY
+PASS config includes secrets bridge governance knobs
+PASS redaction covers mapped secret env vars
+PASS auto backend detection is platform deterministic
+PASS file backend requires explicit opt-in
+RUN node tests/secrets_cli_exec.test.js
+PASS secrets cli exec injects alias env keys without printing values
+RUN node tests/secrets_cli_plugin.test.js
+PASS plugin registers CLI command: secrets
+PASS secrets cli status prints enablement header (no secrets)
+secrets_cli_plugin tests complete
+RUN node tests/skill_composer.test.js
+PASS skill composer is disabled by default
+PASS skill composer respects tool governance decisions
+RUN node tests/system1_ignores_system2_env.test.js
+PASS createVllmProvider ignores SYSTEM2_VLLM_* when system2 is false
+PASS probeVllmServer ignores SYSTEM2_VLLM_* when system2 is false
+PASS probeVllmServer consults SYSTEM2_VLLM_* when system2 is true
+PASS probeVllmServer consults SYSTEM2_VLLM_* when nodeId alias resolves to c_lawd
+RUN node tests/system2_config_resolver.test.js
+PASS resolves with explicit args (highest precedence)
+PASS falls back to SYSTEM2_VLLM_* env vars
+PASS falls back to OPENCLAW_VLLM_* env vars
+PASS prefers SYSTEM2_VLLM_* over OPENCLAW_VLLM_*
+PASS uses node alias system-2 for c_lawd routing context
+PASS uses defaults when envs not set
+PASS emits diagnostic events (keys only)
+PASS resolves numeric config deterministically
+PASS invalid numeric env yields NaN (no throw)
+RUN node tests/system2_evidence_bundle.test.js
+PASS buildEvidenceBundle captures raw, writes redacted output, and emits manifest
+PASS buildEvidenceBundle preserves fail-closed snapshot status
+RUN node tests/system2_experiment.test.js
+PASS no-change fixture yields INCONCLUSIVE
+PASS improvement fixture yields KEEP
+PASS regression fixture yields REVERT
+PASS auth preset script maps to calibrated fail-on path
+PASS calibrated auth fail-on yields REVERT on regression fixture
+PASS failing subprocess writes UNAVAILABLE report and exits 3
+RUN node tests/system2_federation_observability_contract.test.js
+PASS FederatedEnvelopeV1 fixture validates (strict)
+PASS FederatedEnvelopeV1 rejects invalid schema (fail-closed)
+PASS System2EventV1 fixture validates
+PASS JSONL sink contract is deterministic (exact line match)
+PASS redaction-at-write is deterministic and idempotent
+PASS gating: disabled emitter is a no-op
+PASS gating: enabled emitter appends a redacted event
+PASS emitter does not throw on sink error by default (strict=false)
+PASS emitter fails closed on sink error when strict=true
+RUN node tests/system2_http_edge.test.js
+SKIP system2_http_edge: loopback bind not permitted in this environment
+RUN node tests/system2_repair_auth_profiles_acceptance.test.js
+PASS system2 repair auth-profiles acceptance check
+RUN node tests/system2_repair_models_acceptance.test.js
+PASS system2 repair models acceptance check
+RUN node tests/system2_repair_scripts_regression.test.js
+PASS system2 repair scripts regression gate
+RUN node tests/system2_snapshot_capture.test.js
+PASS captureSnapshot writes stable files and summary shape
+PASS captureSnapshot fail-closed with partial outputs when command fails
+RUN node tests/system2_snapshot_diff.test.js
+PASS JSON output is stable and ignores timestamp fields by default
+PASS ignore list suppresses expected diff paths and exits 0
+PASS fail-on marks regressions and exits 2
+PASS human output includes summary counts and regression marker
+PASS computeDiff supports deterministic dotpath flattening
+RUN node tests/system2_snapshot_observability_seam.test.js
+PASS OFF: system2.observability.enabled=false emits nothing and writes no JSONL
+PASS ON: system2.observability.enabled=true writes exactly one deterministic JSONL line
+RUN node tests/tacticr_feedback_writer.test.js
+PASS tacticr feedback writer appends schema-valid sanitized JSONL entries
+PASS tacticr feedback writer enforces required schema fields
+RUN node tests/tool_governance.test.js
+PASS tool governance allows explicit allowlist actions
+PASS tool governance asks for exec/network/outside-workspace writes
+PASS tool governance denies explicit denylist actions
+RUN node tests/tool_governance_edge_hook.test.js
+PASS http edge governance hook maps approval/deny errors deterministically
+OK 38 test group(s)

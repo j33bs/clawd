@@ -1,22 +1,10 @@
-from __future__ import annotations
+"""
+DEPRECATED: compatibility forwarder.
+Canonical source is workspace/tacti/events_paths.py.
+"""
 
-import os
 from pathlib import Path
 
-
-def resolve_events_path(repo_root: Path) -> Path:
-    root = Path(repo_root)
-    raw = str(os.environ.get("TACTI_CR_EVENTS_PATH", "")).strip()
-    if raw:
-        candidate = Path(raw)
-        if not candidate.is_absolute():
-            candidate = root / candidate
-        return candidate
-    return root / "workspace" / "state_runtime" / "tacti_cr" / "events.jsonl"
-
-
-def ensure_parent(p: Path) -> None:
-    Path(p).parent.mkdir(parents=True, exist_ok=True)
-
-
-__all__ = ["resolve_events_path", "ensure_parent"]
+_src = Path(__file__).resolve().parents[1] / "tacti" / "events_paths.py"
+_code = _src.read_text(encoding="utf-8")
+exec(compile(_code, str(_src), "exec"), globals(), globals())
