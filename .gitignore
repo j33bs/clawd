@@ -137,3 +137,56 @@ completions/
 
 # Runtime TACTI events
 /workspace/state_runtime/
+
+# ============================================
+# LOCAL AUTONOMOUS / RESEARCH ARTIFACTS (untracked hygiene)
+# ============================================
+.worktrees/
+docs/AUDIT_*.md
+memory/20??-??-??.md
+memory/literature/Chat GPT 5.2 Contributions/
+memory/literature/IPNB_*.txt
+workspace/AUTONOMOUS_PERIOD_SUMMARY.md
+workspace/CODEX_TASK_OAUTH_FIX.md
+workspace/CODEX_TASK_QUICK_FIX.md
+workspace/IMPLEMENTATION_SUMMARY.md
+workspace/SELF_REFLECTION.md
+workspace/SYSTEM_AUDIT_COMPREHENSIVE.md
+workspace/SYSTEM_STATUS.md
+workspace/daily_briefing_enhancer.py
+workspace/dashboard.py
+workspace/heartbeat_enhancer.py
+workspace/knowledge_base/NOVELTY_INTEGRATION.md
+workspace/knowledge_base/novelty.py
+workspace/knowledge_base/novelty_enhanced_query.py
+workspace/memory/arousal_state.json
+workspace/memory/arousal_tracker.py
+workspace/memory/context_compactor.py
+workspace/memory/conversation_summarizer.py
+workspace/memory/event_notifier.py
+workspace/memory/events.json
+workspace/memory/message_parser.py
+workspace/memory/pattern_chunker.py
+workspace/memory/relationship.json
+workspace/memory/relationship_tracker.py
+workspace/memory/tacti_core.py
+workspace/message_parser.py
+workspace/openclaw_tips_todo.md
+workspace/research/ADVENTURE_TALE_*.md
+workspace/research/IMPLEMENTATION_ROADMAP.md
+workspace/research/TACTI_IPNB_MAPPING.md
+workspace/research/TACTI_IPNB_physiology.md
+workspace/research/TACTI_framework_integration.md
+workspace/research/THERAPEUTIC_MODALITY_INDEX.md
+workspace/research/dreams_of_relational_agent.md
+workspace/research/gap_analyzer.py
+workspace/research/insight_tracker.py
+workspace/research/insights.json
+workspace/research/pdfs/
+workspace/research/research_suggester.py
+workspace/system_query.py
+workspace/tacti_cli.py
+workspace/tacti_dashboard.html
+workspace/teamchat/state/*.json
+workspace/teamchat/summaries/*.md
+workspace/test_tacti_integration.py
