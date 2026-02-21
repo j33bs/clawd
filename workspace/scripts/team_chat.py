@@ -35,6 +35,19 @@ try:
     from tacti_cr.valence import update_valence as valence_update
 except Exception:  # pragma: no cover
     valence_update = None
+try:
+    from memory.session_handshake import close_session_handshake, load_session_handshake
+except Exception:  # pragma: no cover
+    close_session_handshake = None
+    load_session_handshake = None
+try:
+    from tacti_cr.impasse import ImpasseManager
+except Exception:  # pragma: no cover
+    ImpasseManager = None
+try:
+    from memory.context_compactor import compact_context
+except Exception:  # pragma: no cover
+    compact_context = None
 
 
 def _truthy(value: Any) -> bool:
@@ -332,6 +345,8 @@ def write_summary(path: Path, state: dict[str, Any]) -> None:
         f"- accepted_reports: {state.get('accepted_reports', 0)}",
         f"- consecutive_failures: {state.get('consecutive_failures', 0)}",
         f"- queue_depth: {len(state.get('queue', []))}",
+        f"- impasse_status: {state.get('impasse', {}).get('status', 'healthy')}",
+        f"- collapse_mode: {bool(state.get('collapse_mode', False))}",
         "",
         "## Stop Conditions",
         f"- max_cycles: {state.get('max_cycles')}",
@@ -435,6 +450,8 @@ def run(args: argparse.Namespace) -> int:
             "queue": [],
             "accepted_reports": 0,
             "consecutive_failures": 0,
+            "impasse": {"status": "healthy"},
+            "collapse_mode": False,
             "max_cycles": max_cycles,
             "max_commands_per_cycle": int(args.max_commands_per_cycle),
             "max_consecutive_failures": max_consecutive_failures,
@@ -448,6 +465,28 @@ def run(args: argparse.Namespace) -> int:
         max_commands_per_cycle=int(args.max_commands_per_cycle),
         extra_allowlist=args.allow_cmd,
     )
+
+    if callable(load_session_handshake):
+        try:
+            outstanding = [str(item.get("id", "unknown")) for item in list(state.get("queue", []))]
+            handshake = load_session_handshake(
+                repo_root=repo_root,
+                session_id=session_id,
+                summary_file=summary_file,
+                outstanding_threads=outstanding,
+                source="teamchat",
+            )
+            log_event(
+                sessions_file,
+                session_id=session_id,
+                cycle=int(state["cycle"]),
+                actor="system",
+                event_type="handshake_loaded",
+                data={"artifact_path": handshake.get("artifact_path"), "meta": handshake.get("meta", {})},
+                route=None,
+            )
+        except Exception:
+            pass
 
     requested_auto_commit = _parse_bool(
         args.auto_commit if args.auto_commit is not None else os.environ.get("TEAMCHAT_AUTO_COMMIT", "1"),
@@ -469,6 +508,52 @@ def run(args: argparse.Namespace) -> int:
     )
     auto_commit_enabled = bool(guard["final_auto_commit"])
     accept_patches_enabled = bool(guard["final_accept_patches"])
+    impasse = ImpasseManager() if callable(ImpasseManager) else None
+    state.setdefault("impasse", {"status": "healthy"})
+    state.setdefault("collapse_mode", False)
+
+    def _apply_impasse_failure(reason: str) -> None:
+        if impasse is None:
+            return
+        context_overflow = "context" in str(reason or "").lower()
+        snapshot = impasse.on_failure(str(reason), context_overflow=context_overflow)
+        state["impasse"] = dict(snapshot)
+        state["collapse_mode"] = snapshot.get("status") == "collapse"
+        if state["collapse_mode"]:
+            queue = list(state.get("queue", []))
+            limit = int(snapshot.get("retrieval_limit", 2))
+            state["queue"] = queue[:limit]
+            state["max_commands_per_cycle"] = min(int(state.get("max_commands_per_cycle", 4)), limit)
+            if callable(compact_context):
+                try:
+                    compact_context(repo_root=repo_root, session_id=session_id)
+                except Exception:
+                    pass
+        log_event(
+            sessions_file,
+            session_id=session_id,
+            cycle=int(state["cycle"]),
+            actor="system",
+            event_type="impasse_state",
+            data={"reason": str(reason), "snapshot": dict(snapshot)},
+            route=None,
+        )
+
+    def _apply_impasse_success() -> None:
+        if impasse is None:
+            return
+        snapshot = impasse.on_success()
+        state["impasse"] = dict(snapshot)
+        state["collapse_mode"] = snapshot.get("status") == "collapse"
+        log_event(
+            sessions_file,
+            session_id=session_id,
+            cycle=int(state["cycle"]),
+            actor="system",
+            event_type="impasse_state",
+            data={"reason": "success", "snapshot": dict(snapshot)},
+            route=None,
+        )
 
     # Log session_start only for new sessions (not resumes)
     if not resuming:
@@ -562,10 +647,14 @@ def run(args: argparse.Namespace) -> int:
                     data={"error": plan_result.error or "unknown"},
                     route=plan_result.route,
                 )
+                _apply_impasse_failure(plan_result.error or "planner_plan_failed")
                 save_state(state_file, state)
                 write_summary(summary_file, state)
                 continue
             state["queue"] = list(plan_result.data.get("work_orders", []))
+            if state.get("collapse_mode"):
+                limit = int(state.get("impasse", {}).get("retrieval_limit", 2))
+                state["queue"] = list(state["queue"])[:limit]
             log_event(
                 sessions_file,
                 session_id=session_id,
@@ -603,6 +692,7 @@ def run(args: argparse.Namespace) -> int:
                 data={"error": coder_result.error or "unknown", "work_order_id": work_order.get("id")},
                 route=coder_result.route,
             )
+            _apply_impasse_failure(coder_result.error or "coder_failed")
             save_state(state_file, state)
             write_summary(summary_file, state)
             continue
@@ -630,7 +720,7 @@ def run(args: argparse.Namespace) -> int:
             route=coder_result.route,
         )
 
-        if callable(temporal_reset_event):
+        if callable(temporal_reset_event) and not state.get("collapse_mode"):
             drift = temporal_reset_event(json.dumps(patch_report, ensure_ascii=True))
             if drift:
                 log_event(
@@ -654,6 +744,7 @@ def run(args: argparse.Namespace) -> int:
                     },
                 )
                 state["consecutive_failures"] = int(state.get("consecutive_failures", 0)) + 1
+                _apply_impasse_failure("temporal_reset")
                 save_state(state_file, state)
                 write_summary(summary_file, state)
                 continue
@@ -670,6 +761,7 @@ def run(args: argparse.Namespace) -> int:
                 data={"error": review_result.error or "unknown"},
                 route=review_result.route,
             )
+            _apply_impasse_failure(review_result.error or "planner_review_failed")
             save_state(state_file, state)
             write_summary(summary_file, state)
             continue
@@ -690,13 +782,14 @@ def run(args: argparse.Namespace) -> int:
             state["accepted_reports"] = int(state["accepted_reports"]) + 1
             state["consecutive_failures"] = 0
             state["status"] = "accepted"
-            if callable(valence_update):
+            _apply_impasse_success()
+            if callable(valence_update) and not state.get("collapse_mode"):
                 valence_update("planner", {"success": True}, repo_root=repo_root)
                 valence_update("coder", {"success": True}, repo_root=repo_root)
             
             # Auto-commit changes after acceptance
             commit_sha = None
-            if auto_commit_enabled:
+            if auto_commit_enabled and not state.get("collapse_mode"):
                 commit_sha, _audit_path = auto_commit_changes(
                     repo_root,
                     session_id,
@@ -711,14 +804,19 @@ def run(args: argparse.Namespace) -> int:
         elif decision == "request_input":
             state["status"] = "request_input"
             state["consecutive_failures"] = 0
-            if callable(valence_update):
+            _apply_impasse_success()
+            if callable(valence_update) and not state.get("collapse_mode"):
                 valence_update("planner", {"failed": True, "retry_loops": 1}, repo_root=repo_root)
         else:
             next_orders = review_result.data.get("next_work_orders", [])
             if next_orders:
                 state["queue"].extend(next_orders)
+            if state.get("collapse_mode"):
+                limit = int(state.get("impasse", {}).get("retrieval_limit", 2))
+                state["queue"] = list(state["queue"])[:limit]
             state["consecutive_failures"] = int(state["consecutive_failures"]) + 1
-            if callable(valence_update):
+            _apply_impasse_failure("planner_requested_revise")
+            if callable(valence_update) and not state.get("collapse_mode"):
                 valence_update("planner", {"failed": True, "retry_loops": 1}, repo_root=repo_root)
                 valence_update("coder", {"failed": True}, repo_root=repo_root)
 
@@ -747,6 +845,28 @@ def run(args: argparse.Namespace) -> int:
 
     save_state(state_file, state)
     write_summary(summary_file, state)
+    if callable(close_session_handshake):
+        try:
+            unresolved = [str(item.get("id", "unknown")) for item in list(state.get("queue", []))]
+            closed = close_session_handshake(
+                repo_root=repo_root,
+                session_id=session_id,
+                summary_file=summary_file,
+                status=str(state.get("status", "")),
+                outstanding_threads=unresolved,
+                source="teamchat",
+            )
+            log_event(
+                sessions_file,
+                session_id=session_id,
+                cycle=int(state["cycle"]),
+                actor="system",
+                event_type="session_closed",
+                data={"artifact_path": closed.get("artifact_path"), "meta": closed.get("meta", {})},
+                route=None,
+            )
+        except Exception:
+            pass
     log_event(
         sessions_file,
         session_id=session_id,
