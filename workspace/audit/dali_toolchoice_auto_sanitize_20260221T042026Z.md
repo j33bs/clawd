@@ -240,3 +240,78 @@ Observed:
 
 Diagnosis guidance from evidence:
 - If real run still returns original vLLM `auto tool choice` error and strict guard does **not** trigger, runtime is likely executing stale codepath/module instance. Use runtime helper + service `ExecStart` inspection to confirm.
+
+## Operational Loop Closure (Service-Path Verification)
+
+### Phase A — PR Packaging
+
+PR body file created:
+- `workspace/audit/pr_body_dali_toolchoice_auto_bypass_detector_20260221.md`
+
+PR title:
+- `fix(dali/payload): close gateway edge bypass; enforce tool payload invariant at final dispatch (strict opt-in)`
+
+### Phase B — Production-like Verification (same failing context)
+
+Service context commands:
+- `systemctl --user status openclaw-gateway.service --no-pager`
+- `systemctl --user cat openclaw-gateway.service`
+- `journalctl --user -u openclaw-gateway.service -n 200 --no-pager`
+
+Key service context findings:
+- Active runtime is user service `openclaw-gateway.service`
+- ExecStart points to installed dist binary:
+  - `/usr/bin/node /usr/lib/node_modules/openclaw/dist/index.js gateway --port 18789`
+- This is not repo-local JS execution path.
+
+Restart performed:
+- `systemctl --user restart openclaw-gateway.service`
+- Service restarted successfully.
+
+Strict env in service process:
+- Set manager env and restarted:
+  - `systemctl --user set-environment OPENCLAW_STRICT_TOOL_PAYLOAD=1`
+  - `systemctl --user restart openclaw-gateway.service`
+- Verified manager env:
+  - `systemctl --user show-environment | rg OPENCLAW_STRICT_TOOL_PAYLOAD`
+- Verified running process env:
+  - `tr '\0' '\n' < /proc/<MainPID>/environ | rg OPENCLAW_STRICT_TOOL_PAYLOAD`
+  - observed: `OPENCLAW_STRICT_TOOL_PAYLOAD=1`
+
+Runtime identity helper in service-manager context:
+- `systemd-run --user --wait --pipe --collect env OPENCLAW_STRICT_TOOL_PAYLOAD=1 python3 /home/jeebs/src/clawd/workspace/scripts/diagnose_tool_payload_runtime.py`
+- Output included:
+  - `policy_router_module_path=/home/jeebs/src/clawd/workspace/scripts/policy_router.py`
+  - `tool_payload_sanitizer_module_path=/home/jeebs/src/clawd/workspace/scripts/tool_payload_sanitizer.py`
+  - `git_sha=f72dd6c4fe7f`
+  - `strict_tool_payload_enabled=true`
+
+Real failing repro (gateway/service path):
+- `openclaw agent --to +10000000000 --message "strict payload repro probe" --json`
+
+Observed payload text (still failing):
+- `400 "auto" tool choice requires --enable-auto-tool-choice and --tool-call-parser to be set`
+
+Post-repro log scan for strict diagnostics:
+- `journalctl --user -u openclaw-gateway.service -n 120 --no-pager | rg -n "tool_payload|TOOL_PAYLOAD_SANITIZER_BYPASSED|auto tool choice|tool-call-parser"`
+- Only legacy 400 line present; no strict callsite-tag diagnostics emitted.
+
+Installed dist code check:
+- `rg -n "gateway\.adapter\.final_dispatch|policy_router\.final_dispatch|TOOL_PAYLOAD_SANITIZER_BYPASSED|tool_payload_sanitized_after_invalid_shape|OPENCLAW_STRICT_TOOL_PAYLOAD" /usr/lib/node_modules/openclaw/dist -S`
+- No matches.
+
+Repo code check:
+- same `rg` over `core workspace/scripts` shows expected strict tags and diagnostics present.
+
+### Phase C — Operational Conclusion
+
+Conclusion: **stale runtime/module loading proven**.
+
+Reasoning:
+- Live gateway process executes `/usr/lib/node_modules/openclaw/dist/index.js`.
+- Real repro still returns old vLLM `tool_choice:auto` error.
+- Strict mode is confirmed present in service env, but no `TOOL_PAYLOAD_SANITIZER_BYPASSED`/callsite-tag diagnostics appear.
+- Installed dist lacks new strict markers/callsite tags that exist in repo source.
+
+Interpretation:
+- The service is running an installed build that does not yet include this branch’s hardening; this is not a remaining bypass in repo source.
