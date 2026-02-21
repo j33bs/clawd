@@ -1070,3 +1070,26 @@ M	workspace/audit/stash_integration_20260222.md
 4. git revert da84eba
 
 (Current HEAD commit hashes before final fix commit listed above; final exact list captured after commit/push.)
+
+## Phase 5 Final Summary (2026-02-21T23:53:38Z)
+### Commits integrated
+```text
+7bc4d07 fix(gov): restore canonical SOUL after stash integration
+e9230af chore(repo): handle stashed artifacts/ignore rules
+5a78788 feat(chore): integrate stashed script/source updates
+9ae463d data(kb): integrate stashed knowledge base/session updates
+da84eba docs: integrate stashed documentation and audit artifacts
+```
+### Tests run
+- npm test: PASS
+- python3 -m unittest: PASS
+- python3 -m unittest tests_unittest.test_goal_identity_invariants -v: PASS
+### Residual risks / uncertainties
+- Ignored session file workspace/teamchat/sessions/tacti_architecture_review.jsonl was intentionally excluded from commits; include only with explicit operator intent.
+- Excluded artifact moved to /tmp/wt_wirings_integration_excluded/mlx_audit.zip and not versioned.
+### Exact revert sequence (reverse order)
+1. git revert 7bc4d07
+2. git revert e9230af
+3. git revert 5a78788
+4. git revert 9ae463d
+5. git revert da84eba
