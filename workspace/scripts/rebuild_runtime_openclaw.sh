@@ -55,6 +55,106 @@ for (const file of process.argv.slice(2)) {
 NODE
 fi
 
+REPLY_FILE="$(ls "$RUNTIME_DIR"/dist/reply-*.js 2>/dev/null | head -n 1 || true)"
+if [ -n "${REPLY_FILE}" ] && [ -f "$REPLY_FILE" ]; then
+  node - <<'NODE' "$REPLY_FILE"
+const fs = require('node:fs');
+
+const file = process.argv[2];
+let src = fs.readFileSync(file, 'utf8');
+
+const execMarker = '/* OPENCLAW_EXEC_PAYLOAD_TRANSPORT */';
+if (!src.includes(execMarker)) {
+  const execHelperAnchor = 'async function runExecProcess(opts) {';
+  const execHelperBlock = `${execMarker}
+const OPENCLAW_EXEC_INLINE_MAX_BYTES = 32 * 1024;
+let openclawExecPayloadCounter = 0;
+function quoteShellArg(value) {
+	const s = String(value ?? "");
+	return \`'\${s.replace(/'/g, "'\"'\"'")}'\`;
+}
+function nextExecPayloadCorrelationId() {
+	openclawExecPayloadCounter = (openclawExecPayloadCounter + 1) % 1679616;
+	return \`exec-\${Date.now().toString(36)}-\${openclawExecPayloadCounter.toString(36).padStart(3, "0")}\`;
+}
+function externalizeExecCommandIfOversized(command) {
+	const raw = String(command ?? "");
+	const bytes = Buffer.byteLength(raw, "utf8");
+	if (bytes <= OPENCLAW_EXEC_INLINE_MAX_BYTES) return {
+		command: raw
+	};
+	const correlationId = nextExecPayloadCorrelationId();
+	try {
+		const dir = fs$1.mkdtempSync(path.join(os.tmpdir(), "openclaw-exec-"));
+		const scriptPath = path.join(dir, "payload.sh");
+		const wrapped = \`#!/usr/bin/env bash\\nset -euo pipefail\\n\${raw}\\n\`;
+		fs$1.writeFileSync(scriptPath, wrapped, { encoding: "utf-8", mode: 448 });
+		fs$1.chmodSync(scriptPath, 448);
+		console.error(JSON.stringify({
+			event: "exec_payload_transport",
+			mode: "file",
+			bytes,
+			correlation_id: correlationId
+		}));
+		return {
+			command: \`bash \${quoteShellArg(scriptPath)}\`
+		};
+	} catch (err) {
+		console.error(JSON.stringify({
+			event: "exec_payload_transport",
+			mode: "inline_fallback",
+			bytes,
+			correlation_id: correlationId,
+			error: String(err)
+		}));
+		return {
+			command: raw
+		};
+	}
+}
+`;
+  if (!src.includes(execHelperAnchor)) {
+    throw new Error('runExecProcess anchor not found');
+  }
+  src = src.replace(execHelperAnchor, `${execHelperBlock}\n${execHelperAnchor}`);
+}
+
+if (!src.includes('const execCommandPrepared = externalizeExecCommandIfOversized')) {
+  const execCommandNeedle = 'const execCommand = opts.execCommand ?? opts.command;';
+  const execCommandReplacement = `const execCommandPrepared = externalizeExecCommandIfOversized(opts.execCommand ?? opts.command);
+\tconst execCommand = execCommandPrepared.command;`;
+  if (!src.includes(execCommandNeedle)) {
+    throw new Error('execCommand assignment anchor not found');
+  }
+  src = src.replace(execCommandNeedle, execCommandReplacement);
+}
+
+const tgMarker = '/* OPENCLAW_TELEGRAM_ERROR_CORRELATION */';
+if (!src.includes(tgMarker)) {
+  const tgAnchor = 'const registerTelegramHandlers = ({ cfg, accountId, bot, opts, runtime, mediaMaxBytes, telegramCfg, groupAllowFrom, resolveGroupPolicy, resolveTelegramGroupConfig, shouldSkipUpdate, processMessage, logger }) => {';
+  const tgBlock = `${tgMarker}
+let openclawTelegramErrorCounter = 0;
+function nextTelegramErrorCorrelationId() {
+	openclawTelegramErrorCounter = (openclawTelegramErrorCounter + 1) % 1679616;
+	return \`tg-\${Date.now().toString(36)}-\${openclawTelegramErrorCounter.toString(36).padStart(3, "0")}\`;
+}
+`;
+  if (!src.includes(tgAnchor)) {
+    throw new Error('registerTelegramHandlers anchor not found');
+  }
+  src = src.replace(tgAnchor, `${tgBlock}\n${tgAnchor}`);
+}
+
+const tgCatchNeedle = '\t\t} catch (err) {\n\t\t\truntime.error?.(danger(`${event.errorMessage}: ${String(err)}`));\n\t\t}\n\t};';
+if (src.includes(tgCatchNeedle)) {
+  const tgCatchReplacement = '\t\t} catch (err) {\n\t\t\tconst correlationId = nextTelegramErrorCorrelationId();\n\t\t\truntime.error?.(danger(`${event.errorMessage} (correlation_id=${correlationId}): ${String(err)}`));\n\t\t\ttry {\n\t\t\t\tawait withTelegramApiErrorLogging({\n\t\t\t\t\toperation: "sendMessage",\n\t\t\t\t\truntime,\n\t\t\t\t\tfn: () => bot.api.sendMessage(event.chatId, `Error processing request (code: ${correlationId}). Check gateway logs.`, buildTypingThreadParams(event.messageThreadId))\n\t\t\t\t});\n\t\t\t} catch (notifyErr) {\n\t\t\t\truntime.error?.(danger(`telegram error notification failed (correlation_id=${correlationId}): ${String(notifyErr)}`));\n\t\t\t}\n\t\t}\n\t};';
+  src = src.replace(tgCatchNeedle, tgCatchReplacement);
+}
+
+fs.writeFileSync(file, src);
+NODE
+fi
+
 PI_AI_PROVIDER_FILE="$RUNTIME_DIR/node_modules/@mariozechner/pi-ai/dist/providers/openai-completions.js"
 if [ -f "$PI_AI_PROVIDER_FILE" ]; then
   node - <<'NODE' "$PI_AI_PROVIDER_FILE"

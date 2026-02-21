@@ -1091,3 +1091,95 @@ git status --porcelain -uall
 Result:
 - `.runtime/openclaw-dist/` + `.runtime/openclaw/` runtime artifacts no longer flood untracked output.
 - unrelated pre-existing workspace drift remains separate.
+
+## Exec E2BIG + Telegram Error-Path Hardening (2026-02-21)
+
+### Scope
+- Goal: prevent oversized tool payloads from causing `spawn E2BIG` on exec path and prevent silent Telegram drops on handler errors.
+- Minimal-diff implementation route: runtime rebuild patcher + focused regression test.
+
+### Pre-fix evidence (service logs)
+Command:
+```bash
+journalctl --user -u openclaw-gateway.service -n 200 --no-pager | \
+  rg -n "spawn E2BIG|tools\] exec failed|typing TTL reached" -S
+```
+Observed:
+- `typing TTL reached (2m); stopping typing indicator`
+- `[process/supervisor] spawn failed ... Error: spawn E2BIG`
+- `[tools] exec failed: spawn E2BIG`
+
+### Changes applied
+1) Runtime exec transport hardening (rebuilt artifact patch)
+- File: `workspace/scripts/rebuild_runtime_openclaw.sh`
+- Injected marker: `OPENCLAW_EXEC_PAYLOAD_TRANSPORT` into `.runtime/openclaw/dist/reply-*.js`
+- Behavior:
+  - oversized exec command text is externalized to temp script file
+  - spawned argv carries only `bash <short-script-path>` (no large payload in argv/env)
+  - structured log emitted:
+    - `event: "exec_payload_transport"`
+    - `mode: "file"|"inline_fallback"`
+    - `bytes`, `correlation_id`
+
+2) Telegram handler hardening (rebuilt artifact patch)
+- File: `workspace/scripts/rebuild_runtime_openclaw.sh`
+- Injected marker: `OPENCLAW_TELEGRAM_ERROR_CORRELATION`
+- Behavior:
+  - message-like handler catch path generates correlation id (`tg-...`)
+  - logs correlation-aware error
+  - attempts user-visible error reply:
+    - `Error processing request (code: <correlation_id>). Check gateway logs.`
+  - preserves typing-stop semantics via existing typing lifecycle/finalization path.
+
+3) Regression test added
+- File: `tests/safe_spawn.test.js`
+- Cases:
+  - large payload (200KB) uses `file` transport and payload is absent from argv/env
+  - small payload uses `stdin`
+  - null payload uses `none`
+
+### Commands run and results
+```bash
+node tests/safe_spawn.test.js
+```
+Result:
+- PASS large payload uses tempfile transport and does not leak into argv/env
+- PASS small payload uses stdin transport
+- PASS empty payload uses none transport
+
+```bash
+./workspace/scripts/rebuild_runtime_openclaw.sh
+```
+Result:
+- rebuild succeeded from `/usr/lib/node_modules/openclaw` -> `.runtime/openclaw`
+- marker check passed for runtime overlay patch markers.
+
+```bash
+rg -n -S "OPENCLAW_EXEC_PAYLOAD_TRANSPORT|exec_payload_transport|OPENCLAW_TELEGRAM_ERROR_CORRELATION|Error processing request \(code:" \
+  .runtime/openclaw/dist/reply-*.js
+```
+Result includes:
+- `OPENCLAW_TELEGRAM_ERROR_CORRELATION`
+- `Error processing request (code: ${correlationId}). Check gateway logs.`
+- `OPENCLAW_EXEC_PAYLOAD_TRANSPORT`
+- `event: "exec_payload_transport"`
+
+```bash
+systemctl --user restart openclaw-gateway.service
+systemctl --user status openclaw-gateway.service --no-pager | sed -n '1,40p'
+```
+Result:
+- service active with ExecStart:
+  - `/usr/bin/node /home/jeebs/src/clawd/.runtime/openclaw/dist/index.js gateway --port 18789`
+
+```bash
+openclaw agent --session-id e2big-transport-probe --message \
+  "Use your exec tool to run: echo transport_probe_ok && exit 0. Reply with only the command output." --json
+```
+Result:
+- returned payload text `transport_probe_ok`.
+
+### Notes on deterministic live repro
+- This shell-only pass validated patch presence + regression coverage + gateway restart on rebuilt runtime.
+- A deterministic dashboard-triggered oversized exec payload was not reproduced in this run, so no fresh `exec_payload_transport` journal line was captured yet.
+- Existing pre-fix `spawn E2BIG` evidence remains captured above; post-fix runtime now contains the transport safeguard and Telegram correlation/error-reply path.
