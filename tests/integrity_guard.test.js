@@ -77,11 +77,27 @@ function testGuardHookEnforcesBaseline() {
   console.log('PASS integrity guard hook enforces baseline presence');
 }
 
+function testGuardReverifiesEachEnforcement() {
+  const root = mkRepoFixture();
+  approveBaseline(root);
+  const guard = createIntegrityGuard({ repoRoot: root, env: { OPENCLAW_INTEGRITY_GUARD: '1' } });
+
+  assert.doesNotThrow(() => guard.enforceRequest({ metadata: {} }));
+
+  fs.writeFileSync(path.join(root, 'workspace', 'governance', 'IDENTITY.md'), 'identity-v3\n', 'utf8');
+  assert.throws(
+    () => guard.enforceRequest({ metadata: {} }),
+    (err) => err && err.code === 'INTEGRITY_DRIFT'
+  );
+  console.log('PASS integrity guard re-verifies on each request');
+}
+
 function main() {
   testDeterministicBaseline();
   testDriftFailClosedAndApproval();
   testIdentityOverrideDenied();
   testGuardHookEnforcesBaseline();
+  testGuardReverifiesEachEnforcement();
 }
 
 main();

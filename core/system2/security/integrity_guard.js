@@ -238,15 +238,11 @@ function createIntegrityGuard(opts = {}) {
   const env = opts.env || process.env;
   const enabled = String(env.OPENCLAW_INTEGRITY_GUARD || '1') !== '0';
   const repoRoot = resolveRepoRoot(opts.repoRoot || process.cwd());
-  const state = { verified: false };
 
   function verifyOnce() {
     if (!enabled) return { ok: true, skipped: 'disabled' };
-    if (!state.verified) {
-      verifyIntegrity(repoRoot, opts);
-      state.verified = true;
-    }
-    return { ok: true, verified: true };
+    const result = verifyIntegrity(repoRoot, opts);
+    return { ok: true, verified: true, checked: result.checked };
   }
 
   function enforceRequest(params) {
