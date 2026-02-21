@@ -19,6 +19,8 @@ const http = require('node:http');
 const https = require('node:https');
 const { URL } = require('node:url');
 const { redactIfSensitive } = require('./config');
+const { TOOL_SUPPORT } = require('./schemas');
+const { sanitizeToolPayload } = require('./tool_payload_sanitizer');
 
 class ProviderAdapter {
   /**
@@ -431,7 +433,25 @@ class ProviderAdapter {
   }
 
   _httpPost(url, body, options = {}) {
-    return this._httpRequest('POST', url, body, options);
+    const providerCaps = {
+      tool_calls_supported: this._toolCallsSupported(body && body.model)
+    };
+    const sanitizedBody = sanitizeToolPayload(body, providerCaps);
+    return this._httpRequest('POST', url, sanitizedBody, options);
+  }
+
+  _toolCallsSupported(modelId) {
+    const models = Array.isArray(this.entry && this.entry.models) ? this.entry.models : [];
+    if (models.length === 0) return null;
+
+    const exact = modelId
+      ? models.find((m) => m && m.model_id === modelId)
+      : null;
+    if (exact && exact.tool_support === TOOL_SUPPORT.NONE) return false;
+    if (exact) return null;
+
+    const allNone = models.every((m) => m && m.tool_support === TOOL_SUPPORT.NONE);
+    return allNone ? false : null;
   }
 
   _httpRequest(method, urlStr, body, options = {}) {

@@ -21,6 +21,7 @@ const http = require('node:http');
 const https = require('node:https');
 const { URL } = require('node:url');
 const { getProvider } = require('./catalog');
+const { sanitizeToolPayload } = require('./tool_payload_sanitizer');
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -114,18 +115,15 @@ class LocalVllmProvider {
       payload.tool_choice = requested;
     } else if (this._toolParserEnabled && hasTools(options.tools) && requested === undefined) {
       payload.tool_choice = 'auto';
-    } else if (!this._toolParserEnabled && hasTools(options.tools)) {
-      payload.tool_choice = 'none';
     }
 
     return payload;
   }
 
   _sanitizePayloadForToolCalls(payload) {
-    if (this._toolCallEnabled) return payload;
-    const next = { ...payload };
-    delete next.tools;
-    delete next.tool_choice;
+    const providerCaps = { tool_calls_supported: this._toolCallEnabled };
+    const next = sanitizeToolPayload(payload, providerCaps);
+    if (this._toolCallEnabled) return next;
     delete next.parallel_tool_calls;
     delete next.tool_calls;
     delete next.function_call;
