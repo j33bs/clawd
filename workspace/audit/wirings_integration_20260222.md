@@ -1136,3 +1136,44 @@ M	workspace/scripts/audit_commit_hook.py
 - Intent: chain governance/audit JSONL writes through witness ledger with strict fail-closed mode optional.
 - Flag behavior: OPENCLAW_WITNESS_LEDGER defaults on for audit path, OPENCLAW_WITNESS_LEDGER=0 disables, OPENCLAW_WITNESS_LEDGER_STRICT=1 enforces fail-closed.
 - Rollback: git revert <commit_sha_for_wiring_4>
+
+## Wiring #10 Validation 2026-02-21T21:07:29Z
+$ python3 -m unittest tests_unittest.test_kb_prefetch_cache -v
+test_prefetch_miss_then_hit_reuses_cached_context (tests_unittest.test_kb_prefetch_cache.TestKbPrefetchCache.test_prefetch_miss_then_hit_reuses_cached_context) ... FAIL
+
+======================================================================
+FAIL: test_prefetch_miss_then_hit_reuses_cached_context (tests_unittest.test_kb_prefetch_cache.TestKbPrefetchCache.test_prefetch_miss_then_hit_reuses_cached_context)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/private/tmp/twenty-evolutions-20260221/tests_unittest/test_kb_prefetch_cache.py", line 38, in test_prefetch_miss_then_hit_reuses_cached_context
+    self.assertGreaterEqual(len(first), 1)
+    ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^
+AssertionError: 0 not greater than or equal to 1
+
+----------------------------------------------------------------------
+Ran 1 test in 0.001s
+
+FAILED (failures=1)
+$ python3 -m unittest tests_unittest.test_kb_prefetch_cache -v
+test_prefetch_miss_then_hit_reuses_cached_context (tests_unittest.test_kb_prefetch_cache.TestKbPrefetchCache.test_prefetch_miss_then_hit_reuses_cached_context) ... ok
+
+----------------------------------------------------------------------
+Ran 1 test in 0.000s
+
+OK
+$ python3 -m unittest tests_unittest.test_policy_router_tacti_novel10 -v
+test_arousal_and_expression_can_gate_heavy_escalation (tests_unittest.test_policy_router_tacti_novel10.TestPolicyRouterTactiNovel10.test_arousal_and_expression_can_gate_heavy_escalation) ... ok
+
+----------------------------------------------------------------------
+Ran 1 test in 0.050s
+
+OK
+$ git diff --name-status
+M	workspace/audit/wirings_integration_20260222.md
+M	workspace/knowledge_base/kb.py
+M	workspace/state/tacti_cr/events.jsonl
+
+### Wiring #10 summary
+- Intent: instantiate lazy PrefetchCache singleton in KB query path and reuse cached query context on repeat calls.
+- Cache semantics: first query warms cache + records miss, repeated same query returns cached docs + records hit.
+- Rollback: git revert <commit_sha_for_wiring_10>

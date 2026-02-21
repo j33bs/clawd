@@ -22,9 +22,53 @@ from agentic.retrieve import multi_step_retrieve
 from agentic.synthesize import synthesize_response
 
 try:
-    from tacti_cr.prefetch import prefetch_context
+    from tacti_cr.prefetch import PrefetchCache, predict_topics
 except Exception:  # pragma: no cover
-    prefetch_context = None
+    PrefetchCache = None
+    predict_topics = None
+
+_PREFETCH = None
+_PREFETCH_CONTEXT_CACHE = {}
+
+
+def _get_prefetch_cache(repo_root: Path):
+    global _PREFETCH
+    if _PREFETCH is not None:
+        return _PREFETCH
+    if PrefetchCache is None:
+        return None
+    try:
+        _PREFETCH = PrefetchCache(repo_root=repo_root)
+    except Exception:
+        _PREFETCH = None
+    return _PREFETCH
+
+
+def _prefetch_with_cache(query: str, query_fn, *, repo_root: Path):
+    cache = _get_prefetch_cache(repo_root)
+    key = str(query or "").strip().lower()
+    if cache is None or not key:
+        return []
+    cached = _PREFETCH_CONTEXT_CACHE.get(key)
+    if isinstance(cached, list):
+        try:
+            cache.record_hit(True)
+        except Exception:
+            pass
+        return list(cached)
+    if not callable(predict_topics):
+        return []
+    docs = []
+    try:
+        topics = predict_topics(key, top_k=cache.depth())
+        for topic in topics:
+            docs.extend(query_fn(topic))
+        _PREFETCH_CONTEXT_CACHE[key] = list(docs)
+        cache.record_prefetch("|".join(topics), docs)
+        cache.record_hit(False)
+    except Exception:
+        return []
+    return list(docs)
 
 DATA_DIR = Path(__file__).parent / "data"
 DATA_DIR.mkdir(exist_ok=True)
@@ -34,15 +78,11 @@ def cmd_query(args: argparse.Namespace) -> int:
     """Agentic RAG query - the main entry point."""
     query = args.query
 
-    if callable(prefetch_context):
-        try:
-            prefetch_context(
-                query,
-                lambda topic: [f"graph:{topic}"],
-                repo_root=Path(__file__).resolve().parents[2],
-            )
-        except Exception:
-            pass
+    _prefetch_with_cache(
+        query,
+        lambda topic: [f"graph:{topic}"],
+        repo_root=Path(__file__).resolve().parents[2],
+    )
     
     # Step 1: Classify intent
     intent = classify_intent(query)
