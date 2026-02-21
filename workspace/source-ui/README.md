@@ -6,7 +6,7 @@ A standalone desktop application for OpenClaw's Source UI.
 
 ```bash
 # Install dependencies
-cd /home/jeebs/src/clawd/workspace/source-ui
+cd workspace/source-ui
 npm install
 
 # Run in development mode
@@ -46,7 +46,22 @@ This creates a `.deb` package in `dist/`.
 If you just want to run the web interface:
 
 ```bash
-python3 app.py --port 18990
+cp .source-ui.env.example .source-ui.env
+# Set OPENCLAW_TOKEN in .source-ui.env (local only, do not commit)
+./run-source-ui.sh --host 127.0.0.1 --port 18990
 ```
 
 Then open http://localhost:18990 in your browser.
+
+## systemd user service (optional)
+
+Use `source-ui.service` as a user unit template with an environment file:
+
+```bash
+mkdir -p ~/.config/openclaw ~/.config/systemd/user
+cp workspace/source-ui/source-ui.service ~/.config/systemd/user/source-ui.service
+cp workspace/source-ui/.source-ui.env.example ~/.config/openclaw/source-ui.env
+$EDITOR ~/.config/openclaw/source-ui.env
+systemctl --user daemon-reload
+systemctl --user enable --now source-ui.service
+```

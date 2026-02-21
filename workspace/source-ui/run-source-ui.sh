@@ -13,8 +13,16 @@
 PORT=18990
 HOST="127.0.0.1"
 DAEMON=false
-APP_DIR="/home/jeebs/src/clawd/workspace/source-ui"
+APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PID_FILE="/tmp/source-ui.pid"
+ENV_FILE="${SOURCE_UI_ENV_FILE:-${APP_DIR}/.source-ui.env}"
+
+if [ -f "$ENV_FILE" ]; then
+    set -a
+    # shellcheck source=/dev/null
+    . "$ENV_FILE"
+    set +a
+fi
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
@@ -72,7 +80,7 @@ fi
 cd "$APP_DIR"
 
 if [ "$DAEMON" = true ]; then
-    nohup python3 "$APP_DIR/app.py" --port "$PORT" --host "$HOST" > /var/log/source-ui.log 2>&1 &
+    nohup python3 "$APP_DIR/app.py" --port "$PORT" --host "$HOST" > "$APP_DIR/source-ui.log" 2>&1 &
     echo $! > "$PID_FILE"
     echo "Started Source UI on $HOST:$PORT (PID: $(cat $PID_FILE))"
 else

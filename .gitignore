@@ -12,6 +12,7 @@ secrets.json
 .[e]nv
 *.[e]nv.local
 *.[e]nv.*.local
+workspace/source-ui/.source-ui.env
 
 # OAuth and auth tokens
 auth-profiles.[j]son
