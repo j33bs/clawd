@@ -10,10 +10,13 @@ HIVEMIND_ROOT = REPO_ROOT / "workspace" / "hivemind"
 if str(HIVEMIND_ROOT) not in sys.path:
     sys.path.insert(0, str(HIVEMIND_ROOT))
 
-from hivemind.trails import TrailStore  # noqa: E402
+from hivemind.trails import TrailStore, clear_embed_cache, embed_cache_stats  # noqa: E402
 
 
 class TestTrailStore(unittest.TestCase):
+    def setUp(self):
+        clear_embed_cache()
+
     def test_decay_reduces_effective_strength(self):
         with tempfile.TemporaryDirectory() as td:
             path = Path(td) / "trails.jsonl"
@@ -37,7 +40,15 @@ class TestTrailStore(unittest.TestCase):
             self.assertIn(t1, before)
             self.assertEqual(after[0], t2)
 
+    def test_embedding_cache_reuses_repeated_text(self):
+        with tempfile.TemporaryDirectory() as td:
+            store = TrailStore(path=Path(td) / "trails.jsonl", half_life_hours=12.0)
+            _ = store.add({"text": "same trail text", "tags": ["a"], "strength": 1.0, "meta": {}})
+            before = embed_cache_stats()["computed"]
+            _ = store.add({"text": "same trail text", "tags": ["a"], "strength": 1.0, "meta": {}})
+            after = embed_cache_stats()["computed"]
+            self.assertEqual(before, after)
+
 
 if __name__ == "__main__":
     unittest.main()
-

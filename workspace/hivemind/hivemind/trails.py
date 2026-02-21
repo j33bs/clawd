@@ -4,6 +4,7 @@ import hashlib
 import json
 import math
 import os
+from functools import lru_cache
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List
@@ -14,6 +15,8 @@ DEFAULT_BASE_DIR = Path(__file__).resolve().parents[1]
 DEFAULT_TRAILS_PATH = DEFAULT_BASE_DIR / "data" / "trails.jsonl"
 DEFAULT_HALF_LIFE_HOURS = 24.0
 EMBED_DIM = 24
+EMBED_CACHE_SIZE = 1024
+_EMBED_COMPUTE_COUNT = 0
 
 
 def _utc_now() -> datetime:
@@ -51,10 +54,13 @@ def _cosine(a: List[float], b: List[float]) -> float:
     return _dot(a, b) / (na * nb)
 
 
-def _embed_text(text: str, tags: List[str] | None = None, dim: int = EMBED_DIM) -> List[float]:
+@lru_cache(maxsize=EMBED_CACHE_SIZE)
+def _embed_text_cached(text: str, tags_key: tuple[str, ...], dim: int) -> tuple[float, ...]:
+    global _EMBED_COMPUTE_COUNT
+    _EMBED_COMPUTE_COUNT += 1
     vec = [0.0 for _ in range(dim)]
     chunks = [str(text or "").lower()]
-    for tag in (tags or []):
+    for tag in tags_key:
         chunks.append(str(tag).lower())
     for chunk in chunks:
         for token in chunk.split():
@@ -62,7 +68,29 @@ def _embed_text(text: str, tags: List[str] | None = None, dim: int = EMBED_DIM) 
             bucket = int(digest[:8], 16) % dim
             sign = 1.0 if (int(digest[8:10], 16) % 2 == 0) else -1.0
             vec[bucket] += sign
-    return vec
+    return tuple(vec)
+
+
+def _embed_text(text: str, tags: List[str] | None = None, dim: int = EMBED_DIM) -> List[float]:
+    tags_key = tuple(str(tag) for tag in (tags or []))
+    return list(_embed_text_cached(str(text or ""), tags_key, int(dim)))
+
+
+def embed_cache_stats() -> Dict[str, int]:
+    info = _embed_text_cached.cache_info()
+    return {
+        "hits": int(info.hits),
+        "misses": int(info.misses),
+        "maxsize": int(info.maxsize or 0),
+        "currsize": int(info.currsize),
+        "computed": int(_EMBED_COMPUTE_COUNT),
+    }
+
+
+def clear_embed_cache() -> None:
+    global _EMBED_COMPUTE_COUNT
+    _EMBED_COMPUTE_COUNT = 0
+    _embed_text_cached.cache_clear()
 
 
 def _trail_valence_enabled() -> bool:

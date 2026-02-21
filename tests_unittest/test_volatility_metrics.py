@@ -1,10 +1,13 @@
 import math
 import unittest
 
-from core_infra.volatility_metrics import compute_atr, compute_rolling_vol, compute_volatility
+from core_infra.volatility_metrics import cache_stats, clear_cache, compute_atr, compute_rolling_vol, compute_volatility
 
 
 class TestVolatilityMetrics(unittest.TestCase):
+    def setUp(self):
+        clear_cache()
+
     def test_atr_insufficient(self):
         out = compute_atr([], period=3)
         self.assertIsNone(out["atr"])
@@ -36,6 +39,14 @@ class TestVolatilityMetrics(unittest.TestCase):
         out = compute_volatility(prices=prices, params={"vol_window": 3})
         self.assertIsNone(out["atr"])
         self.assertIsNotNone(out["rolling_vol"])
+
+    def test_cache_hits_for_repeated_inputs(self):
+        prices = [100, 101, 102, 103, 104, 105]
+        _ = compute_rolling_vol(prices, window=3)
+        before = cache_stats()["rolling"]["hits"]
+        _ = compute_rolling_vol(prices, window=3)
+        after = cache_stats()["rolling"]["hits"]
+        self.assertGreater(after, before)
 
 
 if __name__ == "__main__":

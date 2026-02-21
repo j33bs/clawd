@@ -1,4 +1,5 @@
 from __future__ import annotations
+from functools import lru_cache
 import math
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -31,9 +32,17 @@ def _extract_ohlc(candle: Dict[str, Any]) -> Optional[Tuple[float, float, float,
     return o, h, l, cl
 
 
-def compute_atr(candles: List[Dict[str, Any]], period: int = 14) -> Dict[str, Any]:
+def _normalize_prices(prices: List[float]) -> Tuple[float, ...]:
+    return tuple(float(x) for x in prices if x is not None and float(x) > 0)
+
+
+def _normalize_ohlc(candles: List[Dict[str, Any]]) -> Tuple[Tuple[float, float, float, float], ...]:
+    return tuple(x for x in (_extract_ohlc(c) for c in candles) if x is not None)
+
+
+@lru_cache(maxsize=256)
+def _compute_atr_cached(ohlc: Tuple[Tuple[float, float, float, float], ...], period: int) -> Dict[str, Any]:
     period = max(1, int(period))
-    ohlc = [x for x in (_extract_ohlc(c) for c in candles) if x is not None]
     if len(ohlc) < period + 1:
         return {"atr": None, "atr_pct": None, "n": len(ohlc), "period_used": period}
 
@@ -51,22 +60,31 @@ def compute_atr(candles: List[Dict[str, Any]], period: int = 14) -> Dict[str, An
     return {"atr": atr, "atr_pct": atr_pct, "n": len(ohlc), "period_used": period}
 
 
-def compute_rolling_vol(prices: List[float], window: int = 30) -> Dict[str, Any]:
+@lru_cache(maxsize=512)
+def _compute_rolling_vol_cached(prices: Tuple[float, ...], window: int) -> Dict[str, Any]:
     window = max(2, int(window))
-    p = [float(x) for x in prices if x is not None and float(x) > 0]
-    if len(p) < window + 1:
-        return {"rolling_vol": None, "rolling_vol_pct": None, "n": len(p), "window_used": window}
+    if len(prices) < window + 1:
+        return {"rolling_vol": None, "rolling_vol_pct": None, "n": len(prices), "window_used": window}
 
-    # log returns
     rets: List[float] = []
-    for i in range(1, len(p)):
-        rets.append(math.log(p[i] / p[i - 1]))
+    for i in range(1, len(prices)):
+        rets.append(math.log(prices[i] / prices[i - 1]))
 
     w = rets[-window:]
     mean = sum(w) / len(w)
     var = sum((r - mean) ** 2 for r in w) / len(w)
     vol = math.sqrt(var)
-    return {"rolling_vol": vol, "rolling_vol_pct": vol * 100.0, "n": len(p), "window_used": window}
+    return {"rolling_vol": vol, "rolling_vol_pct": vol * 100.0, "n": len(prices), "window_used": window}
+
+
+def compute_atr(candles: List[Dict[str, Any]], period: int = 14) -> Dict[str, Any]:
+    normalized = _normalize_ohlc(candles)
+    return dict(_compute_atr_cached(normalized, max(1, int(period))))
+
+
+def compute_rolling_vol(prices: List[float], window: int = 30) -> Dict[str, Any]:
+    normalized = _normalize_prices(prices)
+    return dict(_compute_rolling_vol_cached(normalized, max(2, int(window))))
 
 
 def compute_volatility(
@@ -109,3 +127,22 @@ def compute_volatility(
         "window_used": vol_out.get("window_used"),
         "period_used": atr_out.get("period_used"),
     }
+
+
+def cache_stats() -> Dict[str, Dict[str, int]]:
+    atr_info = _compute_atr_cached.cache_info()
+    rolling_info = _compute_rolling_vol_cached.cache_info()
+    return {
+        "atr": {"hits": atr_info.hits, "misses": atr_info.misses, "maxsize": atr_info.maxsize, "currsize": atr_info.currsize},
+        "rolling": {
+            "hits": rolling_info.hits,
+            "misses": rolling_info.misses,
+            "maxsize": rolling_info.maxsize,
+            "currsize": rolling_info.currsize,
+        },
+    }
+
+
+def clear_cache() -> None:
+    _compute_atr_cached.cache_clear()
+    _compute_rolling_vol_cached.cache_clear()
