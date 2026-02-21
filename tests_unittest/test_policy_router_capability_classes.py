@@ -10,7 +10,7 @@ import sys
 if str(REPO_ROOT / "workspace" / "scripts") not in sys.path:
     sys.path.insert(0, str(REPO_ROOT / "workspace" / "scripts"))
 
-from policy_router import PolicyRouter
+from policy_router import PolicyRouter, classify_intent
 
 
 class TestPolicyRouterCapabilityClasses(unittest.TestCase):
@@ -105,6 +105,22 @@ class TestPolicyRouterCapabilityClasses(unittest.TestCase):
             self.assertEqual(detail.get("request_id"), "req-test-1")
             self.assertIn("latency_ms", detail)
             self.assertEqual(detail.get("outcome_class"), "success")
+
+    def test_classifier_negative_guards_prevent_overcapture(self):
+        self.assertEqual(classify_intent("Explain the error code tg-mlwxbc23-00a"), "planning_synthesis")
+        self.assertEqual(classify_intent("Discuss the code of ethics for agents"), "planning_synthesis")
+        self.assertEqual(classify_intent("What is the patch schedule for security?"), "planning_synthesis")
+
+    def test_classifier_mechanical_examples(self):
+        self.assertEqual(classify_intent("Write code to parse jsonl"), "mechanical_execution")
+        self.assertEqual(classify_intent("Apply this patch to the repo"), "mechanical_execution")
+        self.assertEqual(classify_intent("Explain this code and apply the patch"), "mechanical_execution")
+
+    def test_explain_and_apply_patch_routes_to_mechanical_provider(self):
+        with tempfile.TemporaryDirectory() as td:
+            router = self._build_router(Path(td))
+            sel = router.select_model("conversation", {"input_text": "Explain this code and apply the patch"})
+            self.assertEqual(sel["provider"], "local_vllm_assistant", sel)
 
 
 if __name__ == "__main__":

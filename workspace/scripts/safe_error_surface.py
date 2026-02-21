@@ -73,7 +73,7 @@ def create_safe_error_envelope(
 ) -> dict[str, Any]:
     summary = str(debug_summary or "").strip().lower()
     return {
-        "public_message": str(public_message),
+        "public_message": _redact_text(public_message),
         "error_code": str(error_code),
         "request_id": str(request_id or next_request_id("err")),
         "occurred_at": occurred_at or time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),

@@ -55,7 +55,7 @@ function createSafeErrorEnvelope({
 } = {}) {
   const normalizedDebug = String(debugSummary || '').trim().toLowerCase();
   return {
-    public_message: String(publicMessage),
+    public_message: _redactString(publicMessage),
     error_code: String(errorCode),
     request_id: requestId ? String(requestId) : nextRequestId('err'),
     occurred_at: occurredAt || new Date().toISOString(),

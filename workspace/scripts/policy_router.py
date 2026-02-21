@@ -686,6 +686,80 @@ def _count_file_paths(text):
     return len(set(re.findall(pattern, text)))
 
 
+_INTENT_ACTION_WORD = re.compile(
+    r"\b(write|apply|run|execute|edit|modify|update|add|remove|refactor|rewrite|fix|debug|test|lint|format|implement)\b",
+    re.IGNORECASE,
+)
+_INTENT_MECHANICAL_STRONG = [
+    re.compile(r"\b(write\s+code|apply\s+(this\s+)?patch)\b", re.IGNORECASE),
+    re.compile(r"\b(run|execute)\s+(the\s+)?(tests?|test suite|ci|pipeline)\b", re.IGNORECASE),
+    re.compile(r"\b(implement)\s+(this\s+)?(feature|function|method|module|class|api|endpoint)\b", re.IGNORECASE),
+    re.compile(r"\b(refactor|rename|fix|debug)\b.*\b(function|class|method|module|file|repo|tests?)\b", re.IGNORECASE),
+    re.compile(r"\b(pytest|npm\s+test|pnpm\s+test|go\s+test|cargo\s+test|python\s+-m\s+unittest|git\s+diff|git\s+status|rg\s+-n|sed\s+-n)\b", re.IGNORECASE),
+]
+_INTENT_WORK_NOUN = (
+    r"(code|function|method|class|module|file|repo(?:sitory)?|feature|bug|issue|tests?|pipeline|ci|script|diff|patch|log(?:\s+file)?)"
+)
+_INTENT_CONTEXTUAL_MECHANICAL = [
+    re.compile(
+        rf"\b(write|apply|run|execute|edit|modify|update|add|remove|refactor|rewrite|fix|debug|test|lint|format|implement)\b(?:\W+\w+){{0,6}}\W+\b{_INTENT_WORK_NOUN}\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        rf"\b{_INTENT_WORK_NOUN}\b(?:\W+\w+){{0,6}}\W+\b(write|apply|run|execute|edit|modify|update|add|remove|refactor|rewrite|fix|debug|test|lint|format|implement)\b",
+        re.IGNORECASE,
+    ),
+]
+_INTENT_NEGATIVE_GUARDS = [
+    re.compile(r"\bcode of ethics\b", re.IGNORECASE),
+    re.compile(r"\berror code\b", re.IGNORECASE),
+    re.compile(r"\bzip code\b", re.IGNORECASE),
+    re.compile(r"\bpostal code\b", re.IGNORECASE),
+    re.compile(r"\bpatch schedule\b", re.IGNORECASE),
+    re.compile(r"\bpatch notes\b", re.IGNORECASE),
+    re.compile(r"\b(what is|what's|explain|discuss|describe|define)\b.*\b(code|patch|implementation)\b", re.IGNORECASE),
+]
+_INTENT_PLANNING_CUES = [
+    re.compile(r"\b(plan|planning|design|architecture|roadmap|strategy|proposal|brainstorm|trade[- ]?offs?|synthesis)\b", re.IGNORECASE),
+    re.compile(r"\b(explain|discuss|describe|summari[sz]e|compare|evaluate|reason|why|what is|how does)\b", re.IGNORECASE),
+]
+
+
+def classify_intent(text: str) -> str:
+    """Ordered classifier: negative guards, strong mechanical, contextual mechanical, planning cues, then planning."""
+    normalized = re.sub(r"\s+", " ", str(text or "")).strip()
+    if not normalized:
+        return "planning_synthesis"
+
+    has_action_word = _INTENT_ACTION_WORD.search(normalized) is not None
+
+    if any(rx.search(normalized) for rx in _INTENT_NEGATIVE_GUARDS) and not has_action_word:
+        return "planning_synthesis"
+
+    if any(rx.search(normalized) for rx in _INTENT_MECHANICAL_STRONG):
+        return "mechanical_execution"
+
+    if any(rx.search(normalized) for rx in _INTENT_CONTEXTUAL_MECHANICAL):
+        return "mechanical_execution"
+
+    if any(rx.search(normalized) for rx in _INTENT_PLANNING_CUES):
+        return "planning_synthesis"
+
+    return "planning_synthesis"
+
+
+def _has_strong_planning_signal(text: str) -> bool:
+    normalized = re.sub(r"\s+", " ", str(text or "")).strip()
+    if not normalized:
+        return False
+    if any(rx.search(normalized) for rx in _INTENT_PLANNING_CUES):
+        return True
+    has_action_word = _INTENT_ACTION_WORD.search(normalized) is not None
+    if any(rx.search(normalized) for rx in _INTENT_NEGATIVE_GUARDS) and not has_action_word:
+        return True
+    return False
+
+
 def build_chat_payload(prompt, temperature=0.0, max_tokens=256):
     return {
         "messages": [{"role": "user", "content": prompt}],
@@ -948,60 +1022,7 @@ class PolicyRouter:
         text = "\n".join(
             t for t in [str(context_metadata.get("input_text", "")), str(payload_text or "")] if t
         )
-        lower = text.lower()
-
-        planning_keywords = [
-            "plan",
-            "design",
-            "architecture",
-            "evaluate options",
-            "trade-off",
-            "tradeoffs",
-            "synthesis",
-            "uncertainty",
-            "hypothesis",
-            "reason about",
-        ]
-        mechanical_keywords = [
-            "write code",
-            "code",
-            "implement",
-            "run test",
-            "run tests",
-            "pytest",
-            "unittest",
-            "grep",
-            "ripgrep",
-            "sed",
-            "apply patch",
-            "patch",
-            "diff",
-            "refactor",
-            "rename",
-            "format",
-            "lint",
-            "execute",
-            "command",
-            "fix failing",
-            "repo",
-            "file",
-            "line",
-        ]
-
-        has_planning = any(keyword in lower for keyword in planning_keywords)
-        has_mechanical = any(keyword in lower for keyword in mechanical_keywords)
-        bullets = _count_bullets(text)
-        file_paths = _count_file_paths(text)
-
-        if has_planning and not has_mechanical:
-            return "planning_synthesis"
-        if has_mechanical and not has_planning:
-            return "mechanical_execution"
-        if has_mechanical and has_planning:
-            return "hybrid"
-        if file_paths >= 2 or bullets >= 3:
-            return "mechanical_execution"
-        return "general_conversation"
+        return classify_intent(text)
 
     def _capability_decision(self, context_metadata, payload_text=""):
         cfg = self._capability_cfg()
@@ -1039,7 +1060,7 @@ class PolicyRouter:
                 }
 
         capability_class = self._capability_class(context_metadata, payload_text)
-        if capability_class in {"mechanical_execution", "hybrid"}:
+        if capability_class == "mechanical_execution":
             provider = cfg.get("mechanicalProvider") or cfg.get("codeProvider") or cfg.get("subagentProvider")
             if provider:
                 return {
@@ -1051,6 +1072,8 @@ class PolicyRouter:
                 }
 
         if capability_class == "planning_synthesis":
+            if not _has_strong_planning_signal(text):
+                return None
             provider = cfg.get("planningProvider") or cfg.get("reasoningProvider")
             if provider:
                 return {

@@ -347,3 +347,82 @@ A  workspace/scripts/safe_error_surface.py
  workspace/scripts/safe_error_surface.py            | 111 ++++++
  7 files changed, 987 insertions(+), 135 deletions(-)
 ```
+
+
+## Phase 5B Correction Pass (2026-02-21T23:54:03Z)
+
+- Detected post-commit mismatch: redaction/classifier edits were not present in committed files.
+- Applied corrective minimal diffs and re-verified all targeted tests.
+
+### Correction Backups
+
+- workspace/scripts/safe_error_surface.py.bak.20260221T235149Z
+- workspace/scripts/safe_error_surface.js.bak.20260221T235149Z
+- workspace/scripts/policy_router.py.bak.20260221T235149Z
+- tests/safe_error_surface.test.js.bak.20260221T235149Z
+- tests_unittest/test_policy_router_capability_classes.py.bak.20260221T235149Z
+- tests_unittest/test_safe_error_surface.py.bak.20260221T235149Z
+- workspace/audit/dali_safe_surface_intent_gates_20260221T234003Z.md.bak.20260221T235149Z
+
+### Corrected Line Evidence
+
+```text
+workspace/scripts/safe_error_surface.py:76 -> "public_message": _redact_text(public_message)
+workspace/scripts/safe_error_surface.js:58 -> public_message: _redactString(publicMessage)
+workspace/scripts/policy_router.py:821 -> def classify_intent(text: str) -> str
+workspace/scripts/policy_router.py:829 -> negative guard applies only when no action word
+workspace/scripts/policy_router.py:1182 -> if capability_class == "mechanical_execution"
+workspace/scripts/policy_router.py:1194 -> if not _has_strong_planning_signal(text): return None
+tests/safe_error_surface.test.js:44 -> malicious publicMessage redaction test
+tests_unittest/test_policy_router_capability_classes.py:109 -> planning guard tests
+tests_unittest/test_policy_router_capability_classes.py:114 -> mechanical examples
+tests_unittest/test_policy_router_capability_classes.py:119 -> explain+apply patch mechanical routing
+```
+
+### Correction Verification Outputs
+
+```bash
+node tests/safe_error_surface.test.js
+```
+```text
+PASS redact hides bearer/api keys/cookies
+PASS safe envelope keeps stable public surface
+PASS safe envelope redacts malicious public message text
+PASS adapter error text excludes internal log hints
+```
+
+```bash
+python3 -m unittest tests_unittest.test_policy_router_capability_classes -v
+```
+```text
+test_classifier_mechanical_examples (tests_unittest.test_policy_router_capability_classes.TestPolicyRouterCapabilityClasses.test_classifier_mechanical_examples) ... ok
+test_classifier_negative_guards_prevent_overcapture (tests_unittest.test_policy_router_capability_classes.TestPolicyRouterCapabilityClasses.test_classifier_negative_guards_prevent_overcapture) ... ok
+test_explain_and_apply_patch_routes_to_mechanical_provider (tests_unittest.test_policy_router_capability_classes.TestPolicyRouterCapabilityClasses.test_explain_and_apply_patch_routes_to_mechanical_provider) ... ok
+test_mechanical_execution_prefers_local_vllm (tests_unittest.test_policy_router_capability_classes.TestPolicyRouterCapabilityClasses.test_mechanical_execution_prefers_local_vllm) ... ok
+test_planning_synthesis_prefers_cloud (tests_unittest.test_policy_router_capability_classes.TestPolicyRouterCapabilityClasses.test_planning_synthesis_prefers_cloud) ... ok
+test_router_logs_request_id_latency_outcome (tests_unittest.test_policy_router_capability_classes.TestPolicyRouterCapabilityClasses.test_router_logs_request_id_latency_outcome) ... ok
+
+----------------------------------------------------------------------
+Ran 6 tests in 0.003s
+
+OK
+```
+
+```bash
+python3 -m unittest tests_unittest.test_safe_error_surface -v
+```
+```text
+test_envelope_redacts_malicious_public_message (tests_unittest.test_safe_error_surface.TestSafeErrorSurface.test_envelope_redacts_malicious_public_message) ... ok
+
+----------------------------------------------------------------------
+Ran 1 test in 0.000s
+
+OK
+```
+
+```bash
+bash workspace/scripts/verify_policy_router.sh
+```
+```text
+ok
+```

@@ -41,6 +41,16 @@ run('safe envelope keeps stable public surface', () => {
   assert.equal(payload.request_id, 'req-123');
 });
 
+run('safe envelope redacts malicious public message text', () => {
+  const envelope = createSafeErrorEnvelope({
+    publicMessage: 'Authorization: Bearer sk-abc123secret',
+    errorCode: 'tg-timeout',
+    requestId: 'req-raw'
+  });
+  assert.equal(envelope.public_message.includes('sk-abc123secret'), false);
+  assert.equal(envelope.public_message.includes('<redacted>') || envelope.public_message.includes('<redacted-token>'), true);
+});
+
 run('adapter error text excludes internal log hints', () => {
   const built = buildAdapterSafeError({
     requestId: 'req-222',
