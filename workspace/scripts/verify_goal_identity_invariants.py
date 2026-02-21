@@ -66,6 +66,21 @@ def run_heartbeat_sync_guard(repo: Path) -> None:
         die(f"heartbeat sync guard failed: {guard}\n{details}")
 
 
+def sync_repo_root_governance_mirrors(repo: Path) -> None:
+    """
+    Keep repo-root governance mirrors byte-identical with canonical
+    workspace/governance copies when both files exist.
+    """
+    for name in REPO_ROOT_GOV_FILES_MUST_MATCH_CANONICAL:
+        root_path = repo / name
+        canonical_path = repo / "workspace" / "governance" / name
+        if not root_path.exists() or not canonical_path.exists():
+            continue
+        if root_path.read_bytes() == canonical_path.read_bytes():
+            continue
+        root_path.write_bytes(canonical_path.read_bytes())
+
+
 def read_json(path: Path):
     try:
         return json.loads(path.read_text(encoding="utf-8"))
@@ -159,6 +174,7 @@ def main() -> int:
 
     # Keep repo-root HEARTBEAT mirror in sync before byte-identity checks.
     run_heartbeat_sync_guard(repo)
+    sync_repo_root_governance_mirrors(repo)
 
     # Repo-root bootstrap must not exist on disk (tracked or untracked).
     for name in REPO_ROOT_GOV_FILES_FORBIDDEN:
