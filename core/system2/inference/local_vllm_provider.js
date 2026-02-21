@@ -67,6 +67,33 @@ function includesToolCallUnsupportedHint(text) {
     );
 }
 
+async function forwardGeneratedStream(stream, sink) {
+  const target = sink || process.stdout;
+  const donePayload = { usage: null, model: null, finishReason: null };
+  for await (const chunk of stream) {
+    if (!chunk || typeof chunk !== 'object') continue;
+    if (chunk.type === 'delta') {
+      if (target && typeof target.send === 'function') {
+        target.send({ type: 'delta', text: chunk.text || '' });
+      } else if (target && typeof target.write === 'function') {
+        target.write(chunk.text || '');
+      }
+      continue;
+    }
+    if (chunk.type === 'done') {
+      donePayload.usage = chunk.usage || null;
+      donePayload.model = chunk.model || null;
+      donePayload.finishReason = chunk.finishReason || null;
+      if (target && typeof target.send === 'function') {
+        target.send({ type: 'done', ...donePayload });
+      }
+    }
+  }
+  if (target && typeof target.end === 'function') target.end();
+  if (target && typeof target.close === 'function') target.close();
+  return donePayload;
+}
+
 // ---------------------------------------------------------------------------
 // Provider class
 // ---------------------------------------------------------------------------
@@ -267,6 +294,10 @@ class LocalVllmProvider {
     yield* this._streamRequest(`${this.baseUrl}/chat/completions`, payload);
   }
 
+  async generateChatStreamProxy({ messages = [], options = {}, sink = null }) {
+    return forwardGeneratedStream(this.generateStream({ messages, options }), sink);
+  }
+
   // -------------------------------------------------------------------------
   // Unified call() interface (non-streaming)
   // -------------------------------------------------------------------------
@@ -453,4 +484,4 @@ class LocalVllmProvider {
   }
 }
 
-module.exports = { LocalVllmProvider, normalizeBaseUrl };
+module.exports = { LocalVllmProvider, normalizeBaseUrl, forwardGeneratedStream };

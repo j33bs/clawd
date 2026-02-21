@@ -3,7 +3,7 @@
 
 const assert = require('node:assert');
 
-const { LocalVllmProvider, normalizeBaseUrl } = require('../../core/system2/inference/local_vllm_provider');
+const { LocalVllmProvider, normalizeBaseUrl, forwardGeneratedStream } = require('../../core/system2/inference/local_vllm_provider');
 
 const tests = [];
 function test(name, fn) {
@@ -136,6 +136,27 @@ test('normalizeBaseUrl appends /v1 only when missing', function () {
   assert.strictEqual(normalizeBaseUrl('http://localhost:18888/v1'), 'http://localhost:18888/v1');
   assert.strictEqual(normalizeBaseUrl('http://localhost:18888/'), 'http://localhost:18888/v1');
   assert.strictEqual(normalizeBaseUrl('http://localhost:18888/v1/'), 'http://localhost:18888/v1');
+});
+
+test('forwardGeneratedStream forwards ordered deltas and done payload', async function () {
+  async function* fakeStream() {
+    yield { type: 'delta', text: 'hel' };
+    yield { type: 'delta', text: 'lo' };
+    yield { type: 'done', usage: { total_tokens: 2 }, model: 'local-assistant', finishReason: 'stop' };
+  }
+  const sent = [];
+  const sink = {
+    send(payload) { sent.push(payload); },
+    close() { sent.push({ type: 'closed' }); }
+  };
+
+  const done = await forwardGeneratedStream(fakeStream(), sink);
+  assert.deepStrictEqual(sent[0], { type: 'delta', text: 'hel' });
+  assert.deepStrictEqual(sent[1], { type: 'delta', text: 'lo' });
+  assert.strictEqual(sent[2].type, 'done');
+  assert.strictEqual(sent[2].model, 'local-assistant');
+  assert.strictEqual(sent[3].type, 'closed');
+  assert.strictEqual(done.model, 'local-assistant');
 });
 
 async function run() {

@@ -83,7 +83,7 @@ class TestPolicyRouterTactiMainFlow(unittest.TestCase):
             self.assertIsInstance(result.get("tacti"), dict)
             self.assertTrue(result["tacti"].get("enabled"))
             self.assertTrue(result["tacti"].get("agent_ids"))
-            self.assertIn("google-gemini-cli", result["tacti"].get("agent_ids", []))
+            self.assertIn(result.get("provider"), result["tacti"].get("agent_ids", []))
 
             events_payload = []
             if events.exists():

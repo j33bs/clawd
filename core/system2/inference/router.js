@@ -12,6 +12,14 @@
  */
 
 const { CATALOG } = require('./catalog');
+let GpuGuard = class {
+  shouldDeflect() { return false; }
+};
+try {
+  ({ GpuGuard } = require('./gpu_guard'));
+} catch (_err) {
+  // optional integration: fail open when gpu_guard is unavailable
+}
 
 const TIER = Object.freeze({
   LOW: 'low',
@@ -89,9 +97,17 @@ function routeRequest(params) {
   const explanation = [];
   const scored = [];
   const available = Array.isArray(availableProviderIds) ? new Set(availableProviderIds) : null;
+  const gpuGuard = params.gpuGuard || new GpuGuard();
+  const deflectLocalVllm = gpuGuard.shouldDeflect();
+  if (deflectLocalVllm) {
+    explanation.push('local_vllm: skipped (gpu_guard_deflect)');
+  }
 
   for (const provider of CATALOG) {
     const pid = provider.provider_id;
+    if (deflectLocalVllm && pid === 'local_vllm') {
+      continue;
+    }
 
     // Operator policy: OpenAI/Codex API automation is disabled for now.
     if (pid.startsWith('openai')) {

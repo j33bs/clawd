@@ -29,13 +29,24 @@ Message Schema (normalized):
 
 import os
 import json
+import time
 import logging
+import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any, Optional, Set
 from dataclasses import dataclass, asdict
 
 from .allowlist import is_chat_allowed, log_allowlist_on_startup
+from workspace.itc.ingest.interfaces import FileDropAdapter, RawPayload, persist_artifacts, validate_signal
+
+SCRIPTS_DIR = Path(__file__).resolve().parents[1] / "scripts"
+if str(SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPTS_DIR))
+try:
+    from policy_router import PolicyRouter
+except Exception:  # pragma: no cover - optional runtime integration
+    PolicyRouter = None
 
 logger = logging.getLogger(__name__)
 
@@ -216,15 +227,52 @@ def _forward_to_pipeline(message: IngestedMessage):
     - Apply authority weights
     - Store in digest format
     """
-    # For now, write to a processing queue file
-    output_path = DEDUPE_STATE_PATH.parent / "itc_incoming_queue.jsonl"
+    if PolicyRouter is None:
+        logger.error("Forward drop: policy router unavailable")
+        return
+    router = PolicyRouter()
+    prompt = (
+        "Classify this ITC message and return only JSON matching itc_signal schema.\n"
+        f"message={json.dumps(message.to_dict(), ensure_ascii=False)}"
+    )
+    result = router.execute_with_escalation(
+        "itc_classify",
+        {"prompt": prompt},
+        context_metadata={
+            "input_text": message.text,
+            "source": message.source,
+            "chat_id": message.chat_id,
+            "message_id": message.message_id,
+        },
+    )
+    if not result.get("ok"):
+        logger.error("Forward drop: router failed reason=%s", result.get("reason_code"))
+        return
 
+    text_out = result.get("text", "")
     try:
-        with open(output_path, "a") as f:
-            f.write(json.dumps(message.to_dict()) + "\n")
-        logger.debug(f"Queued message to {output_path}")
-    except Exception as e:
-        logger.error(f"Failed to queue message: {e}")
+        signal = json.loads(text_out) if isinstance(text_out, str) else text_out
+    except Exception:
+        logger.error("Forward drop: router returned non-JSON payload")
+        return
+
+    ok, reason = validate_signal(signal if isinstance(signal, dict) else {})
+    if not ok:
+        logger.error("Forward drop: signal validation failed reason=%s", reason)
+        return
+
+    raw = RawPayload(
+        content=json.dumps(message.to_dict(), ensure_ascii=False).encode("utf-8"),
+        extension="json",
+        metadata={"source": "itc_pipeline.ingestion_boundary"},
+    )
+    run_id = f"itc_ingest_{int(time.time())}"
+    adapter = FileDropAdapter()
+    if hasattr(adapter, "persist_artifacts") and callable(getattr(adapter, "persist_artifacts")):
+        adapter.persist_artifacts(raw, signal, run_id)  # pragma: no cover - optional adapter API
+    else:
+        persist_artifacts(raw, signal, run_id)
+    logger.debug("Persisted normalized ITC signal via ingestion boundary")
 
 
 def initialize_ingestion():

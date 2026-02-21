@@ -30,6 +30,15 @@ except ModuleNotFoundError:
         enforce_tool_payload_invariant,
         resolve_tool_call_capability,
     )
+try:
+    from vllm_metrics_sink import read_metrics_artifact
+except Exception:  # pragma: no cover - optional integration
+    read_metrics_artifact = None
+
+try:
+    from itc.api import get_itc_signal
+except Exception:  # pragma: no cover - optional integration
+    get_itc_signal = None
 
 POLICY_ROUTER_FINAL_DISPATCH_TAG = "policy_router.final_dispatch"
 
@@ -57,6 +66,9 @@ ACTIVE_INFERENCE_STATE_PATH = BASE_DIR / "workspace" / "state" / "active_inferen
 TACTI_ROOT = BASE_DIR / "workspace"
 if str(TACTI_ROOT) not in sys.path:
     sys.path.insert(0, str(TACTI_ROOT))
+HIVEMIND_ROOT = TACTI_ROOT / "hivemind"
+if str(HIVEMIND_ROOT) not in sys.path:
+    sys.path.insert(0, str(HIVEMIND_ROOT))
 
 try:
     from tacti_cr.arousal_oscillator import ArousalOscillator
@@ -72,6 +84,16 @@ except Exception:  # pragma: no cover - optional integration
     collapse_emit_recommendation = None
     tacti_routing_bias = None
     tacti_emit = None
+
+try:
+    from hivemind.integrations.main_flow_hook import tacti_enhance_plan as _tacti_main_flow_enhance_plan
+except Exception:  # pragma: no cover - optional integration
+    _tacti_main_flow_enhance_plan = None
+
+try:
+    from hivemind.reservoir import Reservoir
+except Exception:  # pragma: no cover - optional integration
+    Reservoir = None
 
 DEFAULT_POLICY = {
     "version": 2,
@@ -239,6 +261,8 @@ PROVIDER_ID_ALIASES = {
 PROVIDER_ID_TO_POLICY_PROVIDER = {
     "qwen_alibaba": "qwen",
 }
+
+_RESERVOIR_ROUTER = None
 
 
 class PolicyValidationError(Exception):
@@ -440,7 +464,89 @@ def tacti_enhance_plan(plan, *, context_metadata=None, intent=None):
     plan_dict["agent_ids"] = [str(a) for a in agent_ids if str(a).strip()]
     if intent and "intent" not in plan_dict:
         plan_dict["intent"] = intent
+    if callable(_tacti_main_flow_enhance_plan):
+        candidates = list(plan_dict.get("agent_ids") or [])
+        if not candidates and plan_dict.get("provider"):
+            candidates = [str(plan_dict.get("provider"))]
+        if candidates:
+            context = dict(context_metadata or {})
+            context.setdefault("intent", intent or context.get("intent") or "routing")
+            context.setdefault("source_agent", "router")
+            try:
+                reordered, annotations = _tacti_main_flow_enhance_plan(
+                    context=context,
+                    candidates=candidates,
+                    policy=DEFAULT_POLICY,
+                )
+                if reordered:
+                    reordered_items = [str(item) for item in reordered]
+                    plan_dict["agent_ids"] = reordered_items + [
+                        item for item in candidates if item not in reordered_items
+                    ]
+                if isinstance(annotations, dict):
+                    plan_dict["annotations"] = annotations
+            except Exception:
+                pass
     return plan_dict
+
+
+def _reorder_move_front(items, preferred):
+    preferred = [item for item in preferred if item in items]
+    if not preferred:
+        return list(items)
+    seen = set(preferred)
+    return preferred + [item for item in items if item not in seen]
+
+
+def _safe_float_metric(value):
+    try:
+        return float(value)
+    except Exception:
+        return 0.0
+
+
+def _is_cloud_provider_name(name):
+    lowered = str(name or "").lower()
+    return not (lowered.startswith("local_vllm") or lowered.startswith("ollama"))
+
+
+def _reservoir_readout():
+    global _RESERVOIR_ROUTER
+    if Reservoir is None:
+        return None
+    if _RESERVOIR_ROUTER is None:
+        _RESERVOIR_ROUTER = Reservoir.init(dim=16, leak=0.35, spectral_scale=0.8, seed=11)
+    try:
+        return _RESERVOIR_ROUTER.readout()
+    except Exception:
+        return None
+
+
+def _apply_metrics_gates(order, max_tokens_req):
+    if not callable(read_metrics_artifact):
+        return list(order), max_tokens_req, {}
+    try:
+        metrics = read_metrics_artifact()
+    except Exception:
+        return list(order), max_tokens_req, {}
+    if not isinstance(metrics, dict):
+        return list(order), max_tokens_req, {}
+
+    routing = metrics.get("routing")
+    if not isinstance(routing, dict):
+        return list(order), max_tokens_req, {}
+
+    adjusted = list(order)
+    details = {}
+    queue_depth = int(routing.get("queue_depth") or 0)
+    if queue_depth >= 4:
+        adjusted = [name for name in adjusted if name != "local_vllm_assistant"]
+        details["queue_depth"] = queue_depth
+    kv_cache_usage = _safe_float_metric(routing.get("kv_cache_usage_pct"))
+    if max_tokens_req > 0 and kv_cache_usage >= 85.0:
+        max_tokens_req = max(64, max_tokens_req // 2)
+        details["kv_cache_usage_pct"] = kv_cache_usage
+    return adjusted, max_tokens_req, details
 
 
 def _load_active_inference_state(path):
@@ -1243,6 +1349,69 @@ class PolicyRouter:
         tacti_controls = self._tacti_runtime_controls(intent, intent_cfg, runtime_context)
         payload_text = _extract_text_from_payload(payload)
         order, decision = self._ordered_providers(intent_cfg, runtime_context, payload_text)
+        max_tokens_req = int(
+            intent_cfg.get(
+                "maxTokensPerRequest",
+                self.policy.get("defaults", {}).get("maxTokensPerRequest", 0),
+            )
+        )
+        order, max_tokens_req, metrics_gate = _apply_metrics_gates(order, max_tokens_req)
+        if metrics_gate:
+            log_event(
+                "router_metrics_gate_applied",
+                {"intent": intent, "details": metrics_gate},
+                self.event_log,
+            )
+        reservoir_hints = _reservoir_readout()
+        if isinstance(reservoir_hints, dict):
+            hints = reservoir_hints.get("routing_hints", {})
+            urgency = _safe_float_metric((hints or {}).get("urgency"))
+            risk_off = _safe_float_metric((hints or {}).get("risk_off"))
+            if urgency > 0.7 and "local_vllm_assistant" in order:
+                order = _reorder_move_front(order, ["local_vllm_assistant"])
+            if risk_off > 0.7:
+                cloud = [name for name in order if _is_cloud_provider_name(name)]
+                order = _reorder_move_front(order, cloud)
+        if intent == "itc_classify" and callable(get_itc_signal):
+            try:
+                now_utc = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+                itc = get_itc_signal(now_utc, lookback="8h")
+                signal = itc.get("signal") if isinstance(itc, dict) else None
+                metrics = signal.get("metrics", {}) if isinstance(signal, dict) else {}
+                risk_on = _safe_float_metric(metrics.get("risk_on"))
+                risk_off = _safe_float_metric(metrics.get("risk_off"))
+                if risk_on > 0.6 and "local_vllm_assistant" in order:
+                    order = _reorder_move_front(order, ["local_vllm_assistant"])
+                if risk_off > 0.7:
+                    cloud = [name for name in order if _is_cloud_provider_name(name)]
+                    order = _reorder_move_front(order, cloud)
+            except Exception:
+                pass
+        if callable(_tacti_main_flow_enhance_plan):
+            try:
+                tacti_context = dict(runtime_context)
+                tacti_context.setdefault("intent", intent)
+                tacti_context.setdefault("source_agent", "router")
+                tacti_order, tacti_annotations = _tacti_main_flow_enhance_plan(
+                    context=tacti_context,
+                    candidates=order,
+                    policy=self.policy,
+                )
+                if isinstance(tacti_order, list) and tacti_order:
+                    order = [str(x) for x in tacti_order if str(x) in order] + [
+                        x for x in order if str(x) not in set(str(i) for i in tacti_order)
+                    ]
+                if isinstance(tacti_annotations, dict):
+                    arousal_factor = _safe_float_metric(tacti_annotations.get("arousal_suppression_factor"))
+                    if 0.0 < arousal_factor < 1.0 and max_tokens_req > 0:
+                        max_tokens_req = max(64, int(max_tokens_req * arousal_factor))
+                    efe = tacti_annotations.get("efe_score")
+                    if isinstance(efe, dict):
+                        efe_map = {str(k): _safe_float_metric(v) for k, v in efe.items()}
+                        if efe_map:
+                            order = sorted(order, key=lambda name: efe_map.get(name, float("-inf")), reverse=True)
+            except Exception:
+                pass
         route_explain = self.explain_route(intent, context_metadata=runtime_context, payload=payload)
         if decision:
             log_event(
@@ -1327,12 +1496,6 @@ class PolicyRouter:
                 payload["messages"] = [{"role": "user", "content": text}]
 
             est_tokens = estimate_tokens(text)
-            max_tokens_req = int(
-                intent_cfg.get(
-                    "maxTokensPerRequest",
-                    self.policy.get("defaults", {}).get("maxTokensPerRequest", 0),
-                )
-            )
             if max_tokens_req and est_tokens > max_tokens_req:
                 last_reason = "request_token_cap_exceeded"
                 log_event(

@@ -1331,3 +1331,145 @@ Operational conclusion:
 - Service crash-loop root cause is fixed.
 - Telegram handler hardening/observability is now in place (timeout + retry + deadletter + correlation logging).
 - Remaining blocker to a live bot reply from this shell context is Telegram API network reachability (`fetch failed`), not silent handler failure.
+
+## Glue Wiring Evidence (2026-02-21)
+
+Branch: `feat/dali-wire-existing-components-20260221T2015Z`
+
+### 1) policy_router + vLLM metrics sink
+Implemented in `workspace/scripts/policy_router.py`:
+- `read_metrics_artifact()` consulted pre-selection.
+- `queue_depth >= 4` prunes `local_vllm_assistant`.
+- `kv_cache_usage_pct >= 85` halves `maxTokensPerRequest` (floor 64).
+- Missing/stale artifact: fail-open.
+
+Proof:
+```bash
+python3 -m unittest tests_unittest.test_policy_router_glue_integrations
+```
+- `test_metrics_gate_prunes_local_and_halves_tokens`: PASS
+
+### 2) ingestion_boundary forward path
+Implemented in `workspace/itc_pipeline/ingestion_boundary.py`:
+- Calls `PolicyRouter.execute_with_escalation("itc_classify", ...)`
+- Parses JSON response
+- Validates via `validate_signal(...)`
+- Persists via `persist_artifacts(...)` (adapter method fallback handled)
+- Validation/router failure logs and drops
+
+Proof:
+```bash
+python3 -m unittest tests_unittest.test_itc_ingestion_boundary_forwarding
+```
+- `persist_artifacts` called on valid router output: PASS
+
+### 3) LocalVllmProvider stream proxy
+Implemented in `core/system2/inference/local_vllm_provider.js`:
+- Added `generateChatStreamProxy(...)`
+- Added `forwardGeneratedStream(...)` helper
+- Forwards `delta` chunks to sink/write
+- Emits/returns done usage and closes sink
+
+Proof:
+```bash
+node tests/providers/local_vllm_provider.test.js
+```
+- `forwardGeneratedStream forwards ordered deltas and done payload`: PASS
+
+### 4) Concurrency tuner -> launch max seqs
+Implemented:
+- Added `scripts/tune_concurrency.js`
+- `scripts/vllm_launch_optimal.sh` now runs tuner, exports `VLLM_MAX_SEQS`, feeds `--max-num-seqs "$MAX_SEQS"`
+- Fail-open to default when tuner fails
+
+Proof:
+```bash
+node scripts/tune_concurrency.js
+bash -n scripts/vllm_launch_optimal.sh
+```
+Observed:
+- tuner output: `16`
+- launch script syntax: OK
+
+### 5) gpu_guard deflection in System2 router
+Implemented in `core/system2/inference/router.js`:
+- Instantiates `GpuGuard`
+- If `shouldDeflect()` true, removes `local_vllm` before scoring
+
+Proof:
+```bash
+node tests/router_gpu_guard.test.js
+```
+- local_vllm removed when guard deflects: PASS
+
+### 6) TACTI main flow hook integration
+Implemented in `workspace/scripts/policy_router.py`:
+- wired `hivemind.integrations.main_flow_hook.tacti_enhance_plan` (fail-open)
+- applies optional `arousal_suppression_factor` to cap request max tokens
+- applies optional `efe_score` map to provider ordering
+
+Proof:
+```bash
+python3 -m unittest tests_unittest.test_policy_router_tacti_main_flow tests_unittest.test_policy_router_glue_integrations
+```
+- existing tacti main flow tests: PASS
+- new arousal cap test: PASS
+
+### 7) Reservoir readout routing hints
+Implemented in `workspace/scripts/policy_router.py`:
+- calls `reservoir.readout()` once/request (lazy singleton)
+- `urgency > 0.7`: move `local_vllm_assistant` to front
+- `risk_off > 0.7`: move cloud providers to front
+
+Proof:
+```bash
+python3 -m unittest tests_unittest.test_policy_router_glue_integrations
+```
+- reservoir urgency ordering test: PASS
+
+### 8) ITC signal sentiment-aware routing
+Implemented in `workspace/scripts/policy_router.py` for `intent == "itc_classify"`:
+- `get_itc_signal(ts_utc, lookback="8h")`
+- `risk_on > 0.6`: prefer local fast provider
+- `risk_off > 0.7`: prefer cloud providers
+- API failure: fail-open
+
+Proof:
+```bash
+python3 -m unittest tests_unittest.test_policy_router_glue_integrations
+```
+- ITC risk-off ordering test: PASS
+
+### 9) Auto prefix warmup after vLLM health
+Implemented in `scripts/vllm_launch_optimal.sh`:
+- waits for `/health` (200)
+- runs `node scripts/vllm_prefix_warmup.js` once/start
+- logs: `[vllm-launch] prefix warmup executed` (or fail-open message)
+
+Proof:
+- script wiring validated by `bash -n scripts/vllm_launch_optimal.sh`
+
+### 10) Source UI SSE endpoint
+Implemented in `workspace/source-ui/app.py`:
+- endpoint `/events`
+- emits `router_tick` from `itc/llm_router_events.jsonl` tail
+- emits `gpu_tick` from `workspace/state/vllm_metrics.json`
+- 1s cadence, no frontend changes
+
+Proof:
+```bash
+python3 -m unittest tests_unittest.test_source_ui_sse
+```
+- receives SSE event payload: PASS
+
+### Combined verification commands
+```bash
+python3 -m py_compile workspace/scripts/policy_router.py workspace/itc_pipeline/ingestion_boundary.py workspace/source-ui/app.py \
+  tests_unittest/test_policy_router_glue_integrations.py tests_unittest/test_itc_ingestion_boundary_forwarding.py tests_unittest/test_source_ui_sse.py
+python3 -m unittest tests_unittest.test_policy_router_tacti_main_flow tests_unittest.test_policy_router_glue_integrations tests_unittest.test_itc_ingestion_boundary_forwarding tests_unittest.test_source_ui_sse
+node tests/providers/local_vllm_provider.test.js
+node tests/router_gpu_guard.test.js
+node scripts/tune_concurrency.js
+bash -n scripts/vllm_launch_optimal.sh
+```
+Observed status: all PASS.
