@@ -411,6 +411,52 @@ test('router: deterministic for same inputs', () => {
   }
 });
 
+test('router: proprioception meta is attached when OPENCLAW_ROUTER_PROPRIOCEPTION=1', () => {
+  const prev = process.env.OPENCLAW_ROUTER_PROPRIOCEPTION;
+  process.env.OPENCLAW_ROUTER_PROPRIOCEPTION = '1';
+  try {
+    const result = routeRequest({
+      taskClass: 'fast_chat',
+      providerHealth: {},
+      quotaState: {},
+      config: {
+        enabled: true,
+        vllmEnabled: true,
+        providerAllowlist: [],
+        providerDenylist: []
+      }
+    });
+    assert.ok(result.meta);
+    assert.ok(result.meta.proprioception);
+    assert.equal(result.meta.proprioception.task_class, 'fast_chat');
+  } finally {
+    if (prev === undefined) delete process.env.OPENCLAW_ROUTER_PROPRIOCEPTION;
+    else process.env.OPENCLAW_ROUTER_PROPRIOCEPTION = prev;
+  }
+});
+
+test('router: response remains unchanged when OPENCLAW_ROUTER_PROPRIOCEPTION is off', () => {
+  const prev = process.env.OPENCLAW_ROUTER_PROPRIOCEPTION;
+  process.env.OPENCLAW_ROUTER_PROPRIOCEPTION = '0';
+  try {
+    const result = routeRequest({
+      taskClass: 'fast_chat',
+      providerHealth: {},
+      quotaState: {},
+      config: {
+        enabled: true,
+        vllmEnabled: true,
+        providerAllowlist: [],
+        providerDenylist: []
+      }
+    });
+    assert.equal(Object.prototype.hasOwnProperty.call(result, 'meta'), false);
+  } finally {
+    if (prev === undefined) delete process.env.OPENCLAW_ROUTER_PROPRIOCEPTION;
+    else process.env.OPENCLAW_ROUTER_PROPRIOCEPTION = prev;
+  }
+});
+
 test('router: TACTI(C)-R low tier prefers local/fast when enabled', () => {
   const result = routeRequest({
     taskClass: 'fast_chat',

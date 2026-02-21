@@ -1196,3 +1196,41 @@ M	workspace/state/tacti_cr/events.jsonl
 - Intent: ensure oscillatory gating is explicitly enabled in system1 routing env and covered by a router invocation test.
 - Router callsite already existed in policy_router._tacti_runtime_controls; test pins invocation under enabled flags.
 - Rollback: git revert <commit_sha_for_wiring_2>
+
+## Wiring #6 Validation 2026-02-21T21:10:03Z
+$ node tests/freecompute_cloud.test.js
+
+── Schema Validation ──
+── Catalog Queries ──
+── Config + Redaction ──
+── Router ──
+── Quota Ledger ──
+── vLLM Utilities ──
+── Provider Registry ──
+── Provider Adapter ──
+── Integration Tests ──
+
+════════════════════════════════════════════
+FreeComputeCloud Tests: 72 passed, 0 failed, 3 skipped
+════════════════════════════════════════════
+
+$ python3 -m unittest tests_unittest.test_router_proprioception -v
+test_proprioception_is_consumed_by_tacti_arousal_path (tests_unittest.test_router_proprioception.TestRouterProprioception.test_proprioception_is_consumed_by_tacti_arousal_path) ... ok
+test_router_flag_off_has_no_proprio_meta (tests_unittest.test_router_proprioception.TestRouterProprioception.test_router_flag_off_has_no_proprio_meta) ... ok
+test_router_flag_on_includes_proprio_meta_and_empty_breakers (tests_unittest.test_router_proprioception.TestRouterProprioception.test_router_flag_on_includes_proprio_meta_and_empty_breakers) ... ok
+test_sampler_quantiles_deterministic (tests_unittest.test_router_proprioception.TestRouterProprioception.test_sampler_quantiles_deterministic) ... ok
+
+----------------------------------------------------------------------
+Ran 4 tests in 0.006s
+
+OK
+$ git diff --name-status
+M	core/system2/inference/router.js
+M	tests/freecompute_cloud.test.js
+M	workspace/audit/wirings_integration_20260222.md
+M	workspace/state/tacti_cr/events.jsonl
+
+### Wiring #6 summary
+- Intent: attach lightweight proprioception sample to JS router responses under OPENCLAW_ROUTER_PROPRIOCEPTION.
+- Behavior: flag on => result.meta.proprioception present; flag off => unchanged payload shape.
+- Rollback: git revert <commit_sha_for_wiring_6>
