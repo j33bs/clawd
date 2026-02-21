@@ -121,6 +121,47 @@ class TestTactiDynamicsPipeline(unittest.TestCase):
         self.assertEqual(seen["path"], ["main", "codex"])
         self.assertAlmostEqual(float(seen["valence"]), 0.4, places=6)
 
+    def test_counterfactual_replay_guarded_and_non_crashing(self):
+        with tempfile.TemporaryDirectory() as td:
+            trails = TrailStore(path=Path(td) / "trails.jsonl")
+            with patch.dict(
+                os.environ,
+                {
+                    "ENABLE_MURMURATION": "1",
+                    "ENABLE_RESERVOIR": "0",
+                    "ENABLE_PHYSARUM_ROUTER": "1",
+                    "ENABLE_TRAIL_MEMORY": "1",
+                    "OPENCLAW_COUNTERFACTUAL_REPLAY": "1",
+                },
+                clear=False,
+            ):
+                with patch("hivemind.dynamics_pipeline.replay_counterfactuals") as replay:
+                    replay.return_value = {
+                        "ok": True,
+                        "enabled": True,
+                        "counterfactuals": [{"provider": "codex", "estimated_success": 0.9}],
+                    }
+                    pipeline = TactiDynamicsPipeline(agent_ids=["main", "codex", "claude-code"], seed=4, trail_store=trails)
+                    plan = pipeline.plan_consult_order(
+                        source_agent="main",
+                        target_intent="memory_query",
+                        context_text="route this",
+                        candidate_agents=["codex", "claude-code"],
+                    )
+                    self.assertTrue(plan["counterfactual"]["enabled"])
+                    self.assertTrue(plan["counterfactual"]["applied"])
+
+                with patch("hivemind.dynamics_pipeline.replay_counterfactuals", side_effect=RuntimeError("boom")):
+                    pipeline = TactiDynamicsPipeline(agent_ids=["main", "codex", "claude-code"], seed=4, trail_store=trails)
+                    for _ in range(4):
+                        plan = pipeline.plan_consult_order(
+                            source_agent="main",
+                            target_intent="memory_query",
+                            context_text="route this",
+                            candidate_agents=["codex", "claude-code"],
+                        )
+                    self.assertIn(plan["counterfactual"]["reason"], {"error", "temporarily_disabled"})
+
 
 if __name__ == "__main__":
     unittest.main()

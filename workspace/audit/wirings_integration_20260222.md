@@ -1333,3 +1333,29 @@ M	workspace/state/tacti_cr/events.jsonl
 - Implementation: added workspace/research/gap_analyzer.py and integrated bridge calls into cmd_add/cmd_ingest_topics.
 - Idempotency: publish uses content signature and skips duplicate append on unchanged report.
 - Rollback: git revert <commit_sha_for_wiring_9>
+
+## Wiring #5 Validation 2026-02-21T21:15:42Z
+$ PYTHONPATH=workspace/hivemind python3 -m unittest tests_unittest.test_hivemind_dynamics_pipeline tests_unittest.test_hivemind_active_inference -v
+test_counterfactual_replay_guarded_and_non_crashing (tests_unittest.test_hivemind_dynamics_pipeline.TestTactiDynamicsPipeline.test_counterfactual_replay_guarded_and_non_crashing) ... ok
+test_plan_consult_order_is_deterministic_with_seed (tests_unittest.test_hivemind_dynamics_pipeline.TestTactiDynamicsPipeline.test_plan_consult_order_is_deterministic_with_seed) ... ok
+test_trail_feedback_biases_order (tests_unittest.test_hivemind_dynamics_pipeline.TestTactiDynamicsPipeline.test_trail_feedback_biases_order) ... ok
+test_valence_signal_flows_to_physarum_update (tests_unittest.test_hivemind_dynamics_pipeline.TestTactiDynamicsPipeline.test_valence_signal_flows_to_physarum_update) ... ok
+test_positive_feedback_increases_prior (tests_unittest.test_hivemind_active_inference.TestActiveInferenceModel.test_positive_feedback_increases_prior) ... ok
+test_prediction_error_decreases_over_cycles (tests_unittest.test_hivemind_active_inference.TestActiveInferenceModel.test_prediction_error_decreases_over_cycles) ... ok
+test_snapshot_roundtrip (tests_unittest.test_hivemind_active_inference.TestActiveInferenceModel.test_snapshot_roundtrip) ... ok
+
+----------------------------------------------------------------------
+Ran 7 tests in 0.006s
+
+OK
+$ git diff --name-status
+M	env.d/system1-routing.env
+M	tests_unittest/test_hivemind_dynamics_pipeline.py
+M	workspace/audit/wirings_integration_20260222.md
+M	workspace/hivemind/hivemind/dynamics_pipeline.py
+M	workspace/state/tacti_cr/events.jsonl
+
+### Wiring #5 summary
+- Intent: enable counterfactual replay in dynamics routing loop with runtime circuit breakers.
+- Guards: depth cap, per-decision time budget, and auto temporary-disable after repeated replay errors.
+- Rollback: git revert <commit_sha_for_wiring_5>
