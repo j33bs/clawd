@@ -315,3 +315,196 @@ Reasoning:
 
 Interpretation:
 - The service is running an installed build that does not yet include this branch’s hardening; this is not a remaining bypass in repo source.
+
+## Service Runtime Override to Workspace Path (Stale-Runtime Mitigation)
+
+Date: 2026-02-21
+
+Objective for this step:
+- stop executing `/usr/lib/node_modules/openclaw/dist/index.js` directly from system unit ExecStart
+- run gateway from a repo-local runtime path under `/home/jeebs/src/clawd`
+
+### Commands run
+
+Service/unit inspection:
+- `systemctl --user status openclaw-gateway.service --no-pager`
+- `systemctl --user cat openclaw-gateway.service --no-pager | sed -E 's/(OPENCLAW_GATEWAY_TOKEN=)[^ ]+/\\1<REDACTED>/g'`
+- `systemctl --user show openclaw-gateway.service -p ExecStart -p ActiveState -p SubState --no-pager`
+
+Repo/runtime entrypoint check:
+- `sed -n '1,260p' package.json`
+- `openclaw gateway --help`
+- `openclaw gateway install --help`
+
+Apply user-level override (reversible):
+- `mkdir -p ~/.config/systemd/user/openclaw-gateway.service.d`
+- created `~/.config/systemd/user/openclaw-gateway.service.d/override.conf`:
+
+```ini
+[Service]
+ExecStart=
+ExecStart=/usr/bin/node /home/jeebs/src/clawd/.runtime/openclaw/dist/index.js gateway --port 18789
+Environment=OPENCLAW_STRICT_TOOL_PAYLOAD=1
+```
+
+Populate repo-local runtime bundle:
+- initial attempt (failed due missing dependencies):
+  - `rsync -a --delete /usr/lib/node_modules/openclaw/dist/ /home/jeebs/src/clawd/.runtime/openclaw-dist/`
+- corrected by mirroring full package:
+  - `rsync -a --delete /usr/lib/node_modules/openclaw/ /home/jeebs/src/clawd/.runtime/openclaw/`
+
+Reload/restart and logs:
+- `systemctl --user daemon-reload`
+- `systemctl --user restart openclaw-gateway.service`
+- `journalctl --user -u openclaw-gateway.service -n 80 --no-pager`
+
+### Key outputs
+
+Before override base unit ExecStart:
+- `ExecStart="/usr/bin/node" "/usr/lib/node_modules/openclaw/dist/index.js" gateway --port 18789`
+
+First override failure signal (in journal):
+- `Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'commander' imported from /home/jeebs/src/clawd/.runtime/openclaw-dist/index.js`
+
+After full-package mirror + restart:
+- `ActiveState=active`
+- `SubState=running`
+- `ExecStart={ ... argv[]=/usr/bin/node /home/jeebs/src/clawd/.runtime/openclaw/dist/index.js gateway --port 18789 ... }`
+
+### Operational conclusion for this step
+
+- Live gateway is no longer executing the global path directly in `ExecStart`.
+- Live gateway now executes a workspace path:
+  - `/usr/bin/node /home/jeebs/src/clawd/.runtime/openclaw/dist/index.js gateway --port 18789`
+- Strict mode env for verification is set at the unit override level:
+  - `OPENCLAW_STRICT_TOOL_PAYLOAD=1`
+
+### Revert steps
+
+To revert to stock global install path:
+1. `rm -f ~/.config/systemd/user/openclaw-gateway.service.d/override.conf`
+2. `systemctl --user daemon-reload`
+3. `systemctl --user restart openclaw-gateway.service`
+4. optional cleanup: `rm -rf /home/jeebs/src/clawd/.runtime/openclaw /home/jeebs/src/clawd/.runtime/openclaw-dist`
+
+
+### Post-override real repro result (same service context)
+
+Command:
+- `openclaw agent --to +10000000000 --message "repo-runtime strict probe" --json`
+
+Observed key result:
+- response payload text still contains:
+  - `400 "auto" tool choice requires --enable-auto-tool-choice and --tool-call-parser to be set`
+
+Service log scan command:
+- `journalctl --user -u openclaw-gateway.service -n 140 --no-pager | rg -n -S "TOOL_PAYLOAD_SANITIZER_BYPASSED|tool_payload|callsite_tag|tool-call-parser|auto\" tool choice|payload sanitizer bypassed|gateway\\.adapter\\.final_dispatch|policy_router\\.final_dispatch"`
+
+Observed log match:
+- `400 "auto" tool choice requires --enable-auto-tool-choice and --tool-call-parser to be set`
+- no strict-mode callsite-tag diagnostics (`TOOL_PAYLOAD_SANITIZER_BYPASSED`, `gateway.adapter.final_dispatch`, `policy_router.final_dispatch`) observed.
+
+### Interpretation update
+
+- ExecStart path is now workspace-local, but the executed artifact is a mirrored binary package under `.runtime/openclaw/dist`.
+- This artifact still behaves like stale runtime regarding tool payload strict diagnostics.
+- Therefore, stale-runtime risk is reduced for path location, but **not eliminated for code content**: current running binary bundle does not yet reflect this branch’s source-level hardening markers.
+
+
+## Deterministic Runtime Rebuild Attempt (2026-02-21, stale-runtime follow-up)
+
+### Phase 1 — Marker proof (before)
+
+Command:
+- `rg -n -S "OPENCLAW_STRICT_TOOL_PAYLOAD|gateway\.edge\.final_dispatch|payload sanitizer bypassed" workspace/scripts core/system2/inference scripts || true`
+
+Key repo hits (present):
+- `core/system2/inference/tool_payload_sanitizer.js` includes `OPENCLAW_STRICT_TOOL_PAYLOAD` and `payload sanitizer bypassed`
+- `workspace/scripts/tool_payload_sanitizer.py` includes `OPENCLAW_STRICT_TOOL_PAYLOAD` and `payload sanitizer bypassed`
+
+Command:
+- `rg -n -S "OPENCLAW_STRICT_TOOL_PAYLOAD|gateway\.edge\.final_dispatch|payload sanitizer bypassed" .runtime/openclaw/dist || true`
+
+Result before rebuild:
+- no hits in `.runtime/openclaw/dist`
+
+Interpretation:
+- repo source had strict/sanitizer markers; runtime dist did not.
+
+### Phase 2 — Producer mapping for `.runtime/openclaw`
+
+Tracing command:
+- `rg -n --hidden --glob '!**/.git/**' -S "\.runtime/openclaw|runtime/openclaw|dist/index\.js gateway|openclaw/dist" .`
+
+Operational finding:
+- `.runtime/openclaw` is currently produced as a mirrored installed package from `/usr/lib/node_modules/openclaw` (not built from tracked repo TS sources in this repo).
+- prior step command path (already executed in this branch):
+  - `rsync -a --delete /usr/lib/node_modules/openclaw/ /home/jeebs/src/clawd/.runtime/openclaw/`
+
+Classification:
+- **Case C (installed package mirror)**
+
+### Phase 3 — Deterministic rebuild helper added
+
+Added helper:
+- `workspace/scripts/rebuild_runtime_openclaw.sh`
+
+Helper behavior:
+- `set -euo pipefail`
+- prints git SHA
+- mirrors `/usr/lib/node_modules/openclaw` -> `.runtime/openclaw`
+- applies deterministic overlay module at:
+  - `.runtime/openclaw/dist/runtime_tool_payload_guard_patch.mjs`
+- ensures `dist/index.js` imports overlay (after shebang)
+- prints marker hits in runtime dist
+
+Exact rebuild command run:
+- `./workspace/scripts/rebuild_runtime_openclaw.sh`
+
+### Phase 4 — Marker proof (after)
+
+Command:
+- `rg -n -S "OPENCLAW_STRICT_TOOL_PAYLOAD|gateway\.edge\.final_dispatch|payload sanitizer bypassed" .runtime/openclaw/dist || true`
+
+Result after rebuild:
+- hits present in:
+  - `.runtime/openclaw/dist/runtime_tool_payload_guard_patch.mjs`
+
+### Phase 5 — Restart + verify
+
+Restart commands:
+- `systemctl --user daemon-reload`
+- `systemctl --user restart openclaw-gateway.service`
+- `systemctl --user show openclaw-gateway.service -p ExecStart -p ActiveState -p SubState --no-pager`
+
+Observed:
+- `ExecStart=/usr/bin/node /home/jeebs/src/clawd/.runtime/openclaw/dist/index.js gateway --port 18789`
+- `ActiveState=active`, `SubState=running`
+
+Health check:
+- `openclaw gateway health --json` => `ok: true`
+
+Real repro command:
+- `openclaw agent --to +10000000000 --message "post-overlay-rebuild strict probe" --json`
+
+Observed repro result:
+- still returns:
+  - `400 "auto" tool choice requires --enable-auto-tool-choice and --tool-call-parser to be set`
+
+Log scan command:
+- `journalctl --user -u openclaw-gateway.service -n 220 --no-pager | rg -n -S "TOOL_PAYLOAD_SANITIZER_BYPASSED|tool_payload_sanitized_after_invalid_shape|gateway\.edge\.final_dispatch|payload sanitizer bypassed|tool-call-parser|auto\" tool choice|SyntaxError" | tail -n 120`
+
+Observed log outcome:
+- repeated historical `SyntaxError` restart attempts were captured during one intermediate overlay insertion bug (resolved by placing import after shebang)
+- no strict diagnostic callsite lines (`TOOL_PAYLOAD_SANITIZER_BYPASSED`, `gateway.edge.final_dispatch`) observed in runtime logs for repro
+- vLLM 400 line still present in repro output
+
+### Conclusion of this cycle
+
+- Marker mismatch was proven and marker presence in runtime dist was achieved post-rebuild.
+- Service is executing the intended workspace runtime path.
+- Despite marker overlay, the live failing request still returns the same vLLM `tool_choice:auto` 400 and does not emit strict callsite-tag diagnostics.
+- This indicates the real failing provider call path in this runtime either:
+  1. does not traverse the overlaid boundary hooks, or
+  2. constructs/sends the payload through a different internal request path than the patched boundary.
+
