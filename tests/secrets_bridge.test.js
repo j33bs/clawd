@@ -2,6 +2,9 @@
 'use strict';
 
 const assert = require('node:assert');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
 
 const {
   SecretsBridge,
@@ -135,4 +138,45 @@ test('file backend requires explicit opt-in', function () {
   assert.throws(function () {
     bridge.setSecret('groq', 'x', { passphrase: 'passphrase' });
   }, /explicit opt-in/);
+});
+
+test('file backend blocks env passphrase outside dev/test', function () {
+  const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'secrets-bridge-prod-'));
+  const bridge = new SecretsBridge({
+    env: {
+      ENABLE_SECRETS_BRIDGE: '1',
+      SECRETS_BACKEND: 'file',
+      SECRETS_FILE_PASSPHRASE: 'prod-env-passphrase',
+      NODE_ENV: 'production',
+      HOME: tempHome
+    },
+    platform: 'freebsd',
+    secretsFilePath: path.join(tempHome, '.openclaw', 'secrets.enc')
+  });
+
+  assert.throws(function () {
+    bridge.setSecret('groq', 'x');
+  }, /SECRETS_FILE_PASSPHRASE is blocked outside development\/test/);
+});
+
+test('file backend accepts passphrase from restricted file', function () {
+  const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'secrets-bridge-file-'));
+  const passphraseFile = path.join(tempHome, 'passphrase.txt');
+  fs.writeFileSync(passphraseFile, 'file-passphrase\n', { mode: 0o600 });
+
+  const bridge = new SecretsBridge({
+    env: {
+      ENABLE_SECRETS_BRIDGE: '1',
+      SECRETS_BACKEND: 'file',
+      SECRETS_FILE_PASSPHRASE_FILE: passphraseFile,
+      NODE_ENV: 'production',
+      HOME: tempHome
+    },
+    platform: 'freebsd',
+    secretsFilePath: path.join(tempHome, '.openclaw', 'secrets.enc')
+  });
+
+  const saved = bridge.setSecret('groq', 'gsk_test_from_file');
+  assert.equal(saved.provider, 'groq');
+  assert.equal(bridge._readSecret('groq', { backend: BACKEND_TYPES.FILE }), 'gsk_test_from_file');
 });

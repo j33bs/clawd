@@ -369,7 +369,7 @@ class SecretsBridge {
     }
     if (backend === BACKEND_TYPES.FILE) {
       this._assertFileBackendOptIn();
-      const passphrase = options.passphrase || this._env.SECRETS_FILE_PASSPHRASE;
+      const passphrase = this._resolveFileBackendPassphrase({ passphrase: options.passphrase });
       this._writeFileSecret(providerId, secretValue, passphrase);
       return;
     }
@@ -393,7 +393,7 @@ class SecretsBridge {
     }
     if (backend === BACKEND_TYPES.FILE) {
       this._assertFileBackendOptIn();
-      const passphrase = options.passphrase || this._env.SECRETS_FILE_PASSPHRASE;
+      const passphrase = this._resolveFileBackendPassphrase({ passphrase: options.passphrase });
       return this._readFileSecret(providerId, passphrase);
     }
     throw new Error(`unsupported backend: ${backend}`);
@@ -420,7 +420,7 @@ class SecretsBridge {
     }
     if (backend === BACKEND_TYPES.FILE) {
       this._assertFileBackendOptIn();
-      const passphrase = options.passphrase || this._env.SECRETS_FILE_PASSPHRASE;
+      const passphrase = this._resolveFileBackendPassphrase({ passphrase: options.passphrase });
       this._deleteFileSecret(providerId, passphrase);
       return;
     }
@@ -640,6 +640,68 @@ class SecretsBridge {
     if (this.config.backend !== BACKEND_TYPES.FILE) {
       throw new Error('file backend requires explicit opt-in (SECRETS_BACKEND=file)');
     }
+  }
+
+  _isDevRuntime() {
+    const openclawEnv = String(this._env.OPENCLAW_ENV || '').trim().toLowerCase();
+    const nodeEnv = String(this._env.NODE_ENV || '').trim().toLowerCase();
+    return openclawEnv === 'dev'
+      || openclawEnv === 'development'
+      || openclawEnv === 'test'
+      || nodeEnv === 'development'
+      || nodeEnv === 'test';
+  }
+
+  _readPassphraseFile(passphraseFilePath) {
+    const filePath = this._path.resolve(String(passphraseFilePath || ''));
+    if (!filePath) return null;
+
+    let st;
+    try {
+      st = this._fs.statSync(filePath);
+    } catch (_) {
+      throw new Error(`passphrase file not readable: ${filePath}`);
+    }
+    if (!st.isFile()) {
+      throw new Error(`passphrase file must be a regular file: ${filePath}`);
+    }
+    if (process.platform !== 'win32') {
+      const mode = st.mode & 0o777;
+      if ((mode & 0o077) !== 0) {
+        throw new Error(`passphrase file permissions too open (require 0600): ${filePath}`);
+      }
+    }
+
+    const value = String(this._fs.readFileSync(filePath, 'utf8') || '').trim();
+    if (!value) {
+      throw new Error(`passphrase file is empty: ${filePath}`);
+    }
+    return value;
+  }
+
+  _resolveFileBackendPassphrase(options = {}) {
+    if (options.passphrase) {
+      return String(options.passphrase);
+    }
+
+    const passphraseFile = this._env.SECRETS_FILE_PASSPHRASE_FILE;
+    if (passphraseFile) {
+      return this._readPassphraseFile(passphraseFile);
+    }
+
+    const envPassphrase = this._env.SECRETS_FILE_PASSPHRASE;
+    if (envPassphrase) {
+      const allowEnvPassphrase = parseBoolFlag(this._env.SECRETS_ALLOW_ENV_PASSPHRASE, false)
+        || this._isDevRuntime();
+      if (!allowEnvPassphrase) {
+        throw new Error(
+          'SECRETS_FILE_PASSPHRASE is blocked outside development/test; use SECRETS_FILE_PASSPHRASE_FILE'
+        );
+      }
+      return envPassphrase;
+    }
+
+    return null;
   }
 
   _readFilePayload(passphrase) {
