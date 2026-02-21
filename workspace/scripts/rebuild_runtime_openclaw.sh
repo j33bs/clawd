@@ -145,16 +145,77 @@ function nextTelegramErrorCorrelationId() {
 function sleepMs(ms) {
 	return new Promise((resolve) => setTimeout(resolve, ms));
 }
-function appendTelegramDeadletter(entry) {
+async function appendTelegramDeadletter(entry) {
 	try {
 		const deadletterPath = process.env.OPENCLAW_TELEGRAM_DEADLETTER_PATH || path.join(process.cwd(), "workspace", "telemetry", "telegram_deadletter.jsonl");
-		fs$1.mkdirSync(path.dirname(deadletterPath), { recursive: true });
-		fs$1.appendFileSync(deadletterPath, JSON.stringify(entry) + "\\n", "utf8");
+		await fs$1.mkdir(path.dirname(deadletterPath), { recursive: true });
+		await fs$1.appendFile(deadletterPath, JSON.stringify(entry) + "\\n", "utf8");
+		return {
+			ok: true,
+			path: deadletterPath
+		};
 	} catch (err) {
 		console.error(JSON.stringify({
 			event: "telegram_deadletter_write_failed",
 			error: String(err)
 		}));
+		return {
+			ok: false,
+			error: String(err)
+		};
+	}
+}
+function extractTelegramEntityUrl(entity) {
+	if (!entity || typeof entity !== "object") return "";
+	const value = entity.url || entity.text_link || "";
+	return typeof value === "string" ? value : "";
+}
+function isHeavyTelegramUpdateMessage(msg) {
+	const text = String(msg?.text ?? msg?.caption ?? "");
+	const lowered = text.toLowerCase();
+	if (lowered.includes("arxiv.org/abs/") || lowered.includes("arxiv.org/pdf/")) return true;
+	if (/https?:\\/\\/\\S+\\.pdf(?:\\b|$)/i.test(text)) return true;
+	if (text.length > 1e3) return true;
+	const entities = [...Array.isArray(msg?.entities) ? msg.entities : [], ...Array.isArray(msg?.caption_entities) ? msg.caption_entities : []];
+	if (entities.some((entity) => {
+		const url = extractTelegramEntityUrl(entity).toLowerCase();
+		return url.includes("arxiv.org/abs/") || url.includes("arxiv.org/pdf/") || /\\.pdf(?:\\b|$)/i.test(url);
+	})) return true;
+	if (msg?.document || msg?.video || msg?.audio || msg?.voice || msg?.video_note || msg?.animation) return true;
+	return false;
+}
+async function handleTelegramProcessingError({ bot, event, runtime, err }) {
+	const correlationId = nextTelegramErrorCorrelationId();
+	const stage = String(err?.stage || err?.code || "handler");
+	const errorText = String(err && err.message ? err.message : err);
+	console.error(JSON.stringify({
+		event: "telegram_handler_failed",
+		correlation_id: correlationId,
+		update_id: event.msg?.message_id ?? null,
+		stage,
+		err_class: err?.name || "Error",
+		err_message: errorText
+	}));
+	await appendTelegramDeadletter({
+		ts: new Date().toISOString(),
+		correlation_id: correlationId,
+		update_id: event.msg?.message_id ?? null,
+		route: "telegram_inbound",
+		chat_id_hash: event.chatId != null ? String(event.chatId).slice(-6) : null,
+		stage,
+		err: errorText
+	});
+	runtime.error?.(danger(event.errorMessage + " (correlation_id=" + correlationId + ", stage=" + stage + "): " + errorText));
+	try {
+		await sendTelegramErrorReplyWithRetry({
+			bot,
+			event,
+			runtime,
+			correlationId,
+			messageText: "Error (code: " + correlationId + "). Gateway logs contain details."
+		});
+	} catch (notifyErr) {
+		runtime.error?.(danger("telegram error notification failed (correlation_id=" + correlationId + "): " + String(notifyErr)));
 	}
 }
 function isRetryableTelegramSendError(err) {
@@ -225,11 +286,11 @@ if (handleStart !== -1) {
     let section = src.slice(handleStart, handleEnd);
     section = section.replace(
       /await processInboundMessage\(\{([\s\S]*?)\}\);/,
-      'await runTelegramInboundWithTimeout(() => processInboundMessage({$1}), event, runtime);'
+      'const inboundPayload = {$1};\n\t\t\tif (isHeavyTelegramUpdateMessage(event.msg)) {\n\t\t\t\tconst startedAt = Date.now();\n\t\t\t\tconst lane = `telegram-heavy:${String(event.chatId)}`;\n\t\t\t\tenqueueCommandInLane(lane, async () => {\n\t\t\t\t\tawait processInboundMessage(inboundPayload);\n\t\t\t\t}).catch(async (queueErr) => {\n\t\t\t\t\tawait handleTelegramProcessingError({\n\t\t\t\t\t\tbot,\n\t\t\t\t\t\tevent,\n\t\t\t\t\t\truntime,\n\t\t\t\t\t\terr: queueErr\n\t\t\t\t\t});\n\t\t\t\t});\n\t\t\t\tconsole.error(JSON.stringify({\n\t\t\t\t\tevent: "telegram_handler_deferred",\n\t\t\t\t\tupdate_id: event.msg?.message_id ?? null,\n\t\t\t\t\tchat_id_hash: event.chatId != null ? String(event.chatId).slice(-6) : null,\n\t\t\t\t\tlane,\n\t\t\t\t\telapsed_ms: Date.now() - startedAt\n\t\t\t\t}));\n\t\t\t\treturn;\n\t\t\t}\n\t\t\tawait runTelegramInboundWithTimeout(() => processInboundMessage(inboundPayload), event, runtime);'
     );
     section = section.replace(
       /\t\t\} catch \(err\) \{[\s\S]*?\t\t\}\n\t\};/,
-      '\t\t} catch (err) {\n\t\t\tconst correlationId = nextTelegramErrorCorrelationId();\n\t\t\tconst stage = String(err?.stage || err?.code || "handler");\n\t\t\tconst errorText = String(err && err.message ? err.message : err);\n\t\t\tconsole.error(JSON.stringify({\n\t\t\t\tevent: "telegram_handler_failed",\n\t\t\t\tcorrelation_id: correlationId,\n\t\t\t\tupdate_id: event.msg?.message_id ?? null,\n\t\t\t\tstage,\n\t\t\t\terr_class: err?.name || "Error",\n\t\t\t\terr_message: errorText\n\t\t\t}));\n\t\t\tappendTelegramDeadletter({\n\t\t\t\tts: new Date().toISOString(),\n\t\t\t\tcorrelation_id: correlationId,\n\t\t\t\tupdate_id: event.msg?.message_id ?? null,\n\t\t\t\tchat_id_hash: event.chatId != null ? String(event.chatId).slice(-6) : null,\n\t\t\t\tstage,\n\t\t\t\terr: errorText\n\t\t\t});\n\t\t\truntime.error?.(danger(event.errorMessage + " (correlation_id=" + correlationId + ", stage=" + stage + "): " + errorText));\n\t\t\ttry {\n\t\t\t\tawait sendTelegramErrorReplyWithRetry({\n\t\t\t\t\tbot,\n\t\t\t\t\tevent,\n\t\t\t\t\truntime,\n\t\t\t\t\tcorrelationId,\n\t\t\t\t\tmessageText: "Error (code: " + correlationId + "). Gateway logs contain details."\n\t\t\t\t});\n\t\t\t} catch (notifyErr) {\n\t\t\t\truntime.error?.(danger("telegram error notification failed (correlation_id=" + correlationId + "): " + String(notifyErr)));\n\t\t\t}\n\t\t}\n\t};'
+      '\t\t} catch (err) {\n\t\t\tawait handleTelegramProcessingError({\n\t\t\t\tbot,\n\t\t\t\tevent,\n\t\t\t\truntime,\n\t\t\t\terr\n\t\t\t});\n\t\t}\n\t};'
     );
     src = src.slice(0, handleStart) + section + src.slice(handleEnd);
   }
