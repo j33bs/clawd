@@ -73,7 +73,54 @@ class TestTactiDynamicsPipeline(unittest.TestCase):
                 )
                 self.assertEqual(plan["consult_order"][0], "codex")
 
+    def test_valence_signal_flows_to_physarum_update(self):
+        with tempfile.TemporaryDirectory() as td:
+            trails = TrailStore(path=Path(td) / "trails.jsonl")
+            with patch.dict(
+                os.environ,
+                {
+                    "ENABLE_MURMURATION": "1",
+                    "ENABLE_RESERVOIR": "0",
+                    "ENABLE_PHYSARUM_ROUTER": "1",
+                    "ENABLE_TRAIL_MEMORY": "1",
+                    "OPENCLAW_TRAIL_VALENCE": "1",
+                },
+                clear=False,
+            ):
+                pipeline = TactiDynamicsPipeline(agent_ids=["main", "codex"], seed=5, trail_store=trails)
+                seen = {}
+
+                class _PhysarumStub:
+                    def update(self, path, reward_signal, valence=None):
+                        seen["path"] = list(path)
+                        seen["reward"] = float(reward_signal)
+                        seen["valence"] = valence
+
+                    def prune(self, min_k, max_k):
+                        seen["prune"] = (int(min_k), int(max_k))
+
+                    def propose_paths(self, source, target, graph, n_paths=3):
+                        _ = (source, target, graph, n_paths)
+                        return [["main", "codex"]]
+
+                    def snapshot(self):
+                        return {}
+
+                pipeline.physarum = _PhysarumStub()
+                pipeline.observe_outcome(
+                    source_agent="main",
+                    path=["main", "codex"],
+                    success=True,
+                    latency=10,
+                    tokens=50,
+                    reward=0.8,
+                    context_text="route with confidence",
+                    valence=0.4,
+                )
+
+        self.assertEqual(seen["path"], ["main", "codex"])
+        self.assertAlmostEqual(float(seen["valence"]), 0.4, places=6)
+
 
 if __name__ == "__main__":
     unittest.main()
-

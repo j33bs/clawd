@@ -1284,3 +1284,32 @@ M	workspace/state/tacti_cr/events.jsonl
 - Failure handling: command is best-effort and appends warnings to reports/automation/narrative_distill.log without blocking briefing generation.
 - Note: full narrative_distill unittest module requires PYTHONPATH=workspace/hivemind in this environment.
 - Rollback: git revert <commit_sha_for_wiring_7>
+
+## Wiring #8 Validation 2026-02-21T21:12:46Z
+$ PYTHONPATH=workspace/hivemind python3 -m unittest tests_unittest.test_hivemind_dynamics_pipeline tests_unittest.test_hivemind_physarum_router tests_unittest.test_hivemind_trails -v
+test_plan_consult_order_is_deterministic_with_seed (tests_unittest.test_hivemind_dynamics_pipeline.TestTactiDynamicsPipeline.test_plan_consult_order_is_deterministic_with_seed) ... ok
+test_trail_feedback_biases_order (tests_unittest.test_hivemind_dynamics_pipeline.TestTactiDynamicsPipeline.test_trail_feedback_biases_order) ... ok
+test_valence_signal_flows_to_physarum_update (tests_unittest.test_hivemind_dynamics_pipeline.TestTactiDynamicsPipeline.test_valence_signal_flows_to_physarum_update) ... ok
+test_prune_preserves_min_connectivity (tests_unittest.test_hivemind_physarum_router.TestPhysarumRouter.test_prune_preserves_min_connectivity) ... ok
+test_rewarded_path_becomes_dominant (tests_unittest.test_hivemind_physarum_router.TestPhysarumRouter.test_rewarded_path_becomes_dominant) ... ok
+test_valence_weighting_adjusts_reward_when_enabled (tests_unittest.test_hivemind_physarum_router.TestPhysarumRouter.test_valence_weighting_adjusts_reward_when_enabled) ... ok
+test_decay_reduces_effective_strength (tests_unittest.test_hivemind_trails.TestTrailStore.test_decay_reduces_effective_strength) ... ok
+test_reinforcement_increases_rank (tests_unittest.test_hivemind_trails.TestTrailStore.test_reinforcement_increases_rank) ... ok
+
+----------------------------------------------------------------------
+Ran 8 tests in 0.006s
+
+OK
+$ git diff --name-status
+M	env.d/system1-routing.env
+M	tests_unittest/test_hivemind_dynamics_pipeline.py
+M	tests_unittest/test_hivemind_physarum_router.py
+M	workspace/audit/wirings_integration_20260222.md
+M	workspace/hivemind/hivemind/dynamics_pipeline.py
+M	workspace/hivemind/hivemind/physarum_router.py
+M	workspace/state/tacti_cr/events.jsonl
+
+### Wiring #8 summary
+- Intent: enable trail valence in live env and propagate valence signal into Physarum updates.
+- Implementation: observe_outcome now passes valence to physarum.update and trails store valence_signature consistently.
+- Rollback: git revert <commit_sha_for_wiring_8>

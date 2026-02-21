@@ -136,7 +136,9 @@ class TactiDynamicsPipeline:
         tokens: float,
         reward: float,
         context_text: str,
+        valence: float | None = None,
     ) -> None:
+        valence_signal = float(valence) if isinstance(valence, (int, float)) else float(reward)
         if len(path) >= 2:
             src = str(path[0])
             for dst in path[1:]:
@@ -153,7 +155,7 @@ class TactiDynamicsPipeline:
                     )
                 src = str(dst)
             if self.enable_physarum:
-                self.physarum.update([str(x) for x in path], float(reward))
+                self.physarum.update([str(x) for x in path], float(reward), valence=valence_signal)
                 self.physarum.prune(min_k=max(1, min(3, len(self.agent_ids) - 1)), max_k=min(7, max(2, len(self.agent_ids) - 1)))
 
         if self.enable_trails:
@@ -168,6 +170,7 @@ class TactiDynamicsPipeline:
                         "success": bool(success),
                         "path": list(path),
                     },
+                    "valence_signature": valence_signal,
                 }
             )
             self.trails.decay()
