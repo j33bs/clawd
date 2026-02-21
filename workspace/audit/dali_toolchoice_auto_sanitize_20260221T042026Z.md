@@ -789,3 +789,232 @@ Service restart:
 
 - Guard is opt-in and defaults OFF, so without `OPENCLAW_VLLM_TOKEN_GUARD=1` in the gateway service environment, behavior is unchanged.
 - In this run window, service-level repro commands were influenced by existing session/provider state; deterministic reject/truncate evidence is captured via provider-level regression tests and runtime artifact marker proof.
+
+## Live Service Enablement: vLLM Token Guard (2026-02-21)
+
+### Step 1 — Confirmed user unit + drop-ins
+
+Commands:
+```bash
+systemctl --user cat openclaw-gateway.service
+ls -la ~/.config/systemd/user/openclaw-gateway.service.d/
+```
+
+Observed active override path:
+- `~/.config/systemd/user/openclaw-gateway.service.d/override.conf`
+
+### Step 2 — Override updated (user-local only, not in git)
+
+Override snippet applied:
+```ini
+Environment=OPENCLAW_VLLM_TOKEN_GUARD=1
+Environment=OPENCLAW_VLLM_TOKEN_GUARD_MODE=reject
+Environment=OPENCLAW_VLLM_CONTEXT_MAX_TOKENS=8192
+```
+
+Retained:
+```ini
+Environment=OPENCLAW_STRICT_TOOL_PAYLOAD=1
+Environment=OPENCLAW_TRACE_VLLM_OUTBOUND=1
+```
+
+### Step 3 — Reload + restart
+
+Commands:
+```bash
+systemctl --user daemon-reload
+systemctl --user restart openclaw-gateway.service
+systemctl --user show openclaw-gateway.service --property=Environment --no-pager
+journalctl --user -u openclaw-gateway.service -n 120 --no-pager
+```
+
+Observed in service env:
+- `OPENCLAW_VLLM_TOKEN_GUARD=1`
+- `OPENCLAW_VLLM_TOKEN_GUARD_MODE=reject`
+- `OPENCLAW_VLLM_CONTEXT_MAX_TOKENS=8192`
+
+### Step 4 — Real repro command run
+
+Command:
+```bash
+openclaw agent --to +10000000000 --message "token-guard reject repro" --json
+```
+
+Observed result in this environment:
+- request completed through `minimax-portal` response path (not local vLLM)
+- no `VLLM_CONTEXT_BUDGET_EXCEEDED` surfaced on this run
+
+Additional gateway/service observations around same window:
+- intermittent gateway tooling auth/transport issue appeared:
+  - `gateway closed (1008): pairing required`
+- earlier local-vLLM overflow traces (pre-enable run window) still present in journal history
+
+### Step 5 — Optional truncate mode check
+
+Temporarily set:
+```ini
+Environment=OPENCLAW_VLLM_TOKEN_GUARD_MODE=truncate
+```
+then restarted and reran repro command.
+
+Observed result:
+- repro again returned non-local provider text path; no vLLM token-guard event emitted in this run window.
+
+Restored steady-state mode to reject:
+```ini
+Environment=OPENCLAW_VLLM_TOKEN_GUARD_MODE=reject
+```
+
+### Operational Conclusion
+
+- Live user service now has token guard enabled with `reject` mode and context max `8192`.
+- In the exact repro command context tested here, requests did not deterministically enter the local-vLLM overflow path, so we could not capture a fresh live `VLLM_CONTEXT_BUDGET_EXCEEDED` event from that command alone.
+- Guard enablement is verified at service env + runtime codepath level; reproducing the local-vLLM overflow path remains dependent on session/provider routing state.
+
+## Deterministic Service-Context Token Guard Validation (2026-02-21)
+
+### 1) Gateway pairing/auth stabilization
+
+Commands:
+```bash
+openclaw gateway status
+openclaw gateway probe
+openclaw gateway health
+```
+
+Observed “paired/ok” signal used for this run:
+- `Local loopback ws://127.0.0.1:18789  Connect: ok · RPC: ok`
+- `Gateway Health OK`
+
+### 2) Temporary local-vLLM-only routing window (user service override)
+
+Applied temporary override env lines:
+```ini
+Environment=OPENCLAW_PROVIDER_ALLOWLIST=local_vllm
+Environment=OPENCLAW_DEFAULT_PROVIDER=local_vllm
+Environment=OPENCLAW_ALLOW_CROSSFAMILY_FALLBACK=0
+Environment=OPENCLAW_VLLM_TOKEN_GUARD=1
+Environment=OPENCLAW_VLLM_TOKEN_GUARD_MODE=reject
+Environment=OPENCLAW_VLLM_CONTEXT_MAX_TOKENS=8192
+```
+
+Commands:
+```bash
+systemctl --user daemon-reload
+systemctl --user restart openclaw-gateway.service
+systemctl --user show openclaw-gateway.service --property=Environment --no-pager
+```
+
+Confirmed env included local-vLLM-only + token guard settings.
+
+### 3) Guaranteed-overflow payload
+
+Command used (content not logged):
+```bash
+python3 - <<'PY'
+print('A'*60000)
+PY
+```
+
+Message length used for repro:
+- `message_len=60000`
+
+### 4) Repro (reject mode) and deterministic hit
+
+Initial `--to` and pinned session attempts still routed to existing minimax session state.
+To force deterministic fresh local-vLLM run, used:
+1) temporary model pin:
+```bash
+openclaw models set vllm/local-assistant
+```
+2) fresh explicit session id + oversized message:
+```bash
+openclaw agent --session-id token-guard-vllm-1771664633 --message "<60000 chars>" --json
+```
+
+Observed result:
+- `provider: vllm`
+- `model: local-assistant`
+- response text: `Local vLLM request exceeds context budget`
+- no upstream context-limit 400 emitted to client for this request
+
+### 5) Evidence from service logs
+
+Command:
+```bash
+journalctl --user -u openclaw-gateway.service -n 400 --no-pager | rg -n "vllm_token_guard_preflight|VLLM_CONTEXT_BUDGET_EXCEEDED|vllm_outbound_trace"
+```
+
+Key lines:
+- `{"subsystem":"tool_payload_trace","event":"vllm_token_guard_preflight","action":"reject","callsite_tag":"pi-ai.openai-completions.pre_dispatch","context_max":8192,"prompt_est":26870,"requested_max_completion_tokens":7936}`
+- `Local vLLM request exceeds context budget`
+
+This confirms guard fired pre-dispatch in service context and blocked over-budget request.
+
+### 6) Revert temporary routing overrides
+
+Reverted user override by removing local-vLLM-only routing lines and restoring default model:
+```bash
+openclaw models set minimax-portal/MiniMax-M2.5
+systemctl --user daemon-reload
+systemctl --user restart openclaw-gateway.service
+systemctl --user show openclaw-gateway.service --property=Environment --no-pager
+openclaw gateway probe
+```
+
+Post-revert confirmation:
+- `OPENCLAW_PROVIDER_ALLOWLIST=local_vllm,minimax-portal`
+- `OPENCLAW_DEFAULT_PROVIDER=minimax-portal`
+- probe remains `Connect: ok · RPC: ok`
+
+## Gateway Diag Command Snapshot (2026-02-21)
+
+### Command implementation
+- Added CLI registration for `openclaw gateway diag` via plugin command hook.
+- Added backing script: `scripts/openclaw_gateway_diag.js`.
+
+### Commands run
+```bash
+OPENCLAW_PROVIDER_ALLOWLIST=local_vllm,minimax-portal \
+OPENCLAW_DEFAULT_PROVIDER=minimax-portal \
+OPENCLAW_ALLOW_CROSSFAMILY_FALLBACK=0 \
+OPENCLAW_STRICT_TOOL_PAYLOAD=1 \
+OPENCLAW_TRACE_VLLM_OUTBOUND=1 \
+OPENCLAW_VLLM_TOKEN_GUARD=1 \
+OPENCLAW_VLLM_TOKEN_GUARD_MODE=reject \
+OPENCLAW_VLLM_CONTEXT_MAX_TOKENS=8192 \
+node scripts/openclaw_gateway_diag.js
+
+OPENCLAW_VLLM_TOKEN_GUARD_MODE=truncate node scripts/openclaw_gateway_diag.js --plain
+
+node tests/gateway_diag_cli.test.js
+```
+
+### Sample output highlights
+JSON mode:
+- `routing.provider_allowlist.source=OPENCLAW_PROVIDER_ALLOWLIST`
+- `routing.default_provider.value=minimax-portal`
+- `routing.cross_family_fallback.enabled=false`
+- guard flags present with expected values
+- `runtime.key_modules.*` resolves absolute paths under this checkout
+- `runtime.git_sha=dddc3a902db3`
+
+Plain mode:
+- Sections rendered: `ROUTING`, `GUARDS`, `RUNTIME`, `VERSIONS`
+- Includes `OPENCLAW_VLLM_TOKEN_GUARD_MODE: present=true value=truncate`
+
+Tests:
+- `node tests/gateway_diag_cli.test.js` => PASS (all cases)
+
+### Stale-runtime detection value
+This snapshot directly differentiates stale runtime vs repo source by printing both:
+- absolute module paths (e.g., `core/system2/inference/openai_completions_local_vllm_gate.js`)
+- best-effort repo git SHA (`runtime.git_sha`)
+
+If module paths point at global install artifacts or SHA mismatches the expected branch commit, runtime drift is immediately visible.
+
+### Note on host CLI invocation
+Attempting `openclaw gateway diag` in this shell still hits an existing host issue before command dispatch:
+- `uv_interface_addresses returned Unknown system error 1`
+
+The diagnostic implementation itself is verified through direct script invocation and unit tests above.
