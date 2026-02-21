@@ -17,6 +17,11 @@ try:
 except ImportError:
     requests = None
 
+try:
+    from proprioception import ProprioceptiveSampler
+except Exception:  # pragma: no cover - optional integration
+    ProprioceptiveSampler = None
+
 def _resolve_repo_root(start: Path):
     current = start
     for _ in range(8):
@@ -37,6 +42,7 @@ EVENT_LOG = BASE_DIR / "itc" / "llm_router_events.jsonl"
 QWEN_AUTH_FILE = BASE_DIR / "agents" / "main" / "agent" / "auth-profiles.json"
 TACTI_EVENT_LOG = BASE_DIR / "workspace" / "state" / "tacti_cr" / "events.jsonl"
 ACTIVE_INFERENCE_STATE_PATH = BASE_DIR / "workspace" / "state" / "active_inference_state.json"
+WITNESS_LEDGER_PATH = BASE_DIR / "workspace" / "state_runtime" / "teamchat" / "witness_ledger.jsonl"
 
 TACTI_ROOT = BASE_DIR / "workspace"
 if str(TACTI_ROOT) not in sys.path:
@@ -210,7 +216,7 @@ DEFAULT_POLICY = {
 
 # Alias normalization to reconcile invariant/policy strings with registry IDs.
 PROVIDER_ID_ALIASES = {
-    "google-gemini-cli": "gemini",
+    "google-gemini-cli": "google-gemini-cli",
     "qwen-portal": "qwen_alibaba",
     "minimax-portal": "minimax-portal",
     "gemini": "gemini",
@@ -236,6 +242,21 @@ def normalize_provider_id(value):
     if not key:
         return key
     return PROVIDER_ID_ALIASES.get(key, key)
+
+
+def denormalize_provider_ids(value):
+    out = []
+    for raw, norm in PROVIDER_ID_ALIASES.items():
+        if norm == value:
+            out.append(raw)
+    return out
+
+
+def canonical_intent(intent):
+    raw = str(intent or "")
+    if raw.startswith("teamchat:"):
+        return "coding"
+    return raw
 
 
 def _normalize_provider_order(items):
@@ -399,6 +420,14 @@ def _tacti_event(event_type, detail):
 
 def _flag_enabled(name):
     return str(os.environ.get(name, "")).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def tacti_features_from_proprioception(snapshot):
+    snap = dict(snapshot or {})
+    arousal = 0.05
+    if snap.get("error_rate", 0.0) and float(snap.get("error_rate", 0.0)) > 0.2:
+        arousal = 0.2
+    return {"arousal": float(arousal)}
 
 
 def _legacy_tacti_flags_enabled():
@@ -763,8 +792,10 @@ class PolicyRouter:
         self.circuit_state = load_circuit_state(circuit_path)
         self.handlers = handlers or {}
         self.run_counts = {}
+        self._proprio_sampler = ProprioceptiveSampler() if _flag_enabled("OPENCLAW_ROUTER_PROPRIOCEPTION") and ProprioceptiveSampler else None
 
     def _intent_cfg(self, intent):
+        intent = canonical_intent(intent)
         intents = self.policy.get("routing", {}).get("intents", {})
         if intent in intents:
             return intents.get(intent, {})
@@ -1067,6 +1098,10 @@ class PolicyRouter:
         controls["enabled"] = True
         now_ts = int(time.time())
         now_local = time.localtime(now_ts)
+        proprio_snapshot = (context_metadata or {}).get("proprioception", {})
+        tacti_features = {}
+        if _flag_enabled("OPENCLAW_ROUTER_PROPRIOCEPTION"):
+            tacti_features = tacti_features_from_proprioception(proprio_snapshot)
 
         if callable(compute_expression):
             expression = compute_expression(
@@ -1076,7 +1111,7 @@ class PolicyRouter:
                     "local_available": True,
                     "hour": int(now_local.tm_hour),
                     "valence": float((context_metadata or {}).get("valence", 0.0)),
-                    "arousal": 1.0,
+                    "arousal": float((context_metadata or {}).get("arousal", tacti_features.get("arousal", 1.0))),
                 },
             )
             controls["expression"] = expression
@@ -1190,10 +1225,14 @@ class PolicyRouter:
 
     def execute_with_escalation(self, intent, payload, context_metadata=None, validate_fn=None):
         intent_cfg = self._intent_cfg(intent)
+        budget_intent = canonical_intent(intent)
         attempts = 0
         last_reason = None
         context_metadata = context_metadata or {}
         runtime_context = dict(context_metadata)
+        if self._proprio_sampler is not None:
+            snap = self._proprio_sampler.snapshot()
+            runtime_context.setdefault("proprioception", snap)
         if _flag_enabled("ENABLE_ACTIVE_INFERENCE"):
             runtime_context["active_inference"] = _active_inference_payload(runtime_context)
         tacti_controls = self._tacti_runtime_controls(intent, intent_cfg, runtime_context)
@@ -1225,12 +1264,13 @@ class PolicyRouter:
                 self.event_log,
             )
 
-        max_per_run = int(self.policy.get("budgets", {}).get("intents", {}).get(intent, {}).get("maxCallsPerRun", 0))
-        self.run_counts.setdefault(intent, 0)
+        max_per_run = int(self.policy.get("budgets", {}).get("intents", {}).get(budget_intent, {}).get("maxCallsPerRun", 0))
+        self.run_counts.setdefault(budget_intent, 0)
         now = int(time.time())
 
         for name in order:
-            if max_per_run and self.run_counts[intent] >= max_per_run:
+            provider_start = time.perf_counter()
+            if max_per_run and self.run_counts[budget_intent] >= max_per_run:
                 last_reason = "max_calls_per_run_exhausted"
                 log_event("router_skip", {"intent": intent, "provider": name, "reason_code": last_reason}, self.event_log)
                 break
@@ -1303,18 +1343,23 @@ class PolicyRouter:
                 effective_tokens = max(1, int(round(est_tokens / max(multiplier, 0.05))))
                 if tacti_controls.get("tighten_budget"):
                     effective_tokens = max(1, int(round(effective_tokens * 1.25)))
-            allowed, reason = self._budget_allows(intent, tier, effective_tokens)
+            allowed, reason = self._budget_allows(budget_intent, tier, effective_tokens)
             if not allowed:
                 last_reason = reason
                 log_event("router_skip", {"intent": intent, "provider": name, "reason_code": reason}, self.event_log)
                 continue
 
             attempts += 1
-            self.run_counts[intent] += 1
-            self._budget_consume(intent, tier, effective_tokens)
+            self.run_counts[budget_intent] += 1
+            self._budget_consume(budget_intent, tier, effective_tokens)
 
             # handler dispatch
             handler = self.handlers.get(name)
+            if handler is None:
+                for alias in denormalize_provider_ids(name):
+                    if alias in self.handlers:
+                        handler = self.handlers.get(alias)
+                        break
             if handler:
                 result = handler(payload, model_id, runtime_context)
             else:
@@ -1367,6 +1412,23 @@ class PolicyRouter:
                     },
                     self.event_log,
                 )
+                if self._proprio_sampler is not None:
+                    breaker_open = []
+                    for prov_name, entry in (self.circuit_state.get("providers", {}) or {}).items():
+                        try:
+                            if int(entry.get("openUntil", 0)) > int(time.time()):
+                                breaker_open.append(str(prov_name))
+                        except Exception:
+                            continue
+                    self._proprio_sampler.set_breaker_open_providers(breaker_open)
+                    self._proprio_sampler.record_decision(
+                        duration_ms=(time.perf_counter() - provider_start) * 1000.0,
+                        tokens_in=est_tokens,
+                        tokens_out=0,
+                        provider=name,
+                        ok=False,
+                        err=reason_code,
+                    )
                 continue
 
             text_out = result.get("text", "")
@@ -1422,7 +1484,27 @@ class PolicyRouter:
                     intent=intent,
                 )
                 log_event("tacti_routing_plan", tacti_plan, self.event_log)
-            return {
+            meta = None
+            if self._proprio_sampler is not None:
+                breaker_open = []
+                for prov_name, entry in (self.circuit_state.get("providers", {}) or {}).items():
+                    try:
+                        if int(entry.get("openUntil", 0)) > int(time.time()):
+                            breaker_open.append(str(prov_name))
+                    except Exception:
+                        continue
+                self._proprio_sampler.set_breaker_open_providers(breaker_open)
+                self._proprio_sampler.record_decision(
+                    duration_ms=(time.perf_counter() - provider_start) * 1000.0,
+                    tokens_in=est_tokens,
+                    tokens_out=estimate_tokens(text_out),
+                    provider=name,
+                    ok=True,
+                )
+                snap = self._proprio_sampler.snapshot()
+                runtime_context.setdefault("proprioception", snap)
+                meta = {"proprioception": snap}
+            result_payload = {
                 "ok": True,
                 "provider": name,
                 "model": model_id,
@@ -1432,6 +1514,9 @@ class PolicyRouter:
                 "reason_code": "success",
                 "tacti": tacti_plan,
             }
+            if meta is not None:
+                result_payload["meta"] = meta
+            return result_payload
 
         log_event(
             "router_fail",

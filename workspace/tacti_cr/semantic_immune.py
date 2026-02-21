@@ -5,6 +5,8 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import os
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -87,9 +89,95 @@ def _mad(values: list[float]) -> float:
     return _median([abs(v - med) for v in values])
 
 
+def _epitope_enabled() -> bool:
+    return str(os.environ.get("OPENCLAW_SEMANTIC_IMMUNE_EPITOPES", "")).strip().lower() in {"1", "true", "yes", "on"} or str(
+        os.environ.get("OPENCLAW_EPITOPE_CACHE", "")
+    ).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _normalize_claim(claim: str) -> list[str]:
+    text = str(claim or "").lower()
+    return [tok for tok in re.findall(r"[a-z0-9_]+", text) if tok]
+
+
+def _claim_signature(claim: str) -> dict[str, Any]:
+    tokens = _normalize_claim(claim)
+    digest = hashlib.sha256(" ".join(tokens).encode("utf-8")).hexdigest()[:16]
+    return {"tokens": sorted(set(tokens)), "digest": digest}
+
+
+def _jaccard(a_tokens: list[str], b_tokens: list[str]) -> float:
+    aset = set(a_tokens or [])
+    bset = set(b_tokens or [])
+    if not aset and not bset:
+        return 1.0
+    if not aset or not bset:
+        return 0.0
+    inter = len(aset & bset)
+    union = len(aset | bset)
+    return float(inter) / float(union or 1)
+
+
+class EpitopeCache:
+    def __init__(self, capacity: int = 256):
+        self.capacity = max(1, int(capacity))
+        self._rows: list[dict[str, Any]] = []
+
+    def add(self, claim: str, max_size: int | None = None) -> bool:
+        signature = _claim_signature(claim)
+        if not signature["tokens"]:
+            return False
+        cap = max(1, int(max_size if max_size is not None else self.capacity))
+        self.capacity = cap
+        self._rows.append(signature)
+        if len(self._rows) > cap:
+            self._rows = self._rows[-cap:]
+        return True
+
+    def match(self, claim: str, threshold: float = 0.6) -> bool:
+        incoming = _claim_signature(claim)
+        tokens = incoming.get("tokens", [])
+        if not tokens:
+            return False
+        for row in self._rows:
+            if _jaccard(tokens, row.get("tokens", [])) >= float(threshold):
+                return True
+        return False
+
+
+_EPITOPE_CACHE = EpitopeCache(capacity=256)
+
+
+def cache_epitope(losing_belief: str, *, max_len: int = 256, max_size: int | None = None) -> bool:
+    if not _epitope_enabled():
+        return False
+    cap = int(max_size if max_size is not None else max_len)
+    return _EPITOPE_CACHE.add(str(losing_belief or ""), max_size=cap)
+
+
+def epitope_cache_hit(claim: str, *, threshold: float = 0.6) -> bool:
+    if not _epitope_enabled():
+        return False
+    return _EPITOPE_CACHE.match(str(claim or ""), threshold=threshold)
+
+
 def assess_content(repo_root: Path, content: str) -> dict[str, Any]:
     if not is_enabled("semantic_immune"):
         return {"ok": True, "reason": "semantic_immune_disabled", "quarantined": False}
+
+    if epitope_cache_hit(content):
+        digest = hashlib.sha256(str(content).encode("utf-8")).hexdigest()[:16]
+        row = {
+            "ts": _utc_now(),
+            "content_hash": digest,
+            "score": 1.0,
+            "threshold": 0.6,
+            "reason": "epitope_cache_hit",
+        }
+        paths = _paths(repo_root)
+        _append(paths["quarantine"], {**row, "content": content})
+        emit("tacti_cr.semantic_immune.quarantined", {k: row[k] for k in ("content_hash", "score", "threshold", "reason")})
+        return {"ok": True, "quarantined": True, **row}
 
     paths = _paths(repo_root)
     stats = _load_stats(paths["stats"])
@@ -167,4 +255,11 @@ def approve_quarantine(repo_root: Path, content_hash: str) -> dict[str, Any]:
     return {"ok": True, "content_hash": target}
 
 
-__all__ = ["assess_content", "approve_quarantine"]
+__all__ = [
+    "EpitopeCache",
+    "_EPITOPE_CACHE",
+    "assess_content",
+    "approve_quarantine",
+    "cache_epitope",
+    "epitope_cache_hit",
+]
