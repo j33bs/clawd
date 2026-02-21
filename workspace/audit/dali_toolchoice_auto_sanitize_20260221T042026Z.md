@@ -649,3 +649,62 @@ After gate + rebuild (same callsite family):
 - The proven outbound callsite in `@mariozechner/pi-ai` is now stripping both `tools` and `tool_choice` for local vLLM when disabled.
 - The persistent vLLM 400 remains even when outbound payload keys show no tools/tool_choice, indicating residual server-side behavior and/or additional semantics not captured by top-level key presence.
 - This commit resolves the requested local-callsite capability gate and provides deterministic evidence in-service-context.
+
+## On-Wire Correlated Trace Upgrade (2026-02-21T06:58:46Z)
+
+Objective:
+- Add correlation and on-wire body-key detection at final Node outbound boundary to prove whether `tool_choice`/`tools` exist in the serialized HTTP body that maps to each 4xx response.
+
+### Change
+
+Updated tracer overlay generation in:
+- `workspace/scripts/rebuild_runtime_openclaw.sh`
+
+New opt-in events when `OPENCLAW_TRACE_VLLM_OUTBOUND=1`:
+- `vllm_outbound_trace_send`
+- `vllm_outbound_trace_resp`
+
+New fields:
+- `request_id` (per outbound request)
+- `target_url`, `method`, `content_length`
+- `payload_size_bytes`, `payload_top_keys`
+- `body_has_tools`, `body_has_tool_choice`, `body_has_tool_calls`, `body_has_function_call`
+- `status_code`, `err_snippet` (first 160 chars for status >= 400)
+- `stack_fingerprint`
+
+No payload content is logged.
+
+### Commands Run
+
+```bash
+./workspace/scripts/rebuild_runtime_openclaw.sh
+systemctl --user daemon-reload
+systemctl --user restart openclaw-gateway.service
+openclaw agent --to +10000000000 --message "wire-trace probe" --json
+journalctl --user -u openclaw-gateway.service --since '2026-02-21 16:58:38' --no-pager \
+  | rg -n -S "vllm_outbound_trace_send|vllm_outbound_trace_resp|request_id|auto\" tool choice|tool-call-parser"
+```
+
+### Key Correlated Evidence
+
+Example correlated pair (same `request_id`):
+- send (`request_id=mlvywr69-001`)
+  - `target_url=http://127.0.0.1:8001/v1/chat/completions`
+  - `body_has_tools=false`
+  - `body_has_tool_choice=false`
+  - `payload_top_keys=["model","messages","stream","stream_options","store","max_completion_tokens"]`
+  - stack ends at `@mariozechner/pi-ai/src/providers/openai-completions.ts:131:7`
+- resp (`request_id=mlvywr69-001`)
+  - `status_code=400`
+  - `err_snippet="'max_tokens' or 'max_completion_tokens' is too large..."`
+
+Additional correlated pairs (`mlvywr6z-002`, `mlvywr84-003`, `mlvywr9p-005`, `mlvywre6-00b`, `mlvywrf8-00c`) all show:
+- `body_has_tools=false`
+- `body_has_tool_choice=false`
+- response 400 snippets are context/max token errors, not auto-tool-choice parser errors.
+
+### Conclusion from Correlated Wire Trace
+
+- In current runtime after this trace upgrade, the serialized outbound body at the proven callsite is not carrying `tool_choice` or `tools`.
+- Current 4xx responses correlate to context/max-token limits, not tool-call parser requirements.
+- The historical `"auto" tool choice requires ...` 400 did not reproduce in this post-upgrade run window; correlated traces indicate the present failure mode is different.

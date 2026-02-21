@@ -79,6 +79,12 @@ const TRACE_VLLM = String(process.env.OPENCLAW_TRACE_VLLM_OUTBOUND || "").trim()
 const traceVllmEnabled = TRACE_VLLM === "1" || TRACE_VLLM === "true" || TRACE_VLLM === "yes" || TRACE_VLLM === "on";
 const CALLSITE = "gateway.edge.final_dispatch";
 const VLLM_LOCAL_PORTS = new Set(["8000", "8001"]);
+let requestCounter = 0;
+
+function nextRequestId() {
+  requestCounter = (requestCounter + 1) % 1679616;
+  return `${Date.now().toString(36)}-${requestCounter.toString(36).padStart(3, "0")}`;
+}
 
 function redactUrl(rawUrl) {
   if (!rawUrl) return "";
@@ -112,6 +118,25 @@ function parseJsonBody(body) {
   }
 }
 
+function detectBodyFlags(bodyText) {
+  const text = typeof bodyText === "string" ? bodyText : "";
+  const parsed = parseJsonBody(text);
+  const topKeys = parsed && typeof parsed === "object" && !Array.isArray(parsed) ? Object.keys(parsed) : [];
+  return {
+    payload_size_bytes: Buffer.byteLength(text, "utf8"),
+    payload_top_keys: topKeys,
+    body_has_tools: text.includes('"tools"'),
+    body_has_tool_choice: text.includes('"tool_choice"'),
+    body_has_tool_calls: text.includes('"tool_calls"'),
+    body_has_function_call: text.includes('"function_call"')
+  };
+}
+
+function shortSnippet(value, maxLen = 160) {
+  const text = String(value || "").replace(/\s+/g, " ").trim();
+  return text.length > maxLen ? `${text.slice(0, maxLen)}...` : text;
+}
+
 function isVllmTarget(urlString, host, port) {
   const hostLc = String(host || "").toLowerCase();
   const urlLc = String(urlString || "").toLowerCase();
@@ -122,26 +147,18 @@ function isVllmTarget(urlString, host, port) {
   return false;
 }
 
-function logVllmTrace({ targetUrl, method, contentLength, parsedPayload, callsiteTag }) {
+function logVllmTrace(event, fields) {
   if (!traceVllmEnabled) return;
-  const payloadKeys = parsedPayload && typeof parsedPayload === "object" && !Array.isArray(parsedPayload)
-    ? Object.keys(parsedPayload)
-    : [];
-  const line = JSON.stringify({
+  const line = {
     subsystem: "tool_payload_trace",
-    event: "vllm_outbound_trace",
+    event,
     ts: new Date().toISOString(),
-    target_url: redactUrl(targetUrl),
-    method: String(method || "GET").toUpperCase(),
-    content_length: Number(contentLength || 0),
-    payload_top_keys: payloadKeys,
-    has_tools: payloadKeys.includes("tools"),
-    has_tool_choice: payloadKeys.includes("tool_choice"),
-    callsite_tag: callsiteTag || CALLSITE,
+    callsite_tag: CALLSITE,
     stack_fingerprint: stackFingerprint()
-  });
+  };
+  Object.assign(line, fields || {});
   // eslint-disable-next-line no-console
-  console.log(line);
+  console.log(JSON.stringify(line));
 }
 
 function sanitizePayloadObject(value) {
@@ -203,6 +220,9 @@ if (typeof originalFetch === "function") {
         return "";
       }
     })();
+    const isVllm = isVllmTarget(targetUrl, urlHost, urlPort);
+    let requestId = null;
+    let wireBody = "";
 
     if (nextInit && typeof nextInit.body === "string") {
       const out = sanitizeBodyMaybeJson(nextInit.body);
@@ -210,14 +230,15 @@ if (typeof originalFetch === "function") {
         nextInit.body = out.body;
         logSanitized();
       }
-      if (isVllmTarget(targetUrl, urlHost, urlPort)) {
-        const parsed = parseJsonBody(nextInit.body);
-        logVllmTrace({
-          targetUrl,
-          method,
-          contentLength: Buffer.byteLength(nextInit.body, "utf8"),
-          parsedPayload: parsed,
-          callsiteTag: CALLSITE
+      wireBody = nextInit.body;
+      if (isVllm) {
+        requestId = nextRequestId();
+        logVllmTrace("vllm_outbound_trace_send", {
+          request_id: requestId,
+          target_url: redactUrl(targetUrl),
+          method: String(method || "GET").toUpperCase(),
+          content_length: Buffer.byteLength(wireBody, "utf8"),
+          ...detectBodyFlags(wireBody)
         });
       }
     }
@@ -230,14 +251,15 @@ if (typeof originalFetch === "function") {
           const text = await clone.text();
           const out = sanitizeBodyMaybeJson(text);
           const traceBody = out.changed ? out.body : text;
-          if (isVllmTarget(req.url, urlHost, urlPort)) {
-            const parsed = parseJsonBody(traceBody);
-            logVllmTrace({
-              targetUrl: req.url,
-              method,
-              contentLength: Buffer.byteLength(traceBody, "utf8"),
-              parsedPayload: parsed,
-              callsiteTag: CALLSITE
+          wireBody = traceBody;
+          if (isVllm) {
+            requestId = nextRequestId();
+            logVllmTrace("vllm_outbound_trace_send", {
+              request_id: requestId,
+              target_url: redactUrl(req.url),
+              method: String(method || req.method || "GET").toUpperCase(),
+              content_length: Buffer.byteLength(traceBody, "utf8"),
+              ...detectBodyFlags(traceBody)
             });
           }
           if (out.changed) {
@@ -250,14 +272,50 @@ if (typeof originalFetch === "function") {
               signal: req.signal
             });
             logSanitized();
-            return originalFetch.call(this, patched);
+            const response = await originalFetch.call(this, patched);
+            if (isVllm) {
+              let errSnippet = "";
+              if (response.status >= 400) {
+                try {
+                  errSnippet = shortSnippet(await response.clone().text());
+                } catch {
+                  errSnippet = "";
+                }
+              }
+              logVllmTrace("vllm_outbound_trace_resp", {
+                request_id: requestId || nextRequestId(),
+                target_url: redactUrl(req.url),
+                method: String(method || req.method || "GET").toUpperCase(),
+                status_code: Number(response.status || 0),
+                err_snippet: errSnippet
+              });
+            }
+            return response;
           }
         }
       } catch {
         // Preserve original request flow on patch failure.
       }
     }
-    return originalFetch.call(this, input, nextInit);
+    const response = await originalFetch.call(this, input, nextInit);
+    if (isVllm) {
+      let errSnippet = "";
+      if (response.status >= 400) {
+        try {
+          errSnippet = shortSnippet(await response.clone().text());
+        } catch {
+          errSnippet = "";
+        }
+      }
+      logVllmTrace("vllm_outbound_trace_resp", {
+        request_id: requestId || nextRequestId(),
+        target_url: redactUrl(targetUrl),
+        method: String(method || "GET").toUpperCase(),
+        status_code: Number(response.status || 0),
+        err_snippet: errSnippet
+      });
+    }
+    return response;
   };
 }
 
@@ -317,14 +375,48 @@ function patchNodeRequest(mod) {
       const body = Buffer.concat(chunks).toString("utf8");
       const out = sanitizeBodyMaybeJson(body);
       const finalBody = out.changed ? out.body : body;
-      if (isVllmTarget(targetUrl, host, port)) {
-        const parsed = parseJsonBody(finalBody);
-        logVllmTrace({
-          targetUrl,
-          method,
-          contentLength: Buffer.byteLength(finalBody, "utf8"),
-          parsedPayload: parsed,
-          callsiteTag: CALLSITE
+      const isVllm = isVllmTarget(targetUrl, host, port);
+      const requestId = isVllm ? nextRequestId() : null;
+      if (isVllm) {
+        logVllmTrace("vllm_outbound_trace_send", {
+          request_id: requestId,
+          target_url: redactUrl(targetUrl),
+          method: String(method || "POST").toUpperCase(),
+          content_length: Buffer.byteLength(finalBody, "utf8"),
+          ...detectBodyFlags(finalBody)
+        });
+        req.once("response", (res) => {
+          const statusCode = Number(res?.statusCode || 0);
+          if (statusCode < 400) {
+            logVllmTrace("vllm_outbound_trace_resp", {
+              request_id: requestId,
+              target_url: redactUrl(targetUrl),
+              method: String(method || "POST").toUpperCase(),
+              status_code: statusCode
+            });
+            return;
+          }
+          const chunks = [];
+          let received = 0;
+          res.on("data", (buf) => {
+            if (!buf) return;
+            const chunkBuf = Buffer.isBuffer(buf) ? buf : Buffer.from(String(buf));
+            if (received < 512) {
+              const remaining = 512 - received;
+              chunks.push(chunkBuf.subarray(0, remaining));
+            }
+            received += chunkBuf.length;
+          });
+          res.on("end", () => {
+            const snippet = shortSnippet(Buffer.concat(chunks).toString("utf8"));
+            logVllmTrace("vllm_outbound_trace_resp", {
+              request_id: requestId,
+              target_url: redactUrl(targetUrl),
+              method: String(method || "POST").toUpperCase(),
+              status_code: statusCode,
+              err_snippet: snippet
+            });
+          });
         });
       }
       if (out.changed) {
