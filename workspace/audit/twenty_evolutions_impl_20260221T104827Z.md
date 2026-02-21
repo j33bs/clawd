@@ -9213,3 +9213,183 @@ PASS tool governance denies explicit denylist actions
 RUN node tests/tool_governance_edge_hook.test.js
 PASS http edge governance hook maps approval/deny errors deterministically
 OK 38 test group(s)
+
+=== Namespace hardening baseline ===
+Sat Feb 21 13:10:48 UTC 2026
+ M workspace/audit/twenty_evolutions_impl_20260221T104827Z.md
+45ca3eb
+
+=== Phase 1: aliasing invariant test ===
+test_arousal_alias_functional_equivalence (tests_unittest.test_tacti_namespace_aliasing.TestTactiNamespaceAliasing.test_arousal_alias_functional_equivalence) ... FAIL
+test_events_alias_shares_persistence_target_contract (tests_unittest.test_tacti_namespace_aliasing.TestTactiNamespaceAliasing.test_events_alias_shares_persistence_target_contract) ... ok
+
+======================================================================
+FAIL: test_arousal_alias_functional_equivalence (tests_unittest.test_tacti_namespace_aliasing.TestTactiNamespaceAliasing.test_arousal_alias_functional_equivalence)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/private/tmp/twenty-evolutions-20260221/tests_unittest/test_tacti_namespace_aliasing.py", line 28, in test_arousal_alias_functional_equivalence
+    self.assertEqual(canonical_plan, legacy_plan)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Compu[25 chars] timeout_multiplier=1.0, context_budget=2000, allow_paid=False) != Compu[25 chars] timeout_multiplier=1.0, context_budget=2000, allow_paid=False)
+
+----------------------------------------------------------------------
+Ran 2 tests in 0.071s
+
+FAILED (failures=1)
+
+=== Re-run: aliasing invariant test (after fix) ===
+test_arousal_alias_functional_equivalence (tests_unittest.test_tacti_namespace_aliasing.TestTactiNamespaceAliasing.test_arousal_alias_functional_equivalence) ... ok
+test_events_alias_shares_persistence_target_contract (tests_unittest.test_tacti_namespace_aliasing.TestTactiNamespaceAliasing.test_events_alias_shares_persistence_target_contract) ... ok
+
+----------------------------------------------------------------------
+Ran 2 tests in 0.055s
+
+OK
+
+=== Re-run: full relevant Python slice ===
+test_arousal_alias_functional_equivalence (tests_unittest.test_tacti_namespace_aliasing.TestTactiNamespaceAliasing.test_arousal_alias_functional_equivalence) ... ok
+test_events_alias_shares_persistence_target_contract (tests_unittest.test_tacti_namespace_aliasing.TestTactiNamespaceAliasing.test_events_alias_shares_persistence_target_contract) ... ok
+test_hivemind_query_parses_json_results (tests_unittest.test_tacti_cr_hivemind_bridge.TestTactiCRHiveMindBridge.test_hivemind_query_parses_json_results) ... ok
+test_hivemind_store_returns_true_on_stored (tests_unittest.test_tacti_cr_hivemind_bridge.TestTactiCRHiveMindBridge.test_hivemind_store_returns_true_on_stored) ... ok
+test_emit_and_read_deterministic_timestamp (tests_unittest.test_tacti_cr_events.TestTactiCrEvents.test_emit_and_read_deterministic_timestamp) ... ok
+test_non_serializable_payload (tests_unittest.test_tacti_cr_events.TestTactiCrEvents.test_non_serializable_payload) ... ok
+test_summarize_by_type (tests_unittest.test_tacti_cr_events.TestTactiCrEvents.test_summarize_by_type) ... ok
+test_collapse_state_on_severe_failure_count (tests_unittest.test_tacti_cr_collapse.TestTactiCRCollapse.test_collapse_state_on_severe_failure_count) ... ok
+test_degraded_detects_repeated_failures (tests_unittest.test_tacti_cr_collapse.TestTactiCRCollapse.test_degraded_detects_repeated_failures) ... ok
+test_health_is_healthy_by_default (tests_unittest.test_tacti_cr_collapse.TestTactiCRCollapse.test_health_is_healthy_by_default) ... ok
+test_hivemind_history_adds_warning_and_action (tests_unittest.test_tacti_cr_collapse.TestTactiCRCollapse.test_hivemind_history_adds_warning_and_action) ... ok
+test_provider_exhaustion_warning_when_last_event_matches (tests_unittest.test_tacti_cr_collapse.TestTactiCRCollapse.test_provider_exhaustion_warning_when_last_event_matches) ... ok
+test_prune_expired_respects_retention_window (tests_unittest.test_tacti_cr_temporal.TestTactiCRTemporal.test_prune_expired_respects_retention_window) ... ok
+test_retrieve_can_include_hivemind_context (tests_unittest.test_tacti_cr_temporal.TestTactiCRTemporal.test_retrieve_can_include_hivemind_context) ... ok
+test_retrieve_prefers_recent_relevant_entries (tests_unittest.test_tacti_cr_temporal.TestTactiCRTemporal.test_retrieve_prefers_recent_relevant_entries) ... ok
+test_store_clamps_importance (tests_unittest.test_tacti_cr_temporal.TestTactiCRTemporal.test_store_clamps_importance) ... ok
+test_store_syncs_to_hivemind (tests_unittest.test_tacti_cr_temporal.TestTactiCRTemporal.test_store_syncs_to_hivemind) ... ok
+test_arousal_temporal_collapse_repair_flow (tests_unittest.test_tacti_cr_integration.TestTactiCRIntegration.test_arousal_temporal_collapse_repair_flow) ... ok
+test_first_failure_enters_impasse_not_collapse (tests_unittest.test_tacti_cr_impasse.TestImpasseManager.test_first_failure_enters_impasse_not_collapse) ... ok
+test_legacy_shim_import_still_resolves (tests_unittest.test_tacti_cr_impasse.TestImpasseManager.test_legacy_shim_import_still_resolves) ... ok
+test_repeated_failures_trigger_repairable_collapse (tests_unittest.test_tacti_cr_impasse.TestImpasseManager.test_repeated_failures_trigger_repairable_collapse) ... ok
+test_stable_success_recovers_from_collapse (tests_unittest.test_tacti_cr_impasse.TestImpasseManager.test_stable_success_recovers_from_collapse) ... ok
+test_handler_path_invokes_tracker_once_per_append (tests_unittest.test_memory_message_hooks.TestMemoryMessageHooks.test_handler_path_invokes_tracker_once_per_append) ... ok
+test_trackers_update_deterministically_without_raw_content (tests_unittest.test_memory_message_hooks.TestMemoryMessageHooks.test_trackers_update_deterministically_without_raw_content) ... ok
+test_open_and_close_persist_artifacts_and_relationship_state (tests_unittest.test_session_handshake.TestSessionHandshake.test_open_and_close_persist_artifacts_and_relationship_state) ... ok
+test_verify_llm_policy_accepts_legacy_provider_aliases (tests_unittest.test_verify_llm_policy_alias.TestVerifyLlmPolicyAlias.test_verify_llm_policy_accepts_legacy_provider_aliases) ... ok
+test_verify_llm_policy_still_rejects_unknown_provider (tests_unittest.test_verify_llm_policy_alias.TestVerifyLlmPolicyAlias.test_verify_llm_policy_still_rejects_unknown_provider) ... ok
+
+----------------------------------------------------------------------
+Ran 27 tests in 0.980s
+
+OK
+
+=== npm test (alias hardening) ===
+log_path=/tmp/twenty_evolutions_npm_test_alias_hardening_20260221.log
+PASS injectRuntimeEnv respects operator override and injects missing
+PASS injectRuntimeEnv propagates GROQ_API_KEY operator override to OPENCLAW_GROQ_API_KEY
+PASS config includes secrets bridge governance knobs
+PASS redaction covers mapped secret env vars
+PASS auto backend detection is platform deterministic
+PASS file backend requires explicit opt-in
+RUN node tests/secrets_cli_exec.test.js
+PASS secrets cli exec injects alias env keys without printing values
+RUN node tests/secrets_cli_plugin.test.js
+PASS plugin registers CLI command: secrets
+PASS secrets cli status prints enablement header (no secrets)
+secrets_cli_plugin tests complete
+RUN node tests/skill_composer.test.js
+PASS skill composer is disabled by default
+PASS skill composer respects tool governance decisions
+RUN node tests/system1_ignores_system2_env.test.js
+PASS createVllmProvider ignores SYSTEM2_VLLM_* when system2 is false
+PASS probeVllmServer ignores SYSTEM2_VLLM_* when system2 is false
+PASS probeVllmServer consults SYSTEM2_VLLM_* when system2 is true
+PASS probeVllmServer consults SYSTEM2_VLLM_* when nodeId alias resolves to c_lawd
+RUN node tests/system2_config_resolver.test.js
+PASS resolves with explicit args (highest precedence)
+PASS falls back to SYSTEM2_VLLM_* env vars
+PASS falls back to OPENCLAW_VLLM_* env vars
+PASS prefers SYSTEM2_VLLM_* over OPENCLAW_VLLM_*
+PASS uses node alias system-2 for c_lawd routing context
+PASS uses defaults when envs not set
+PASS emits diagnostic events (keys only)
+PASS resolves numeric config deterministically
+PASS invalid numeric env yields NaN (no throw)
+RUN node tests/system2_evidence_bundle.test.js
+PASS buildEvidenceBundle captures raw, writes redacted output, and emits manifest
+PASS buildEvidenceBundle preserves fail-closed snapshot status
+RUN node tests/system2_experiment.test.js
+PASS no-change fixture yields INCONCLUSIVE
+PASS improvement fixture yields KEEP
+PASS regression fixture yields REVERT
+PASS auth preset script maps to calibrated fail-on path
+PASS calibrated auth fail-on yields REVERT on regression fixture
+PASS failing subprocess writes UNAVAILABLE report and exits 3
+RUN node tests/system2_federation_observability_contract.test.js
+PASS FederatedEnvelopeV1 fixture validates (strict)
+PASS FederatedEnvelopeV1 rejects invalid schema (fail-closed)
+PASS System2EventV1 fixture validates
+PASS JSONL sink contract is deterministic (exact line match)
+PASS redaction-at-write is deterministic and idempotent
+PASS gating: disabled emitter is a no-op
+PASS gating: enabled emitter appends a redacted event
+PASS emitter does not throw on sink error by default (strict=false)
+PASS emitter fails closed on sink error when strict=true
+RUN node tests/system2_http_edge.test.js
+SKIP system2_http_edge: loopback bind not permitted in this environment
+RUN node tests/system2_repair_auth_profiles_acceptance.test.js
+PASS system2 repair auth-profiles acceptance check
+RUN node tests/system2_repair_models_acceptance.test.js
+PASS system2 repair models acceptance check
+RUN node tests/system2_repair_scripts_regression.test.js
+PASS system2 repair scripts regression gate
+RUN node tests/system2_snapshot_capture.test.js
+PASS captureSnapshot writes stable files and summary shape
+PASS captureSnapshot fail-closed with partial outputs when command fails
+RUN node tests/system2_snapshot_diff.test.js
+PASS JSON output is stable and ignores timestamp fields by default
+PASS ignore list suppresses expected diff paths and exits 0
+PASS fail-on marks regressions and exits 2
+PASS human output includes summary counts and regression marker
+PASS computeDiff supports deterministic dotpath flattening
+RUN node tests/system2_snapshot_observability_seam.test.js
+PASS OFF: system2.observability.enabled=false emits nothing and writes no JSONL
+PASS ON: system2.observability.enabled=true writes exactly one deterministic JSONL line
+RUN node tests/tacticr_feedback_writer.test.js
+PASS tacticr feedback writer appends schema-valid sanitized JSONL entries
+PASS tacticr feedback writer enforces required schema fields
+RUN node tests/tool_governance.test.js
+PASS tool governance allows explicit allowlist actions
+PASS tool governance asks for exec/network/outside-workspace writes
+PASS tool governance denies explicit denylist actions
+RUN node tests/tool_governance_edge_hook.test.js
+PASS http edge governance hook maps approval/deny errors deterministically
+OK 38 test group(s)
+
+## Namespace hardening follow-up (aliasing invariants + shim metadata)
+
+### What changed
+- Added aliasing regression test: `tests_unittest/test_tacti_namespace_aliasing.py`.
+  - Validates functional equivalence for `workspace.tacti.arousal` vs `workspace.tacti_cr.arousal`.
+  - Validates shared persistence contract for `workspace.tacti.events` vs `workspace.tacti_cr.events`.
+- Hardened compatibility shims in `workspace/tacti_cr/*.py` without changing exec-forward behavior.
+  - Added metadata guards for `__file__`, `__package__`, and `__spec__` (fallback only when missing).
+  - Preserved `__all__` when canonical modules define it.
+
+### Commands run
+- `git status --porcelain -uall`
+- `git rev-parse --short HEAD`
+- `python3 -m py_compile workspace/tacti_cr/*.py`
+- `python3 -m unittest tests_unittest.test_tacti_namespace_aliasing -v`
+- `python3 -m unittest tests_unittest.test_tacti_namespace_aliasing tests_unittest.test_tacti_cr_hivemind_bridge tests_unittest.test_tacti_cr_events tests_unittest.test_tacti_cr_collapse tests_unittest.test_tacti_cr_temporal tests_unittest.test_tacti_cr_integration tests_unittest.test_tacti_cr_impasse tests_unittest.test_memory_message_hooks tests_unittest.test_session_handshake tests_unittest.test_verify_llm_policy_alias -v`
+- `npm test` (captured; see log path `/tmp/twenty_evolutions_npm_test_alias_hardening_20260221.log`)
+
+### Results
+- New aliasing test: PASS.
+- Relevant Python slice: PASS.
+- Full npm test suite: PASS (`OK 38 test group(s)`).
+
+### Rationale
+- Pins aliasing invariants so future namespace cleanup cannot silently diverge legacy and canonical import paths.
+- Hardens shim metadata to reduce introspection and traceback edge-cases while retaining compatibility.
+
+### Rollback
+- Revert this hardening commit only:
+  - `git revert <commit_sha>`
