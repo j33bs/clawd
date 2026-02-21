@@ -1234,3 +1234,53 @@ M	workspace/state/tacti_cr/events.jsonl
 - Intent: attach lightweight proprioception sample to JS router responses under OPENCLAW_ROUTER_PROPRIOCEPTION.
 - Behavior: flag on => result.meta.proprioception present; flag off => unchanged payload shape.
 - Rollback: git revert <commit_sha_for_wiring_6>
+
+## Wiring #7 Validation 2026-02-21T21:11:05Z
+$ python3 -m unittest tests_unittest.test_ensure_cron_jobs tests_unittest.test_narrative_distill -v
+test_ensure_jobs_create_then_unchanged_then_update (tests_unittest.test_ensure_cron_jobs.TestEnsureCronJobs.test_ensure_jobs_create_then_unchanged_then_update) ... ok
+test_load_templates_and_heartbeat_dependency (tests_unittest.test_ensure_cron_jobs.TestEnsureCronJobs.test_load_templates_and_heartbeat_dependency) ... ok
+test_run_job_now_ensures_templates_and_records_snapshot (tests_unittest.test_ensure_cron_jobs.TestRunJobNowEnsure.test_run_job_now_ensures_templates_and_records_snapshot) ... ok
+test_distillation_is_stable_for_fixed_fixture (tests_unittest.test_narrative_distill.TestNarrativeDistill.test_distillation_is_stable_for_fixed_fixture) ... ok
+test_flag_off_produces_no_write (tests_unittest.test_narrative_distill.TestNarrativeDistill.test_flag_off_produces_no_write) ... ok
+test_max_items_is_respected (tests_unittest.test_narrative_distill.TestNarrativeDistill.test_max_items_is_respected) ... ok
+test_semantic_store_write_is_idempotent_when_flag_on (tests_unittest.test_narrative_distill.TestNarrativeDistill.test_semantic_store_write_is_idempotent_when_flag_on) ... ERROR
+
+======================================================================
+ERROR: test_semantic_store_write_is_idempotent_when_flag_on (tests_unittest.test_narrative_distill.TestNarrativeDistill.test_semantic_store_write_is_idempotent_when_flag_on)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/private/tmp/twenty-evolutions-20260221/workspace/scripts/narrative_distill.py", line 199, in write_semantic_entries
+    from hivemind.trails import TrailStore
+ModuleNotFoundError: No module named 'hivemind'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/private/tmp/twenty-evolutions-20260221/tests_unittest/test_narrative_distill.py", line 58, in test_semantic_store_write_is_idempotent_when_flag_on
+    first = write_semantic_entries(entries, repo_root=root)
+  File "/private/tmp/twenty-evolutions-20260221/workspace/scripts/narrative_distill.py", line 206, in write_semantic_entries
+    from trails import TrailStore
+ModuleNotFoundError: No module named 'trails'
+
+----------------------------------------------------------------------
+Ran 7 tests in 1.133s
+
+FAILED (errors=1)
+$ PYTHONPATH=workspace/hivemind python3 -m unittest tests_unittest.test_narrative_distill.TestNarrativeDistill.test_semantic_store_write_is_idempotent_when_flag_on -v
+test_semantic_store_write_is_idempotent_when_flag_on (tests_unittest.test_narrative_distill.TestNarrativeDistill.test_semantic_store_write_is_idempotent_when_flag_on) ... ok
+
+----------------------------------------------------------------------
+Ran 1 test in 0.066s
+
+OK
+$ git diff --name-status
+M	tests_unittest/test_ensure_cron_jobs.py
+M	workspace/audit/wirings_integration_20260222.md
+M	workspace/automation/cron_jobs.json
+M	workspace/state/tacti_cr/events.jsonl
+
+### Wiring #7 summary
+- Intent: invoke narrative distillation before the Daily Morning Briefing cron payload.
+- Failure handling: command is best-effort and appends warnings to reports/automation/narrative_distill.log without blocking briefing generation.
+- Note: full narrative_distill unittest module requires PYTHONPATH=workspace/hivemind in this environment.
+- Rollback: git revert <commit_sha_for_wiring_7>
