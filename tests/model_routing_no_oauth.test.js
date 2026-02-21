@@ -74,7 +74,7 @@ function main() {
   assert.strictEqual(policy.defaults && policy.defaults.preferLocal, true, 'policy.defaults.preferLocal must be true');
   assert.strictEqual(policy.defaults && policy.defaults.allowPaid, false, 'policy.defaults.allowPaid must be false');
   const policyProviders = (policy.providers || {});
-  // OpenAI/Codex lanes must not be enabled (they may exist but must be disabled).
+  // Auth placeholders may exist only disabled; codex lane keys themselves must be absent.
   for (const k of ['openai_auth', 'openai_api']) {
     if (Object.prototype.hasOwnProperty.call(policyProviders, k)) {
       assert.strictEqual(policyProviders[k].enabled, false, `policy.providers.${k}.enabled must be false`);

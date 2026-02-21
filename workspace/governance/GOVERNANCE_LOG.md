@@ -8,6 +8,7 @@ Append-only record of all governance events. Each entry is immutable once added.
 |------|------|-----|---------|-------|--------|
 | 2026-02-05 | ADMISSION | INITIAL-2026-02-05-001 | Initialize repository with security-first .gitignore | system | ADMITTED |
 | 2026-02-05 | ADMISSION | INITIAL-2026-02-05-002 | Add CONTRIBUTING.md with governance workflow | system | ADMITTED |
+| 2026-02-21 | ADMISSION | POLICY-2026-02-21-OPENAI-CODEX-001 | Align policy verifier with canonical default-deny rule: `policy.providers` must not include `openai-codex`/`openai_codex`; keep `openai_auth`/`openai_api` disabled when present | system | ADMITTED |
 
 ---
 

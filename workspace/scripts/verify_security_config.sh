@@ -23,11 +23,29 @@ def check_groq(path, provider):
     if provider.get('apiKey'):
         failures.append(f"{path}: groq.apiKey must be empty (no secrets)")
 
+def check_policy_provider_contract(path, policy):
+    if not policy:
+        return
+    providers = policy.get('providers', {}) or {}
+    for key in ('openai-codex', 'openai_codex'):
+        if key in providers:
+            failures.append(f"{path}: policy.providers must not include {key}")
+    for key in ('openai_auth', 'openai_api'):
+        entry = providers.get(key)
+        if not isinstance(entry, dict):
+            continue
+        if entry.get('enabled') not in (False, 'false', 'False'):
+            failures.append(f"{path}: policy.providers.{key}.enabled must be false")
+
 # workspace/policy/system_map.json
 system_map = load('workspace/policy/system_map.json') or {}
 nodes = system_map.get('nodes', {})
 if 'dali' not in nodes or 'c_lawd' not in nodes:
     failures.append('workspace/policy/system_map.json: expected nodes dali and c_lawd')
+
+# workspace/policy/llm_policy.json
+policy = load('workspace/policy/llm_policy.json') or {}
+check_policy_provider_contract('workspace/policy/llm_policy.json', policy)
 
 # openclaw.json (optional in repo)
 root = load('openclaw.json') or {}
