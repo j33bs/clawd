@@ -3,6 +3,7 @@ set -e
 
 python3 - <<'PY'
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -18,10 +19,21 @@ def load(path):
 def check_groq(path, provider):
     if not provider:
         return
-    if provider.get('enabled') not in (False, 'false', 'False'):
-        failures.append(f"{path}: groq.enabled must be false")
-    if provider.get('apiKey'):
-        failures.append(f"{path}: groq.apiKey must be empty (no secrets)")
+    enabled = provider.get('enabled')
+    if enabled in (False, 'false', 'False'):
+        failures.append(f"{path}: groq.enabled must not be false (provider is part of free ladder)")
+
+    api_key = provider.get('apiKey')
+    if not api_key:
+        return
+
+    # Allow env-var references only (for example: GROQ_API_KEY).
+    if isinstance(api_key, str) and re.fullmatch(r'[A-Z][A-Z0-9_]*', api_key):
+        return
+    if isinstance(api_key, str) and api_key.startswith('${') and api_key.endswith('}'):
+        return
+
+    failures.append(f"{path}: groq.apiKey must be an env var reference (no key material)")
 
 # workspace/policy/system_map.json
 system_map = load('workspace/policy/system_map.json') or {}
