@@ -89,6 +89,7 @@ FEATURE_FLAGS = {
     "valence": "TACTI_CR_VALENCE",
     "temporal_watchdog": "TACTI_CR_TEMPORAL_WATCHDOG",
     "source_ui_heatmap": "SOURCE_UI_HEATMAP",
+    "gpu_telemetry": "TACTI_CR_GPU_TELEMETRY",
 }
 
 
