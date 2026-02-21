@@ -1,43 +1,29 @@
-name: ci
+name: CI
 
 on:
-  pull_request:
   push:
-    branches:
-      - main
-      - "feat/dali-wire-existing-components-*"
-  workflow_dispatch:
-
-permissions:
-  contents: read
+    branches: [ main, 'feat/dali-wire-existing-components-*' ]
+  pull_request:
+    branches: [ main ]
 
 jobs:
-  glue-suite:
+  test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout source
+        uses: actions/checkout@v3
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
+      - name: Set up Node.js v22
+        uses: actions/setup-node@v3
         with:
-          node-version: "22"
+          node-version: '22'
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v4
         with:
-          python-version: "3.12"
+          python-version: '3.12'
 
-      - name: Install Python deps (optional)
-        run: |
-          if [ -f requirements.txt ]; then
-            python3 -m pip install -r requirements.txt
-          elif [ -f pyproject.toml ]; then
-            python3 -m pip install .
-          else
-            echo "No Python dependency manifest found; skipping install."
-          fi
-
-      - name: Install Node deps (optional)
+      - name: Install Node dependencies (optional)
         run: |
           if [ -f package.json ]; then
             if [ -f package-lock.json ]; then
@@ -49,10 +35,10 @@ jobs:
             echo "No package.json found; skipping npm install."
           fi
 
-      - name: Bash syntax check
+      - name: Run shell syntax check
         run: bash -n scripts/vllm_launch_optimal.sh
 
-      - name: Python glue suite
+      - name: Run Python glue tests
         run: |
           python3 -m unittest \
             tests_unittest.test_policy_router_tacti_main_flow \
@@ -60,7 +46,7 @@ jobs:
             tests_unittest.test_itc_ingestion_boundary_forwarding \
             tests_unittest.test_source_ui_sse
 
-      - name: Node glue suite
+      - name: Run Node glue tests
         run: |
           node tests/providers/local_vllm_provider.test.js
           node tests/router_gpu_guard.test.js

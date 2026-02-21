@@ -1751,3 +1751,30 @@ Result: PR body/comment could not be attached via `gh` in this environment due A
 Use browser PR URL and paste from:
 - `workspace/audit/pr_body_dali_wire_existing_components_20260221.md`
 - https://github.com/j33bs/clawd/pull/39
+
+## CI Workflow Update for PR #39 (2026-02-21)
+
+Workflow file:
+- `.github/workflows/ci.yml`
+
+Trigger events:
+- `push` on branches: `main`, `feat/dali-wire-existing-components-*`
+- `pull_request` on branch: `main`
+
+Commands executed by CI job:
+- `bash -n scripts/vllm_launch_optimal.sh`
+- `python3 -m unittest tests_unittest.test_policy_router_tacti_main_flow tests_unittest.test_policy_router_glue_integrations tests_unittest.test_itc_ingestion_boundary_forwarding tests_unittest.test_source_ui_sse`
+- `node tests/providers/local_vllm_provider.test.js`
+- `node tests/router_gpu_guard.test.js`
+
+Local verification before push:
+```bash
+bash -n scripts/vllm_launch_optimal.sh
+python3 -m unittest tests_unittest.test_policy_router_tacti_main_flow tests_unittest.test_policy_router_glue_integrations tests_unittest.test_itc_ingestion_boundary_forwarding tests_unittest.test_source_ui_sse
+node tests/providers/local_vllm_provider.test.js
+node tests/router_gpu_guard.test.js
+```
+Observed: all PASS.
+
+Note:
+- `actionlint` was not installed locally; YAML syntax validated via command execution and workflow file review.
