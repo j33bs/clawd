@@ -20,7 +20,9 @@ const https = require('node:https');
 const { URL } = require('node:url');
 const { redactIfSensitive } = require('./config');
 const { TOOL_SUPPORT } = require('./schemas');
-const { sanitizeToolPayload } = require('./tool_payload_sanitizer');
+const { enforceToolPayloadInvariant } = require('./tool_payload_sanitizer');
+
+const FINAL_DISPATCH_TAG = 'gateway.adapter.final_dispatch';
 
 class ProviderAdapter {
   /**
@@ -436,7 +438,11 @@ class ProviderAdapter {
     const providerCaps = {
       tool_calls_supported: this._toolCallsSupported(body && body.model)
     };
-    const sanitizedBody = sanitizeToolPayload(body, providerCaps);
+    const sanitizedBody = enforceToolPayloadInvariant(body, providerCaps, {
+      provider_id: this.providerId,
+      model_id: body && body.model,
+      callsite_tag: FINAL_DISPATCH_TAG
+    });
     return this._httpRequest('POST', url, sanitizedBody, options);
   }
 

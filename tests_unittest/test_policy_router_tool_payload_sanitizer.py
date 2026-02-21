@@ -1,4 +1,5 @@
 import importlib.util
+import os
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
@@ -100,6 +101,31 @@ class TestPolicyRouterToolPayloadSanitizer(unittest.TestCase):
         self.assertIn("json", seen)
         self.assertNotIn("tools", seen["json"])
         self.assertNotIn("tool_choice", seen["json"])
+
+    def test_strict_mode_raises_structured_bypass_error(self):
+        sanitizer = _load_sanitizer_module()
+        payload = {"messages": [{"role": "user", "content": "hi"}], "tool_choice": "auto"}
+        prev = os.environ.get("OPENCLAW_STRICT_TOOL_PAYLOAD")
+        os.environ["OPENCLAW_STRICT_TOOL_PAYLOAD"] = "1"
+        try:
+            with self.assertRaises(sanitizer.ToolPayloadBypassError) as ctx:
+                sanitizer.enforce_tool_payload_invariant(
+                    payload,
+                    {"tool_calls_supported": True},
+                    provider_id="openai_compatible",
+                    model_id="model-a",
+                    callsite_tag="policy_router.final_dispatch",
+                )
+            err = ctx.exception
+            self.assertEqual(err.code, "TOOL_PAYLOAD_SANITIZER_BYPASSED")
+            self.assertEqual(err.provider_id, "openai_compatible")
+            self.assertEqual(err.model_id, "model-a")
+            self.assertEqual(err.callsite_tag, "policy_router.final_dispatch")
+        finally:
+            if prev is None:
+                del os.environ["OPENCLAW_STRICT_TOOL_PAYLOAD"]
+            else:
+                os.environ["OPENCLAW_STRICT_TOOL_PAYLOAD"] = prev
 
 
 if __name__ == "__main__":

@@ -18,12 +18,20 @@ except ImportError:
     requests = None
 
 try:
-    from tool_payload_sanitizer import resolve_tool_call_capability, sanitize_tool_payload
+    from tool_payload_sanitizer import (
+        enforce_tool_payload_invariant,
+        resolve_tool_call_capability,
+    )
 except ModuleNotFoundError:
     _THIS_DIR = Path(__file__).resolve().parent
     if str(_THIS_DIR) not in sys.path:
         sys.path.insert(0, str(_THIS_DIR))
-    from tool_payload_sanitizer import resolve_tool_call_capability, sanitize_tool_payload
+    from tool_payload_sanitizer import (
+        enforce_tool_payload_invariant,
+        resolve_tool_call_capability,
+    )
+
+POLICY_ROUTER_FINAL_DISPATCH_TAG = "policy_router.final_dispatch"
 
 def _resolve_repo_root(start: Path):
     current = start
@@ -623,7 +631,13 @@ def _call_openai_compatible(base_url, api_key, model_id, payload, timeout=15, pr
     if "prompt" in payload and "messages" not in payload:
         payload = dict(payload)
         payload["messages"] = [{"role": "user", "content": payload.pop("prompt")}]
-    payload = sanitize_tool_payload(payload, provider_caps)
+    payload = enforce_tool_payload_invariant(
+        payload,
+        provider_caps,
+        provider_id="openai_compatible",
+        model_id=model_id,
+        callsite_tag=POLICY_ROUTER_FINAL_DISPATCH_TAG,
+    )
     try:
         # Invariant: tool payload must be sanitized here; do not bypass.
         resp = requests.post(url, json={"model": model_id, **payload}, headers=headers, timeout=timeout)
@@ -660,7 +674,13 @@ def _call_anthropic(base_url, api_key, model_id, payload, timeout=15):
         "x-api-key": api_key or "",
         "anthropic-version": "2023-06-01",
     }
-    payload = sanitize_tool_payload(payload, {"tool_calls_supported": False})
+    payload = enforce_tool_payload_invariant(
+        payload,
+        {"tool_calls_supported": False},
+        provider_id="anthropic",
+        model_id=model_id,
+        callsite_tag=POLICY_ROUTER_FINAL_DISPATCH_TAG,
+    )
     body = {
         "model": model_id,
         "max_tokens": payload.get("max_tokens", 256),
@@ -695,7 +715,13 @@ def _call_ollama(base_url, model_id, payload, timeout=10):
     if requests is None:
         return {"ok": False, "reason_code": "no_requests_lib"}
     url = base_url.rstrip("/") + "/api/generate"
-    payload = sanitize_tool_payload(payload, {"tool_calls_supported": False})
+    payload = enforce_tool_payload_invariant(
+        payload,
+        {"tool_calls_supported": False},
+        provider_id="ollama",
+        model_id=model_id,
+        callsite_tag=POLICY_ROUTER_FINAL_DISPATCH_TAG,
+    )
     prompt = payload.get("prompt")
     if not prompt:
         prompt = _extract_text_from_payload(payload)

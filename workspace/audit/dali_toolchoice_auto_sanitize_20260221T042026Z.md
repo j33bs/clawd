@@ -119,3 +119,124 @@ Not included due known unrelated drift in current workspace:
 - `workspace/scripts/policy_router.py`
 - `tests_unittest/test_policy_router_tool_payload_sanitizer.py`
 - `workspace/audit/dali_toolchoice_auto_sanitize_20260221T042026Z.md`
+
+## Bypass Detector Hardening (2026-02-21)
+
+### Branch
+- `fix/dali-toolchoice-auto-bypass-detector-20260221T043027Z`
+
+### Phase 1 — Dispatch Census (exhaustive)
+
+Commands run:
+- `rg -n --hidden --glob '!**/.git/**' -S "tool_choice|\btools\b|tool_calls|function_call" .`
+- `rg -n --hidden --glob '!**/.git/**' -S "requests\.|httpx\.|aiohttp\.|urllib3\." .`
+- `rg -n --hidden --glob '!**/.git/**' -S "fetch\(|axios\(|http\.request\(|https\.request\(" .`
+
+Relevant outbound paths and sanitizer status:
+- `workspace/scripts/policy_router.py:_call_openai_compatible`
+  - Outbound: `requests.post(.../chat/completions)`
+  - Reaches: Dali policy providers of type `openai_compatible` (e.g., groq/qwen/minimax aliases per policy)
+  - Sanitizer: **YES** (final-boundary guard + sanitizer)
+- `workspace/scripts/policy_router.py:_call_anthropic`
+  - Outbound: `requests.post(.../messages)`
+  - Reaches: Dali anthropic providers
+  - Sanitizer: **YES** (final-boundary guard + sanitizer, unsupported caps)
+- `workspace/scripts/policy_router.py:_call_ollama`
+  - Outbound: `requests.post(.../api/generate)`
+  - Reaches: Dali ollama providers
+  - Sanitizer: **YES** (final-boundary guard + sanitizer, unsupported caps)
+- `core/system2/inference/provider_adapter.js:_httpPost`
+  - Outbound: Node provider adapter final POST
+  - Reaches: gateway/system2 openai-compatible + vendor providers using adapter
+  - Sanitizer: **YES** (final-boundary guard + sanitizer)
+- `core/system2/inference/local_vllm_provider.js:_sanitizePayloadForToolCalls` before `_httpRequest/_streamRequest`
+  - Outbound: local vLLM `/chat/completions`
+  - Reaches: local_vllm provider
+  - Sanitizer: **YES** (final-boundary guard + sanitizer)
+- `scripts/system2_http_edge.js:proxyUpstream` (`http.request`)
+  - Outbound: raw proxy to upstream gateway (`/rpc/*`)
+  - Reaches: gateway RPC surface (opaque pass-through)
+  - Sanitizer: N/A at proxy body level; relies on downstream final-boundary sanitizers above
+
+Non-LLM outbound paths observed:
+- `workspace/scripts/message_handler.py` uses `aiohttp` for gateway messaging/spawn APIs, not direct provider chat payload dispatch.
+
+### Phase 2/3 — Unavoidable Final-Boundary Guard + Sanitizer
+
+Canonical Python module (`workspace/scripts/tool_payload_sanitizer.py`) now provides:
+- `sanitize_tool_payload(payload, provider_caps)`
+- `resolve_tool_call_capability(provider, model_id)` (fail-closed unknown => false)
+- `enforce_tool_payload_invariant(payload, provider_caps, provider_id, model_id, callsite_tag)`
+
+Strict mode behavior:
+- `OPENCLAW_STRICT_TOOL_PAYLOAD=1` + invalid shape (`tool_choice` present without non-empty `tools`) => raises structured `ToolPayloadBypassError` including:
+  - `provider_id`, `model_id`, `callsite_tag`, remediation
+- strict mode off => structured warning to stderr, then sanitize and continue
+
+Callsite tags:
+- `policy_router.final_dispatch` (Dali Python boundary)
+- `gateway.adapter.final_dispatch` (Node adapter boundary)
+
+### Phase 4 — Runtime Identity Helper (stale-code trap)
+
+Added:
+- `workspace/scripts/diagnose_tool_payload_runtime.py`
+
+What it prints:
+- absolute module path for `policy_router`
+- absolute module path for `tool_payload_sanitizer`
+- git SHA (best-effort from `.git/HEAD`)
+- `OPENCLAW_STRICT_TOOL_PAYLOAD` state
+
+Interactive command:
+- `python3 workspace/scripts/diagnose_tool_payload_runtime.py`
+
+Service-context inspection commands:
+- `systemctl --user show openclaw-gateway.service --property=ExecStart --no-pager`
+- `systemctl --user show openclaw-gateway.service --property=Environment --no-pager`
+- Compare service `ExecStart`/workspace with helper output from the same host.
+
+Observed helper output:
+- `policy_router_module_path=/home/jeebs/src/clawd/workspace/scripts/policy_router.py`
+- `tool_payload_sanitizer_module_path=/home/jeebs/src/clawd/workspace/scripts/tool_payload_sanitizer.py`
+- `git_sha=025483c5464a`
+- strict disabled by default
+
+### Phase 5 — Tests
+
+Added/updated:
+- `tests_unittest/test_policy_router_tool_payload_sanitizer.py`
+  - Added strict-mode structured raise assertion
+- `tests/providers/tool_payload_sanitizer.test.js`
+  - Added strict-mode structured bypass error assertion
+
+### Phase 6 — Verification Evidence
+
+Commands run:
+- `python3 -m py_compile workspace/scripts/tool_payload_sanitizer.py workspace/scripts/policy_router.py workspace/scripts/diagnose_tool_payload_runtime.py`
+- `python3 -m unittest tests_unittest.test_policy_router_tool_payload_sanitizer`
+- `node tests/providers/tool_payload_sanitizer.test.js && node tests/providers/provider_adapter_tool_payload.test.js && node tests/providers/local_vllm_provider.test.js`
+
+All passed.
+
+Strict repro (Dali boundary):
+- `OPENCLAW_STRICT_TOOL_PAYLOAD=1 python3 - <<'PY' ... mod._call_openai_compatible(..., {'tool_choice':'auto'}, provider_caps={'tool_calls_supported': True}) ... PY`
+
+Observed:
+- `strict.error_type=ToolPayloadBypassError`
+- `strict.code=TOOL_PAYLOAD_SANITIZER_BYPASSED`
+- `strict.callsite_tag=policy_router.final_dispatch`
+- `strict.provider_id=openai_compatible`
+- `strict.model_id=model-a`
+
+Strict repro (Node adapter boundary):
+- `OPENCLAW_STRICT_TOOL_PAYLOAD=1 node - <<'NODE' ... adapter._httpPost(... tool_choice:'auto' without tools) ... NODE`
+
+Observed:
+- `node.strict.code=TOOL_PAYLOAD_SANITIZER_BYPASSED`
+- `node.strict.callsite_tag=gateway.adapter.final_dispatch`
+- `node.strict.provider_id=provider_x`
+- `node.strict.model_id=model-a`
+
+Diagnosis guidance from evidence:
+- If real run still returns original vLLM `auto tool choice` error and strict guard does **not** trigger, runtime is likely executing stale codepath/module instance. Use runtime helper + service `ExecStart` inspection to confirm.

@@ -21,7 +21,9 @@ const http = require('node:http');
 const https = require('node:https');
 const { URL } = require('node:url');
 const { getProvider } = require('./catalog');
-const { sanitizeToolPayload } = require('./tool_payload_sanitizer');
+const { enforceToolPayloadInvariant } = require('./tool_payload_sanitizer');
+
+const FINAL_DISPATCH_TAG = 'gateway.adapter.final_dispatch';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -122,7 +124,11 @@ class LocalVllmProvider {
 
   _sanitizePayloadForToolCalls(payload) {
     const providerCaps = { tool_calls_supported: this._toolCallEnabled };
-    const next = sanitizeToolPayload(payload, providerCaps);
+    const next = enforceToolPayloadInvariant(payload, providerCaps, {
+      provider_id: this.providerId,
+      model_id: payload && payload.model,
+      callsite_tag: FINAL_DISPATCH_TAG
+    });
     if (this._toolCallEnabled) return next;
     delete next.parallel_tool_calls;
     delete next.tool_calls;
