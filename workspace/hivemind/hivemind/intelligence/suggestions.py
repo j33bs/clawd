@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 from ..store import HiveMindStore
+from .utils import get_all_units_cached
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 STATE_PATH = REPO_ROOT / "workspace" / "hivemind" / "suggestions_state.json"
@@ -38,8 +39,15 @@ def _can_view(agent: str, item_scope: str) -> bool:
     return item_scope == "shared" or item_scope == agent
 
 
-def generate_suggestions(context: str, agent: str, session_id: str = "default") -> List[Dict[str, Any]]:
-    store = HiveMindStore()
+def generate_suggestions(
+    context: str,
+    agent: str,
+    session_id: str = "default",
+    *,
+    store: HiveMindStore | None = None,
+    units: List[Dict[str, Any]] | None = None,
+) -> List[Dict[str, Any]]:
+    store = store or HiveMindStore()
     now = datetime.now(timezone.utc)
     state = _load_state()
     s = state.setdefault("sessions", {}).setdefault(session_id, {}).setdefault(agent, {"count": 0, "last": None})
@@ -54,7 +62,9 @@ def generate_suggestions(context: str, agent: str, session_id: str = "default") 
     if int(s.get("count", 0)) >= MAX_PER_SESSION:
         return []
 
-    units = [u for u in store.all_units() if _can_view(agent, str(u.get("agent_scope", "shared")))]
+    if units is None:
+        units, _meta = get_all_units_cached(store, ttl_seconds=60)
+    units = [u for u in units if _can_view(agent, str(u.get("agent_scope", "shared")))]
     suggestions: List[Dict[str, Any]] = []
 
     # 1) Temporal patterns from query logs

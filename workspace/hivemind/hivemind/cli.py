@@ -8,6 +8,7 @@ from .intelligence.contradictions import detect_contradictions
 from .intelligence.pruning import prune_expired_and_stale
 from .intelligence.suggestions import generate_suggestions
 from .intelligence.summaries import generate_cross_agent_summary
+from .intelligence.utils import get_all_units_cached
 from .store import HiveMindStore
 
 
@@ -17,7 +18,8 @@ def _can_view(agent: str, scope: str) -> bool:
 
 def cmd_scan_contradictions(args: argparse.Namespace) -> int:
     store = HiveMindStore()
-    visible = [u for u in store.all_units() if _can_view(args.agent, str(u.get("agent_scope", "shared")))]
+    units, _meta = get_all_units_cached(store, ttl_seconds=60)
+    visible = [u for u in units if _can_view(args.agent, str(u.get("agent_scope", "shared")))]
     reports = detect_contradictions(visible)
     print(json.dumps({"contradictions": reports}, ensure_ascii=False, indent=2))
     return 0

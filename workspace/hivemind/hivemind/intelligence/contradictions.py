@@ -107,7 +107,13 @@ def _append_review_queue(items: List[Dict[str, Any]], review_queue_path: Path) -
     review_queue_path.write_text(json.dumps(existing, indent=2) + "\n", encoding="utf-8")
 
 
-def detect_contradictions(ku_graph: List[Dict[str, Any]], review_queue_path: Path = DEFAULT_REVIEW_QUEUE) -> List[Dict[str, Any]]:
+def detect_contradictions(
+    ku_graph: List[Dict[str, Any]],
+    review_queue_path: Path = DEFAULT_REVIEW_QUEUE,
+    *,
+    units: List[Dict[str, Any]] | None = None,
+) -> List[Dict[str, Any]]:
+    ku_graph = list(units if units is not None else ku_graph)
     reports: List[Dict[str, Any]] = []
 
     # Pairwise scans

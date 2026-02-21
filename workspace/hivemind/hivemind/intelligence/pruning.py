@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
 from ..store import HiveMindStore
+from .utils import get_all_units_cached
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 ARCHIVE_DIR = REPO_ROOT / "workspace" / "hivemind" / "archive"
@@ -69,10 +70,16 @@ def _append_review(entries: List[Dict[str, Any]]) -> None:
     REVIEW_QUEUE.write_text(json.dumps(current, indent=2) + "\n", encoding="utf-8")
 
 
-def prune_expired_and_stale(dry_run: bool = False, store: HiveMindStore | None = None) -> Dict[str, Any]:
+def prune_expired_and_stale(
+    dry_run: bool = False,
+    store: HiveMindStore | None = None,
+    *,
+    units: List[Dict[str, Any]] | None = None,
+) -> Dict[str, Any]:
     store = store or HiveMindStore()
     now = datetime.now(timezone.utc)
-    units = store.all_units()
+    if units is None:
+        units, _meta = get_all_units_cached(store, ttl_seconds=60)
     keep: List[Dict[str, Any]] = []
     archive_rows: List[Dict[str, Any]] = []
     deleted_rows: List[Dict[str, Any]] = []

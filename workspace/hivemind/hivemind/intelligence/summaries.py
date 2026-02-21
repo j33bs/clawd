@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 from ..store import HiveMindStore
+from .utils import get_all_units_cached
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 DIGEST_DIR = REPO_ROOT / "workspace" / "hivemind" / "digests"
@@ -37,13 +38,20 @@ def _summarize_group(rows: List[Dict[str, Any]]) -> List[str]:
     return lines
 
 
-def generate_cross_agent_summary(period: str = "7d", store: HiveMindStore | None = None) -> Dict[str, Any]:
+def generate_cross_agent_summary(
+    period: str = "7d",
+    store: HiveMindStore | None = None,
+    *,
+    units: List[Dict[str, Any]] | None = None,
+) -> Dict[str, Any]:
     store = store or HiveMindStore()
     now = datetime.now(timezone.utc)
     since = now - _parse_period(period)
 
+    if units is None:
+        units, _meta = get_all_units_cached(store, ttl_seconds=60)
     shared = []
-    for row in store.all_units():
+    for row in units:
         if str(row.get("agent_scope")) != "shared":
             continue
         try:
