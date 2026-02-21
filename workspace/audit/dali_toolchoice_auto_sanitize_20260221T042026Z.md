@@ -1549,3 +1549,53 @@ git status --porcelain -uall
 Only explicitly excluded drift remains:
 - `workspace/state/tacti_cr/events.jsonl` (runtime state)
 - untracked docs/runtime artifacts not required for this PR.
+
+## Hygiene + PR Prep (2026-02-21)
+
+### Phase 1 — Revert tracked runtime artifact
+Command:
+```bash
+git restore workspace/state/tacti_cr/events.jsonl
+git status --porcelain -uall
+```
+Status after revert:
+```text
+?? docs/GPU_SETUP.md
+?? scripts/vllm_prefix_warmup.js
+?? workspace/NOVELTY_LOVE_ALIGNMENT_RECS.md
+?? workspace/NOVELTY_LOVE_ALIGNMENT_TODO.md
+?? workspace/artifacts/itc/events/itc_events.jsonl
+```
+Confirmed: `workspace/state/tacti_cr/events.jsonl` no longer modified.
+
+### Phase 2 — Required module tracking + suite rerun
+Dependency files confirmed present:
+```bash
+ls core/system2/inference/concurrency_tuner.js core/system2/inference/gpu_guard.js workspace/scripts/vllm_metrics_sink.py
+```
+
+Test/verification commands:
+```bash
+python3 -m unittest tests_unittest.test_policy_router_tacti_main_flow tests_unittest.test_policy_router_glue_integrations tests_unittest.test_itc_ingestion_boundary_forwarding tests_unittest.test_source_ui_sse
+node tests/providers/local_vllm_provider.test.js
+node tests/router_gpu_guard.test.js
+bash -n scripts/vllm_launch_optimal.sh
+```
+Observed:
+- Python suite: PASS (`Ran 9 tests ... OK`)
+- Node provider tests: PASS
+- Router gpu guard test: PASS
+- Shell syntax check: PASS
+
+### Final status snapshot (pre-PR)
+```bash
+git status --porcelain -uall
+```
+```text
+?? docs/GPU_SETUP.md
+?? scripts/vllm_prefix_warmup.js
+?? workspace/NOVELTY_LOVE_ALIGNMENT_RECS.md
+?? workspace/NOVELTY_LOVE_ALIGNMENT_TODO.md
+?? workspace/artifacts/itc/events/itc_events.jsonl
+```
+Only explicitly excluded untracked drift remains.
