@@ -1,5 +1,6 @@
 'use strict';
 
+const fs = require('node:fs');
 const path = require('node:path');
 
 const ALLOWLIST = Object.freeze([
@@ -24,9 +25,28 @@ function normalizeAction(action) {
 
 function isPathOutsideWorkspace(targetPath, repoRoot) {
   if (!targetPath || !repoRoot) return true;
-  const workspaceRoot = path.resolve(repoRoot, 'workspace');
-  const resolvedTarget = path.resolve(targetPath);
-  return !resolvedTarget.startsWith(workspaceRoot + path.sep) && resolvedTarget !== workspaceRoot;
+  const workspaceRootRaw = path.resolve(repoRoot, 'workspace');
+  if (!fs.existsSync(workspaceRootRaw)) return true;
+
+  const realpath = fs.realpathSync.native || fs.realpathSync;
+  const workspaceRoot = realpath(workspaceRootRaw);
+  const targetAbs = path.resolve(targetPath);
+
+  let targetResolved = targetAbs;
+  if (fs.existsSync(targetAbs)) {
+    targetResolved = realpath(targetAbs);
+  } else {
+    const parent = path.dirname(targetAbs);
+    const base = path.basename(targetAbs);
+    try {
+      targetResolved = path.join(realpath(parent), base);
+    } catch (_) {
+      targetResolved = targetAbs;
+    }
+  }
+
+  const rel = path.relative(workspaceRoot, targetResolved);
+  return rel !== '' && (rel.startsWith('..') || path.isAbsolute(rel));
 }
 
 function decide(toolCall = {}, context = {}, options = {}) {
