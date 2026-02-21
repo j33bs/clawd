@@ -1313,3 +1313,23 @@ M	workspace/state/tacti_cr/events.jsonl
 - Intent: enable trail valence in live env and propagate valence signal into Physarum updates.
 - Implementation: observe_outcome now passes valence to physarum.update and trails store valence_signature consistently.
 - Rollback: git revert <commit_sha_for_wiring_8>
+
+## Wiring #9 Validation 2026-02-21T21:14:25Z
+$ python3 -m unittest tests_unittest.test_research_gap_analyzer_bridge -v
+test_analyze_and_publish_gap_report_is_idempotent (tests_unittest.test_research_gap_analyzer_bridge.TestResearchGapAnalyzerBridge.test_analyze_and_publish_gap_report_is_idempotent) ... ok
+test_research_ingest_bridge_writes_kb_gap_report (tests_unittest.test_research_gap_analyzer_bridge.TestResearchGapAnalyzerBridge.test_research_ingest_bridge_writes_kb_gap_report) ... ok
+
+----------------------------------------------------------------------
+Ran 2 tests in 0.007s
+
+OK
+$ git diff --name-status
+M	workspace/audit/wirings_integration_20260222.md
+M	workspace/research/research_ingest.py
+M	workspace/state/tacti_cr/events.jsonl
+
+### Wiring #9 summary
+- Intent: bridge research ingest to a compact research_gap_report artifact in knowledge base data.
+- Implementation: added workspace/research/gap_analyzer.py and integrated bridge calls into cmd_add/cmd_ingest_topics.
+- Idempotency: publish uses content signature and skips duplicate append on unchanged report.
+- Rollback: git revert <commit_sha_for_wiring_9>
