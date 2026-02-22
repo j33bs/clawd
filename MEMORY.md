@@ -3,8 +3,8 @@
 *Last updated: 2026-02-21*
 
 ## User Preferences
-- **Name:** Heath
-- **Call them:** Jeebs (nickname from @j33bs handle)
+- **Name:** jeebs
+- **Call them:** jeebs (nickname from @j33bs handle)
 - **Pronouns:** -
 - **Timezone:** Australia/Brisbane
 - **GitHub:** @j33bs
