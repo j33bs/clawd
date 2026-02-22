@@ -4,9 +4,35 @@
   "type": "object",
   "additionalProperties": false,
   "properties": {
+    "action": { "type": "string", "enum": ["PROCESS", "DROP"] },
     "tier": { "type": "string", "enum": ["LOCAL", "REMOTE", "HUMAN"] },
     "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
     "rationale": { "type": "string" },
+    "flags": { "type": "array", "items": { "type": "string" } },
+    "evidence_bundle": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "type": "string", "enum": ["topk_stub"] },
+        "top_k": { "type": "integer", "minimum": 1 },
+        "selected": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "id": { "type": "string" },
+              "start": { "type": "integer", "minimum": 0 },
+              "end": { "type": "integer", "minimum": 0 },
+              "score": { "type": "number", "minimum": 0 }
+            },
+            "required": ["id", "start", "end", "score"]
+          }
+        },
+        "notes": { "type": "string" }
+      },
+      "required": ["kind", "top_k", "selected", "notes"]
+    },
     "request_for_chatgpt": {
       "type": "object",
       "additionalProperties": false,
@@ -19,5 +45,5 @@
       "required": ["task", "context", "why", "expected_output"]
     }
   },
-  "required": ["tier", "confidence", "rationale"]
+  "required": ["action", "confidence", "rationale"]
 }
