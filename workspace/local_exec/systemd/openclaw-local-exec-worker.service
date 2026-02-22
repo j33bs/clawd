@@ -1,0 +1,14 @@
+[Unit]
+Description=OpenClaw Local Execution Worker
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=__REPO_ROOT__
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/usr/bin/python3 -m workspace.local_exec.worker --repo-root __REPO_ROOT__ --worker-id local-exec-systemd
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=default.target
