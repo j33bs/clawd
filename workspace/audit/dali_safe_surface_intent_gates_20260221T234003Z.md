@@ -604,3 +604,38 @@ final verification summary:
 - python3 -m unittest tests_unittest.test_policy_router_capability_classes -v -> OK
 - python3 -m unittest tests_unittest.test_safe_error_surface -v -> OK
 - bash workspace/scripts/verify_policy_router.sh -> ok
+
+## Phase X — Re-verify on clean branch @ 1c0a6220a0e743dac0684309dc7c131e82e327f7 (2026-02-22T00:15:32Z)
+
+date_utc=2026-02-22T00:15:32Z
+head=1c0a6220a0e743dac0684309dc7c131e82e327f7
+
+git status --porcelain -uall:
+
+git diff --name-status origin/main...HEAD:
+A	tests/safe_error_surface.test.js
+A	tests_unittest/test_policy_router_capability_classes.py
+A	tests_unittest/test_safe_error_surface.py
+A	workspace/audit/dali_safe_surface_intent_gates_20260221T234003Z.md
+M	workspace/scripts/policy_router.py
+A	workspace/scripts/safe_error_surface.js
+A	workspace/scripts/safe_error_surface.py
+
+quiesce notes:
+- attempted: systemctl --user stop openclaw-gateway.service
+- result: failed to connect to bus (Operation not permitted)
+- fallback exact kill command used: kill 39472
+- fallback post-check: no exact openclaw-gateway process remained
+
+$ node tests/safe_error_surface.test.js
+PASS redact hides bearer/api keys/cookies
+PASS safe envelope keeps stable public surface
+PASS safe envelope redacts malicious public message text
+PASS adapter error text excludes internal log hints
+
+$ python3 -m unittest tests_unittest.test_policy_router_capability_classes -v
+
+$ python3 -m unittest tests_unittest.test_safe_error_surface -v
+
+$ bash workspace/scripts/verify_policy_router.sh
+ok
