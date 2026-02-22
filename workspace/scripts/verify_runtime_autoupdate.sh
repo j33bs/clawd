@@ -36,6 +36,8 @@ grep -q "dry_run=1" "$log_file"
 grep -q "new_sha=${current_sha}" "$log_file"
 grep -q "target_branch=${current_branch}" "$log_file"
 grep -q "planned:" "$log_file"
+grep -q "planned:gen_build_stamp:" "$log_file"
+grep -q "planned:verify_build_sha:" "$log_file"
 if grep -q "executed:" "$log_file"; then
   echo "error: dry-run executed mutating actions" >&2
   exit 1

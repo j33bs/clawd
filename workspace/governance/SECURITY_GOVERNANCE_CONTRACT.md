@@ -55,10 +55,13 @@ Broad actions require explicit operator approval (deny-by-default):
   - supports `OPENCLAW_AUTOUPDATE_FORCE=1` to override branch gating,
   - guarantees `OPENCLAW_AUTOUPDATE_DRYRUN=1` is side-effect free (plan + log only),
   - updates the CLI in user scope via `npm install -g . --prefix ~/.local`,
+  - generates `workspace/version_build.json` with `build_sha` + `build_time_utc`,
+  - installs a user-local OpenClaw wrapper that appends build stamp data to `openclaw --version`,
   - stops gateway (`systemctl --user` first, exact-PID fallback when bus is unavailable),
   - runs bounded dependency/build/install steps,
   - restarts gateway (or logs manual-start requirement),
-  - logs resolved OpenClaw path and version after restart,
+  - logs expected/observed CLI + gateway build SHA after restart,
+  - fails on SHA mismatch on `main` unless `OPENCLAW_AUTOUPDATE_ALLOW_SHA_MISMATCH=1`,
   - verifies with `workspace/scripts/verify_policy_router.sh`.
 - Audit log path: `workspace/audit/runtime_autoupdate.log` (append-only).
 - Disable by removing hooks: `.git/hooks/post-merge` and `.git/hooks/post-checkout`.
