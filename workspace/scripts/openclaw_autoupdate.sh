@@ -7,6 +7,9 @@ cd "$repo_root"
 state_file="${OPENCLAW_AUTOUPDATE_STATE:-$repo_root/workspace/.runtime_autoupdate_state}"
 log_file="${OPENCLAW_AUTOUPDATE_LOG:-$repo_root/workspace/audit/runtime_autoupdate.log}"
 dry_run="${OPENCLAW_AUTOUPDATE_DRYRUN:-0}"
+target_branch="${OPENCLAW_AUTOUPDATE_TARGET_BRANCH:-main}"
+allow_branches_raw="${OPENCLAW_AUTOUPDATE_ALLOW_BRANCHES:-}"
+force_run="${OPENCLAW_AUTOUPDATE_FORCE:-0}"
 
 mkdir -p "$(dirname "$state_file")" "$(dirname "$log_file")"
 
@@ -16,8 +19,7 @@ timestamp_utc() {
 
 old_sha=""
 new_sha="$(git rev-parse HEAD)"
-target_branch="${OPENCLAW_AUTOUPDATE_BRANCH:-main}"
-current_branch="$(git symbolic-ref --quiet --short HEAD 2>/dev/null || echo DETACHED)"
+current_branch="$(git symbolic-ref --quiet --short HEAD 2>/dev/null || echo "<detached>")"
 if [[ -f "$state_file" ]]; then
   old_sha="$(awk -F= '/^sha=/{print $2}' "$state_file" | tail -n 1)"
 fi
@@ -27,6 +29,7 @@ commands_executed=()
 quiesce_method="none"
 verify_outcome="skipped"
 result="success"
+reason=""
 error_detail=""
 state_write_pending=0
 
@@ -61,11 +64,33 @@ any_build_relevant_change() {
 run_cmd() {
   local label="$1"
   shift
-  log_action "$label: $*"
   if [[ "$dry_run" == "1" ]]; then
+    log_action "planned:$label:$*"
     return 0
   fi
+  log_action "executed:$label:$*"
   "$@"
+}
+
+trim_spaces() {
+  local s="$1"
+  s="${s#"${s%%[![:space:]]*}"}"
+  s="${s%"${s##*[![:space:]]}"}"
+  echo "$s"
+}
+
+branch_matches_allowlist() {
+  local pattern
+  local -a patterns=()
+  IFS=',' read -r -a patterns <<< "$allow_branches_raw"
+  for pattern in "${patterns[@]}"; do
+    pattern="$(trim_spaces "$pattern")"
+    [[ -z "$pattern" ]] && continue
+    if [[ "$current_branch" == $pattern ]]; then
+      return 0
+    fi
+  done
+  return 1
 }
 
 exact_gateway_pids() {
@@ -94,8 +119,8 @@ exact_gateway_pids() {
 
 quiesce_gateway() {
   if [[ "$dry_run" == "1" ]]; then
-    quiesce_method="dryrun"
-    log_action "quiesce: dry-run skip stop"
+    quiesce_method="planned"
+    log_action "planned:quiesce:systemctl --user stop openclaw-gateway.service (or pid_fallback)"
     return 0
   fi
 
@@ -136,7 +161,7 @@ quiesce_gateway() {
 
 restart_gateway() {
   if [[ "$dry_run" == "1" ]]; then
-    log_action "restart: dry-run skip start"
+    log_action "planned:restart:systemctl --user start openclaw-gateway.service (if systemctl path)"
     return 0
   fi
 
@@ -165,11 +190,18 @@ finalize() {
   {
     printf '[%s] openclaw_autoupdate\n' "$(timestamp_utc)"
     printf 'result=%s\n' "$result"
+    if [[ -n "$reason" ]]; then
+      printf 'reason=%s\n' "$reason"
+    fi
     printf 'dry_run=%s\n' "$dry_run"
+    printf 'force_run=%s\n' "$force_run"
     printf 'old_sha=%s\n' "${old_sha:-<none>}"
     printf 'new_sha=%s\n' "$new_sha"
     printf 'current_branch=%s\n' "$current_branch"
     printf 'target_branch=%s\n' "$target_branch"
+    if [[ -n "$allow_branches_raw" ]]; then
+      printf 'allow_branches=%s\n' "$allow_branches_raw"
+    fi
     printf 'changed_files_count=%s\n' "${#changed_files[@]}"
     if [[ ${#changed_files[@]} -gt 0 ]]; then
       printf 'changed_files=%s\n' "$(join_csv "${changed_files[@]}")"
@@ -198,9 +230,18 @@ on_err() {
 trap 'on_err' ERR
 trap 'finalize "$?"' EXIT
 
-if [[ "$current_branch" != "$target_branch" ]]; then
-  result="noop"
-  log_action "branch $current_branch is not target $target_branch; no actions"
+if [[ "$dry_run" == "1" ]]; then
+  log_action "planned:branch_gate:bypass_dry_run"
+elif [[ "$force_run" == "1" ]]; then
+  log_action "executed:branch_gate:force_override"
+elif [[ "$current_branch" == "$target_branch" ]]; then
+  log_action "executed:branch_gate:target_branch_match"
+elif branch_matches_allowlist; then
+  log_action "executed:branch_gate:allowlist_match"
+else
+  result="skipped"
+  reason="branch_gate"
+  log_action "executed:branch_gate:skip current=$current_branch target=$target_branch allow=$allow_branches_raw"
   exit 0
 fi
 
@@ -253,10 +294,18 @@ if command -v openclaw >/dev/null 2>&1; then
   if openclaw gateway --help >/dev/null 2>&1; then
     run_cmd "gateway_install" openclaw gateway install --force
   else
-    log_action "gateway_install: openclaw present but gateway install unavailable"
+    if [[ "$dry_run" == "1" ]]; then
+      log_action "planned:gateway_install:skip_unavailable"
+    else
+      log_action "gateway_install: openclaw present but gateway install unavailable"
+    fi
   fi
 else
-  log_action "gateway_install: openclaw command missing"
+  if [[ "$dry_run" == "1" ]]; then
+    log_action "planned:gateway_install:skip_openclaw_missing"
+  else
+    log_action "gateway_install: openclaw command missing"
+  fi
 fi
 
 restart_gateway
@@ -264,7 +313,7 @@ restart_gateway
 if [[ -f "$repo_root/workspace/scripts/verify_policy_router.sh" ]]; then
   if [[ "$dry_run" == "1" ]]; then
     verify_outcome="dryrun"
-    log_action "verify: dry-run skip bash workspace/scripts/verify_policy_router.sh"
+    log_action "planned:verify:bash workspace/scripts/verify_policy_router.sh"
   else
     if bash "$repo_root/workspace/scripts/verify_policy_router.sh"; then
       verify_outcome="pass"
