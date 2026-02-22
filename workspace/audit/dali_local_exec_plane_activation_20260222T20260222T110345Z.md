@@ -173,3 +173,5 @@ UTC end: 2026-02-22T11:12:52Z
   - workspace/audit/skills_tiered_mlx_triage_scaffold_20260222.md
 - Drift verification: no mlx-infer or skills_tiered_mlx paths remain in origin/main...HEAD diff.
 - Cleanup commit SHA: pending (recorded after commit).
+- Cleanup commit SHA: 773bcada01267a85f5fcb3dc6501881067577f9d
+- Confirmation: branch diff is local-exec-only (mlx-infer drift removed).
