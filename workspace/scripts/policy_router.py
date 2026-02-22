@@ -1061,7 +1061,21 @@ class PolicyRouter:
 
         capability_class = self._capability_class(context_metadata, payload_text)
         if capability_class == "mechanical_execution":
-            provider = cfg.get("mechanicalProvider") or cfg.get("codeProvider") or cfg.get("subagentProvider")
+            default_cap = DEFAULT_POLICY.get("routing", {}).get("capability_router", {})
+            code_provider = cfg.get("codeProvider")
+            mechanical_provider = cfg.get("mechanicalProvider")
+            small_provider = cfg.get("smallCodeProvider")
+            small_by_ctx = str(context_metadata.get("expected_change_size", "")).strip().lower() in {"small", "tiny"}
+            loc_hint = _coerce_positive_int(context_metadata.get("expected_loc"), 0)
+            small_by_loc = 0 < loc_hint <= 50
+            if small_provider and (small_by_ctx or small_by_loc):
+                provider = small_provider
+            elif code_provider and code_provider != default_cap.get("codeProvider"):
+                provider = code_provider
+            elif mechanical_provider and mechanical_provider != default_cap.get("mechanicalProvider"):
+                provider = mechanical_provider
+            else:
+                provider = mechanical_provider or code_provider or cfg.get("subagentProvider")
             if provider:
                 return {
                     "trigger": "capability_class",
@@ -1074,7 +1088,15 @@ class PolicyRouter:
         if capability_class == "planning_synthesis":
             if not _has_strong_planning_signal(text):
                 return None
-            provider = cfg.get("planningProvider") or cfg.get("reasoningProvider")
+            default_cap = DEFAULT_POLICY.get("routing", {}).get("capability_router", {})
+            reasoning_provider = cfg.get("reasoningProvider")
+            planning_provider = cfg.get("planningProvider")
+            if reasoning_provider and reasoning_provider != default_cap.get("reasoningProvider"):
+                provider = reasoning_provider
+            elif planning_provider and planning_provider != default_cap.get("planningProvider"):
+                provider = planning_provider
+            else:
+                provider = reasoning_provider or planning_provider
             if provider:
                 return {
                     "trigger": "capability_class",
@@ -1335,11 +1357,23 @@ class PolicyRouter:
 
     def execute_with_escalation(self, intent, payload, context_metadata=None, validate_fn=None):
         intent_cfg = self._intent_cfg(intent)
-        budget_intent = canonical_intent(intent)
         attempts = 0
         last_reason = None
         context_metadata = context_metadata or {}
         runtime_context = dict(context_metadata)
+        request_id = str(runtime_context.get("request_id") or _new_request_id("rt"))
+        runtime_context["request_id"] = request_id
+        payload_text = _extract_text_from_payload(payload)
+        capability_class = self._capability_class(runtime_context, payload_text)
+        runtime_context.setdefault("capability_class", capability_class)
+        budget_intent = _budget_intent_key(intent)
+
+        def _emit(event_type, detail=None):
+            event_detail = dict(detail or {})
+            event_detail.setdefault("request_id", request_id)
+            event_detail.setdefault("capability_class", capability_class)
+            log_event(event_type, event_detail, self.event_log)
+
         if self._proprio_sampler is not None:
             snap = self._proprio_sampler.snapshot()
             runtime_context.setdefault("proprioception", snap)
@@ -1458,34 +1492,13 @@ class PolicyRouter:
             self.run_counts[budget_intent] += 1
             self._budget_consume(budget_intent, tier, effective_tokens)
 
+            started_at = time.perf_counter()
+
             # handler dispatch
-            handler = self.handlers.get(name)
-            if handler is None:
-                for alias in denormalize_provider_ids(name):
-                    if alias in self.handlers:
-                        handler = self.handlers.get(alias)
-                        break
-            if handler:
-                result = handler(payload, model_id, runtime_context)
-            else:
-                ptype = provider.get("type")
-                if ptype == "openai_compatible":
-                    api_key = None
-                    if provider.get("auth") == "qwen_oauth":
-                        api_key, _ = get_qwen_token()
-                    else:
-                        api_key_env = _provider_api_key_env(provider)
-                        if api_key_env:
-                            api_key = read_env_or_secrets(api_key_env)
-                    result = _call_openai_compatible(provider.get("baseUrl", ""), api_key, model_id, payload)
-                elif ptype == "anthropic":
-                    api_key = read_env_or_secrets(provider.get("apiKeyEnv", ""))
-                    result = _call_anthropic(provider.get("baseUrl", ""), api_key, model_id, payload)
-                elif ptype == "ollama":
-                    base = provider.get("baseUrl", "http://localhost:11434")
-                    result = _call_ollama(base, model_id, payload)
-                elif ptype == "openai_auth" or ptype == "anthropic_auth":
-                    result = {"ok": False, "reason_code": "auth_login_required"}
+            try:
+                handler = self.handlers.get(name)
+                if handler:
+                    result = handler(payload, model_id, runtime_context)
                 else:
                     ptype = provider.get("type")
                     if ptype == "openai_compatible":
