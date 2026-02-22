@@ -9,6 +9,7 @@ export type LocalSuggestion = {
 export type DecisionInput = {
   task: string;
   context?: string;
+  lastLocalErrorType?: string;
   localSuggestionTier?: Tier;
   localConfidence?: number;
   localRationale?: string;
@@ -24,6 +25,16 @@ function routeOverride(text: string, routeOverrides: any[]): any | null {
   for (const item of routeOverrides || []) {
     const match = String(item?.match || "").toLowerCase();
     if (match && text.toLowerCase().includes(match)) return item;
+  }
+  return null;
+}
+
+function errorEscalation(lastErrorType: string, errorEscalations: any[]): any | null {
+  const wanted = String(lastErrorType || "").toUpperCase();
+  if (!wanted) return null;
+  for (const item of errorEscalations || []) {
+    const type = String(item?.type || "").toUpperCase();
+    if (type && type === wanted) return item;
   }
   return null;
 }
@@ -51,6 +62,19 @@ export function decideTier(input: DecisionInput): {
       confidence: 1,
       rationale: `Force-human signal matched: ${forceHumanSignals.join(", ")}`,
       notes: { force_human_signals: forceHumanSignals }
+    };
+  }
+
+  const escalation = errorEscalation(input.lastLocalErrorType || "", input.rules?.error_escalations || []);
+  if (escalation) {
+    const tier = String(escalation.tier || "REMOTE").toUpperCase() as Tier;
+    const confidence = Number(escalation.confidence ?? 0.9);
+    const rationale = String(escalation.rationale || "local mlx unavailable; escalated");
+    return {
+      tier,
+      confidence,
+      rationale,
+      notes: { error_escalation: true, last_local_error_type: input.lastLocalErrorType || "" }
     };
   }
 

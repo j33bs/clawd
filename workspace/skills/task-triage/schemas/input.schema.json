@@ -5,7 +5,15 @@
   "additionalProperties": false,
   "properties": {
     "task": { "type": "string", "minLength": 1 },
-    "context": { "type": "string" }
+    "context": { "type": "string" },
+    "last_local_error": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "type": { "type": "string" },
+        "message": { "type": "string" }
+      }
+    }
   },
   "required": ["task"]
 }

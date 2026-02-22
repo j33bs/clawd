@@ -10,6 +10,15 @@ function routeOverride(text, routeOverrides) {
   }
   return null;
 }
+function errorEscalation(lastErrorType, errorEscalations) {
+  const wanted = String(lastErrorType || "").toUpperCase();
+  if (!wanted) return null;
+  for (const item of errorEscalations || []) {
+    const type = String((item && item.type) || "").toUpperCase();
+    if (type && type === wanted) return item;
+  }
+  return null;
+}
 function decideTier(input) {
   const task = String(input.task || "");
   const context = String(input.context || "");
@@ -26,6 +35,19 @@ function decideTier(input) {
       confidence: 1,
       rationale: `Force-human signal matched: ${forceHumanSignals.join(", ")}`,
       notes: { force_human_signals: forceHumanSignals }
+    };
+  }
+
+  const escalation = errorEscalation(input.lastLocalErrorType || "", (input.rules && input.rules.error_escalations) || []);
+  if (escalation) {
+    const tier = String(escalation.tier || "REMOTE").toUpperCase();
+    const confidence = Number(escalation.confidence ?? 0.9);
+    const rationale = String(escalation.rationale || "local mlx unavailable; escalated");
+    return {
+      tier,
+      confidence,
+      rationale,
+      notes: { error_escalation: true, last_local_error_type: input.lastLocalErrorType || "" }
     };
   }
 

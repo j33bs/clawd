@@ -70,3 +70,18 @@ test("openai keyword triggers HUMAN plus request_for_chatgpt", () => {
   assert.ok(result.request_for_chatgpt);
   assert.equal(typeof result.request_for_chatgpt.expected_output, "string");
 });
+
+test("MLX_DEVICE_UNAVAILABLE escalates using configured error_escalations rule", () => {
+  const result = decideTier({
+    task: "draft response",
+    context: "",
+    lastLocalErrorType: "MLX_DEVICE_UNAVAILABLE",
+    localSuggestionTier: "LOCAL",
+    localConfidence: 0.2,
+    localRationale: "mlx failed",
+    rules,
+  });
+  assert.equal(result.tier, "REMOTE");
+  assert.equal(result.confidence, 0.9);
+  assert.match(result.rationale, /local mlx unavailable; escalated/i);
+});

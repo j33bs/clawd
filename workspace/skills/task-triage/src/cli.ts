@@ -5,6 +5,10 @@ import { decideTier } from "./decision";
 type InputPayload = {
   task?: string;
   context?: string;
+  last_local_error?: {
+    type?: string;
+    message?: string;
+  };
   local?: {
     tier_suggestion?: "LOCAL" | "REMOTE" | "HUMAN";
     confidence?: number;
@@ -52,6 +56,7 @@ async function main(): Promise<void> {
   const decision = decideTier({
     task: input.task,
     context: input.context || "",
+    lastLocalErrorType: input.last_local_error?.type || "",
     localSuggestionTier: input.local?.tier_suggestion || "LOCAL",
     localConfidence: Number(input.local?.confidence ?? 0),
     localRationale: input.local?.rationale || "",

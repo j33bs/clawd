@@ -29,5 +29,13 @@
       "tier": "HUMAN",
       "reason": "OpenAI is HUMAN-mediated in this deployment."
     }
+  ],
+  "error_escalations": [
+    {
+      "type": "MLX_DEVICE_UNAVAILABLE",
+      "tier": "REMOTE",
+      "confidence": 0.9,
+      "rationale": "local mlx unavailable; escalated"
+    }
   ]
 }
