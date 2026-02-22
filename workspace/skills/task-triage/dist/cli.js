@@ -159,7 +159,7 @@ async function run() {
       context,
       lastLocalErrorType: input.last_local_error && input.last_local_error.type || "",
       localSuggestionTier: input.local && input.local.tier_suggestion || "LOCAL",
-      localConfidence: Number(input.local && input.local.confidence ?? 0),
+      localConfidence: Number((input.local && input.local.confidence) ?? 0),
       localRationale: input.local && input.local.rationale || "",
       rules,
     });
