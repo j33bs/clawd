@@ -283,3 +283,47 @@ node --test workspace/skills/**/tests/*.test.js
 - Tests run:
   - node --test workspace/skills/**/tests/*.test.js
   - Summary: PASS (20 tests, 0 failures)
+
+## Prefilter + Sentinel + Evidence Bundle Pipeline (2026-02-22T15:56:33Z)
+- Why: reduce main-agent parse latency and token load by pushing deterministic filtering and bounded evidence selection ahead of orchestration.
+- Stage 0 (deterministic prefilter) added:
+  - Config path: workspace/skills/task-triage/config/decision_rules.json
+  - Caps: prefilter.max_task_chars=4000, prefilter.max_context_chars=12000
+  - Rules: drop_if + escalate_if (regex and size-triggered), source allow/deny metadata hooks.
+  - Output contract: decision=PASS|DROP|ESCALATE with tier/confidence/rationale/flags.
+- Stage 1 (sentinel interface) added:
+  - Input contract supports sentinel + excerpt + local_sentinel_result fields.
+  - Threshold: sentinel.min_confidence=0.7 (config-driven).
+  - Policy: PASS + sentinel confidence >= threshold adopts sentinel tier; missing/low confidence escalates REMOTE.
+- Stage 2 (evidence bundle stub) added:
+  - Config: evidence.enabled=true, chunk_chars=800, top_k=5, min_score=1.
+  - Deterministic selector returns evidence_bundle.kind=topk_stub with top chunk ranges/scoring.
+- Logging:
+  - Structured JSON logs include stage=prefilter decision line with stats/flags.
+  - OPENCLAW_LOG_LEVEL controls verbosity.
+- Tests run:
+  - node --test workspace/skills/**/tests/*.test.js
+  - Summary: PASS (27 tests, 0 failures).
+- Rollback: git revert <docs_commit_sha>, git revert <feature_commit_shas>
+
+## Prefilter + Sentinel + Evidence Bundle Pipeline (2026-02-22T19:58:40Z)
+- Why: reduce main-agent parse latency and token load by pushing deterministic filtering and bounded evidence selection ahead of orchestration.
+- Stage 0 (deterministic prefilter) added:
+  - Config path: workspace/skills/task-triage/config/decision_rules.json
+  - Caps: prefilter.max_task_chars=4000, prefilter.max_context_chars=12000
+  - Rules: drop_if + escalate_if (regex and size-triggered), source allow/deny metadata hooks.
+  - Output contract: decision=PASS|DROP|ESCALATE with tier/confidence/rationale/flags.
+- Stage 1 (sentinel interface) added:
+  - Input contract supports sentinel + excerpt + local_sentinel_result fields.
+  - Threshold: sentinel.min_confidence=0.7 (config-driven).
+  - Policy: PASS + sentinel confidence >= threshold adopts sentinel tier; missing/low confidence escalates REMOTE.
+- Stage 2 (evidence bundle stub) added:
+  - Config: evidence.enabled=true, chunk_chars=800, top_k=5, min_score=1.
+  - Deterministic selector returns evidence_bundle.kind=topk_stub with top chunk ranges/scoring.
+- Logging:
+  - Structured JSON logs include stage=prefilter decision line with stats/flags.
+  - OPENCLAW_LOG_LEVEL controls verbosity.
+- Tests run:
+  - node --test workspace/skills/**/tests/*.test.js
+  - Summary: PASS (27 tests, 0 failures).
+- Rollback: git revert <docs_commit_sha>, git revert <feature_commit_shas>
