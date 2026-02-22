@@ -581,3 +581,26 @@ failure_to_pass_summary=
 - then verify_policy_router failed because default capability providers (planningProvider/mechanicalProvider) overshadowed scenario-specific reasoningProvider/codeProvider in merged policies
 - resolved by repairing execute_with_escalation initialization/syntax, removing external helper dependency in node test, and applying explicit-provider precedence + small-code selection in capability routing
 - final rerun: all four required commands passed
+
+## Clean Worktree Rebuild + Verification @ 1f3cd4fd5edeb3113dd20b7b58ff9b178aa7839a
+
+timestamp_utc=2026-02-22T00:11:19Z
+worktree_path=/tmp/wt_safe_surface
+
+git status --porcelain -uall (post-fix):
+ M workspace/audit/dali_safe_surface_intent_gates_20260221T234003Z.md
+
+git diff --name-status origin/main...HEAD (post-fix):
+A	tests/safe_error_surface.test.js
+A	tests_unittest/test_policy_router_capability_classes.py
+A	tests_unittest/test_safe_error_surface.py
+A	workspace/audit/dali_safe_surface_intent_gates_20260221T234003Z.md
+M	workspace/scripts/policy_router.py
+A	workspace/scripts/safe_error_surface.js
+A	workspace/scripts/safe_error_surface.py
+
+final verification summary:
+- node tests/safe_error_surface.test.js -> PASS
+- python3 -m unittest tests_unittest.test_policy_router_capability_classes -v -> OK
+- python3 -m unittest tests_unittest.test_safe_error_surface -v -> OK
+- bash workspace/scripts/verify_policy_router.sh -> ok
