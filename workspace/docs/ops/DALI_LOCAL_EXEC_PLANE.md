@@ -20,6 +20,10 @@ workspace/scripts/check_gateway_pairing_health.sh
 
 This check fails fast if pending pairing/repair exists; follow the printed approve steps before continuing.
 
+Cron path stabilization:
+- Cron should call `$HOME/.local/bin/openclaw-cron-preflight` (stable user-owned shim), not a `/tmp` worktree path.
+- If your canonical repo path differs, set `OPENCLAW_REPO_ROOT` in cron environment before invoking the shim.
+
 ## Start and Stop
 
 ```bash
