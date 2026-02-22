@@ -29,6 +29,20 @@ def append_event(repo_root: Path, job_id: str, kind: str, payload: dict[str, Any
     return target
 
 
+def append_worker_event(repo_root: Path, worker_id: str, kind: str, payload: dict[str, Any]) -> Path:
+    safe_worker_id = worker_id.replace("/", "_").replace(" ", "_")
+    target = evidence_dir(repo_root) / f"worker_{safe_worker_id}.jsonl"
+    event = {
+        "ts_utc": _utc_now(),
+        "worker_id": worker_id,
+        "kind": kind,
+        "payload": payload,
+    }
+    with target.open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps(event, ensure_ascii=False) + "\n")
+    return target
+
+
 def write_summary(repo_root: Path, job_id: str, summary: str) -> Path:
     target = evidence_dir(repo_root) / f"{job_id}.md"
     target.write_text(summary, encoding="utf-8")

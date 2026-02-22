@@ -11,18 +11,38 @@ class SubprocessPolicyError(RuntimeError):
     pass
 
 
-def _ensure_within_repo(repo_root: Path, cwd: Path) -> None:
-    repo_resolved = repo_root.resolve()
-    cwd_resolved = cwd.resolve()
-    if repo_resolved == cwd_resolved:
+def _repo_realpath(repo_root: Path) -> str:
+    return os.path.realpath(str(repo_root))
+
+
+def _ensure_within_repo(repo_root: Path, target: Path) -> None:
+    repo_resolved = _repo_realpath(repo_root)
+    target_resolved = os.path.realpath(str(target))
+    if target_resolved == repo_resolved:
         return
-    if repo_resolved not in cwd_resolved.parents:
-        raise SubprocessPolicyError("cwd outside repo root")
+    if not target_resolved.startswith(repo_resolved + os.sep):
+        raise SubprocessPolicyError("path_rejected:outside_repo")
+
+
+def resolve_repo_path(repo_root: Path, user_path: str, *, must_exist: bool = False) -> Path:
+    if not isinstance(user_path, str) or not user_path.strip():
+        raise SubprocessPolicyError("path_rejected:empty")
+    candidate = Path(user_path)
+    if candidate.is_absolute():
+        raise SubprocessPolicyError("path_rejected:absolute")
+    if ".." in candidate.parts:
+        raise SubprocessPolicyError("path_rejected:parent_ref")
+
+    resolved = (repo_root / candidate).resolve()
+    _ensure_within_repo(repo_root, resolved)
+    if must_exist and not resolved.exists():
+        raise SubprocessPolicyError("path_rejected:not_found")
+    return resolved
 
 
 def _reject_shell_like(argv: list[str]) -> None:
     if len(argv) == 1 and (" " in argv[0] or any(token in argv[0] for token in (";", "&&", "||", "|", "$", "`"))):
-        raise SubprocessPolicyError("shell-like command string is not allowed")
+        raise SubprocessPolicyError("argv_rejected:shell_like")
 
 
 def run_argv(
@@ -35,12 +55,12 @@ def run_argv(
     max_output_bytes: int = 262144,
 ) -> dict[str, Any]:
     if not isinstance(argv, list) or not argv:
-        raise SubprocessPolicyError("argv must be a non-empty list")
+        raise SubprocessPolicyError("argv_rejected:empty")
     if any(not isinstance(item, str) for item in argv):
-        raise SubprocessPolicyError("argv entries must be strings")
+        raise SubprocessPolicyError("argv_rejected:not_strings")
     _reject_shell_like(argv)
 
-    run_cwd = (cwd or repo_root).resolve()
+    run_cwd = cwd.resolve() if cwd is not None else repo_root.resolve()
     _ensure_within_repo(repo_root, run_cwd)
 
     env: dict[str, str] = {"PATH": os.environ.get("PATH", "")}
@@ -69,9 +89,15 @@ def run_argv(
     duration_ms = int((time.monotonic() - start) * 1000)
     stdout = getattr(proc, "stdout", "") or ""
     stderr = getattr(proc, "stderr", "") or ""
-    if len(stdout.encode("utf-8", errors="ignore")) > max_output_bytes:
+
+    stdout_bytes = len(stdout.encode("utf-8", errors="ignore"))
+    stderr_bytes = len(stderr.encode("utf-8", errors="ignore"))
+    stdout_truncated = stdout_bytes > max_output_bytes
+    stderr_truncated = stderr_bytes > max_output_bytes
+
+    if stdout_truncated:
         stdout = stdout.encode("utf-8")[:max_output_bytes].decode("utf-8", errors="replace")
-    if len(stderr.encode("utf-8", errors="ignore")) > max_output_bytes:
+    if stderr_truncated:
         stderr = stderr.encode("utf-8")[:max_output_bytes].decode("utf-8", errors="replace")
 
     return {
@@ -81,4 +107,8 @@ def run_argv(
         "duration_ms": duration_ms,
         "stdout": stdout,
         "stderr": stderr,
+        "stdout_bytes": stdout_bytes,
+        "stderr_bytes": stderr_bytes,
+        "stdout_truncated": stdout_truncated,
+        "stderr_truncated": stderr_truncated,
     }

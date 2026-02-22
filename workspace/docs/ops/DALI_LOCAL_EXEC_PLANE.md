@@ -19,6 +19,21 @@ bash scripts/local_exec_plane.sh status
 bash scripts/local_exec_plane.sh stop
 ```
 
+## Worker Loop Mode
+
+```bash
+# run one job and exit
+python3 -m workspace.local_exec.worker --repo-root . --once
+
+# continuous mode with idle heartbeats and bounded poll interval
+python3 -m workspace.local_exec.worker --repo-root . --loop --sleep-s 2 --max-idle-s 300
+```
+
+Loop behavior:
+- Emits periodic worker idle-heartbeat evidence records when idle.
+- Renews queue lease heartbeats while processing jobs.
+- Uses bounded exponential backoff (1s -> 2s -> 4s ... max 30s) on transient loop errors.
+
 ## Enqueue Jobs
 
 ```bash
@@ -40,6 +55,7 @@ Job schema:
 - Queue ledger: `workspace/local_exec/state/jobs.jsonl` (append-only)
 - Kill switch: `workspace/local_exec/state/KILL_SWITCH`
 - Per-job evidence JSONL: `workspace/local_exec/evidence/<job_id>.jsonl`
+- Worker evidence JSONL: `workspace/local_exec/evidence/worker_<worker_id>.jsonl`
 - Per-job summary markdown: `workspace/local_exec/evidence/<job_id>.md`
 
 ## Budgets and Guardrails
@@ -48,6 +64,13 @@ Job schema:
 - Deny-by-default tool policy per job
 - Subprocess execution is argv-only and shell-like strings are rejected
 - Network is disabled by default in worker policies
+- Path sandbox rejects absolute paths, parent escapes (`..`), and symlink escapes outside repo root.
+- Every run writes a `run_header` evidence event with immutable run metadata (validator mode, worker version, policy/budget hashes, model mode).
+
+Kill switch semantics:
+- Create `workspace/local_exec/state/KILL_SWITCH` to stop new job claims.
+- Worker checks kill switch before claim and between steps.
+- Current step is allowed to complete; worker then exits loop and records `loop_exit`.
 
 ## Optional MCPorter Enablement
 
