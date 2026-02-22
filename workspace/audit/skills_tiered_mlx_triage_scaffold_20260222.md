@@ -283,3 +283,61 @@ node --test workspace/skills/**/tests/*.test.js
 - Tests run:
   - node --test workspace/skills/**/tests/*.test.js
   - Summary: PASS (20 tests, 0 failures)
+
+## Core ML Embedding Sub-Agent MVP (Runner + Skill) (2026-02-22T20:29:45Z)
+- Branch: codex/feat/coreml-runner-embed-20260223
+- Why: add a bounded LOCAL Core ML embedding primitive for routing/retrieval workflows without introducing a primary local LLM agent.
+
+### Files added
+- workspace/runners/coreml_embed_runner/Package.swift
+- workspace/runners/coreml_embed_runner/Sources/CoreMLEmbedRunner/main.swift
+- workspace/runners/coreml_embed_runner/build.sh
+- workspace/runners/coreml_embed_runner/run.sh
+- workspace/runners/coreml_embed_runner/README.md
+- workspace/skills/coreml-embed/SKILL.md
+- workspace/skills/coreml-embed/README.md
+- workspace/skills/coreml-embed/config/default.json
+- workspace/skills/coreml-embed/src/cli.ts
+- workspace/skills/coreml-embed/src/logger.ts
+- workspace/skills/coreml-embed/dist/cli.js
+- workspace/skills/coreml-embed/dist/logger.js
+- workspace/skills/coreml-embed/schemas/input.schema.json
+- workspace/skills/coreml-embed/schemas/output.schema.json
+- workspace/skills/coreml-embed/tests/coreml_embed_cli.test.js
+- workspace/skills/coreml-embed/tests/fixtures/default.json
+- workspace/skills/coreml-embed/tests/fixtures/max1.json
+
+### Runner contract
+- stdin JSON inference request with: model_path, texts[], max_text_chars, compute_units.
+- stdout JSON success: ok=true, model_path, dims, embeddings, latency_ms.
+- stdout JSON failure: ok=false, error{type,message,details}.
+- Health mode: --health --model_path <...> with IO compatibility check.
+
+### Skill contract and safeguards
+- CLI: node workspace/skills/coreml-embed/dist/cli.js
+- Health passthrough: --health
+- Typed errors at skill layer: RUNNER_MISSING, RUNNER_BUILD_FAILED, RUNNER_TIMEOUT, CONCURRENCY_LIMIT, INVALID_ARGS.
+- Runner errors are surfaced as-is (e.g., MODEL_NOT_FOUND).
+- Concurrency guard: PID files under workspace/skills/coreml-embed/.run/coreml-embed with stale cleanup and TTL (OPENCLAW_COREML_EMBED_PID_TTL_MS, default 600000ms).
+
+### Commands run + key outcomes
+- node --test workspace/skills/coreml-embed/tests/*.test.js
+  - PASS (5 tests, 0 failures)
+- node --test workspace/skills/**/tests/*.test.js
+  - PASS (25 tests, 0 failures)
+- bash workspace/runners/coreml_embed_runner/run.sh --health --model_path /tmp/does-not-exist.mlpackage
+  - Output: {"ok":false,"error":{"type":"MODEL_NOT_FOUND","message":"model_path does not exist",...}}
+- printf '{...}' | node workspace/skills/coreml-embed/dist/cli.js
+  - Output: {"ok":false,"error":{"type":"MODEL_NOT_FOUND","message":"model_path does not exist",...}}
+
+### Notable implementation assumptions
+- IO detection is best-effort and intentionally strict for MVP:
+  - input: first String feature
+  - output: first MLMultiArray feature
+  - otherwise returns UNSUPPORTED_MODEL_IO with discovered input/output metadata.
+
+### Rollback
+- Revert in reverse order after merge:
+  - git revert <docs-audit-sha>
+  - git revert <skills-sha>
+  - git revert <runner-sha>
