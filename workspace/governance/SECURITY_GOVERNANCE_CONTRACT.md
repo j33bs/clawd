@@ -44,3 +44,15 @@ Broad actions require explicit operator approval (deny-by-default):
   - `kill <exact_pid_list>`
   - verify with `pgrep -af '^openclaw-gateway$'`
 - Record all quiesce commands and PID values in the audit evidence section before verification.
+
+## Runtime Autoupdate Hooks
+- Install with: `bash workspace/scripts/install_git_hooks.sh`.
+- Hooks `post-merge` and `post-checkout` call `workspace/scripts/openclaw_autoupdate.sh`.
+- The autoupdate script:
+  - detects `main` HEAD movement from `workspace/.runtime_autoupdate_state`,
+  - stops gateway (`systemctl --user` first, exact-PID fallback when bus is unavailable),
+  - runs bounded dependency/build/install steps,
+  - restarts gateway (or logs manual-start requirement),
+  - verifies with `workspace/scripts/verify_policy_router.sh`.
+- Audit log path: `workspace/audit/runtime_autoupdate.log` (append-only).
+- Disable by removing hooks: `.git/hooks/post-merge` and `.git/hooks/post-checkout`.
