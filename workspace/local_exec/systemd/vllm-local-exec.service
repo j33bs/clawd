@@ -1,0 +1,17 @@
+[Unit]
+Description=vLLM Local Exec Service (user)
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=__REPO_ROOT__
+EnvironmentFile=%h/.config/openclaw/local_exec.env
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/usr/bin/env vllm serve ${MODEL_ID} --config __REPO_ROOT__/config/vllm/dali_local_exec.yaml --api-key ${VLLM_API_KEY}
+Restart=on-failure
+RestartSec=3
+StartLimitIntervalSec=120
+StartLimitBurst=5
+
+[Install]
+WantedBy=default.target

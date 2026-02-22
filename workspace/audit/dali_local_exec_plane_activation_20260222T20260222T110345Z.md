@@ -76,3 +76,27 @@ workspace/local_exec/subprocess_harness.py.bak.20260222T110452Z:54:        proc 
 
 $ python3 -m unittest tests_unittest.test_local_exec_plane_offline -v
 ```
+
+## Phase 2 — Optional vLLM user-service wiring
+```text
+$ bash -n scripts/local_exec_plane.sh
+
+$ bash scripts/local_exec_plane.sh install-units
+install_units=blocked reason=worker_unit_copy_failed path=/home/jeebs/.config/systemd/user/openclaw-local-exec-worker.service
+
+$ bash scripts/local_exec_plane.sh status
+fallback worker inactive
+vllm_status=unknown reason=systemd_user_unavailable
+
+$ bash scripts/local_exec_plane.sh enable-vllm
+enable_vllm=blocked reason=systemd_user_unavailable
+
+$ OPENCLAW_LOCAL_EXEC_MODEL_STUB=0 OPENCLAW_LOCAL_EXEC_API_BASE=http://127.0.0.1:8001/v1 bash scripts/local_exec_plane.sh health
+{"kill_switch": false, "ledger_path": "/tmp/wt_local_exec_activation/workspace/local_exec/state/jobs.jsonl", "events": 0, "last_event": null, "model_stub_mode": false, "model_api_base": "http://127.0.0.1:8001/v1", "model_reachable": false, "model_detail": "error:<urlopen error [Errno 1] Operation not permitted>"}
+summary kill_switch=False events=0 model_stub=False model_reachable=False
+```
+
+Blocked-by observed in this runtime:
+- user systemd bus unavailable in this execution context.
+- user unit destination under ~/.config/systemd/user not writable in this sandbox context.
+- local vLLM endpoint not reachable from this execution context; health reports bounded error and continues.
