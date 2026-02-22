@@ -1,0 +1,6 @@
+{
+  "max_concurrent": 1,
+  "max_texts": 32,
+  "default_compute_units": "ALL",
+  "runner_timeout_ms": 2000
+}
