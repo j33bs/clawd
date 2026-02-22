@@ -3,6 +3,7 @@ set -euo pipefail
 
 repo_root="$(git rev-parse --show-toplevel)"
 cd "$repo_root"
+export PATH="$HOME/.local/bin:$PATH"
 
 state_file="${OPENCLAW_AUTOUPDATE_STATE:-$repo_root/workspace/.runtime_autoupdate_state}"
 log_file="${OPENCLAW_AUTOUPDATE_LOG:-$repo_root/workspace/audit/runtime_autoupdate.log}"
@@ -174,6 +175,27 @@ restart_gateway() {
   log_action "restart: manual_start_required"
 }
 
+log_openclaw_resolution() {
+  if [[ "$dry_run" == "1" ]]; then
+    log_action "planned:openclaw_resolution:command -v openclaw && openclaw --version"
+    return 0
+  fi
+
+  if ! command -v openclaw >/dev/null 2>&1; then
+    log_action "observed:openclaw_path:missing"
+    log_action "observed:openclaw_version:missing"
+    return 0
+  fi
+
+  local oc_path oc_real oc_version
+  oc_path="$(command -v openclaw)"
+  oc_real="$(readlink -f "$oc_path" 2>/dev/null || echo "$oc_path")"
+  oc_version="$(openclaw --version 2>/dev/null || echo unavailable)"
+
+  log_action "observed:openclaw_path:$oc_real"
+  log_action "observed:openclaw_version:$oc_version"
+}
+
 finalize() {
   local exit_code="$1"
   if [[ "$exit_code" -ne 0 ]]; then
@@ -290,25 +312,18 @@ if [[ "$should_build" == "1" ]]; then
   run_cmd "build" npm run -s build
 fi
 
-if command -v openclaw >/dev/null 2>&1; then
-  if openclaw gateway --help >/dev/null 2>&1; then
-    run_cmd "gateway_install" openclaw gateway install --force
-  else
-    if [[ "$dry_run" == "1" ]]; then
-      log_action "planned:gateway_install:skip_unavailable"
-    else
-      log_action "gateway_install: openclaw present but gateway install unavailable"
-    fi
-  fi
+if [[ -f package.json ]] && command -v npm >/dev/null 2>&1; then
+  run_cmd "gateway_install" npm install -g . --prefix "$HOME/.local"
 else
   if [[ "$dry_run" == "1" ]]; then
-    log_action "planned:gateway_install:skip_openclaw_missing"
+    log_action "planned:gateway_install:skip_missing_package_or_npm"
   else
-    log_action "gateway_install: openclaw command missing"
+    log_action "gateway_install: skipped (missing package.json or npm)"
   fi
 fi
 
 restart_gateway
+log_openclaw_resolution
 
 if [[ -f "$repo_root/workspace/scripts/verify_policy_router.sh" ]]; then
   if [[ "$dry_run" == "1" ]]; then

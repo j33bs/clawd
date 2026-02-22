@@ -36,11 +36,15 @@ grep -q "dry_run=1" "$log_file"
 grep -q "new_sha=${current_sha}" "$log_file"
 grep -q "target_branch=${current_branch}" "$log_file"
 grep -q "planned:" "$log_file"
+if grep -q "executed:" "$log_file"; then
+  echo "error: dry-run executed mutating actions" >&2
+  exit 1
+fi
 if grep -q "executed:deps:npm ci" "$log_file"; then
   echo "error: dry-run executed npm ci" >&2
   exit 1
 fi
-if grep -q "executed:gateway_install:openclaw gateway install --force" "$log_file"; then
+if grep -q "executed:gateway_install:npm install -g . --prefix" "$log_file"; then
   echo "error: dry-run executed gateway install" >&2
   exit 1
 fi
