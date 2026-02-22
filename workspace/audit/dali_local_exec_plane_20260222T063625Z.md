@@ -261,3 +261,16 @@ Outcome:
 - Added user service template `workspace/local_exec/systemd/openclaw-local-exec-worker.service`.
 - Added vLLM template config `config/vllm/dali_local_exec.yaml` (loopback, conservative GPU settings, env-key).
 - Non-blocking behavior: systemd user preferred; pidfile/nohup fallback if bus unavailable.
+
+## Phase 6 — Specialist prompt dictionary + cross-check protocol
+```text
+Sun Feb 22 06:55:34 UTC 2026
+Added:
+- workspace/local_exec/agents/AGENT_PROMPTS.json
+- workspace/local_exec/agents/README.md
+```
+
+Outcome:
+- Added governed prompts for `coordinator`, `coder_python`, `coder_js`, `verifier_tests`, `auditor_evidence`, `doc_compactor`.
+- Each prompt includes scope constraints, tool policy constraints, evidence requirements, and cross-check protocol.
+- Added concise README with required cross-check sequence.
