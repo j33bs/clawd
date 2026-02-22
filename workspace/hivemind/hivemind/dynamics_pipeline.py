@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import os
+import time
 from typing import Any, Dict, List
 
+from .active_inference import replay_counterfactuals
 from .flags import is_enabled
 from .peer_graph import PeerGraph
 from .physarum_router import PhysarumRouter
@@ -11,6 +14,14 @@ from .trails import TrailStore
 
 def _env_enabled(name: str) -> bool:
     return is_enabled(name)
+
+
+def _env_int(name: str, default: int) -> int:
+    raw = str(os.environ.get(name, str(default))).strip()
+    try:
+        return int(raw)
+    except Exception:
+        return int(default)
 
 
 def _norm(values: Dict[str, float]) -> Dict[str, float]:
@@ -42,10 +53,16 @@ class TactiDynamicsPipeline:
         self.enable_reservoir = _env_enabled("ENABLE_RESERVOIR")
         self.enable_physarum = _env_enabled("ENABLE_PHYSARUM_ROUTER")
         self.enable_trails = _env_enabled("ENABLE_TRAIL_MEMORY")
+        self.enable_counterfactual = _env_enabled("OPENCLAW_COUNTERFACTUAL_REPLAY")
         self.peer_graph = PeerGraph.init(self.agent_ids, k=peer_k, seed=self.seed)
         self.reservoir = Reservoir.init(dim=32, leak=0.35, spectral_scale=0.9, seed=self.seed + 1)
         self.physarum = PhysarumRouter(seed=self.seed + 2)
         self.trails = trail_store or TrailStore()
+        self._counterfactual_depth = max(1, _env_int("OPENCLAW_COUNTERFACTUAL_REPLAY_MAX_DEPTH", 2))
+        self._counterfactual_budget_ms = max(1, _env_int("OPENCLAW_COUNTERFACTUAL_REPLAY_BUDGET_MS", 20))
+        self._counterfactual_error_limit = max(1, _env_int("OPENCLAW_COUNTERFACTUAL_REPLAY_ERROR_LIMIT", 3))
+        self._counterfactual_disabled_until = 0.0
+        self._counterfactual_errors = 0
 
     def _trail_agent_bias(self, context_text: str, candidate_agents: List[str]) -> Dict[str, float]:
         if not self.enable_trails:
@@ -117,6 +134,66 @@ class TactiDynamicsPipeline:
                 + (0.3 * reservoir_gain)
             )
         normalized = _norm(combined)
+        counterfactual_meta = {
+            "enabled": bool(self.enable_counterfactual),
+            "applied": False,
+            "reason": "disabled",
+            "errors": int(self._counterfactual_errors),
+        }
+        if self.enable_counterfactual and time.time() >= self._counterfactual_disabled_until:
+            started = time.perf_counter()
+            try:
+                replay = replay_counterfactuals(
+                    {
+                        "provider": candidates[0] if candidates else "",
+                        "candidates": list(candidates),
+                        "provider_priors": dict(normalized),
+                        "reason_code": "plan_consult_order",
+                    },
+                    k=self._counterfactual_depth,
+                )
+                elapsed_ms = (time.perf_counter() - started) * 1000.0
+                if elapsed_ms <= float(self._counterfactual_budget_ms):
+                    for row in replay.get("counterfactuals", []):
+                        provider = str((row or {}).get("provider", ""))
+                        if provider in normalized:
+                            normalized[provider] = float(normalized.get(provider, 0.0)) + (
+                                0.1 * float((row or {}).get("estimated_success", 0.0) or 0.0)
+                            )
+                    normalized = _norm(normalized)
+                    counterfactual_meta = {
+                        "enabled": True,
+                        "applied": True,
+                        "reason": "ok",
+                        "elapsed_ms": round(elapsed_ms, 3),
+                        "k": self._counterfactual_depth,
+                    }
+                else:
+                    counterfactual_meta = {
+                        "enabled": True,
+                        "applied": False,
+                        "reason": "budget_exceeded",
+                        "elapsed_ms": round(elapsed_ms, 3),
+                        "budget_ms": self._counterfactual_budget_ms,
+                    }
+                self._counterfactual_errors = 0
+            except Exception:
+                self._counterfactual_errors += 1
+                counterfactual_meta = {
+                    "enabled": True,
+                    "applied": False,
+                    "reason": "error",
+                    "errors": int(self._counterfactual_errors),
+                }
+                if self._counterfactual_errors >= self._counterfactual_error_limit:
+                    self._counterfactual_disabled_until = time.time() + 300.0
+        elif self.enable_counterfactual:
+            counterfactual_meta = {
+                "enabled": True,
+                "applied": False,
+                "reason": "temporarily_disabled",
+                "retry_after_epoch": round(float(self._counterfactual_disabled_until), 3),
+            }
         consult_order = sorted(candidates, key=lambda aid: (-normalized.get(aid, 0.0), aid))
         return {
             "consult_order": consult_order,
@@ -124,6 +201,7 @@ class TactiDynamicsPipeline:
             "reservoir": readout,
             "scores": normalized,
             "trail_bias": trail_bias,
+            "counterfactual": counterfactual_meta,
         }
 
     def observe_outcome(
@@ -136,7 +214,9 @@ class TactiDynamicsPipeline:
         tokens: float,
         reward: float,
         context_text: str,
+        valence: float | None = None,
     ) -> None:
+        valence_signal = float(valence) if isinstance(valence, (int, float)) else float(reward)
         if len(path) >= 2:
             src = str(path[0])
             for dst in path[1:]:
@@ -153,7 +233,7 @@ class TactiDynamicsPipeline:
                     )
                 src = str(dst)
             if self.enable_physarum:
-                self.physarum.update([str(x) for x in path], float(reward))
+                self.physarum.update([str(x) for x in path], float(reward), valence=valence_signal)
                 self.physarum.prune(min_k=max(1, min(3, len(self.agent_ids) - 1)), max_k=min(7, max(2, len(self.agent_ids) - 1)))
 
         if self.enable_trails:
@@ -168,6 +248,7 @@ class TactiDynamicsPipeline:
                         "success": bool(success),
                         "path": list(path),
                     },
+                    "valence_signature": valence_signal,
                 }
             )
             self.trails.decay()
@@ -183,6 +264,7 @@ class TactiDynamicsPipeline:
                 "ENABLE_RESERVOIR": self.enable_reservoir,
                 "ENABLE_PHYSARUM_ROUTER": self.enable_physarum,
                 "ENABLE_TRAIL_MEMORY": self.enable_trails,
+                "OPENCLAW_COUNTERFACTUAL_REPLAY": self.enable_counterfactual,
             },
             "peer_graph": self.peer_graph.snapshot(),
             "reservoir": self.reservoir.snapshot(),

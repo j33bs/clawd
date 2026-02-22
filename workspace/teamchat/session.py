@@ -5,6 +5,11 @@ from typing import Any
 
 from .message import agent_role, make_message
 from .store import TeamChatStore, default_session_path
+try:
+    from memory.message_hooks import build_message_event, process_message_event
+except Exception:  # pragma: no cover
+    build_message_event = None
+    process_message_event = None
 
 
 class TeamChatSession:
@@ -34,8 +39,25 @@ class TeamChatSession:
         self.store = TeamChatStore(Path(store_path) if store_path else default_session_path(self.repo_root, self.session_id))
         self.turn = 0
 
+    def _track_message(self, row: dict[str, Any], *, source: str = "teamchat", tone: str | None = None) -> None:
+        if not callable(build_message_event) or not callable(process_message_event):
+            return
+        try:
+            event = build_message_event(
+                session_id=self.session_id,
+                role=str(row.get("role", "unknown")),
+                content=str(row.get("content", "")),
+                ts_utc=str(row.get("ts", "")),
+                source=source,
+                tone=tone,
+            )
+            process_message_event(event, repo_root=self.repo_root)
+        except Exception:
+            return
+
     def append_user(self, content: str) -> dict[str, Any]:
         row = make_message(role="user", content=str(content), meta={"session_id": self.session_id})
+        self._track_message(row, source="teamchat", tone="unlabeled")
         self.store.append(row)
         return row
 
@@ -58,6 +80,7 @@ class TeamChatSession:
             route=route or {},
             meta=payload_meta,
         )
+        self._track_message(row, source="teamchat", tone=str(payload_meta.get("tone", "unlabeled")))
         self.store.append(row)
         return row
 

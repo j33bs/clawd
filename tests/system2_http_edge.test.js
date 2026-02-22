@@ -11,9 +11,41 @@ const { createHash, createHmac } = require('node:crypto');
 const { createEdgeServer } = require('../scripts/system2_http_edge');
 
 async function listen(server, host = '127.0.0.1') {
-  await new Promise((resolve) => server.listen(0, host, resolve));
+  await new Promise((resolve, reject) => {
+    const onError = (err) => {
+      server.off('listening', onListening);
+      reject(err);
+    };
+    const onListening = () => {
+      server.off('error', onError);
+      resolve();
+    };
+    server.once('error', onError);
+    server.once('listening', onListening);
+    server.listen(0, host);
+  });
   const addr = server.address();
   return { host, port: addr.port };
+}
+
+async function loopbackBindingSupported() {
+  const probe = http.createServer((req, res) => {
+    res.statusCode = 204;
+    res.end();
+  });
+  try {
+    await listen(probe, '127.0.0.1');
+    return true;
+  } catch (error) {
+    if (error && (error.code === 'EPERM' || error.code === 'EACCES')) {
+      return false;
+    }
+    throw error;
+  } finally {
+    if (probe.listening) {
+      await new Promise((resolve) => probe.close(resolve));
+    }
+  }
 }
 
 function requestJson({ host, port, method, path, headers, body }) {
@@ -795,6 +827,11 @@ async function testInflightCapsAndTimeoutConfig() {
 }
 
 async function main() {
+  if (!(await loopbackBindingSupported())) {
+    console.log('SKIP system2_http_edge: loopback bind not permitted in this environment');
+    return;
+  }
+
   await testAuthAndNoSecretLogs();
   console.log('PASS edge rejects missing/invalid auth and does not log secrets');
 

@@ -1,18 +1,21 @@
-"""Task 8 interface seam for epistemic value scoring."""
+"""
+DEPRECATED: compatibility forwarder.
+Canonical source is workspace/tacti/curiosity.py.
+"""
 
-from __future__ import annotations
+from importlib.util import spec_from_file_location
+from pathlib import Path
 
-from typing import Any, Mapping
-
-
-def epistemic_value(state: Mapping[str, Any], action: Mapping[str, Any]) -> float:
-    """
-    Return a minimal epistemic value estimate.
-
-    TODO: upgrade to uncertainty-reduction objective once state model is finalized.
-    """
-    _ = state
-    if "epistemic_value" in action:
-        return float(action.get("epistemic_value", 0.0))
-    return float(action.get("uncertainty_delta", 0.0))
-
+_shim_file = Path(__file__).resolve()
+_src = _shim_file.parents[1] / "tacti" / "curiosity.py"
+__file__ = str(_src)
+if not globals().get("__package__"):
+    __package__ = __name__.rpartition(".")[0]
+if globals().get("__spec__") is None:
+    __spec__ = spec_from_file_location(__name__, str(_src))
+if not globals().get("_TACTI_SHIM_EXECUTED", False):
+    _code = _src.read_text(encoding="utf-8")
+    exec(compile(_code, str(_src), "exec"), globals(), globals())
+    globals()["_TACTI_SHIM_EXECUTED"] = True
+if "__all__" in globals():
+    __all__ = list(__all__)

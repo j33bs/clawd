@@ -1,4 +1,5 @@
 import os
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -16,6 +17,32 @@ import policy_router  # noqa: E402
 
 
 class TestPolicyRouterActiveInferenceHook(unittest.TestCase):
+    def _policy_path(self, root: Path) -> Path:
+        payload = {
+            "version": 2,
+            "defaults": {
+                "allowPaid": False,
+                "maxTokensPerRequest": 2048,
+                "circuitBreaker": {"failureThreshold": 3, "cooldownSec": 60, "windowSec": 60, "failOn": []},
+            },
+            "budgets": {
+                "intents": {"coding": {"dailyTokenBudget": 100000, "dailyCallBudget": 1000, "maxCallsPerRun": 20}},
+                "tiers": {"free": {"dailyTokenBudget": 100000, "dailyCallBudget": 1000}},
+            },
+            "providers": {
+                "groq": {"enabled": True, "paid": False, "tier": "free", "type": "mock", "models": [{"id": "g"}]},
+                "local_vllm_assistant": {"enabled": True, "paid": False, "tier": "free", "type": "mock", "models": [{"id": "l"}]},
+            },
+            "routing": {
+                "free_order": ["groq", "local_vllm_assistant"],
+                "intents": {"coding": {"order": ["free"], "allowPaid": False}},
+                "capability_router": {"enabled": True, "explicitTriggers": {}},
+            },
+        }
+        path = root / "policy.json"
+        path.write_text(json.dumps(payload), encoding="utf-8")
+        return path
+
     def test_active_inference_predict_and_update_in_execute(self):
         with tempfile.TemporaryDirectory() as td:
             tmp = Path(td)
@@ -57,6 +84,47 @@ class TestPolicyRouterActiveInferenceHook(unittest.TestCase):
             self.assertIn("preference_params", ai)
             self.assertIn("confidence", ai)
             self.assertTrue(ai_state.exists())
+
+    def test_openclaw_active_inference_prefers_local_provider_for_concise_tasks(self):
+        with tempfile.TemporaryDirectory() as td:
+            tmp = Path(td)
+            with patch.dict(os.environ, {"OPENCLAW_ACTIVE_INFERENCE": "1"}, clear=False):
+                router = policy_router.PolicyRouter(
+                    policy_path=self._policy_path(tmp),
+                    budget_path=tmp / "budget.json",
+                    circuit_path=tmp / "circuit.json",
+                    event_log=tmp / "events.jsonl",
+                    handlers={
+                        "groq": lambda payload, model_id, context_metadata: {"ok": True, "text": "groq"},
+                        "local_vllm_assistant": lambda payload, model_id, context_metadata: {"ok": True, "text": "local"},
+                    },
+                )
+                result = router.execute_with_escalation(
+                    "coding",
+                    {"prompt": "small patch"},
+                    context_metadata={"input_text": "be concise and brief", "requires_tools": False},
+                )
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["provider"], "local_vllm_assistant")
+
+    def test_active_inference_fallback_keeps_router_operational(self):
+        with tempfile.TemporaryDirectory() as td:
+            tmp = Path(td)
+            with patch.dict(os.environ, {"OPENCLAW_ACTIVE_INFERENCE": "1"}, clear=False):
+                with patch.object(policy_router, "ActiveInferenceAgent", side_effect=RuntimeError("boom")):
+                    router = policy_router.PolicyRouter(
+                        policy_path=self._policy_path(tmp),
+                        budget_path=tmp / "budget.json",
+                        circuit_path=tmp / "circuit.json",
+                        event_log=tmp / "events.jsonl",
+                        handlers={"groq": lambda payload, model_id, context_metadata: {"ok": True, "text": "groq"}},
+                    )
+                    result = router.execute_with_escalation(
+                        "coding",
+                        {"prompt": "small patch"},
+                        context_metadata={"input_text": "normal task"},
+                    )
+        self.assertTrue(result["ok"])
 
 
 if __name__ == "__main__":

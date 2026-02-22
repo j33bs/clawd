@@ -51,6 +51,7 @@ if str(TACTI_ROOT) not in sys.path:
 
 try:
     from tacti_cr.arousal_oscillator import ArousalOscillator
+    from tacti_cr.active_inference_agent import ActiveInferenceAgent
     from tacti_cr.config import is_enabled as tacti_enabled
     from tacti_cr.expression import compute_expression
     from tacti_cr.collapse import emit_recommendation as collapse_emit_recommendation
@@ -58,6 +59,7 @@ try:
     from tacti_cr.events import emit as tacti_emit
 except Exception:  # pragma: no cover - optional integration
     ArousalOscillator = None
+    ActiveInferenceAgent = None
     tacti_enabled = None
     compute_expression = None
     collapse_emit_recommendation = None
@@ -499,6 +501,10 @@ def _flag_enabled(name):
     return str(os.environ.get(name, "")).strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _active_inference_enabled():
+    return _flag_enabled("OPENCLAW_ACTIVE_INFERENCE") or _flag_enabled("ENABLE_ACTIVE_INFERENCE")
+
+
 def tacti_features_from_proprioception(snapshot):
     snap = dict(snapshot or {})
     arousal = 0.05
@@ -557,16 +563,78 @@ def _active_inference_payload(context_metadata):
     concise_hint = "concise" in text or "brief" in text
     runs = int(state.get("runs", 0))
     confidence = min(0.95, 0.5 + (runs * 0.05))
-    preference_params = {
-        "style": "concise" if concise_hint else "balanced",
-        "conciseness": 0.8 if concise_hint else 0.5,
-    }
+    preference_params = {"style": "concise" if concise_hint else "balanced", "conciseness": 0.8 if concise_hint else 0.5}
+    preferred_provider = None
+    if ActiveInferenceAgent is not None:
+        try:
+            arousal = float((context_metadata or {}).get("arousal", 0.35 if concise_hint else 0.6))
+            collapse_mode = bool((context_metadata or {}).get("collapse_mode", False))
+            local_utility = 0.9 if concise_hint else 0.58
+            balanced_utility = 0.55 if concise_hint else 0.72
+            exploratory_utility = 0.35 if concise_hint else 0.8
+            candidate_policies = [
+                {
+                    "id": "local_conservative",
+                    "style": "concise",
+                    "conciseness": 0.9 if concise_hint else 0.55,
+                    "expected_utility": local_utility,
+                    "epistemic_value": 0.35,
+                    "complexity": 0.25,
+                    "preferred_provider": "local_vllm_assistant",
+                },
+                {
+                    "id": "balanced",
+                    "style": "balanced",
+                    "conciseness": 0.5,
+                    "expected_utility": balanced_utility,
+                    "epistemic_value": 0.55,
+                    "complexity": 0.5,
+                    "preferred_provider": "groq",
+                },
+                {
+                    "id": "exploratory",
+                    "style": "deep",
+                    "conciseness": 0.3,
+                    "expected_utility": exploratory_utility,
+                    "epistemic_value": 0.8,
+                    "complexity": 0.9,
+                    "preferred_provider": "openai_gpt52_chat",
+                },
+            ]
+            agent = ActiveInferenceAgent(
+                beliefs=dict(state.get("beliefs", {})),
+                model={
+                    "utility_weight": 1.0,
+                    "epistemic_weight": 0.65,
+                    "arousal_weight": 0.8,
+                    "collapse_penalty_weight": 1.2,
+                    "target_arousal": 0.45,
+                },
+            )
+            agent.beliefs.update({"arousal": arousal, "collapse_mode": collapse_mode})
+            decision = agent.step({"candidate_policies": candidate_policies, "input_text": text})
+            policy = decision.get("policy", {}) if isinstance(decision, dict) else {}
+            if isinstance(policy, dict):
+                preference_params = {
+                    "style": str(policy.get("style", preference_params["style"])),
+                    "conciseness": float(policy.get("conciseness", preference_params["conciseness"])),
+                }
+                preferred_provider = str(policy.get("preferred_provider") or "").strip() or None
+            state["beliefs"] = dict(agent.beliefs)
+            state["lastDecision"] = {
+                "policy_id": str(policy.get("id", "")),
+                "score": float((decision or {}).get("score", 0.0) or 0.0),
+                "preferred_provider": preferred_provider,
+            }
+        except Exception:
+            preferred_provider = None
     state["runs"] = runs + 1
     state["lastPreference"] = preference_params
     _save_active_inference_state(state, ACTIVE_INFERENCE_STATE_PATH)
     return {
         "preference_params": preference_params,
         "confidence": round(confidence, 3),
+        "preferred_provider": preferred_provider,
     }
 
 
@@ -1025,11 +1093,22 @@ class PolicyRouter:
         return classify_intent(text)
 
     def _capability_decision(self, context_metadata, payload_text=""):
+        context_metadata = context_metadata or {}
+        ai_payload = context_metadata.get("active_inference")
+        if isinstance(ai_payload, dict):
+            ai_provider = normalize_provider_id(ai_payload.get("preferred_provider"))
+            if ai_provider:
+                return {
+                    "trigger": "active_inference",
+                    "matched": "preferred_provider",
+                    "provider": ai_provider,
+                    "reason": "active inference preferred provider",
+                }
+
         cfg = self._capability_cfg()
         if cfg.get("enabled") is False:
             return None
 
-        context_metadata = context_metadata or {}
         text = "\n".join(
             t for t in [str(context_metadata.get("input_text", "")), str(payload_text or "")] if t
         )
@@ -1377,7 +1456,7 @@ class PolicyRouter:
         if self._proprio_sampler is not None:
             snap = self._proprio_sampler.snapshot()
             runtime_context.setdefault("proprioception", snap)
-        if _flag_enabled("ENABLE_ACTIVE_INFERENCE"):
+        if _active_inference_enabled():
             runtime_context["active_inference"] = _active_inference_payload(runtime_context)
         tacti_controls = self._tacti_runtime_controls(intent, intent_cfg, runtime_context)
         order, decision = self._ordered_providers(intent_cfg, runtime_context, payload_text)
