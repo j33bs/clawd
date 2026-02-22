@@ -37,3 +37,10 @@ Broad actions require explicit operator approval (deny-by-default):
 - No `system2-litellm`.
 - No OpenAI/Codex provider lanes and no model IDs starting with `openai/` or `openai-codex/`.
 
+## Audit Quiesce Fallback (When `systemctl --user` Is Unavailable)
+- First attempt `systemctl --user stop <service>`.
+- If user bus is unavailable, use exact PID targeting only:
+  - `pgrep -f '^openclaw-gateway$'`
+  - `kill <exact_pid_list>`
+  - verify with `pgrep -af '^openclaw-gateway$'`
+- Record all quiesce commands and PID values in the audit evidence section before verification.
