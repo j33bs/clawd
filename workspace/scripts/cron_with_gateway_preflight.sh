@@ -37,8 +37,9 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 GUARD="${ROOT}/workspace/scripts/check_gateway_pairing_health.sh"
 
-if ! "${GUARD}"; then
-  status=$?
+status=0
+"${GUARD}" || status=$?
+if [[ "$status" -ne 0 ]]; then
   echo "PRECHECK FAILED: gateway pairing/repair pending; aborting job (see guard output above)" >&2
   exit "$status"
 fi
