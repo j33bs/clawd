@@ -37,7 +37,7 @@ def default_tool_policy(*, allow_subprocess: bool = False) -> dict[str, object]:
 
 def build_demo_job() -> dict:
     return {
-        "job_id": "job-demo-repoindex01",
+        "job_id": "job-demorepoindex01",
         "job_type": "repo_index_task",
         "created_at_utc": utc_now(),
         "payload": {

@@ -274,3 +274,44 @@ Outcome:
 - Added governed prompts for `coordinator`, `coder_python`, `coder_js`, `verifier_tests`, `auditor_evidence`, `doc_compactor`.
 - Each prompt includes scope constraints, tool policy constraints, evidence requirements, and cross-check protocol.
 - Added concise README with required cross-check sequence.
+
+## Phase 7 — Final integration + evidence bundle
+```text
+Sun Feb 22 06:48:40 UTC 2026
+$ python3 -m unittest tests_unittest.test_local_exec_plane_offline -v
+
+$ python3 scripts/local_exec_enqueue.py --repo-root /tmp/wt_local_exec --demo
+{"status": "enqueued", "job_id": "job-demorepoindex01", "event_ts": "2026-02-22T06:48:17.211629Z"}
+
+$ python3 -m workspace.local_exec.worker --repo-root /tmp/wt_local_exec --once
+{"status": "complete", "job_id": "job-demorepoindex01", "result": {"files_considered": 200, "hits_written": 89, "index_jsonl": "workspace/local_exec/evidence/job-demorepoindex01_index.jsonl"}}
+
+$ ls -la workspace/local_exec/evidence
+total 28
+drwxrwxr-x 2 jeebs jeebs  4096 Feb 22 16:48 .
+drwxrwxr-x 8 jeebs jeebs  4096 Feb 22 16:45 ..
+-rw-rw-r-- 1 jeebs jeebs   374 Feb 22 16:48 job-demorepoindex01.jsonl
+-rw-rw-r-- 1 jeebs jeebs   164 Feb 22 16:48 job-demorepoindex01.md
+-rw-rw-r-- 1 jeebs jeebs 10910 Feb 22 16:48 job-demorepoindex01_index.jsonl
+
+$ bash scripts/local_exec_plane.sh health
+{"kill_switch": false, "ledger_path": "/tmp/wt_local_exec/workspace/local_exec/state/jobs.jsonl", "events": 4, "last_event": {"ts_utc": "2026-02-22T06:48:17.301521Z", "event": "complete", "job_id": "job-demorepoindex01", "worker_id": "local-exec-worker", "result": {"files_considered": 200, "hits_written": 89, "index_jsonl": "workspace/local_exec/evidence/job-demorepoindex01_index.jsonl"}}}
+```
+
+Outcome:
+- Added operator handoff doc: workspace/docs/ops/DALI_LOCAL_EXEC_PLANE.md.
+- Demo offline pipeline succeeded: enqueue -> claim -> complete -> evidence artifacts produced.
+- blocked-by summary: mcporter unavailable on runner; adapter remains deny-by-default stubbed path.
+- blocked-by summary: vLLM not started/managed in this pass; config and activation instructions provided.
+
+Next steps (priority):
+1. Install mcporter and explicitly allowlist safe tools in config/mcporter.json.
+2. Launch local vLLM endpoint and switch model client out of stub mode for selected job classes.
+3. Optionally wire cron templates to enqueue bounded local_exec jobs overnight.
+
+### Phase 7b — Post-fix re-run
+```text
+$ python3 -m unittest tests_unittest.test_local_exec_plane_offline -v
+Ran 7 tests in 0.048s
+OK
+```

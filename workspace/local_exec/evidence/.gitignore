@@ -1,0 +1,3 @@
+# Runtime evidence artifacts are append-only local outputs and not committed.
+*
+!.gitignore
