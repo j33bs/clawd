@@ -297,3 +297,22 @@ $ bash scripts/local_exec_plane.sh health || true
 {"kill_switch": false, "ledger_path": "/tmp/wt_local_exec_activation/workspace/local_exec/state/jobs.jsonl", "events": 12, "last_event": {"ts_utc": "2026-02-22T11:12:44.540610Z", "event": "complete", "job_id": "job-sleeprun11124203", "worker_id": "local-exec-fallback", "result": {"commands_run": 1, "results": [{"argv": ["python3", "-m", "unittest", "tests_unittest.test_local_exec_plane_offline.LocalExecPlaneOfflineTests.test_model_client_stub_returns_no_tool_calls", "-v"], "returncode": 0, "timed_out": false, "duration_ms": 91, "stdout": "", "stderr": "test_model_client_stub_returns_no_tool_calls (tests_unittest.test_local_exec_plane_offline.LocalExecPlaneOfflineTests.test_model_client_stub_returns_no_tool_calls) ... ok\n\n----------------------------------------------------------------------\nRan 1 test in 0.009s\n\nOK\n", "stdout_bytes": 0, "stderr_bytes": 268, "stdout_truncated": false, "stderr_truncated": false}]}}, "model_stub_mode": true, "model_api_base": "", "model_reachable": null, "model_detail": "stub_mode"}
 summary kill_switch=False events=12 model_stub=True model_reachable=None
 ```
+
+## Final blocked-by notes
+```text
+$ timeout 3s python3 -m workspace.local_exec.worker --repo-root . --loop --sleep-s 1 --max-idle-s 2 --worker-id debug-worker; echo rc=$?
+rc=124
+
+$ ls -la workspace/local_exec/state && tail -n 120 workspace/local_exec/state/worker.log && pgrep -af "workspace.local_exec.worker|local-exec-fallback"
+total 24
+drwxrwxr-x 2 jeebs jeebs 4096 Feb 22 22:08 .
+drwxrwxr-x 8 jeebs jeebs 4096 Feb 22 21:07 ..
+-rw-rw-r-- 1 jeebs jeebs   64 Feb 22 21:03 .gitignore
+-rw-rw-r-- 1 jeebs jeebs 4328 Feb 22 21:12 jobs.jsonl
+-rw-r--r-- 1 jeebs jeebs    0 Feb 22 21:12 jobs.lock
+-rw-rw-r-- 1 jeebs jeebs    0 Feb 22 21:12 worker.log
+-rw-rw-r-- 1 jeebs jeebs    6 Feb 22 22:09 worker.pid
+91665 /bin/bash -c cd /tmp/wt_local_exec_activation && AUDIT=workspace/audit/dali_local_exec_plane_activation_20260222T20260222T110345Z.md && {   echo   echo "## Final blocked-by notes"   echo '```text'   echo '$ timeout 3s python3 -m workspace.local_exec.worker --repo-root . --loop --sleep-s 1 --max-idle-s 2 --worker-id debug-worker; echo rc=$?'   timeout 3s python3 -m workspace.local_exec.worker --repo-root . --loop --sleep-s 1 --max-idle-s 2 --worker-id debug-worker; echo rc=$?   echo   echo '$ ls -la workspace/local_exec/state && tail -n 120 workspace/local_exec/state/worker.log && pgrep -af "workspace.local_exec.worker|local-exec-fallback"'   ls -la workspace/local_exec/state   tail -n 120 workspace/local_exec/state/worker.log 2>&1 || true   pgrep -af 'workspace.local_exec.worker|local-exec-fallback' || true   echo '```'   echo "- blocked-by: user systemd unavailable (Operation not permitted)."   echo "- blocked-by: fallback background worker process did not remain persistent in this execution context; likely session/sandbox process-lifecycle behavior." } >> "$AUDIT"  git add "$AUDIT" && git commit -m "docs(audit): add blocked-by details for fallback worker persistence" && git push -u origin codex/feat/dali-local-exec-plane-20260222
+```
+- blocked-by: user systemd unavailable (Operation not permitted).
+- blocked-by: fallback background worker process did not remain persistent in this execution context; likely session/sandbox process-lifecycle behavior.
