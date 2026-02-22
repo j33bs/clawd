@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "workspace/skills/scaffold-apply/schemas/input.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "dry_run": { "type": "boolean" },
+    "target_dir": { "type": "string", "minLength": 1 },
+    "plan": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "file": { "type": "string", "minLength": 1 },
+          "operation": { "type": "string", "enum": ["create", "patch", "delete"] },
+          "content": { "type": "string" },
+          "rationale": { "type": "string", "minLength": 1 }
+        },
+        "required": ["file", "operation", "rationale"]
+      }
+    }
+  },
+  "required": ["target_dir", "plan"]
+}

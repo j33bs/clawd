@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "workspace/skills/scaffold-apply/schemas/output.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "steps_applied": { "type": "integer", "minimum": 0 },
+    "steps_failed": { "type": "integer", "minimum": 0 },
+    "commit_hashes": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "failed_step": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "index": { "type": "integer" },
+        "step": { "type": ["object", "null"] },
+        "error": { "type": "string" }
+      },
+      "required": ["index", "step", "error"]
+    }
+  },
+  "required": ["steps_applied", "steps_failed", "commit_hashes"]
+}
