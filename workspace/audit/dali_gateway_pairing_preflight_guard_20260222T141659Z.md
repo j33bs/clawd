@@ -608,3 +608,9 @@ INFO: recent scope-upgrade/pairing-required log lines were found; ensure devices
 OK: no pending pairing/repair detected.
 (exit_code=0)
 ```
+
+## Addendum - Operator docs reminder (2026-02-22T15:04:29Z)
+
+- Added preflight reminder to run `workspace/scripts/check_gateway_pairing_health.sh` before sub-agent or browser-relay operations.
+- Runbook updated: `workspace/docs/ops/DALI_LOCAL_EXEC_PLANE.md` (section: Gateway Pairing Preflight).
+- Note: check fails fast if pending pairing/repair exists; follow printed approve steps.

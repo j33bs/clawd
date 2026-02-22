@@ -10,6 +10,16 @@ python3 -m workspace.local_exec.worker --repo-root . --once
 bash scripts/local_exec_plane.sh health
 ```
 
+## Gateway Pairing Preflight
+
+Run this before sub-agent or browser-relay operations:
+
+```bash
+workspace/scripts/check_gateway_pairing_health.sh
+```
+
+This check fails fast if pending pairing/repair exists; follow the printed approve steps before continuing.
+
 ## Start and Stop
 
 ```bash
