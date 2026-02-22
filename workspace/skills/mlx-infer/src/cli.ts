@@ -21,6 +21,22 @@ type CliErrorType =
   | "INVALID_ARGS"
   | "RUNTIME";
 
+type Config = Record<string, unknown> & {
+  max_concurrent?: number;
+  default_model?: string;
+};
+
+type SpawnResult = { stdout: string; stderr: string; code: number };
+
+type RunDeps = {
+  spawnPython?: (args: string[], timeoutMs: number) => Promise<SpawnResult>;
+  ensurePython?: () => void;
+  ensureMlxImport?: () => void;
+  acquireSlot?: (baseDir: string, limit: number) => () => void;
+};
+
+const DEFAULT_PID_TTL_MS = 600000;
+
 function printOk(payload: Record<string, unknown>): never {
   process.stdout.write(`${JSON.stringify(payload)}\n`);
   process.exit(0);
@@ -68,7 +84,7 @@ async function readStdinJson(): Promise<Partial<Input>> {
   }
 }
 
-function loadConfig(configArg?: string): Record<string, unknown> {
+function loadConfig(configArg?: string): Config {
   const cfgPath = configArg || process.env.OPENCLAW_SKILL_CONFIG;
   if (!cfgPath) return {};
   try {
@@ -98,23 +114,67 @@ function runDir(baseDir: string): string {
   return d;
 }
 
-function cleanupStale(dir: string): void {
+function parsePidFromFilename(file: string): number | null {
+  const match = /^pid-(\d+)(?:-.+)?$/.exec(file);
+  if (!match) return null;
+  const pid = Number(match[1]);
+  if (!Number.isInteger(pid) || pid < 1) return null;
+  return pid;
+}
+
+function isPidAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err: any) {
+    if (err?.code === "ESRCH") return false;
+    if (err?.code === "EPERM") return true;
+    return true;
+  }
+}
+
+function isExpiredByTtl(mtimeMs: number, ttlMs: number): boolean {
+  return Date.now() - mtimeMs > ttlMs;
+}
+
+function resolvePidTtlMs(): number {
+  const raw = process.env.OPENCLAW_MLX_INFER_PID_TTL_MS;
+  if (!raw) return DEFAULT_PID_TTL_MS;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed <= 0) return DEFAULT_PID_TTL_MS;
+  return Math.floor(parsed);
+}
+
+function cleanupStale(dir: string, ttlMs: number): void {
   for (const file of fs.readdirSync(dir)) {
     if (!file.startsWith("pid-")) continue;
-    const parts = file.split("-");
-    const pid = Number(parts[1]);
-    if (!Number.isFinite(pid)) continue;
+    const fullPath = path.join(dir, file);
+    let stat: fs.Stats;
     try {
-      process.kill(pid, 0);
-    } catch {
-      fs.rmSync(path.join(dir, file), { force: true });
+      stat = fs.statSync(fullPath);
+    } catch (err: any) {
+      if (err?.code === "ENOENT") continue;
+      continue;
+    }
+    let shouldDelete = isExpiredByTtl(stat.mtimeMs, ttlMs);
+    if (!shouldDelete) {
+      const pid = parsePidFromFilename(file);
+      if (pid !== null && !isPidAlive(pid)) {
+        shouldDelete = true;
+      }
+    }
+    if (!shouldDelete) continue;
+    try {
+      fs.rmSync(fullPath, { force: true });
+    } catch (err: any) {
+      if (err?.code === "ENOENT") continue;
     }
   }
 }
 
 function acquireSlot(baseDir: string, limit: number): () => void {
   const dir = runDir(baseDir);
-  cleanupStale(dir);
+  cleanupStale(dir, resolvePidTtlMs());
   const slot = `pid-${process.pid}-${Date.now()}`;
   const slotPath = path.join(dir, slot);
   fs.writeFileSync(slotPath, "1", { encoding: "utf8", flag: "wx" });
@@ -146,7 +206,7 @@ function buildPythonArgs(input: Required<Pick<Input, "prompt">> & Input): string
   return args;
 }
 
-function spawnPython(args: string[], timeoutMs: number): Promise<{ stdout: string; stderr: string; code: number }> {
+function spawnPython(args: string[], timeoutMs: number): Promise<SpawnResult> {
   return new Promise((resolve) => {
     const proc: ChildProcessWithoutNullStreams = spawn("python3", args, { stdio: ["ignore", "pipe", "pipe"] });
     let stdout = "";
@@ -168,14 +228,19 @@ function spawnPython(args: string[], timeoutMs: number): Promise<{ stdout: strin
   });
 }
 
-async function main(): Promise<void> {
-  const flagArgs = parseArgs(process.argv.slice(2));
+async function run(argv: string[] = process.argv.slice(2), deps: RunDeps = {}): Promise<void> {
+  const usedSpawn = deps.spawnPython || spawnPython;
+  const usedEnsurePy = deps.ensurePython || ensurePython;
+  const usedEnsureMlx = deps.ensureMlxImport || ensureMlxImport;
+  const usedAcquire = deps.acquireSlot || acquireSlot;
+
+  const flagArgs = parseArgs(argv);
   const stdinInput = await readStdinJson();
   const merged: Input = { ...stdinInput, ...flagArgs };
   const cfg = loadConfig(merged.config);
 
-  ensurePython();
-  ensureMlxImport();
+  usedEnsurePy();
+  usedEnsureMlx();
 
   const maxConcurrent = Number(process.env.OPENCLAW_MAX_CONCURRENT || cfg.max_concurrent || 1);
   if (!Number.isFinite(maxConcurrent) || maxConcurrent < 1) {
@@ -202,13 +267,13 @@ async function main(): Promise<void> {
   }
 
   const baseDir = path.join(__dirname, "..");
-  const release = acquireSlot(baseDir, maxConcurrent);
+  const release = usedAcquire(baseDir, maxConcurrent);
   try {
     const args = buildPythonArgs({ ...merged, model, prompt: merged.prompt });
-    const result = await spawnPython(args, 120000);
+    const result = await usedSpawn(args, 120000);
     let payload: any;
     try {
-      payload = JSON.parse(result.stdout.trim());
+      payload = JSON.parse((result.stdout || "").trim());
     } catch (err) {
       printErr("RUNTIME", "python returned malformed JSON", { stderr: result.stderr, stdout: result.stdout, parse_error: String(err) });
     }
@@ -230,6 +295,21 @@ async function main(): Promise<void> {
   }
 }
 
-main().catch((err) => {
-  printErr("RUNTIME", `unexpected failure: ${String(err)}`);
-});
+if (require.main === module) {
+  run().catch((err) => {
+    printErr("RUNTIME", `unexpected failure: ${String(err)}`);
+  });
+}
+
+module.exports = {
+  run,
+  parseArgs,
+  buildPythonArgs,
+  mapPythonError,
+  parsePidFromFilename,
+  isPidAlive,
+  isExpiredByTtl,
+  resolvePidTtlMs,
+  cleanupStale,
+  acquireSlot
+};
