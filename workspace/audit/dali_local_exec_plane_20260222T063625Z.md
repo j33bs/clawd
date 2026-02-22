@@ -226,3 +226,18 @@ Phase 3 outcome:
 - Added argv-only subprocess harness with shell-like string rejection.
 - Added worker handlers for `repo_index_task`, `test_runner_task`, `doc_compactor_task` with deny-by-default policy checks.
 - Added deterministic offline test suite: `tests_unittest/test_local_exec_plane_offline.py`.
+
+## Phase 4 — Optional MCPorter harness (best effort)
+```text
+Sun Feb 22 06:47:36 UTC 2026
+$ command -v mcporter
+(not found)
+```
+
+Outcome:
+- blocked-by: `mcporter` not installed on runner.
+- added optional adapter `workspace/local_exec/tools_mcporter.py` with:
+  - deny-by-default allowlist,
+  - strict timeout/response-size bounds,
+  - explicit `tool_not_allowed` and `blocked_by:mcporter_not_installed` behavior.
+- added config stub `config/mcporter.json` with zero enabled tools by default.

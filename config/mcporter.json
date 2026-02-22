@@ -1,0 +1,6 @@
+{
+  "enabled_tools": [],
+  "timeout_sec": 30,
+  "max_response_bytes": 131072,
+  "notes": "Deny-by-default. Explicitly opt-in tool names before enabling calls."
+}
