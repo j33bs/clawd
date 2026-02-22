@@ -341,3 +341,15 @@ node --test workspace/skills/**/tests/*.test.js
   - git revert <docs-audit-sha>
   - git revert <skills-sha>
   - git revert <runner-sha>
+
+## Merge Verification for coreml-embed runner + skill (2026-02-22T20:43:06Z)
+- Integration branch base: origin/main (local main had divergence; avoided rewrite by merging on origin/main-based branch)
+- Merge commit: 5ac9293
+- Test command: node --test workspace/skills/**/tests/*.test.js
+- Test summary: PASS (25 tests, 0 failures)
+
+## Merge Verification for coreml-embed runner + skill (2026-02-22T20:43:14Z)
+- Integration branch base: origin/main (local main had divergence; avoided rewrite by merging on origin/main-based branch)
+- Merge commit: 5ac9293
+- Test command: node --test workspace/skills/**/tests/*.test.js
+- Test summary: PASS (25 tests, 0 failures)
