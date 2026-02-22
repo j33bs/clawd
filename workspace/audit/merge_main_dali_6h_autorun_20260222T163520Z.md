@@ -143,3 +143,12 @@ Verification result: PASS (all required checks passed; no rollback needed).
 
 ## Phase 3 - Push main
 (pending after audit note commit)
+
+```bash
+$ git push origin main
+push: success
+$ git rev-parse HEAD
+6386313d94eef61e9f0662a0817daf94a4891421
+$ git log -1 --oneline
+6386313 docs(audit): record merge of dali 6h audit-repair branch
+```
