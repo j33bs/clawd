@@ -1,0 +1,33 @@
+{
+  "confidence_threshold_remote": 0.7,
+  "confidence_threshold_human": 0.5,
+  "signals": {
+    "force_human": [
+      "delete prod data",
+      "wire money",
+      "send legal threat"
+    ],
+    "prefer_local": [
+      "format",
+      "rename",
+      "summarize",
+      "extract",
+      "list",
+      "grep"
+    ],
+    "prefer_remote": [
+      "architecture",
+      "threat model",
+      "cryptography",
+      "governance",
+      "design a system"
+    ]
+  },
+  "route_overrides": [
+    {
+      "match": "openai",
+      "tier": "HUMAN",
+      "reason": "OpenAI is HUMAN-mediated in this deployment."
+    }
+  ]
+}

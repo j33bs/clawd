@@ -1,0 +1,7 @@
+{
+  "name": "@openclaw/scaffold-apply-skill",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Workspace skill for applying scaffold plans with per-step git commits",
+  "type": "commonjs"
+}
