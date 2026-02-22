@@ -225,3 +225,41 @@ node --test workspace/skills/**/tests/*.test.js
 - Test command: node --test workspace/skills/**/tests/*.test.js
 - Test summary: PASS (16 tests, 0 failures).
 - Conclusion: MLX/Metal device initialization crashes on this host; mlx-infer not operational yet. Recommended fallback: LOCAL non-MLX engine until MLX runtime is fixed.
+
+## MLX Crash-Rate Matrix (Pin Compatibility) (2026-02-22T10:38:17Z)
+- Scope: diagnostics + venv-only pinning in .venv-mlx313; no OpenClaw runtime code changes.
+- Harness files (temp): /tmp/mlx_probe.py, /tmp/mlx_crashrate.sh.
+- Harness method: 50 independent fresh Python processes; recorded exit code per run.
+
+### Pins before matrix
+- mlx==0.30.6
+- mlx-metal==0.30.6
+- mlx-lm==0.30.7
+
+### Crash-rate: baseline pin set (mlx-lm 0.30.7)
+- Command: bash /tmp/mlx_crashrate.sh 50
+- Result: ok=0, fail=50 (all nonzero exit=134 abort)
+- Crash sample: NSRangeException / __NSArray0 objectAtIndex in libmlx metal device init.
+
+### Pin experiment: mlx-lm compatibility
+- Command: /private/tmp/wt_docs_main/.venv-mlx313/bin/python -m pip install --no-cache-dir --upgrade mlx-lm==0.30.6
+- Availability: mlx-lm==0.30.6 exists and installed successfully.
+- Pins after install:
+  - mlx==0.30.6
+  - mlx-metal==0.30.6
+  - mlx-lm==0.30.6
+
+### Crash-rate: matched pin set (mlx-lm 0.30.6)
+- First run result: ok=50, fail=0.
+- Immediate spot checks (non-tty + pseudo-tty): both crashed with same NSRangeException signature.
+- Repeat 50-run result: ok=0, fail=50.
+
+### Context / API reachability notes
+- osascript probe failed at AppleScript parse level in this environment (did not execute Python).
+- For crashing runs, import aborted before JSON could include metal.is_available/device_info.
+
+### Conclusion
+- Primary evidence supports hypothesis (A): severe intermittency in MLX/Metal device initialization (crash-rate instability).
+- Hypothesis (B) is not supported as sole root cause: aligning mlx-lm to 0.30.6 did not produce stable reliability.
+- Hypothesis (C) remains possible but unproven here: non-tty and pseudo-tty both crash in this context.
+- Recommendation: treat MLX path as unreliable on macOS 26.3 in this host context; gate with health checks and keep non-MLX local fallback as default.
