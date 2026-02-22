@@ -280,3 +280,20 @@ summary kill_switch=False events=12 model_stub=True model_reachable=None
 - Primary user-systemd control path blocked-by: 'Failed to connect to bus: Operation not permitted'.
 - Applied safe fallback recovery: started local exec worker via scripts/local_exec_plane.sh (fallback pid mode).
 - vLLM remained optional/disabled (LOCAL_EXEC_ENABLE_VLLM not set).
+
+## Final post-check restart confirmation
+```text
+$ bash scripts/local_exec_plane.sh start || true
+fallback worker started pid=91520
+vllm_start=skipped reason=LOCAL_EXEC_ENABLE_VLLM_not_set
+fallback worker active pid=91520
+vllm_status=unknown reason=systemd_user_unavailable
+
+$ bash scripts/local_exec_plane.sh status || true
+fallback worker active pid=91520
+vllm_status=unknown reason=systemd_user_unavailable
+
+$ bash scripts/local_exec_plane.sh health || true
+{"kill_switch": false, "ledger_path": "/tmp/wt_local_exec_activation/workspace/local_exec/state/jobs.jsonl", "events": 12, "last_event": {"ts_utc": "2026-02-22T11:12:44.540610Z", "event": "complete", "job_id": "job-sleeprun11124203", "worker_id": "local-exec-fallback", "result": {"commands_run": 1, "results": [{"argv": ["python3", "-m", "unittest", "tests_unittest.test_local_exec_plane_offline.LocalExecPlaneOfflineTests.test_model_client_stub_returns_no_tool_calls", "-v"], "returncode": 0, "timed_out": false, "duration_ms": 91, "stdout": "", "stderr": "test_model_client_stub_returns_no_tool_calls (tests_unittest.test_local_exec_plane_offline.LocalExecPlaneOfflineTests.test_model_client_stub_returns_no_tool_calls) ... ok\n\n----------------------------------------------------------------------\nRan 1 test in 0.009s\n\nOK\n", "stdout_bytes": 0, "stderr_bytes": 268, "stdout_truncated": false, "stderr_truncated": false}]}}, "model_stub_mode": true, "model_api_base": "", "model_reachable": null, "model_detail": "stub_mode"}
+summary kill_switch=False events=12 model_stub=True model_reachable=None
+```
