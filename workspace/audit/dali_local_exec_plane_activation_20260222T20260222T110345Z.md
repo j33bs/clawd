@@ -158,3 +158,18 @@ summary_enqueued=3 summary_errors=0
 ledger_summary={"ledger_events": 12, "last_event": {"ts_utc": "2026-02-22T11:12:44.540610Z", "event": "complete", "job_id": "job-sleeprun11124203", "worker_id": "local-exec-fallback", "result": {"commands_run": 1, "results": [{"argv": ["python3", "-m", "unittest", "tests_unittest.test_local_exec_plane_offline.LocalExecPlaneOfflineTests.test_model_client_stub_returns_no_tool_calls", "-v"], "returncode": 0, "timed_out": false, "duration_ms": 91, "stdout": "", "stderr": "test_model_client_stub_returns_no_tool_calls (tests_unittest.test_local_exec_plane_offline.LocalExecPlaneOfflineTests.test_model_client_stub_returns_no_tool_calls) ... ok\n\n----------------------------------------------------------------------\nRan 1 test in 0.009s\n\nOK\n", "stdout_bytes": 0, "stderr_bytes": 268, "stdout_truncated": false, "stderr_truncated": false}]}}}
 UTC end: 2026-02-22T11:12:52Z
 ```
+
+## Drift cleanup starting
+- UTC: $(date -u +%Y-%m-%dT%H:%M:%SZ)
+- Goal: remove unrelated mlx-infer + scaffold audit drift and keep diff local-exec only.
+
+## Drift cleanup result
+- UTC: 2026-02-22T11:55:38Z
+- Reverted to origin/main:
+  - workspace/skills/mlx-infer/dist/cli.js
+  - workspace/skills/mlx-infer/src/cli.ts
+  - workspace/skills/mlx-infer/tests/mlx_infer_concurrency_stale_pid_cleanup.test.js
+  - workspace/skills/mlx-infer/tests/mlx_infer_integration_stub.test.js
+  - workspace/audit/skills_tiered_mlx_triage_scaffold_20260222.md
+- Drift verification: no mlx-infer or skills_tiered_mlx paths remain in origin/main...HEAD diff.
+- Cleanup commit SHA: pending (recorded after commit).
