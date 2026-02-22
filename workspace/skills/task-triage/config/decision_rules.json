@@ -1,6 +1,49 @@
 {
   "confidence_threshold_remote": 0.7,
   "confidence_threshold_human": 0.5,
+  "sentinel": {
+    "min_confidence": 0.7
+  },
+  "prefilter": {
+    "enabled": true,
+    "max_task_chars": 4000,
+    "max_context_chars": 12000,
+    "drop_if": [
+      {
+        "when": {
+          "task_regex": "^(ping|test)$"
+        },
+        "action": "DROP",
+        "rationale": "trivial"
+      }
+    ],
+    "escalate_if": [
+      {
+        "when": {
+          "task_regex": "(?i)password|secret|api key|mnemonic"
+        },
+        "tier": "HUMAN",
+        "confidence": 0.95,
+        "rationale": "sensitive material"
+      },
+      {
+        "when": {
+          "context_too_large": true
+        },
+        "tier": "REMOTE",
+        "confidence": 0.85,
+        "rationale": "context too large; requires integrator"
+      }
+    ],
+    "allowlist_sources": [],
+    "denylist_sources": []
+  },
+  "evidence": {
+    "enabled": true,
+    "chunk_chars": 800,
+    "top_k": 5,
+    "min_score": 1
+  },
   "signals": {
     "force_human": [
       "delete prod data",
