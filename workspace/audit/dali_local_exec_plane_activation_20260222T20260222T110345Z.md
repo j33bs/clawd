@@ -316,3 +316,179 @@ drwxrwxr-x 8 jeebs jeebs 4096 Feb 22 21:07 ..
 ```
 - blocked-by: user systemd unavailable (Operation not permitted).
 - blocked-by: fallback background worker process did not remain persistent in this execution context; likely session/sandbox process-lifecycle behavior.
+
+## Durable worker bring-up attempt (systemd user bus unavailable fallback runbook)
+- UTC: 2026-02-22T12:22:28Z
+- Host: jeebs-Z490-AORUS-MASTER
+```text
+$ pwd
+/tmp/wt_local_exec_activation
+$ git rev-parse --abbrev-ref HEAD
+codex/feat/dali-local-exec-plane-20260222
+$ git rev-parse HEAD
+90cda66fd8116aace78711ad5bbd7a700d42fd99
+$ git status --porcelain -uall
+ M workspace/audit/dali_local_exec_plane_activation_20260222T20260222T110345Z.md
+$ systemctl --user is-active openclaw-local-exec-worker.service || true
+$ systemctl --user is-active vllm-local-exec.service || true
+```
+
+## Phase 1 — Ensure not quiesced
+```text
+$ test -f workspace/local_exec/state/KILL_SWITCH && echo "KILL_SWITCH present" || echo "KILL_SWITCH absent"
+KILL_SWITCH absent
+$ rm -f workspace/local_exec/state/KILL_SWITCH
+removed_if_present=true
+$ mkdir -p workspace/local_exec/state workspace/local_exec/evidence
+total 24
+drwxrwxr-x 2 jeebs jeebs 4096 Feb 22 22:08 .
+drwxrwxr-x 8 jeebs jeebs 4096 Feb 22 21:07 ..
+-rw-rw-r-- 1 jeebs jeebs   64 Feb 22 21:03 .gitignore
+-rw-rw-r-- 1 jeebs jeebs 4328 Feb 22 21:12 jobs.jsonl
+-rw-r--r-- 1 jeebs jeebs    0 Feb 22 21:12 jobs.lock
+-rw-rw-r-- 1 jeebs jeebs    0 Feb 22 21:12 worker.log
+-rw-rw-r-- 1 jeebs jeebs    6 Feb 22 22:09 worker.pid
+```
+
+## Phase 2 — Stop stale fallback worker (best effort)
+```text
+pidfile_found:91520
+$ ps aux | grep -F "workspace.local_exec.worker" | grep -v grep || true
+
+--- after targeted kill ---
+
+```
+
+## Phase 3 — Durable mode selection
+```text
+tmux=missing
+$ tmux ls | grep -n "local-exec-worker" || true
+
+```
+
+## Phase 4 — Durable mode B (nohup + pidfile)
+```text
+$ nohup ... python3 -m workspace.local_exec.worker --repo-root . --loop --sleep-s 2
+pidfile_pid=92775
+$ ps -p "92775" -o pid,cmd
+  92775 python3 -m workspace.local_exec.worker --repo-root . --loop --sleep-s 2
+```
+
+## Phase 5 — Verify persistence + event increment
+```text
+$ python3 scripts/local_exec_enqueue.py --demo --repo-root .
+{"status": "enqueued", "job_id": "job-demorepoindex01", "event_ts": "2026-02-22T12:23:21.509648Z"}
+
+$ bash scripts/local_exec_plane.sh health || true  # check1
+{"kill_switch": false, "ledger_path": "/tmp/wt_local_exec_activation/workspace/local_exec/state/jobs.jsonl", "events": 13, "last_event": {"ts_utc": "2026-02-22T12:23:21.509648Z", "event": "enqueue", "validator_mode": "jsonschema", "job": {"job_id": "job-demorepoindex01", "job_type": "repo_index_task", "created_at_utc": "2026-02-22T12:23:21.502959Z", "payload": {"include_globs": ["workspace/**/*.py", "workspace/**/*.md", "scripts/*.py"], "exclude_globs": ["**/*.bak.*"], "max_files": 200, "max_file_bytes": 32768, "keywords": ["policy", "router", "audit"]}, "budgets": {"max_wall_time_sec": 300, "max_tool_calls": 10, "max_output_bytes": 262144, "max_concurrency_slots": 1}, "tool_policy": {"allow_network": false, "allow_subprocess": false, "allowed_tools": []}, "meta": {"source": "enqueue-demo"}}}, "model_stub_mode": true, "model_api_base": "", "model_reachable": null, "model_detail": "stub_mode"}
+summary kill_switch=False events=13 model_stub=True model_reachable=None
+
+$ sleep 5
+$ bash scripts/local_exec_plane.sh health || true  # check2
+{"kill_switch": false, "ledger_path": "/tmp/wt_local_exec_activation/workspace/local_exec/state/jobs.jsonl", "events": 13, "last_event": {"ts_utc": "2026-02-22T12:23:21.509648Z", "event": "enqueue", "validator_mode": "jsonschema", "job": {"job_id": "job-demorepoindex01", "job_type": "repo_index_task", "created_at_utc": "2026-02-22T12:23:21.502959Z", "payload": {"include_globs": ["workspace/**/*.py", "workspace/**/*.md", "scripts/*.py"], "exclude_globs": ["**/*.bak.*"], "max_files": 200, "max_file_bytes": 32768, "keywords": ["policy", "router", "audit"]}, "budgets": {"max_wall_time_sec": 300, "max_tool_calls": 10, "max_output_bytes": 262144, "max_concurrency_slots": 1}, "tool_policy": {"allow_network": false, "allow_subprocess": false, "allowed_tools": []}, "meta": {"source": "enqueue-demo"}}}, "model_stub_mode": true, "model_api_base": "", "model_reachable": null, "model_detail": "stub_mode"}
+summary kill_switch=False events=13 model_stub=True model_reachable=None
+
+events_check1=13
+events_check2=13
+
+$ tail -n 80 workspace/local_exec/state/worker.out || true
+
+
+$ tail -n 80 workspace/local_exec/state/worker.err || true
+
+
+$ tail -n 50 workspace/local_exec/state/jobs.jsonl || true
+{"ts_utc": "2026-02-22T11:12:22.441416Z", "event": "enqueue", "validator_mode": "jsonschema", "job": {"job_id": "job-sleeprun11122201", "job_type": "repo_index_task", "created_at_utc": "2026-02-22T11:12:22.436191Z", "budgets": {"max_wall_time_sec": 180, "max_tool_calls": 8, "max_output_bytes": 131072, "max_concurrency_slots": 1}, "tool_policy": {"allow_network": false, "allow_subprocess": false, "allowed_tools": []}, "meta": {"source": "sleep_run"}, "payload": {"include_globs": ["workspace/local_exec/*.py", "workspace/docs/ops/*.md", "scripts/*.sh"], "exclude_globs": ["**/*.bak.*"], "max_files": 60, "max_file_bytes": 16384, "keywords": ["kill_switch", "evidence", "worker"]}}}
+{"ts_utc": "2026-02-22T11:12:24.435146Z", "event": "claim", "job_id": "job-sleeprun11122201", "worker_id": "local-exec-fallback", "lease_expires_unix": 1771758804.4351397}
+{"ts_utc": "2026-02-22T11:12:24.436499Z", "event": "heartbeat", "job_id": "job-sleeprun11122201", "worker_id": "local-exec-fallback", "lease_expires_unix": 1771758804.4365041}
+{"ts_utc": "2026-02-22T11:12:24.441112Z", "event": "complete", "job_id": "job-sleeprun11122201", "worker_id": "local-exec-fallback", "result": {"files_considered": 19, "hits_written": 7, "index_jsonl": "workspace/local_exec/evidence/job-sleeprun11122201_index.jsonl"}}
+{"ts_utc": "2026-02-22T11:12:32.523166Z", "event": "enqueue", "validator_mode": "jsonschema", "job": {"job_id": "job-sleeprun11123202", "job_type": "doc_compactor_task", "created_at_utc": "2026-02-22T11:12:32.518209Z", "budgets": {"max_wall_time_sec": 180, "max_tool_calls": 8, "max_output_bytes": 131072, "max_concurrency_slots": 1}, "tool_policy": {"allow_network": false, "allow_subprocess": false, "allowed_tools": []}, "meta": {"source": "sleep_run"}, "payload": {"inputs": ["workspace/audit/dali_local_exec_plane_activation_20260222T20260222T110345Z.md"], "max_input_bytes": 32768, "max_output_bytes": 8192, "title": "Sleep-run evidence compaction"}}}
+{"ts_utc": "2026-02-22T11:12:34.443436Z", "event": "claim", "job_id": "job-sleeprun11123202", "worker_id": "local-exec-fallback", "lease_expires_unix": 1771758814.4434347}
+{"ts_utc": "2026-02-22T11:12:34.444737Z", "event": "heartbeat", "job_id": "job-sleeprun11123202", "worker_id": "local-exec-fallback", "lease_expires_unix": 1771758814.4447415}
+{"ts_utc": "2026-02-22T11:12:34.445108Z", "event": "complete", "job_id": "job-sleeprun11123202", "worker_id": "local-exec-fallback", "result": {"inputs_considered": 1, "bytes_read": 7950}}
+{"ts_utc": "2026-02-22T11:12:42.604094Z", "event": "enqueue", "validator_mode": "jsonschema", "job": {"job_id": "job-sleeprun11124203", "job_type": "test_runner_task", "created_at_utc": "2026-02-22T11:12:42.599037Z", "budgets": {"max_wall_time_sec": 180, "max_tool_calls": 8, "max_output_bytes": 131072, "max_concurrency_slots": 1}, "tool_policy": {"allow_network": false, "allow_subprocess": true, "allowed_tools": []}, "meta": {"source": "sleep_run"}, "payload": {"commands": [["python3", "-m", "unittest", "tests_unittest.test_local_exec_plane_offline.LocalExecPlaneOfflineTests.test_model_client_stub_returns_no_tool_calls", "-v"]], "timeout_sec": 90, "cwd": ".", "env_allow": []}}}
+{"ts_utc": "2026-02-22T11:12:44.447590Z", "event": "claim", "job_id": "job-sleeprun11124203", "worker_id": "local-exec-fallback", "lease_expires_unix": 1771758824.4475884}
+{"ts_utc": "2026-02-22T11:12:44.448858Z", "event": "heartbeat", "job_id": "job-sleeprun11124203", "worker_id": "local-exec-fallback", "lease_expires_unix": 1771758824.4488626}
+{"ts_utc": "2026-02-22T11:12:44.540610Z", "event": "complete", "job_id": "job-sleeprun11124203", "worker_id": "local-exec-fallback", "result": {"commands_run": 1, "results": [{"argv": ["python3", "-m", "unittest", "tests_unittest.test_local_exec_plane_offline.LocalExecPlaneOfflineTests.test_model_client_stub_returns_no_tool_calls", "-v"], "returncode": 0, "timed_out": false, "duration_ms": 91, "stdout": "", "stderr": "test_model_client_stub_returns_no_tool_calls (tests_unittest.test_local_exec_plane_offline.LocalExecPlaneOfflineTests.test_model_client_stub_returns_no_tool_calls) ... ok\n\n----------------------------------------------------------------------\nRan 1 test in 0.009s\n\nOK\n", "stdout_bytes": 0, "stderr_bytes": 268, "stdout_truncated": false, "stderr_truncated": false}]}}
+{"ts_utc": "2026-02-22T12:23:21.509648Z", "event": "enqueue", "validator_mode": "jsonschema", "job": {"job_id": "job-demorepoindex01", "job_type": "repo_index_task", "created_at_utc": "2026-02-22T12:23:21.502959Z", "payload": {"include_globs": ["workspace/**/*.py", "workspace/**/*.md", "scripts/*.py"], "exclude_globs": ["**/*.bak.*"], "max_files": 200, "max_file_bytes": 32768, "keywords": ["policy", "router", "audit"]}, "budgets": {"max_wall_time_sec": 300, "max_tool_calls": 10, "max_output_bytes": 262144, "max_concurrency_slots": 1}, "tool_policy": {"allow_network": false, "allow_subprocess": false, "allowed_tools": []}, "meta": {"source": "enqueue-demo"}}}
+```
+
+## Phase 5b — Event growth proof window
+```text
+$ bash scripts/local_exec_plane.sh health || true  # checkA
+{"kill_switch": false, "ledger_path": "/tmp/wt_local_exec_activation/workspace/local_exec/state/jobs.jsonl", "events": 13, "last_event": {"ts_utc": "2026-02-22T12:23:21.509648Z", "event": "enqueue", "validator_mode": "jsonschema", "job": {"job_id": "job-demorepoindex01", "job_type": "repo_index_task", "created_at_utc": "2026-02-22T12:23:21.502959Z", "payload": {"include_globs": ["workspace/**/*.py", "workspace/**/*.md", "scripts/*.py"], "exclude_globs": ["**/*.bak.*"], "max_files": 200, "max_file_bytes": 32768, "keywords": ["policy", "router", "audit"]}, "budgets": {"max_wall_time_sec": 300, "max_tool_calls": 10, "max_output_bytes": 262144, "max_concurrency_slots": 1}, "tool_policy": {"allow_network": false, "allow_subprocess": false, "allowed_tools": []}, "meta": {"source": "enqueue-demo"}}}, "model_stub_mode": true, "model_api_base": "", "model_reachable": null, "model_detail": "stub_mode"}
+summary kill_switch=False events=13 model_stub=True model_reachable=None
+
+$ python3 scripts/local_exec_enqueue.py --demo --repo-root .
+{"status": "enqueued", "job_id": "job-demorepoindex01", "event_ts": "2026-02-22T12:23:39.196998Z"}
+
+$ sleep 5
+$ bash scripts/local_exec_plane.sh health || true  # checkB
+{"kill_switch": false, "ledger_path": "/tmp/wt_local_exec_activation/workspace/local_exec/state/jobs.jsonl", "events": 14, "last_event": {"ts_utc": "2026-02-22T12:23:39.196998Z", "event": "enqueue", "validator_mode": "jsonschema", "job": {"job_id": "job-demorepoindex01", "job_type": "repo_index_task", "created_at_utc": "2026-02-22T12:23:39.191319Z", "payload": {"include_globs": ["workspace/**/*.py", "workspace/**/*.md", "scripts/*.py"], "exclude_globs": ["**/*.bak.*"], "max_files": 200, "max_file_bytes": 32768, "keywords": ["policy", "router", "audit"]}, "budgets": {"max_wall_time_sec": 300, "max_tool_calls": 10, "max_output_bytes": 262144, "max_concurrency_slots": 1}, "tool_policy": {"allow_network": false, "allow_subprocess": false, "allowed_tools": []}, "meta": {"source": "enqueue-demo"}}}, "model_stub_mode": true, "model_api_base": "", "model_reachable": null, "model_detail": "stub_mode"}
+summary kill_switch=False events=14 model_stub=True model_reachable=None
+
+events_checkA=13
+events_checkB=14
+```
+
+## Phase 7 — Kill switch test
+```text
+$ touch workspace/local_exec/state/KILL_SWITCH
+kill_switch_set=true
+$ python3 scripts/local_exec_enqueue.py --demo --repo-root .
+{"status": "enqueued", "job_id": "job-demorepoindex01", "event_ts": "2026-02-22T12:24:01.507075Z"}
+job_id_under_kill_switch=job-demorepoindex01
+
+$ bash scripts/local_exec_plane.sh health || true # before/after kill-switch window
+health_before:\n{"kill_switch": false, "ledger_path": "/tmp/wt_local_exec_activation/workspace/local_exec/state/jobs.jsonl", "events": 14, "last_event": {"ts_utc": "2026-02-22T12:23:39.196998Z", "event": "enqueue", "validator_mode": "jsonschema", "job": {"job_id": "job-demorepoindex01", "job_type": "repo_index_task", "created_at_utc": "2026-02-22T12:23:39.191319Z", "payload": {"include_globs": ["workspace/**/*.py", "workspace/**/*.md", "scripts/*.py"], "exclude_globs": ["**/*.bak.*"], "max_files": 200, "max_file_bytes": 32768, "keywords": ["policy", "router", "audit"]}, "budgets": {"max_wall_time_sec": 300, "max_tool_calls": 10, "max_output_bytes": 262144, "max_concurrency_slots": 1}, "tool_policy": {"allow_network": false, "allow_subprocess": false, "allowed_tools": []}, "meta": {"source": "enqueue-demo"}}}, "model_stub_mode": true, "model_api_base": "", "model_reachable": null, "model_detail": "stub_mode"}
+summary kill_switch=False events=14 model_stub=True model_reachable=None
+
+health_after:\n{"kill_switch": true, "ledger_path": "/tmp/wt_local_exec_activation/workspace/local_exec/state/jobs.jsonl", "events": 15, "last_event": {"ts_utc": "2026-02-22T12:24:01.507075Z", "event": "enqueue", "validator_mode": "jsonschema", "job": {"job_id": "job-demorepoindex01", "job_type": "repo_index_task", "created_at_utc": "2026-02-22T12:24:01.501520Z", "payload": {"include_globs": ["workspace/**/*.py", "workspace/**/*.md", "scripts/*.py"], "exclude_globs": ["**/*.bak.*"], "max_files": 200, "max_file_bytes": 32768, "keywords": ["policy", "router", "audit"]}, "budgets": {"max_wall_time_sec": 300, "max_tool_calls": 10, "max_output_bytes": 262144, "max_concurrency_slots": 1}, "tool_policy": {"allow_network": false, "allow_subprocess": false, "allowed_tools": []}, "meta": {"source": "enqueue-demo"}}}, "model_stub_mode": true, "model_api_base": "", "model_reachable": null, "model_detail": "stub_mode"}
+summary kill_switch=True events=15 model_stub=True model_reachable=None
+
+events_before=14
+events_after=15
+
+$ tail -n 20 workspace/local_exec/state/jobs.jsonl
+{"ts_utc": "2026-02-22T11:12:22.441416Z", "event": "enqueue", "validator_mode": "jsonschema", "job": {"job_id": "job-sleeprun11122201", "job_type": "repo_index_task", "created_at_utc": "2026-02-22T11:12:22.436191Z", "budgets": {"max_wall_time_sec": 180, "max_tool_calls": 8, "max_output_bytes": 131072, "max_concurrency_slots": 1}, "tool_policy": {"allow_network": false, "allow_subprocess": false, "allowed_tools": []}, "meta": {"source": "sleep_run"}, "payload": {"include_globs": ["workspace/local_exec/*.py", "workspace/docs/ops/*.md", "scripts/*.sh"], "exclude_globs": ["**/*.bak.*"], "max_files": 60, "max_file_bytes": 16384, "keywords": ["kill_switch", "evidence", "worker"]}}}
+{"ts_utc": "2026-02-22T11:12:24.435146Z", "event": "claim", "job_id": "job-sleeprun11122201", "worker_id": "local-exec-fallback", "lease_expires_unix": 1771758804.4351397}
+{"ts_utc": "2026-02-22T11:12:24.436499Z", "event": "heartbeat", "job_id": "job-sleeprun11122201", "worker_id": "local-exec-fallback", "lease_expires_unix": 1771758804.4365041}
+{"ts_utc": "2026-02-22T11:12:24.441112Z", "event": "complete", "job_id": "job-sleeprun11122201", "worker_id": "local-exec-fallback", "result": {"files_considered": 19, "hits_written": 7, "index_jsonl": "workspace/local_exec/evidence/job-sleeprun11122201_index.jsonl"}}
+{"ts_utc": "2026-02-22T11:12:32.523166Z", "event": "enqueue", "validator_mode": "jsonschema", "job": {"job_id": "job-sleeprun11123202", "job_type": "doc_compactor_task", "created_at_utc": "2026-02-22T11:12:32.518209Z", "budgets": {"max_wall_time_sec": 180, "max_tool_calls": 8, "max_output_bytes": 131072, "max_concurrency_slots": 1}, "tool_policy": {"allow_network": false, "allow_subprocess": false, "allowed_tools": []}, "meta": {"source": "sleep_run"}, "payload": {"inputs": ["workspace/audit/dali_local_exec_plane_activation_20260222T20260222T110345Z.md"], "max_input_bytes": 32768, "max_output_bytes": 8192, "title": "Sleep-run evidence compaction"}}}
+{"ts_utc": "2026-02-22T11:12:34.443436Z", "event": "claim", "job_id": "job-sleeprun11123202", "worker_id": "local-exec-fallback", "lease_expires_unix": 1771758814.4434347}
+{"ts_utc": "2026-02-22T11:12:34.444737Z", "event": "heartbeat", "job_id": "job-sleeprun11123202", "worker_id": "local-exec-fallback", "lease_expires_unix": 1771758814.4447415}
+{"ts_utc": "2026-02-22T11:12:34.445108Z", "event": "complete", "job_id": "job-sleeprun11123202", "worker_id": "local-exec-fallback", "result": {"inputs_considered": 1, "bytes_read": 7950}}
+{"ts_utc": "2026-02-22T11:12:42.604094Z", "event": "enqueue", "validator_mode": "jsonschema", "job": {"job_id": "job-sleeprun11124203", "job_type": "test_runner_task", "created_at_utc": "2026-02-22T11:12:42.599037Z", "budgets": {"max_wall_time_sec": 180, "max_tool_calls": 8, "max_output_bytes": 131072, "max_concurrency_slots": 1}, "tool_policy": {"allow_network": false, "allow_subprocess": true, "allowed_tools": []}, "meta": {"source": "sleep_run"}, "payload": {"commands": [["python3", "-m", "unittest", "tests_unittest.test_local_exec_plane_offline.LocalExecPlaneOfflineTests.test_model_client_stub_returns_no_tool_calls", "-v"]], "timeout_sec": 90, "cwd": ".", "env_allow": []}}}
+{"ts_utc": "2026-02-22T11:12:44.447590Z", "event": "claim", "job_id": "job-sleeprun11124203", "worker_id": "local-exec-fallback", "lease_expires_unix": 1771758824.4475884}
+{"ts_utc": "2026-02-22T11:12:44.448858Z", "event": "heartbeat", "job_id": "job-sleeprun11124203", "worker_id": "local-exec-fallback", "lease_expires_unix": 1771758824.4488626}
+{"ts_utc": "2026-02-22T11:12:44.540610Z", "event": "complete", "job_id": "job-sleeprun11124203", "worker_id": "local-exec-fallback", "result": {"commands_run": 1, "results": [{"argv": ["python3", "-m", "unittest", "tests_unittest.test_local_exec_plane_offline.LocalExecPlaneOfflineTests.test_model_client_stub_returns_no_tool_calls", "-v"], "returncode": 0, "timed_out": false, "duration_ms": 91, "stdout": "", "stderr": "test_model_client_stub_returns_no_tool_calls (tests_unittest.test_local_exec_plane_offline.LocalExecPlaneOfflineTests.test_model_client_stub_returns_no_tool_calls) ... ok\n\n----------------------------------------------------------------------\nRan 1 test in 0.009s\n\nOK\n", "stdout_bytes": 0, "stderr_bytes": 268, "stdout_truncated": false, "stderr_truncated": false}]}}
+{"ts_utc": "2026-02-22T12:23:21.509648Z", "event": "enqueue", "validator_mode": "jsonschema", "job": {"job_id": "job-demorepoindex01", "job_type": "repo_index_task", "created_at_utc": "2026-02-22T12:23:21.502959Z", "payload": {"include_globs": ["workspace/**/*.py", "workspace/**/*.md", "scripts/*.py"], "exclude_globs": ["**/*.bak.*"], "max_files": 200, "max_file_bytes": 32768, "keywords": ["policy", "router", "audit"]}, "budgets": {"max_wall_time_sec": 300, "max_tool_calls": 10, "max_output_bytes": 262144, "max_concurrency_slots": 1}, "tool_policy": {"allow_network": false, "allow_subprocess": false, "allowed_tools": []}, "meta": {"source": "enqueue-demo"}}}
+{"ts_utc": "2026-02-22T12:23:39.196998Z", "event": "enqueue", "validator_mode": "jsonschema", "job": {"job_id": "job-demorepoindex01", "job_type": "repo_index_task", "created_at_utc": "2026-02-22T12:23:39.191319Z", "payload": {"include_globs": ["workspace/**/*.py", "workspace/**/*.md", "scripts/*.py"], "exclude_globs": ["**/*.bak.*"], "max_files": 200, "max_file_bytes": 32768, "keywords": ["policy", "router", "audit"]}, "budgets": {"max_wall_time_sec": 300, "max_tool_calls": 10, "max_output_bytes": 262144, "max_concurrency_slots": 1}, "tool_policy": {"allow_network": false, "allow_subprocess": false, "allowed_tools": []}, "meta": {"source": "enqueue-demo"}}}
+{"ts_utc": "2026-02-22T12:24:01.507075Z", "event": "enqueue", "validator_mode": "jsonschema", "job": {"job_id": "job-demorepoindex01", "job_type": "repo_index_task", "created_at_utc": "2026-02-22T12:24:01.501520Z", "payload": {"include_globs": ["workspace/**/*.py", "workspace/**/*.md", "scripts/*.py"], "exclude_globs": ["**/*.bak.*"], "max_files": 200, "max_file_bytes": 32768, "keywords": ["policy", "router", "audit"]}, "budgets": {"max_wall_time_sec": 300, "max_tool_calls": 10, "max_output_bytes": 262144, "max_concurrency_slots": 1}, "tool_policy": {"allow_network": false, "allow_subprocess": false, "allowed_tools": []}, "meta": {"source": "enqueue-demo"}}}
+
+$ rm -f workspace/local_exec/state/KILL_SWITCH
+kill_switch_cleared=true
+```
+
+## Durable bring-up result summary
+```text
+mode_attempt_1=tmux (missing)
+mode_attempt_2=nohup+pidfile (process reaped/inactive between checks)
+mode_attempt_3=foreground_loop (successful)
+event_counts_health_window: pre=18 post=22
+kill_switch_test: set -> worker exited, claims stopped
+
+systemctl_user_worker_is_active:
+Failed to connect to bus: Operation not permitted
+systemctl_user_vllm_is_active:
+Failed to connect to bus: Operation not permitted
+
+script_status_now:
+fallback worker inactive
+vllm_status=unknown reason=systemd_user_unavailable
+
+script_health_now:
+{"kill_switch": false, "ledger_path": "/tmp/wt_local_exec_activation/workspace/local_exec/state/jobs.jsonl", "events": 22, "last_event": {"ts_utc": "2026-02-22T12:24:54.734192Z", "event": "complete", "job_id": "job-demorepoindex01", "worker_id": "local-exec-worker", "result": {"files_considered": 200, "hits_written": 90, "index_jsonl": "workspace/local_exec/evidence/job-demorepoindex01_index.jsonl"}}, "model_stub_mode": true, "model_api_base": "", "model_reachable": null, "model_detail": "stub_mode"}
+summary kill_switch=False events=22 model_stub=True model_reachable=None
+```
+- blocked-by: background worker persistence is unreliable in this execution context (process reaped). Foreground mode required for deterministic persistence.
