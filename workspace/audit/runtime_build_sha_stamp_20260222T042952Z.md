@@ -185,3 +185,25 @@ verify_outcome=pass
 exit_code=0
 ---
 ```
+
+## Phase 6 — Commit + push
+```
+Sun Feb 22 04:58:28 UTC 2026
+ M workspace/audit/runtime_build_sha_stamp_20260222T042952Z.md
+?? workspace/version_build.json
+--- diff --name-status ---
+M	workspace/audit/runtime_build_sha_stamp_20260222T042952Z.md
+--- branch/head ---
+codex/feat/build-sha-stamp-20260222
+9325318d0c992f1e5395a7274f98220ca7999336
+--- diff vs origin/main ---
+A	tests_unittest/test_runtime_build_stamp.py
+A	workspace/audit/runtime_build_sha_stamp_20260222T042952Z.md
+M	workspace/governance/SECURITY_GOVERNANCE_CONTRACT.md
+A	workspace/scripts/gen_build_stamp.sh
+M	workspace/scripts/openclaw_autoupdate.sh
+A	workspace/scripts/openclaw_build_wrapper.sh
+M	workspace/scripts/verify_runtime_autoupdate.sh
+```
+
+Acceptance note: package version string remains 2026.2.19-2; commit identity is now authoritative via build_sha matching expected repo HEAD in CLI output and gateway startup log.
