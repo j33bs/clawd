@@ -225,3 +225,43 @@ node --test workspace/skills/**/tests/*.test.js
 - Test command: node --test workspace/skills/**/tests/*.test.js
 - Test summary: PASS (16 tests, 0 failures).
 - Conclusion: MLX/Metal device initialization crashes on this host; mlx-infer not operational yet. Recommended fallback: LOCAL non-MLX engine until MLX runtime is fixed.
+
+## MLX Metal Crash Triage + Pin Experiments (2026-02-22T06:31:31Z)
+- Scope: diagnostics and venv-only package experiments; no runtime code changes.
+- osascript probe result: failed at AppleScript parse level before Python executed.
+  - `osascript -e 'do shell script "<python> -c '\''import mlx.core as mx; print(mx.default_device())'\''"'`
+  - Output: `0:8: syntax error: A identifier can’t go after this identifier. (-2740)`
+
+### Baseline package state (before experiments)
+- `mlx==0.30.6`
+- `mlx-metal==0.30.6`
+- `mlx-lm==0.30.7`
+- Source: `pip show` + `pip freeze` in `.venv-mlx313`.
+
+### non-tty vs pseudo-tty repro
+- non-tty command:
+  - `/private/tmp/wt_docs_main/.venv-mlx313/bin/python -c 'import mlx.core as mx; print(mx.default_device())'`
+  - Result: crash with `NSRangeException` (`__NSArray0 objectAtIndex: index 0 beyond bounds`).
+- pseudo-tty command:
+  - `script -q /dev/null /private/tmp/wt_docs_main/.venv-mlx313/bin/python -c 'import mlx.core as mx; print(mx.default_device())'`
+  - Result: same crash signature.
+
+### Pin/reinstall matrix
+- Current detected versions: `CUR_MLX=0.30.6`, `CUR_METAL=0.30.6`.
+- Candidate V1 (`0.30.6`):
+  - Install command: `pip install --no-cache-dir mlx==0.30.6 mlx-metal==0.30.6 mlx-lm`
+  - Wheels resolved and installed successfully.
+  - Probe output immediately after reinstall: `mlx import ok` + `Device(gpu, 0)` (success in that run).
+- Candidate V2 (`0.30.4`):
+  - Not attempted because V1 run reported success.
+
+### Clean-venv control
+- Created `.venv-mlx313-clean` and installed `mlx==0.30.6`, `mlx-metal==0.30.6`, `mlx-lm`.
+- Probe output in clean venv: `Device(gpu, 0)` (success in that run).
+
+### Conclusion
+- Evidence indicates unstable/intermittent MLX Metal initialization on this host/build:
+  - repeated crashes remain reproducible in non-tty and pseudo-tty probes,
+  - but success is also observed immediately after reinstall in both original and clean venvs.
+- Recommendation: keep local fallback engine enabled for reliability; treat MLX path as best-effort until upstream/runtime stabilization.
+- If MLX is retried, pin `mlx==mlx-metal==0.30.6` in the dedicated venv and revalidate with repeated probes.
