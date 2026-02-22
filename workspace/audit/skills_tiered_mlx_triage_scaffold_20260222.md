@@ -47,3 +47,25 @@ node --test workspace/skills/**/tests/*.test.js
 - mlx-infer requires python3 + mlx-lm preinstalled; tests use stubs and do not exercise real MLX runtime.
 - task-triage relies on external local suggestion JSON; it does not invoke mlx-infer internally by design.
 - scaffold-apply does not auto-rollback previously committed steps when a later step fails (intentional).
+
+## Files Added/Changed
+- workspace/skills/mlx-infer/
+  - README.md, SKILL.md
+  - scripts/mlx_infer.py
+  - src/{cli.ts,logger.ts}
+  - dist/{cli.js,logger.js}
+  - schemas/{input.schema.json,output.schema.json}
+  - tests/mlx_infer_integration_stub.test.js
+- workspace/skills/task-triage/
+  - README.md, SKILL.md
+  - config/{decision_rules.json,classifier_prompt.md}
+  - src/{cli.ts,decision.ts,logger.ts}
+  - dist/{cli.js,decision.js,logger.js}
+  - schemas/{input.schema.json,output.schema.json}
+  - tests/decision_logic.test.js
+- workspace/skills/scaffold-apply/
+  - README.md, SKILL.md, package.json
+  - src/{cli.ts,plan_schema.ts,logger.ts}
+  - dist/{cli.js,plan_schema.js,logger.js}
+  - schemas/{input.schema.json,output.schema.json}
+  - tests/{plan_validation.test.js,dry_run_patch_check.test.js}
