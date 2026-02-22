@@ -69,3 +69,53 @@ node --test workspace/skills/**/tests/*.test.js
   - dist/{cli.js,plan_schema.js,logger.js}
   - schemas/{input.schema.json,output.schema.json}
   - tests/{plan_validation.test.js,dry_run_patch_check.test.js}
+
+## Merge Verification on main (2026-02-22T04:30:10Z)
+- BR_REF: origin/codex/feat/clawd-tiered-skills-mlx-triage-scaffold-20260222
+- Merge commit: 8bcbba6
+- Test command:     \✔ maps python error types to node-level types (0.737084ms)
+✔ buildPythonArgs includes required and optional args (0.823583ms)
+✔ dry-run patch check passes on valid patch (184.307333ms)
+✔ dry-run patch check reports failed step on invalid patch (148.954333ms)
+✔ validation fails when required fields are missing (0.86225ms)
+✔ validation fails invalid operation (0.155459ms)
+✔ validation rejects path traversal (0.107583ms)
+✔ high-confidence LOCAL remains LOCAL (0.846708ms)
+✔ low confidence escalates to REMOTE (0.077958ms)
+✔ very low confidence escalates to HUMAN (0.066791ms)
+✔ force_human signal triggers HUMAN (0.072541ms)
+✔ openai keyword triggers HUMAN plus request_for_chatgpt (0.099791ms)
+ℹ tests 12
+ℹ suites 0
+ℹ pass 12
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 424.794583
+- Test summary: PASS (12 tests, 0 failures)
+
+## Merge Verification on main (2026-02-22T04:30:25Z)
+- BR_REF: origin/codex/feat/clawd-tiered-skills-mlx-triage-scaffold-20260222
+- Merge commit: 8bcbba6
+- Test command: ✔ maps python error types to node-level types (0.755583ms)
+✔ buildPythonArgs includes required and optional args (0.8165ms)
+✔ dry-run patch check passes on valid patch (190.017875ms)
+✔ dry-run patch check reports failed step on invalid patch (155.191792ms)
+✔ validation fails when required fields are missing (0.848292ms)
+✔ validation fails invalid operation (0.146209ms)
+✔ validation rejects path traversal (0.103ms)
+✔ high-confidence LOCAL remains LOCAL (0.941083ms)
+✔ low confidence escalates to REMOTE (0.081167ms)
+✔ very low confidence escalates to HUMAN (0.067375ms)
+✔ force_human signal triggers HUMAN (0.063083ms)
+✔ openai keyword triggers HUMAN plus request_for_chatgpt (0.097834ms)
+ℹ tests 12
+ℹ suites 0
+ℹ pass 12
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 474.158958
+- Test summary: PASS (12 tests, 0 failures)
