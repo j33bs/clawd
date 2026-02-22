@@ -175,3 +175,108 @@ UTC end: 2026-02-22T11:12:52Z
 - Cleanup commit SHA: pending (recorded after commit).
 - Cleanup commit SHA: 773bcada01267a85f5fcb3dc6501881067577f9d
 - Confirmation: branch diff is local-exec-only (mlx-infer drift removed).
+
+## Service recovery check initiated
+- UTC: 2026-02-22T12:07:37Z
+- Host: jeebs-Z490-AORUS-MASTER
+- Branch: codex/feat/dali-local-exec-plane-20260222
+- HEAD: e67008e034176666f32cf1aa11c150520c7ae10c
+
+```text
+$ git rev-parse --abbrev-ref HEAD
+codex/feat/dali-local-exec-plane-20260222
+$ git rev-parse HEAD
+e67008e034176666f32cf1aa11c150520c7ae10c
+
+$ git status --porcelain -uall
+ M workspace/audit/dali_local_exec_plane_activation_20260222T20260222T110345Z.md
+
+$ ls -la workspace/local_exec/state || true
+total 20
+drwxrwxr-x 2 jeebs jeebs 4096 Feb 22 21:12 .
+drwxrwxr-x 8 jeebs jeebs 4096 Feb 22 21:07 ..
+-rw-rw-r-- 1 jeebs jeebs   64 Feb 22 21:03 .gitignore
+-rw-rw-r-- 1 jeebs jeebs 4328 Feb 22 21:12 jobs.jsonl
+-rw-r--r-- 1 jeebs jeebs    0 Feb 22 21:12 jobs.lock
+-rw-rw-r-- 1 jeebs jeebs    0 Feb 22 21:12 worker.log
+
+$ systemctl --user status openclaw-local-exec-worker.service || true
+
+$ systemctl --user status vllm-local-exec.service || true
+```
+
+## Phase 1 — Quiescence detection
+```text
+$ if [ -f workspace/local_exec/state/KILL_SWITCH ]; then echo "KILL_SWITCH present"; else echo "KILL_SWITCH absent"; fi
+KILL_SWITCH absent
+
+$ systemctl --user is-active openclaw-local-exec-worker.service || true
+Failed to connect to bus: Operation not permitted
+
+$ systemctl --user is-active vllm-local-exec.service || true
+Failed to connect to bus: Operation not permitted
+```
+
+## Phase 2 — Clear quiescence
+```text
+No KILL_SWITCH to remove
+```
+
+## Phase 3 — Restart services
+```text
+$ systemctl --user daemon-reload || true
+Failed to connect to bus: Operation not permitted
+
+$ systemctl --user restart openclaw-local-exec-worker.service || true
+Failed to connect to bus: Operation not permitted
+
+$ systemctl --user list-unit-files | grep -q '^vllm-local-exec.service' && systemctl --user restart vllm-local-exec.service || true
+Failed to connect to bus: Operation not permitted
+```
+
+## Phase 4 — Health verification
+```text
+$ systemctl --user status openclaw-local-exec-worker.service --no-pager || true
+Failed to connect to bus: Operation not permitted
+
+$ systemctl --user status vllm-local-exec.service --no-pager || true
+Failed to connect to bus: Operation not permitted
+
+$ bash scripts/local_exec_plane.sh health || true
+{"kill_switch": false, "ledger_path": "/tmp/wt_local_exec_activation/workspace/local_exec/state/jobs.jsonl", "events": 12, "last_event": {"ts_utc": "2026-02-22T11:12:44.540610Z", "event": "complete", "job_id": "job-sleeprun11124203", "worker_id": "local-exec-fallback", "result": {"commands_run": 1, "results": [{"argv": ["python3", "-m", "unittest", "tests_unittest.test_local_exec_plane_offline.LocalExecPlaneOfflineTests.test_model_client_stub_returns_no_tool_calls", "-v"], "returncode": 0, "timed_out": false, "duration_ms": 91, "stdout": "", "stderr": "test_model_client_stub_returns_no_tool_calls (tests_unittest.test_local_exec_plane_offline.LocalExecPlaneOfflineTests.test_model_client_stub_returns_no_tool_calls) ... ok\n\n----------------------------------------------------------------------\nRan 1 test in 0.009s\n\nOK\n", "stdout_bytes": 0, "stderr_bytes": 268, "stdout_truncated": false, "stderr_truncated": false}]}}, "model_stub_mode": true, "model_api_base": "", "model_reachable": null, "model_detail": "stub_mode"}
+summary kill_switch=False events=12 model_stub=True model_reachable=None
+
+$ journalctl --user -u openclaw-local-exec-worker.service -n 50 --no-pager || true
+-- No entries --
+
+$ journalctl --user -u vllm-local-exec.service -n 50 --no-pager || true
+-- No entries --
+```
+
+## Phase 4b — Fallback recovery via local_exec_plane.sh
+```text
+$ bash scripts/local_exec_plane.sh start || true
+fallback worker started pid=91313
+vllm_start=skipped reason=LOCAL_EXEC_ENABLE_VLLM_not_set
+fallback worker active pid=91313
+vllm_status=unknown reason=systemd_user_unavailable
+
+$ bash scripts/local_exec_plane.sh status || true
+fallback worker active pid=91313
+vllm_status=unknown reason=systemd_user_unavailable
+
+$ pgrep -af 'workspace.local_exec.worker|openclaw-local-exec-worker' || true
+91307 /bin/bash -c set -euo pipefail cd /tmp/wt_local_exec_activation AUDIT=workspace/audit/dali_local_exec_plane_activation_20260222T20260222T110345Z.md START_OUT=$(bash scripts/local_exec_plane.sh start 2>&1 || true) STATUS_OUT=$(bash scripts/local_exec_plane.sh status 2>&1 || true) HEALTH2_OUT=$(bash scripts/local_exec_plane.sh health 2>&1 || true) PIDS=$(pgrep -af 'workspace.local_exec.worker|openclaw-local-exec-worker' || true) {   echo   echo "## Phase 4b — Fallback recovery via local_exec_plane.sh"   echo '```text'   echo '$ bash scripts/local_exec_plane.sh start || true'   echo "$START_OUT"   echo   echo '$ bash scripts/local_exec_plane.sh status || true'   echo "$STATUS_OUT"   echo   echo '$ pgrep -af '\''workspace.local_exec.worker|openclaw-local-exec-worker'\'' || true'   echo "$PIDS"   echo   echo '$ bash scripts/local_exec_plane.sh health || true'   echo "$HEALTH2_OUT"   echo '```' } >> "$AUDIT" printf 'start=%s\nstatus=%s\n' "$START_OUT" "$STATUS_OUT"
+91313 python3 -m workspace.local_exec.worker --repo-root /tmp/wt_local_exec_activation --loop --sleep-s 2 --max-idle-s 300 --worker-id local-exec-fallback
+91327 /bin/bash -c set -euo pipefail cd /tmp/wt_local_exec_activation AUDIT=workspace/audit/dali_local_exec_plane_activation_20260222T20260222T110345Z.md START_OUT=$(bash scripts/local_exec_plane.sh start 2>&1 || true) STATUS_OUT=$(bash scripts/local_exec_plane.sh status 2>&1 || true) HEALTH2_OUT=$(bash scripts/local_exec_plane.sh health 2>&1 || true) PIDS=$(pgrep -af 'workspace.local_exec.worker|openclaw-local-exec-worker' || true) {   echo   echo "## Phase 4b — Fallback recovery via local_exec_plane.sh"   echo '```text'   echo '$ bash scripts/local_exec_plane.sh start || true'   echo "$START_OUT"   echo   echo '$ bash scripts/local_exec_plane.sh status || true'   echo "$STATUS_OUT"   echo   echo '$ pgrep -af '\''workspace.local_exec.worker|openclaw-local-exec-worker'\'' || true'   echo "$PIDS"   echo   echo '$ bash scripts/local_exec_plane.sh health || true'   echo "$HEALTH2_OUT"   echo '```' } >> "$AUDIT" printf 'start=%s\nstatus=%s\n' "$START_OUT" "$STATUS_OUT"
+
+$ bash scripts/local_exec_plane.sh health || true
+{"kill_switch": false, "ledger_path": "/tmp/wt_local_exec_activation/workspace/local_exec/state/jobs.jsonl", "events": 12, "last_event": {"ts_utc": "2026-02-22T11:12:44.540610Z", "event": "complete", "job_id": "job-sleeprun11124203", "worker_id": "local-exec-fallback", "result": {"commands_run": 1, "results": [{"argv": ["python3", "-m", "unittest", "tests_unittest.test_local_exec_plane_offline.LocalExecPlaneOfflineTests.test_model_client_stub_returns_no_tool_calls", "-v"], "returncode": 0, "timed_out": false, "duration_ms": 91, "stdout": "", "stderr": "test_model_client_stub_returns_no_tool_calls (tests_unittest.test_local_exec_plane_offline.LocalExecPlaneOfflineTests.test_model_client_stub_returns_no_tool_calls) ... ok\n\n----------------------------------------------------------------------\nRan 1 test in 0.009s\n\nOK\n", "stdout_bytes": 0, "stderr_bytes": 268, "stdout_truncated": false, "stderr_truncated": false}]}}, "model_stub_mode": true, "model_api_base": "", "model_reachable": null, "model_detail": "stub_mode"}
+summary kill_switch=False events=12 model_stub=True model_reachable=None
+```
+
+## Phase 5 — Outcome summary
+- No kill switch detected; no quiescence file removal required.
+- Primary user-systemd control path blocked-by: 'Failed to connect to bus: Operation not permitted'.
+- Applied safe fallback recovery: started local exec worker via scripts/local_exec_plane.sh (fallback pid mode).
+- vLLM remained optional/disabled (LOCAL_EXEC_ENABLE_VLLM not set).
