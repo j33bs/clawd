@@ -105,3 +105,11 @@ Blocked-by observed in this runtime:
 ```text
 $ python3 -m unittest tests_unittest.test_local_exec_plane_offline -v
 ```
+
+## Phase 4 — MCPorter onboarding docs + structured blocked-by evidence
+```text
+$ python3 - <<'PY' ... MCPorterAdapter.list_tools()
+{'available': False, 'blocked_by': 'mcporter_not_installed', 'error_code': 'mcporter_missing', 'tools': []}
+```
+
+Outcome: adapter emits structured missing-tool signal (error_code=mcporter_missing) and keeps deny-by-default allowlist.

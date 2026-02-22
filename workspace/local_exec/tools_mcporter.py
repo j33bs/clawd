@@ -6,6 +6,8 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
+from .evidence import append_worker_event
+
 
 class MCPorterError(RuntimeError):
     pass
@@ -18,6 +20,14 @@ class MCPorterAdapter:
         self.repo_root = repo_root
         self.config_path = config_path or (repo_root / "config" / "mcporter.json")
         self._cfg = self._load_config()
+        self._worker_id = "mcporter-adapter"
+
+    def _emit_event(self, kind: str, payload: dict[str, Any]) -> None:
+        try:
+            append_worker_event(self.repo_root, self._worker_id, kind, payload)
+        except Exception:
+            # Evidence logging must not break adapter behavior.
+            pass
 
     def _load_config(self) -> dict[str, Any]:
         if not self.config_path.exists():
@@ -51,12 +61,27 @@ class MCPorterAdapter:
 
     def list_tools(self) -> dict[str, Any]:
         if not self.is_available():
-            return {"available": False, "blocked_by": "mcporter_not_installed", "tools": []}
+            payload = {
+                "available": False,
+                "blocked_by": "mcporter_not_installed",
+                "error_code": "mcporter_missing",
+                "tools": [],
+            }
+            self._emit_event("mcporter_unavailable", payload)
+            return payload
 
         argv = [self.command_path(), "list-tools", "--json"]
         proc = subprocess.run(argv, cwd=str(self.repo_root), capture_output=True, text=True, timeout=self._cfg["timeout_sec"], check=False)
         if proc.returncode != 0:
-            return {"available": False, "blocked_by": "mcporter_list_failed", "stderr": proc.stderr[:4000], "tools": []}
+            payload = {
+                "available": False,
+                "blocked_by": "mcporter_list_failed",
+                "error_code": "mcporter_list_failed",
+                "stderr": proc.stderr[:4000],
+                "tools": [],
+            }
+            self._emit_event("mcporter_list_failed", payload)
+            return payload
 
         payload = (proc.stdout or "")[: self._cfg["max_response_bytes"]]
         try:
@@ -65,14 +90,19 @@ class MCPorterAdapter:
             parsed = []
         names = [row.get("name") for row in parsed if isinstance(row, dict) and isinstance(row.get("name"), str)]
         filtered = [name for name in names if name in self.enabled_tools]
-        return {"available": True, "tools": filtered, "allowlist_count": len(self.enabled_tools)}
+        payload = {"available": True, "tools": filtered, "allowlist_count": len(self.enabled_tools)}
+        self._emit_event("mcporter_list_ok", {"tools_count": len(filtered), "allowlist_count": len(self.enabled_tools)})
+        return payload
 
     def call_tool(self, tool_name: str, payload: dict[str, Any]) -> dict[str, Any]:
         if tool_name not in self.enabled_tools:
+            self._emit_event("mcporter_tool_rejected", {"tool_name": tool_name, "error_code": "tool_not_allowlisted"})
             raise MCPorterError(f"tool_not_allowed:{tool_name}")
         if not self.is_available():
+            self._emit_event("mcporter_unavailable", {"tool_name": tool_name, "error_code": "mcporter_missing"})
             raise MCPorterError("blocked_by:mcporter_not_installed")
         if not isinstance(payload, dict):
+            self._emit_event("mcporter_payload_rejected", {"tool_name": tool_name, "error_code": "payload_not_object"})
             raise MCPorterError("payload_must_be_object")
 
         argv = [self.command_path(), "call", tool_name, "--json", json.dumps(payload, ensure_ascii=False)]
@@ -87,5 +117,10 @@ class MCPorterAdapter:
             "stderr": stderr,
         }
         if proc.returncode != 0:
+            self._emit_event(
+                "mcporter_call_failed",
+                {"tool_name": tool_name, "error_code": "mcporter_call_failed", "returncode": proc.returncode},
+            )
             raise MCPorterError(f"mcporter_call_failed:{tool_name}")
+        self._emit_event("mcporter_call_ok", {"tool_name": tool_name, "stdout_bytes": len(stdout), "stderr_bytes": len(stderr)})
         return result

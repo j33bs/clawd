@@ -80,6 +80,18 @@ Default is deny-by-default (`config/mcporter.json` has empty `enabled_tools`).
 2. Edit `config/mcporter.json` and add exact tool names to `enabled_tools`.
 3. Keep timeout/response-size bounds in place.
 
+Example: enable one read-only tool only.
+
+```json
+{
+  "enabled_tools": ["repo.search"],
+  "timeout_sec": 30,
+  "max_response_bytes": 131072
+}
+```
+
+`workspace/local_exec/tools_mcporter.py` writes structured worker evidence events when `mcporter` is missing or a tool is rejected.
+
 ## Optional vLLM Enablement
 
 Template config: `config/vllm/dali_local_exec.yaml`
