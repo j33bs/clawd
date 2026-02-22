@@ -225,3 +225,41 @@ node --test workspace/skills/**/tests/*.test.js
 - Test command: node --test workspace/skills/**/tests/*.test.js
 - Test summary: PASS (16 tests, 0 failures).
 - Conclusion: MLX/Metal device initialization crashes on this host; mlx-infer not operational yet. Recommended fallback: LOCAL non-MLX engine until MLX runtime is fixed.
+
+## mlx-infer Preflight Isolation Hardening (2026-02-22T10:52:33Z)
+- Evidence basis: prior MLX crash-rate diagnostics in this audit (see entries from commits c770674 and ed2935b) showed repeated hard aborts during MLX/Metal init.
+- Rationale: isolate MLX device initialization in a dedicated short-lived subprocess to prevent hard crashes from taking down the primary inference path.
+- Behavior change:
+  - Added preflight stage before mlx-lm import/generation.
+  - Preflight command: python -c "import mlx.core as mx; print(mx.default_device())".
+  - Timeout: 3000ms.
+  - On nonzero exit, timeout, or empty stdout, CLI returns typed error:
+    - error.type: MLX_DEVICE_UNAVAILABLE
+    - error.message: MLX Metal device init unstable/unavailable
+    - error.details: { exit_code, timed_out, stderr_head, stdout_head }
+  - If preflight fails, mlx-lm import/generation path is not executed.
+- Logging:
+  - Emits preflight log line to stderr with stage=mlx_preflight and outcome=ok|fail, including exit_code and timed_out.
+- Tests run:
+  - node --test workspace/skills/**/tests/*.test.js
+  - Result: PASS (19 tests, 0 failures).
+- Rollback: git revert <commit_sha>
+
+## mlx-infer Preflight Isolation Hardening (2026-02-22T10:53:10Z)
+- Evidence basis: prior MLX crash-rate diagnostics in this audit (see entries from commits c770674 and ed2935b) showed repeated hard aborts during MLX/Metal init.
+- Rationale: isolate MLX device initialization in a dedicated short-lived subprocess to prevent hard crashes from taking down the primary inference path.
+- Behavior change:
+  - Added preflight stage before mlx-lm import/generation.
+  - Preflight command: python -c "import mlx.core as mx; print(mx.default_device())".
+  - Timeout: 3000ms.
+  - On nonzero exit, timeout, or empty stdout, CLI returns typed error:
+    - error.type: MLX_DEVICE_UNAVAILABLE
+    - error.message: MLX Metal device init unstable/unavailable
+    - error.details: { exit_code, timed_out, stderr_head, stdout_head }
+  - If preflight fails, mlx-lm import/generation path is not executed.
+- Logging:
+  - Emits preflight log line to stderr with stage=mlx_preflight and outcome=ok|fail, including exit_code and timed_out.
+- Tests run:
+  - node --test workspace/skills/**/tests/*.test.js
+  - Result: PASS (19 tests, 0 failures).
+- Rollback: git revert <commit_sha>
