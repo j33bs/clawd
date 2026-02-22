@@ -201,3 +201,28 @@ models.json: valid JSON
 ```
 
 Summary: Added RTX-3090 model menu with coordinator/coder/verifier/doc_compactor logical roles, tool parser metadata, and bounded vLLM hints. No weights downloaded in this phase.
+
+## Phase 3 — Governed queue/worker core + offline tests
+```text
+Sun Feb 22 06:45:35 UTC 2026
+$ python3 -m unittest tests_unittest.test_local_exec_plane_offline -v
+
+test_append_only_ledger_grows_and_worker_completes ... ok
+test_budget_enforcement_max_tool_calls ... ok
+test_disallowed_tool_call_rejected ... ok
+test_kill_switch_prevents_claims ... ok
+test_model_client_stub_returns_no_tool_calls ... ok
+test_subprocess_policy_blocks_shell_string ... ok
+test_test_runner_requires_subprocess_permission ... ok
+
+Ran 7 tests in 0.043s
+OK
+```
+
+Phase 3 outcome:
+- Added JSON schemas + validator (jsonschema when available, lite validator fallback).
+- Added append-only queue ledger with lock-based claim + lease heartbeat.
+- Added budget guardrails + kill switch gate.
+- Added argv-only subprocess harness with shell-like string rejection.
+- Added worker handlers for `repo_index_task`, `test_runner_task`, `doc_compactor_task` with deny-by-default policy checks.
+- Added deterministic offline test suite: `tests_unittest/test_local_exec_plane_offline.py`.
