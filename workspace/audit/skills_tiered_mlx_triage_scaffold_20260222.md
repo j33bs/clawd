@@ -263,3 +263,23 @@ node --test workspace/skills/**/tests/*.test.js
   - node --test workspace/skills/**/tests/*.test.js
   - Result: PASS (19 tests, 0 failures).
 - Rollback: git revert <commit_sha>
+
+## Merge + Triage Escalation Verification (2026-02-22T12:22:57Z)
+- Merge applied: origin/codex/fix/mlx-infer-preflight-isolation-20260222 -> main
+- Merge commit: d67ac06
+- Added config-driven triage escalation for local MLX failures:
+  - Rule location: workspace/skills/task-triage/config/decision_rules.json (error_escalations[type=MLX_DEVICE_UNAVAILABLE])
+  - Behavior: last_local_error.type=MLX_DEVICE_UNAVAILABLE escalates to tier=REMOTE, confidence=0.9, rationale includes "local mlx unavailable; escalated".
+- Tests run:
+  - node --test workspace/skills/**/tests/*.test.js
+  - Summary: PASS (20 tests, 0 failures)
+
+## Merge + Triage Escalation Verification (2026-02-22T13:56:29Z)
+- Merge applied: origin/codex/fix/mlx-infer-preflight-isolation-20260222 -> main
+- Merge commit: d67ac06
+- Added config-driven triage escalation for local MLX failures:
+  - Rule location: workspace/skills/task-triage/config/decision_rules.json (error_escalations[type=MLX_DEVICE_UNAVAILABLE])
+  - Behavior: last_local_error.type=MLX_DEVICE_UNAVAILABLE escalates to tier=REMOTE, confidence=0.9, rationale includes "local mlx unavailable; escalated".
+- Tests run:
+  - node --test workspace/skills/**/tests/*.test.js
+  - Summary: PASS (20 tests, 0 failures)
