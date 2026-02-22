@@ -113,3 +113,48 @@ $ python3 - <<'PY' ... MCPorterAdapter.list_tools()
 ```
 
 Outcome: adapter emits structured missing-tool signal (error_code=mcporter_missing) and keeps deny-by-default allowlist.
+
+## Phase 5 — local_exec_sleep_run
+```text
+UTC start: 2026-02-22T11:12:20Z
+run_seconds=22 interval_seconds=10
+$ python3 -m unittest tests_unittest.test_local_exec_plane_offline -v
+test_append_only_ledger_grows_and_worker_completes (tests_unittest.test_local_exec_plane_offline.LocalExecPlaneOfflineTests.test_append_only_ledger_grows_and_worker_completes) ... ok
+test_budget_enforcement_max_tool_calls (tests_unittest.test_local_exec_plane_offline.LocalExecPlaneOfflineTests.test_budget_enforcement_max_tool_calls) ... ok
+test_disallowed_tool_call_rejected (tests_unittest.test_local_exec_plane_offline.LocalExecPlaneOfflineTests.test_disallowed_tool_call_rejected) ... ok
+test_kill_switch_prevents_claims (tests_unittest.test_local_exec_plane_offline.LocalExecPlaneOfflineTests.test_kill_switch_prevents_claims) ... ok
+test_loop_emits_idle_heartbeat_and_exits_on_kill_switch (tests_unittest.test_local_exec_plane_offline.LocalExecPlaneOfflineTests.test_loop_emits_idle_heartbeat_and_exits_on_kill_switch) ... ok
+test_model_client_stub_returns_no_tool_calls (tests_unittest.test_local_exec_plane_offline.LocalExecPlaneOfflineTests.test_model_client_stub_returns_no_tool_calls) ... ok
+test_path_sandbox_rejects_escape (tests_unittest.test_local_exec_plane_offline.LocalExecPlaneOfflineTests.test_path_sandbox_rejects_escape) ... ok
+test_run_header_contains_required_fields (tests_unittest.test_local_exec_plane_offline.LocalExecPlaneOfflineTests.test_run_header_contains_required_fields) ... ok
+test_subprocess_policy_blocks_shell_string (tests_unittest.test_local_exec_plane_offline.LocalExecPlaneOfflineTests.test_subprocess_policy_blocks_shell_string) ... ok
+test_test_runner_requires_subprocess_permission (tests_unittest.test_local_exec_plane_offline.LocalExecPlaneOfflineTests.test_test_runner_requires_subprocess_permission) ... ok
+
+----------------------------------------------------------------------
+Ran 10 tests in 1.481s
+
+OK
+blocked-by: missing_env_file path=/home/jeebs/.config/openclaw/local_exec.env
+$ bash scripts/local_exec_plane.sh start
+fallback worker started pid=87740
+vllm_start=blocked reason=systemd_user_unavailable
+fallback worker active pid=87740
+vllm_status=unknown reason=systemd_user_unavailable
+enqueue_iter=1 job_type=repo_index_task job_id=job-sleeprun11122201
+{"enqueued": "job-sleeprun11122201", "event": "enqueue"}
+enqueue_result=ok iter=1
+enqueue_iter=2 job_type=doc_compactor_task job_id=job-sleeprun11123202
+{"enqueued": "job-sleeprun11123202", "event": "enqueue"}
+enqueue_result=ok iter=2
+enqueue_iter=3 job_type=test_runner_task job_id=job-sleeprun11124203
+{"enqueued": "job-sleeprun11124203", "event": "enqueue"}
+enqueue_result=ok iter=3
+$ bash scripts/local_exec_plane.sh stop
+fallback worker stopped pid=87740
+vllm_stop=skipped reason=systemd_user_unavailable
+fallback worker inactive
+vllm_status=unknown reason=systemd_user_unavailable
+summary_enqueued=3 summary_errors=0
+ledger_summary={"ledger_events": 12, "last_event": {"ts_utc": "2026-02-22T11:12:44.540610Z", "event": "complete", "job_id": "job-sleeprun11124203", "worker_id": "local-exec-fallback", "result": {"commands_run": 1, "results": [{"argv": ["python3", "-m", "unittest", "tests_unittest.test_local_exec_plane_offline.LocalExecPlaneOfflineTests.test_model_client_stub_returns_no_tool_calls", "-v"], "returncode": 0, "timed_out": false, "duration_ms": 91, "stdout": "", "stderr": "test_model_client_stub_returns_no_tool_calls (tests_unittest.test_local_exec_plane_offline.LocalExecPlaneOfflineTests.test_model_client_stub_returns_no_tool_calls) ... ok\n\n----------------------------------------------------------------------\nRan 1 test in 0.009s\n\nOK\n", "stdout_bytes": 0, "stderr_bytes": 268, "stdout_truncated": false, "stderr_truncated": false}]}}}
+UTC end: 2026-02-22T11:12:52Z
+```
