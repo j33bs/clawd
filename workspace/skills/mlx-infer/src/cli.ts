@@ -94,15 +94,21 @@ function loadConfig(configArg?: string): Config {
   }
 }
 
+function resolvePythonExecutable(): string {
+  const fromEnv = process.env.OPENCLAW_MLX_INFER_PYTHON;
+  if (typeof fromEnv === "string" && fromEnv.trim().length > 0) return fromEnv.trim();
+  return "python3";
+}
+
 function ensurePython(): void {
-  const check = spawnSync("python3", ["--version"], { encoding: "utf8" });
+  const check = spawnSync(resolvePythonExecutable(), ["--version"], { encoding: "utf8" });
   if (check.error || check.status !== 0) {
     printErr("PYTHON_MISSING", "python3 not available", { stderr: check.stderr || "" });
   }
 }
 
 function ensureMlxImport(): void {
-  const check = spawnSync("python3", ["-c", "import mlx_lm"], { encoding: "utf8" });
+  const check = spawnSync(resolvePythonExecutable(), ["-c", "import mlx_lm"], { encoding: "utf8" });
   if (check.error || check.status !== 0) {
     printErr("MLX_MISSING", "mlx_lm import failed", { stderr: check.stderr || "" });
   }
@@ -208,7 +214,7 @@ function buildPythonArgs(input: Required<Pick<Input, "prompt">> & Input): string
 
 function spawnPython(args: string[], timeoutMs: number): Promise<SpawnResult> {
   return new Promise((resolve) => {
-    const proc: ChildProcessWithoutNullStreams = spawn("python3", args, { stdio: ["ignore", "pipe", "pipe"] });
+    const proc: ChildProcessWithoutNullStreams = spawn(resolvePythonExecutable(), args, { stdio: ["ignore", "pipe", "pipe"] });
     let stdout = "";
     let stderr = "";
     const timer = setTimeout(() => {
@@ -306,6 +312,7 @@ module.exports = {
   parseArgs,
   buildPythonArgs,
   mapPythonError,
+  resolvePythonExecutable,
   parsePidFromFilename,
   isPidAlive,
   isExpiredByTtl,
