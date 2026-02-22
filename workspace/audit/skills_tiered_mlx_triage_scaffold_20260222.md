@@ -186,3 +186,16 @@ node --test workspace/skills/**/tests/*.test.js
 - Merge commit: 2eca151
 - Test command: node --test workspace/skills/**/tests/*.test.js
 - Test summary: PASS (15 tests, 0 failures)
+
+## MLX Runtime Determinism Verification (2026-02-22T05:53:54Z)
+- System python discovered: /opt/homebrew/bin/python3 (Python 3.14.3).
+- Venv path used: .venv-mlx (python: /private/tmp/wt_docs_main/.venv-mlx/bin/python).
+- mlx-lm state: not preinstalled in system python; newly installed into .venv-mlx via pip.
+- OPENCLAW_MLX_INFER_PYTHON support added: yes (mlx-infer now uses env override, fallback python3).
+- Smoke command:
+  - export OPENCLAW_MLX_INFER_PYTHON="/private/tmp/wt_docs_main/.venv-mlx/bin/python"
+  - node workspace/skills/mlx-infer/dist/cli.js --prompt "Say hello." --max_tokens 20 --temperature 0.1
+- Smoke result: FAIL with JSON error type=MLX_MISSING caused by native MLX import crash (NSRangeException in libmlx on this host).
+- Test suite command: node --test workspace/skills/**/tests/*.test.js
+- Test suite summary: PASS (16 tests, 0 failures).
+- Rollback: git revert <commit_sha>

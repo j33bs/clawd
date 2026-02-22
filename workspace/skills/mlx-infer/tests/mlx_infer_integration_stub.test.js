@@ -2,7 +2,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 
-const { mapPythonError, buildPythonArgs } = require("../dist/cli.js");
+const { mapPythonError, buildPythonArgs, resolvePythonExecutable } = require("../dist/cli.js");
 
 test("maps python error types to node-level types", () => {
   assert.equal(mapPythonError("MODEL_NOT_FOUND"), "MODEL_NOT_FOUND");
@@ -29,4 +29,14 @@ test("buildPythonArgs includes required and optional args", () => {
     "--temperature", "0.2",
     "--config", "./cfg.json"
   ]);
+});
+
+test("resolvePythonExecutable prefers OPENCLAW_MLX_INFER_PYTHON and falls back to python3", () => {
+  const prev = process.env.OPENCLAW_MLX_INFER_PYTHON;
+  process.env.OPENCLAW_MLX_INFER_PYTHON = "/tmp/custom-python";
+  assert.equal(resolvePythonExecutable(), "/tmp/custom-python");
+  process.env.OPENCLAW_MLX_INFER_PYTHON = "   ";
+  assert.equal(resolvePythonExecutable(), "python3");
+  if (prev === undefined) delete process.env.OPENCLAW_MLX_INFER_PYTHON;
+  else process.env.OPENCLAW_MLX_INFER_PYTHON = prev;
 });
