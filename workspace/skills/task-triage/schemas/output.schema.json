@@ -4,9 +4,59 @@
   "type": "object",
   "additionalProperties": false,
   "properties": {
+    "action": { "type": "string", "enum": ["PROCESS", "DROP"] },
     "tier": { "type": "string", "enum": ["LOCAL", "REMOTE", "HUMAN"] },
     "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
     "rationale": { "type": "string" },
+    "evidence_bundle": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "type": "string", "enum": ["coreml_embed", "keyword_stub"] },
+        "top_k": { "type": "integer", "minimum": 1 },
+        "selected": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "id": { "type": "string" },
+              "start": { "type": "integer", "minimum": 0 },
+              "end": { "type": "integer", "minimum": 0 },
+              "score": { "type": "number" }
+            },
+            "required": ["id", "start", "end", "score"]
+          }
+        },
+        "notes": { "type": "string" },
+        "stats": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "chunks_total": { "type": "integer", "minimum": 0 },
+            "chunks_used": { "type": "integer", "minimum": 0 },
+            "truncated": { "type": "boolean" },
+            "latency_ms": { "type": "integer", "minimum": 0 },
+            "strategy_attempts": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "strategy": { "type": "string" },
+                  "ok": { "type": "boolean" },
+                  "latency_ms": { "type": "integer", "minimum": 0 },
+                  "error_type": { "type": "string" }
+                },
+                "required": ["strategy", "ok", "latency_ms"]
+              }
+            }
+          },
+          "required": ["chunks_total", "chunks_used", "truncated", "latency_ms", "strategy_attempts"]
+        }
+      },
+      "required": ["kind", "top_k", "selected", "notes", "stats"]
+    },
     "request_for_chatgpt": {
       "type": "object",
       "additionalProperties": false,
@@ -19,5 +69,5 @@
       "required": ["task", "context", "why", "expected_output"]
     }
   },
-  "required": ["tier", "confidence", "rationale"]
+  "required": ["action", "tier", "confidence", "rationale"]
 }

@@ -2,6 +2,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const { decideTier } = require("./decision");
+const { selectEvidenceBundle } = require("./evidence_embed");
 
 function die(message) {
   process.stdout.write(`${JSON.stringify({ ok: false, error: { type: "INVALID_ARGS", message } })}\n`);
@@ -49,6 +50,13 @@ async function run() {
     localRationale: (input.local && input.local.rationale) || "",
     rules,
   });
+  const evidenceResult = await selectEvidenceBundle(input.task, input.context || "", rules);
+  const evidenceBundle = evidenceResult.bundle;
+  const evidenceSummary = evidenceResult.summary;
+
+  const rationale = evidenceBundle
+    ? `${decision.rationale} [evidence:${evidenceBundle.kind}]`
+    : `${decision.rationale} [evidence:none]`;
 
   appendAudit({
     ts: new Date().toISOString(),
@@ -57,13 +65,16 @@ async function run() {
     tier: decision.tier,
     confidence: decision.confidence,
     signals: decision.notes || {},
+    evidence: evidenceSummary,
   });
 
   const output = {
+    action: "PROCESS",
     tier: decision.tier,
     confidence: decision.confidence,
-    rationale: decision.rationale,
+    rationale,
   };
+  if (evidenceBundle) output.evidence_bundle = evidenceBundle;
   if (decision.request_for_chatgpt) output.request_for_chatgpt = decision.request_for_chatgpt;
 
   process.stdout.write(`${JSON.stringify(output)}\n`);
