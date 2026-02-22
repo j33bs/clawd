@@ -100,3 +100,8 @@ Blocked-by observed in this runtime:
 - user systemd bus unavailable in this execution context.
 - user unit destination under ~/.config/systemd/user not writable in this sandbox context.
 - local vLLM endpoint not reachable from this execution context; health reports bounded error and continues.
+
+## Phase 3 — Expanded deterministic offline tests
+```text
+$ python3 -m unittest tests_unittest.test_local_exec_plane_offline -v
+```

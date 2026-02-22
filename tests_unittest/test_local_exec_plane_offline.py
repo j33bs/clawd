@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 import subprocess
 import tempfile
+import threading
+import time
 import unittest
 from datetime import datetime, timezone
 from pathlib import Path
@@ -10,7 +12,7 @@ from pathlib import Path
 from workspace.local_exec.model_client import OpenAICompatClient, ModelClientError, reject_disallowed_tool_calls
 from workspace.local_exec.queue import enqueue_job, ledger_path
 from workspace.local_exec.subprocess_harness import SubprocessPolicyError, run_argv
-from workspace.local_exec.worker import run_once
+from workspace.local_exec.worker import run_loop, run_once
 
 
 class LocalExecPlaneOfflineTests(unittest.TestCase):
@@ -101,6 +103,52 @@ class LocalExecPlaneOfflineTests(unittest.TestCase):
         with self.assertRaises(SubprocessPolicyError):
             run_argv(["echo hello"], repo_root=self.repo_root, cwd=self.repo_root)
 
+    def test_run_header_contains_required_fields(self) -> None:
+        input_path = self.repo_root / "workspace" / "local_exec" / "input.txt"
+        input_path.write_text("header-check\n", encoding="utf-8")
+
+        job = self._job(
+            job_id="job-runheader01",
+            job_type="doc_compactor_task",
+            payload={"inputs": ["workspace/local_exec/input.txt"], "max_input_bytes": 1024, "max_output_bytes": 2048},
+        )
+        enqueue_job(self.repo_root, job)
+        result = run_once(self.repo_root, worker_id="t1")
+        self.assertEqual(result["status"], "complete")
+
+        evidence_path = self.repo_root / "workspace" / "local_exec" / "evidence" / "job-runheader01.jsonl"
+        rows = [json.loads(line) for line in evidence_path.read_text(encoding="utf-8").splitlines() if line.strip()]
+        run_headers = [row for row in rows if row.get("kind") == "run_header"]
+        self.assertEqual(len(run_headers), 1)
+        payload = run_headers[0]["payload"]
+        for key in (
+            "validator_mode",
+            "repo_root_resolved",
+            "model_mode",
+            "api_base",
+            "model_name",
+            "tool_policy_hash",
+            "budgets_hash",
+            "worker_version",
+        ):
+            self.assertIn(key, payload)
+
+    def test_path_sandbox_rejects_escape(self) -> None:
+        job = self._job(
+            job_id="job-pathreject01",
+            job_type="doc_compactor_task",
+            payload={"inputs": ["../etc/passwd"], "max_input_bytes": 1024, "max_output_bytes": 2048},
+        )
+        enqueue_job(self.repo_root, job)
+        result = run_once(self.repo_root, worker_id="t1")
+        self.assertEqual(result["status"], "complete")
+
+        evidence_path = self.repo_root / "workspace" / "local_exec" / "evidence" / "job-pathreject01.jsonl"
+        rows = [json.loads(line) for line in evidence_path.read_text(encoding="utf-8").splitlines() if line.strip()]
+        rejects = [row for row in rows if row.get("kind") == "path_rejected"]
+        self.assertTrue(rejects)
+        self.assertIn("parent_ref", rejects[0]["payload"]["reason"])
+
     def test_model_client_stub_returns_no_tool_calls(self) -> None:
         client = OpenAICompatClient(base_url="", model="stub-model")
         resp = client.chat(messages=[{"role": "user", "content": "hello"}])
@@ -123,6 +171,31 @@ class LocalExecPlaneOfflineTests(unittest.TestCase):
         result = run_once(self.repo_root, worker_id="t1")
         self.assertEqual(result["status"], "failed")
         self.assertIn("subprocess_not_allowed", result["error"])
+
+    def test_loop_emits_idle_heartbeat_and_exits_on_kill_switch(self) -> None:
+        worker = threading.Thread(
+            target=run_loop,
+            kwargs={
+                "repo_root": self.repo_root,
+                "worker_id": "loop-worker",
+                "lease_sec": 10,
+                "sleep_s": 0.2,
+                "max_idle_s": 1,
+            },
+            daemon=True,
+        )
+        worker.start()
+        time.sleep(1.4)
+        kill_switch = self.repo_root / "workspace" / "local_exec" / "state" / "KILL_SWITCH"
+        kill_switch.write_text("1\n", encoding="utf-8")
+        worker.join(timeout=3.0)
+        self.assertFalse(worker.is_alive())
+
+        worker_evidence = self.repo_root / "workspace" / "local_exec" / "evidence" / "worker_loop-worker.jsonl"
+        rows = [json.loads(line) for line in worker_evidence.read_text(encoding="utf-8").splitlines() if line.strip()]
+        kinds = {row.get("kind") for row in rows}
+        self.assertIn("idle_heartbeat", kinds)
+        self.assertIn("loop_exit", kinds)
 
 
 if __name__ == "__main__":
