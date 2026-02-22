@@ -78,23 +78,69 @@ function runDir(baseDir) {
   return d;
 }
 
-function cleanupStale(dir) {
+const DEFAULT_PID_TTL_MS = 600000;
+
+function parsePidFromFilename(file) {
+  const match = /^pid-(\d+)(?:-.+)?$/.exec(file);
+  if (!match) return null;
+  const pid = Number(match[1]);
+  if (!Number.isInteger(pid) || pid < 1) return null;
+  return pid;
+}
+
+function isPidAlive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err) {
+    if (err && err.code === "ESRCH") return false;
+    if (err && err.code === "EPERM") return true;
+    return true;
+  }
+}
+
+function isExpiredByTtl(mtimeMs, ttlMs) {
+  return Date.now() - mtimeMs > ttlMs;
+}
+
+function resolvePidTtlMs() {
+  const raw = process.env.OPENCLAW_MLX_INFER_PID_TTL_MS;
+  if (!raw) return DEFAULT_PID_TTL_MS;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed <= 0) return DEFAULT_PID_TTL_MS;
+  return Math.floor(parsed);
+}
+
+function cleanupStale(dir, ttlMs) {
   for (const file of fs.readdirSync(dir)) {
     if (!file.startsWith("pid-")) continue;
-    const parts = file.split("-");
-    const pid = Number(parts[1]);
-    if (!Number.isFinite(pid)) continue;
+    const fullPath = path.join(dir, file);
+    let stat;
     try {
-      process.kill(pid, 0);
-    } catch {
-      fs.rmSync(path.join(dir, file), { force: true });
+      stat = fs.statSync(fullPath);
+    } catch (err) {
+      if (err && err.code === "ENOENT") continue;
+      continue;
+    }
+    let shouldDelete = isExpiredByTtl(stat.mtimeMs, ttlMs);
+    if (!shouldDelete) {
+      const pid = parsePidFromFilename(file);
+      if (pid !== null && !isPidAlive(pid)) {
+        shouldDelete = true;
+      }
+    }
+    if (!shouldDelete) continue;
+    try {
+      fs.rmSync(fullPath, { force: true });
+    } catch (err) {
+      if (err && err.code === "ENOENT") continue;
     }
   }
 }
 
 function acquireSlot(baseDir, limit) {
   const dir = runDir(baseDir);
-  cleanupStale(dir);
+  cleanupStale(dir, resolvePidTtlMs());
   const slot = `pid-${process.pid}-${Date.now()}`;
   const slotPath = path.join(dir, slot);
   fs.writeFileSync(slotPath, "1", { encoding: "utf8", flag: "wx" });
@@ -217,4 +263,15 @@ if (require.main === module) {
   });
 }
 
-module.exports = { run, parseArgs, buildPythonArgs, mapPythonError };
+module.exports = {
+  run,
+  parseArgs,
+  buildPythonArgs,
+  mapPythonError,
+  parsePidFromFilename,
+  isPidAlive,
+  isExpiredByTtl,
+  resolvePidTtlMs,
+  cleanupStale,
+  acquireSlot
+};
