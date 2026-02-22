@@ -241,3 +241,23 @@ Outcome:
   - strict timeout/response-size bounds,
   - explicit `tool_not_allowed` and `blocked_by:mcporter_not_installed` behavior.
 - added config stub `config/mcporter.json` with zero enabled tools by default.
+
+## Phase 5 — Operator surface + user-service templates
+```text
+Sun Feb 22 06:52:18 UTC 2026
+$ bash -n scripts/local_exec_plane.sh
+OK
+
+$ python3 scripts/local_exec_enqueue.py --help
+usage: local_exec_enqueue.py [-h] [--repo-root REPO_ROOT] [--job-file JOB_FILE] [--demo]
+
+$ bash scripts/local_exec_plane.sh health
+{"kill_switch": false, "ledger_path": "/tmp/wt_local_exec/workspace/local_exec/state/jobs.jsonl", "events": 0, "last_event": null}
+```
+
+Outcome:
+- Added `scripts/local_exec_plane.sh` with `start|stop|status|health|enqueue-demo`.
+- Added `scripts/local_exec_enqueue.py` for schema-validated queue insertion.
+- Added user service template `workspace/local_exec/systemd/openclaw-local-exec-worker.service`.
+- Added vLLM template config `config/vllm/dali_local_exec.yaml` (loopback, conservative GPU settings, env-key).
+- Non-blocking behavior: systemd user preferred; pidfile/nohup fallback if bus unavailable.
