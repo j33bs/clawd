@@ -15,6 +15,7 @@ type Input = {
 type CliErrorType =
   | "MODEL_NOT_FOUND"
   | "OOM"
+  | "MLX_DEVICE_UNAVAILABLE"
   | "CONCURRENCY_LIMIT"
   | "PYTHON_MISSING"
   | "MLX_MISSING"
@@ -27,15 +28,24 @@ type Config = Record<string, unknown> & {
 };
 
 type SpawnResult = { stdout: string; stderr: string; code: number };
+type PreflightResult = {
+  stdout: string;
+  stderr: string;
+  code: number;
+  timed_out: boolean;
+  signal?: NodeJS.Signals | null;
+};
 
 type RunDeps = {
   spawnPython?: (args: string[], timeoutMs: number) => Promise<SpawnResult>;
+  runMlxPreflight?: (timeoutMs: number) => Promise<PreflightResult>;
   ensurePython?: () => void;
   ensureMlxImport?: () => void;
   acquireSlot?: (baseDir: string, limit: number) => () => void;
 };
 
 const DEFAULT_PID_TTL_MS = 600000;
+const PREFLIGHT_SNIPPET = "import mlx.core as mx; print(mx.default_device())";
 
 function printOk(payload: Record<string, unknown>): never {
   process.stdout.write(`${JSON.stringify(payload)}\n`);
@@ -100,6 +110,16 @@ function resolvePythonExecutable(): string {
   return "python3";
 }
 
+function headText(value: string, max = 400): string {
+  const out = String(value || "").trim();
+  if (out.length <= max) return out;
+  return out.slice(0, max);
+}
+
+function logStage(stage: string, outcome: "ok" | "fail", details: Record<string, unknown> = {}): void {
+  process.stderr.write(`${JSON.stringify({ ts: new Date().toISOString(), stage, outcome, ...details })}\n`);
+}
+
 function ensurePython(): void {
   const check = spawnSync(resolvePythonExecutable(), ["--version"], { encoding: "utf8" });
   if (check.error || check.status !== 0) {
@@ -112,6 +132,33 @@ function ensureMlxImport(): void {
   if (check.error || check.status !== 0) {
     printErr("MLX_MISSING", "mlx_lm import failed", { stderr: check.stderr || "" });
   }
+}
+
+function runMlxPreflight(timeoutMs: number): Promise<PreflightResult> {
+  return new Promise((resolve) => {
+    const proc: ChildProcessWithoutNullStreams = spawn(
+      resolvePythonExecutable(),
+      ["-c", PREFLIGHT_SNIPPET],
+      { stdio: ["ignore", "pipe", "pipe"] }
+    );
+    let stdout = "";
+    let stderr = "";
+    let timedOut = false;
+    const timer = setTimeout(() => {
+      timedOut = true;
+      proc.kill("SIGKILL");
+    }, timeoutMs);
+    proc.stdout.on("data", (d) => {
+      stdout += d.toString();
+    });
+    proc.stderr.on("data", (d) => {
+      stderr += d.toString();
+    });
+    proc.on("close", (code, signal) => {
+      clearTimeout(timer);
+      resolve({ stdout, stderr, code: timedOut ? 124 : (code ?? 1), timed_out: timedOut, signal });
+    });
+  });
 }
 
 function runDir(baseDir: string): string {
@@ -236,6 +283,7 @@ function spawnPython(args: string[], timeoutMs: number): Promise<SpawnResult> {
 
 async function run(argv: string[] = process.argv.slice(2), deps: RunDeps = {}): Promise<void> {
   const usedSpawn = deps.spawnPython || spawnPython;
+  const usedPreflight = deps.runMlxPreflight || runMlxPreflight;
   const usedEnsurePy = deps.ensurePython || ensurePython;
   const usedEnsureMlx = deps.ensureMlxImport || ensureMlxImport;
   const usedAcquire = deps.acquireSlot || acquireSlot;
@@ -246,6 +294,20 @@ async function run(argv: string[] = process.argv.slice(2), deps: RunDeps = {}): 
   const cfg = loadConfig(merged.config);
 
   usedEnsurePy();
+  const preflight = await usedPreflight(3000);
+  const preflightOk = !preflight.timed_out && preflight.code === 0 && preflight.stdout.trim().length > 0;
+  logStage("mlx_preflight", preflightOk ? "ok" : "fail", {
+    exit_code: preflight.code,
+    timed_out: preflight.timed_out
+  });
+  if (!preflightOk) {
+    printErr("MLX_DEVICE_UNAVAILABLE", "MLX Metal device init unstable/unavailable", {
+      exit_code: preflight.code,
+      timed_out: preflight.timed_out,
+      stderr_head: headText(preflight.stderr),
+      stdout_head: headText(preflight.stdout)
+    });
+  }
   usedEnsureMlx();
 
   const maxConcurrent = Number(process.env.OPENCLAW_MAX_CONCURRENT || cfg.max_concurrent || 1);
@@ -313,6 +375,7 @@ module.exports = {
   buildPythonArgs,
   mapPythonError,
   resolvePythonExecutable,
+  runMlxPreflight,
   parsePidFromFilename,
   isPidAlive,
   isExpiredByTtl,

@@ -2,6 +2,8 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const { spawn, spawnSync } = require("node:child_process");
+const DEFAULT_PID_TTL_MS = 600000;
+const PREFLIGHT_SNIPPET = "import mlx.core as mx; print(mx.default_device())";
 
 function printOk(payload) {
   process.stdout.write(`${JSON.stringify(payload)}\n`);
@@ -64,6 +66,16 @@ function resolvePythonExecutable() {
   return "python3";
 }
 
+function headText(value, max = 400) {
+  const out = String(value || "").trim();
+  if (out.length <= max) return out;
+  return out.slice(0, max);
+}
+
+function logStage(stage, outcome, details = {}) {
+  process.stderr.write(`${JSON.stringify({ ts: new Date().toISOString(), stage, outcome, ...details })}\n`);
+}
+
 function ensurePython() {
   const check = spawnSync(resolvePythonExecutable(), ["--version"], { encoding: "utf8" });
   if (check.error || check.status !== 0) {
@@ -78,13 +90,30 @@ function ensureMlxImport() {
   }
 }
 
+function runMlxPreflight(timeoutMs) {
+  return new Promise((resolve) => {
+    const proc = spawn(resolvePythonExecutable(), ["-c", PREFLIGHT_SNIPPET], { stdio: ["ignore", "pipe", "pipe"] });
+    let stdout = "";
+    let stderr = "";
+    let timedOut = false;
+    const timer = setTimeout(() => {
+      timedOut = true;
+      proc.kill("SIGKILL");
+    }, timeoutMs);
+    proc.stdout.on("data", (d) => { stdout += d.toString(); });
+    proc.stderr.on("data", (d) => { stderr += d.toString(); });
+    proc.on("close", (code, signal) => {
+      clearTimeout(timer);
+      resolve({ stdout, stderr, code: timedOut ? 124 : (code ?? 1), timed_out: timedOut, signal });
+    });
+  });
+}
+
 function runDir(baseDir) {
   const d = path.join(baseDir, ".run", "mlx-infer");
   fs.mkdirSync(d, { recursive: true });
   return d;
 }
-
-const DEFAULT_PID_TTL_MS = 600000;
 
 function parsePidFromFilename(file) {
   const match = /^pid-(\d+)(?:-.+)?$/.exec(file);
@@ -198,6 +227,7 @@ function spawnPython(args, timeoutMs) {
 
 async function run(argv = process.argv.slice(2), deps = {}) {
   const usedSpawn = deps.spawnPython || spawnPython;
+  const usedPreflight = deps.runMlxPreflight || runMlxPreflight;
   const usedEnsurePy = deps.ensurePython || ensurePython;
   const usedEnsureMlx = deps.ensureMlxImport || ensureMlxImport;
   const usedAcquire = deps.acquireSlot || acquireSlot;
@@ -208,6 +238,20 @@ async function run(argv = process.argv.slice(2), deps = {}) {
   const cfg = loadConfig(merged.config);
 
   usedEnsurePy();
+  const preflight = await usedPreflight(3000);
+  const preflightOk = !preflight.timed_out && preflight.code === 0 && preflight.stdout.trim().length > 0;
+  logStage("mlx_preflight", preflightOk ? "ok" : "fail", {
+    exit_code: preflight.code,
+    timed_out: preflight.timed_out
+  });
+  if (!preflightOk) {
+    printErr("MLX_DEVICE_UNAVAILABLE", "MLX Metal device init unstable/unavailable", {
+      exit_code: preflight.code,
+      timed_out: preflight.timed_out,
+      stderr_head: headText(preflight.stderr),
+      stdout_head: headText(preflight.stdout)
+    });
+  }
   usedEnsureMlx();
 
   const maxConcurrent = Number(process.env.OPENCLAW_MAX_CONCURRENT || cfg.max_concurrent || 1);
@@ -275,6 +319,7 @@ module.exports = {
   buildPythonArgs,
   mapPythonError,
   resolvePythonExecutable,
+  runMlxPreflight,
   parsePidFromFilename,
   isPidAlive,
   isExpiredByTtl,
