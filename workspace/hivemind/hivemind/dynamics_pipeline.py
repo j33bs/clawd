@@ -271,11 +271,13 @@ class TactiDynamicsPipeline:
                     "text": context_text,
                     "tags": ["tacti_dynamics", "routing"],
                     "strength": 1.0 + max(0.0, float(reward)),
+                    "source": "response",
                     "meta": {
                         "agent": str(path[1]) if len(path) > 1 else str(source_agent),
                         "reward": float(reward),
                         "success": bool(success),
                         "path": list(path),
+                        "source": "response",
                     },
                     "valence_signature": valence_signal,
                 }

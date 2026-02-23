@@ -121,3 +121,26 @@ Verification:
 
 Rollback:
 - `git revert <item3_commit_sha>`
+
+## Item 4 — Trail origin tagging
+Intent:
+- Tag newly written trails with origin `source: wander|task|response` while preserving backward compatibility.
+
+Touched files:
+- `workspace/hivemind/hivemind/trails.py`
+- `workspace/hivemind/hivemind/dynamics_pipeline.py`
+- `tests_unittest/test_hivemind_trails.py`
+
+Implementation notes:
+- `TrailStore.deposit(...)` now persists `source` with fallback to `unknown`.
+- Query path defaults legacy rows (missing source) to `unknown` without migration.
+- `TactiDynamicsPipeline.observe_outcome(...)` now writes response-generated trails with `source: response`.
+
+Verification:
+- `python3 -m unittest tests_unittest.test_hivemind_trails tests_unittest.test_hivemind_dynamics_pipeline -v`
+  - PASS (9 tests)
+- New trail line sample (keys only):
+  - `{'trail_id': 'ad422a4a-1cc5-4718-8cc6-04a47c63d18e', 'source': 'wander', 'tags': ['wander', 'inquiry']}`
+
+Rollback:
+- `git revert <item4_commit_sha>`

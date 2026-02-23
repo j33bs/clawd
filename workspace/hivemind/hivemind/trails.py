@@ -149,6 +149,7 @@ class TrailStore:
             "tags": tags,
             "embedding": embedding,
             "strength": float(trail.get("strength", 1.0) or 1.0),
+            "source": str(trail.get("source") or (trail.get("meta") or {}).get("source") or "unknown"),
             "meta": dict(trail.get("meta") or {}),
             "created_at": str(trail.get("created_at") or now),
             "updated_at": str(trail.get("updated_at") or now),
@@ -206,6 +207,8 @@ class TrailStore:
             similarity = max(0.0, _cosine(query_embedding, emb))
             effective = self._effective_strength(row, current) * similarity
             item = dict(row)
+            if not str(item.get("source", "")).strip():
+                item["source"] = "unknown"
             item["similarity"] = similarity
             item["effective_strength"] = effective
             scored.append(item)

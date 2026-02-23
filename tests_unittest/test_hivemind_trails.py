@@ -37,7 +37,33 @@ class TestTrailStore(unittest.TestCase):
             self.assertIn(t1, before)
             self.assertEqual(after[0], t2)
 
+    def test_writer_persists_source_field(self):
+        with tempfile.TemporaryDirectory() as td:
+            store = TrailStore(path=Path(td) / "trails.jsonl")
+            trail_id = store.add(
+                {
+                    "text": "wander curiosity pass",
+                    "tags": ["wander"],
+                    "strength": 1.1,
+                    "source": "wander",
+                    "meta": {},
+                }
+            )
+            hit = store.query("wander curiosity", k=1)[0]
+            self.assertEqual(hit["trail_id"], trail_id)
+            self.assertEqual(hit["source"], "wander")
+
+    def test_reader_defaults_missing_source_to_unknown(self):
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "trails.jsonl"
+            path.write_text(
+                '{"trail_id":"legacy-1","text":"legacy item","tags":["routing"],"embedding":[1,0,0],"strength":1.0,"meta":{},"created_at":"2026-02-23T00:00:00Z","updated_at":"2026-02-23T00:00:00Z"}\n',
+                encoding="utf-8",
+            )
+            store = TrailStore(path=path)
+            hit = store.query([1.0, 0.0, 0.0], k=1)[0]
+            self.assertEqual(hit["source"], "unknown")
+
 
 if __name__ == "__main__":
     unittest.main()
-
