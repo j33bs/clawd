@@ -21,7 +21,7 @@ This remains correspondence, not a spec. We add just enough structure to turn pr
 | Date | Question | Tag | Action | Result | Link |
 |---|---|---|---|---|---|
 | 2026-02-24 | *(placeholder example)* "What changed after a null run?" | EXPERIMENT PENDING | Define observable + run once | Placeholder | OPEN_QUESTIONS.md |
-| 2026-02-24 | Has Φ ever been measured here? | EXPERIMENT PENDING | Define minimal session + metric | Inconclusive (proxy v7 propagation links run logged; not IIT Φ) | workspace/audit/phi_proxy_session_v7_20260224.md |
+| 2026-02-24 | Has Φ ever been measured here? | EXPERIMENT PENDING | Define minimal session + metric | Inconclusive (proxy v8 decision-compiler run logged; not IIT Φ) | workspace/audit/phi_proxy_session_v8_20260224.md |
 
 ---
 
@@ -138,3 +138,17 @@ Small relay for discipline outside the main spine:
 - New constructs introduced in correspondence should either gain a probe or be marked speculative.
 
 This hub does not replace Governance & Alignment; it distributes its discipline.
+
+
+## ✦ Decision Micro-Ritual (Added 2026-02-24)
+
+When pressure rises, run this tiny compiler:
+1. Select: choose one live question from the Instrumentation Index.
+2. Decide: mark it EXPERIMENT PENDING, GOVERNANCE RULE CANDIDATE, or PHILOSOPHICAL ONLY.
+3. Log: record the outcome and date in the Index or a linked audit note.
+
+We will verify that each pass names one concrete next move.
+This ritual must update either the Result field or an audit link before the next cycle closes.
+Outcomes produced here bind subsequent handling of that question.
+If a decision cannot be tested, mark it PHILOSOPHICAL ONLY instead of pretending.
+This does not replace Governance & Alignment; it is a local decision compiler.
