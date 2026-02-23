@@ -34,3 +34,20 @@ drwxr-xr-x@ 53 heathyeager  wheel  1696 Feb 23 10:51 ..
 ## Notes
 - No canonical AIN Phi calculator entrypoint was discovered in current wiring code paths.
 - Session recorded as BLOCKED, with deterministic wiring snapshot artifact captured.
+
+## Why blocked (actionable)
+- Exact symbols/modules searched:
+  - Module candidates: `workspace.tacti.phi_integration`, `workspace.tacti_cr.phi_integration`, `hivemind.phi`
+  - Function candidates per module: `compute_phi`, `calculate_phi`, `run_phi`
+  - Repo grep patterns run: `ain_phi|phi|Φ|IIT|integrated information|hivemind wiring`
+- Expected canonical entrypoint target:
+  - `workspace.tacti.phi_integration.compute_phi(snapshot_payload)`
+  - Compatible fallback target: `workspace.tacti_cr.phi_integration.compute_phi(snapshot_payload)`
+- File paths inspected:
+  - `workspace/scripts/phi_session_runner.py`
+  - `workspace/research/phi_metrics.md`
+  - `workspace/research/active_inference_research.md`
+  - `workspace/TWENTY_EVOLUTIONS.md`
+- Precise unresolved dependency/interface:
+  - No importable module exposing any of the target calculator functions above exists in current wiring.
+  - Missing implementation contract: deterministic calculator accepting a wiring snapshot payload and returning scalar Φ.
