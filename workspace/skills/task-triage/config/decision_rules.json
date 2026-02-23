@@ -37,5 +37,32 @@
       "confidence": 0.9,
       "rationale": "local mlx unavailable; escalated"
     }
-  ]
+  ],
+  "evidence": {
+    "enabled": true,
+    "strategy_preference": [
+      "coreml_embed",
+      "keyword_stub"
+    ],
+    "chunk_chars": 800,
+    "top_k": 5,
+    "min_score": 0,
+    "max_context_chars_for_evidence": 20000,
+    "coreml": {
+      "enabled": true,
+      "model_path": "",
+      "compute_units": "ALL",
+      "max_texts_per_call": 32,
+      "timeout_ms": 30000,
+      "health_check": true,
+      "circuit_breaker": {
+        "failure_window": 10,
+        "max_failures": 3,
+        "cooloff_ms": 60000
+      }
+    },
+    "fallback_keyword_stub": {
+      "enabled": true
+    }
+  }
 }

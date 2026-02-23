@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { decideTier } from "./decision";
+import { selectEvidenceBundle } from "./evidence_embed";
 
 type InputPayload = {
   task?: string;
@@ -62,6 +63,13 @@ async function main(): Promise<void> {
     localRationale: input.local?.rationale || "",
     rules,
   });
+  const evidenceResult = await selectEvidenceBundle(input.task, input.context || "", rules);
+  const evidenceBundle = evidenceResult.bundle;
+  const evidenceSummary = evidenceResult.summary;
+
+  const rationale = evidenceBundle
+    ? `${decision.rationale} [evidence:${evidenceBundle.kind}]`
+    : `${decision.rationale} [evidence:none]`;
 
   appendAudit({
     ts: new Date().toISOString(),
@@ -70,13 +78,16 @@ async function main(): Promise<void> {
     tier: decision.tier,
     confidence: decision.confidence,
     signals: decision.notes || {},
+    evidence: evidenceSummary,
   });
 
   const output: Record<string, unknown> = {
+    action: "PROCESS",
     tier: decision.tier,
     confidence: decision.confidence,
-    rationale: decision.rationale,
+    rationale,
   };
+  if (evidenceBundle) output.evidence_bundle = evidenceBundle;
   if (decision.request_for_chatgpt) output.request_for_chatgpt = decision.request_for_chatgpt;
 
   process.stdout.write(`${JSON.stringify(output)}\n`);

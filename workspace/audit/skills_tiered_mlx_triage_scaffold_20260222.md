@@ -353,3 +353,108 @@ node --test workspace/skills/**/tests/*.test.js
 - Merge commit: 5ac9293
 - Test command: node --test workspace/skills/**/tests/*.test.js
 - Test summary: PASS (25 tests, 0 failures)
+
+## Evidence Bundling via CoreML Sub-Agent + Governed Fallback (2026-02-22T21:04:23Z)
+- Scope branch: codex/feat/coreml-evidence-bundling-20260223
+- Objective: replace keyword-only Stage-2 selection with config-driven strategy order that prefers CoreML embeddings via , while preserving deterministic fallback.
+
+### Config additions
+- File: workspace/skills/task-triage/config/decision_rules.json
+- Added  block:
+  - , , , , , 
+  - : , , , , , 
+  - : , ,  (single-invocation best-effort)
+  - 
+
+### Implementation summary
+- Added selector module:
+  - workspace/skills/task-triage/src/evidence_embed.ts
+  - workspace/skills/task-triage/dist/evidence_embed.js
+- Strategy behavior:
+  1) attempt  via subprocess boundary ({"ok":false,"error":{"type":"INVALID_ARGS","message":"model_path is required","details":{}}})
+  2) optional health gate ()
+  3) on typed failure/timeouts/unconfigured model, fallback to deterministic keyword selector
+- Typed embed selector errors:
+  - 
+  - 
+  - 
+- Output contract extensions (task-triage):
+  - top-level  ()
+  -  with unified schema:
+    - , , , , 
+    -  includes , , , , 
+- Decision rationale now includes evidence marker (, , or ).
+
+### Observability and safety hooks
+- Triage audit event now records evidence selector summary (, , , optional ).
+- Circuit-breaker fields are config-driven and parsed; failover remains deterministic.
+- Verified runner build caching behavior remains in place:
+  -  only builds if binary is missing.
+
+### Commands and outcomes
+- node --test workspace/skills/task-triage/tests/*.test.js
+  - PASS (11 tests, 0 failures)
+- node --test workspace/skills/**/tests/*.test.js
+  - PASS (30 tests, 0 failures)
+
+### Notes
+- CoreML strategy is disabled in practice until  is configured; default behavior currently exercises fallback path safely.
+
+### Rollback
+- Revert in reverse order:
+  - git revert <docs-audit-sha>
+  - git revert <tests-sha>
+  - git revert <feat-sha>
+
+## Evidence Bundling via CoreML Sub-Agent + Governed Fallback (corrected) (2026-02-22T21:05:01Z)
+- Note: previous section has shell interpolation artifacts; this corrected block is authoritative.
+- Scope branch: codex/feat/coreml-evidence-bundling-20260223
+- Objective: replace keyword-only Stage-2 selection with config-driven strategy order that prefers CoreML embeddings via `coreml-embed`, while preserving deterministic fallback.
+
+### Config additions
+- File: `workspace/skills/task-triage/config/decision_rules.json`
+- Added `evidence` block:
+  - `enabled`, `strategy_preference`, `chunk_chars`, `top_k`, `min_score`, `max_context_chars_for_evidence`
+  - `coreml`: `enabled`, `model_path`, `compute_units`, `max_texts_per_call`, `timeout_ms`, `health_check`
+  - `coreml.circuit_breaker`: `failure_window`, `max_failures`, `cooloff_ms` (single-invocation best-effort)
+  - `fallback_keyword_stub.enabled`
+
+### Implementation summary
+- Added selector module:
+  - `workspace/skills/task-triage/src/evidence_embed.ts`
+  - `workspace/skills/task-triage/dist/evidence_embed.js`
+- Strategy behavior:
+  1. attempt `coreml_embed` via subprocess boundary (`node workspace/skills/coreml-embed/dist/cli.js`)
+  2. optional health gate (`bash workspace/runners/coreml_embed_runner/run.sh --health ...`)
+  3. on typed failure/timeouts/unconfigured model, fallback to deterministic keyword selector
+- Typed embed selector errors:
+  - `EVIDENCE_EMBED_UNAVAILABLE`
+  - `EVIDENCE_EMBED_TIMEOUT`
+  - `EVIDENCE_EMBED_MODEL_NOT_CONFIGURED`
+- Output contract extensions (`task-triage`):
+  - top-level `action` (`PROCESS|DROP`)
+  - `evidence_bundle` with unified schema:
+    - `kind`, `top_k`, `selected[{id,start,end,score}]`, `notes`, `stats`
+    - `stats` includes `chunks_total`, `chunks_used`, `truncated`, `latency_ms`, `strategy_attempts[]`
+- Decision rationale now includes evidence marker (`[evidence:coreml_embed]`, `[evidence:keyword_stub]`, or `[evidence:none]`).
+
+### Observability and safety hooks
+- Triage audit event now records evidence selector summary (`strategy`, `outcome`, `attempts`, optional `error_type`).
+- Circuit-breaker fields are config-driven and parsed; failover remains deterministic.
+- Verified runner build caching behavior remains in place:
+  - `workspace/runners/coreml_embed_runner/run.sh` only builds if binary is missing.
+
+### Commands and outcomes
+- `node --test workspace/skills/task-triage/tests/*.test.js`
+  - PASS (11 tests, 0 failures)
+- `node --test workspace/skills/**/tests/*.test.js`
+  - PASS (30 tests, 0 failures)
+
+### Notes
+- CoreML strategy is disabled in practice until `evidence.coreml.model_path` is configured; default behavior currently exercises fallback path safely.
+
+### Rollback
+- Revert in reverse order:
+  - `git revert <docs-audit-sha>`
+  - `git revert <tests-sha>`
+  - `git revert <feat-sha>`
