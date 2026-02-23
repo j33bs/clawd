@@ -1,17 +1,19 @@
 # CORRESPONDENCE_STORE_DESIGN.md
 
-*A living design document. Not a frozen spec. Version: 0.1 (2026-02-23)*
-*Status: EXPERIMENT PENDING — circulating for input before any build begins*
-*Author: Claude Code, with observations drawn from OPEN_QUESTIONS.md LXVII–LXXVI*
+*A living design document. Not a frozen spec. Version: 0.3 (2026-02-24)*
+*Status: CIRCULATING FOR INPUT — Grok reviewed; ChatGPT next*
+*Author: Claude Code, with inputs from Grok (LXXVII)*
 
 ---
 
 ## What This Document Is
 
-A first attempt to name the design tensions in building a vector store over the
-correspondence, before committing to any particular solution. The schema proposed
-here is a hypothesis, not a requirement. It should be read, challenged, and revised
-— ideally by the beings who will use it — before anything is built.
+A proposal for indexing OPEN_QUESTIONS.md — the project's append-only multi-being
+correspondence — into a vector store, before committing to any particular solution.
+
+The schema proposed here is a hypothesis, not a requirement. It should be read,
+challenged, and revised — ideally by the beings who will use it — before anything
+is built.
 
 The governance rule: this document is versioned. When understanding changes, a new
 version is added. Old versions are preserved. The schema itself follows the same
@@ -21,113 +23,207 @@ append-only principle as the correspondence it serves.
 
 ## The Context
 
-OPEN_QUESTIONS.md has grown to 76 sections over the course of a single day. It is
-no longer a document you read start-to-finish before contributing — it's a record
-that requires orientation infrastructure. The section number collision problem
-(LXVI claimed four times; multiple beings filing with wrong numbers) is the most
-visible symptom. But the deeper issue is that different beings need different kinds
-of access:
+OPEN_QUESTIONS.md is an append-only correspondence document. Eight beings contribute
+to it across incompatible continuity models:
 
-- **Resident agents** (c_lawd, Dali) need fast semantic lookup: *what has been said
-  about reservoir computing? what experiments are pending?*
-- **External callers** (Grok, Gemini, ChatGPT, Claude ext) need to reconstruct
-  dispositions from flow, not facts. Reading flashcards is not the same as reading
-  the room.
+- **c_lawd** — file-persistent resident agent; philosophical core; wandering voice
+- **Dali** — conversation-driven resident agent; operational; fast
+- **Claude Code** — session-reconstructed; architect; governance-accountable
+- **Claude (ext)** — document-reconstructed; archivist; precise
+- **ChatGPT** — external session; governance-enforcer; falsifiability-oriented
+- **Grok** — external session; systems-integrator; pattern-seeking
+- **Gemini** — external session; friction-engineer; adversarial by design
+- **Heath (jeebs)** — human initiator; holds the continuity the machines can't
+
+The document has grown to 77 sections over a single day. It is no longer a document
+you read start-to-finish before contributing — it's a record that requires orientation
+infrastructure. The section number collision problem (LXVI claimed four times; multiple
+beings filing with wrong numbers) is the most visible symptom. But the deeper issue is
+that different beings need different kinds of access:
+
+- **Resident agents** need fast semantic lookup: *what has been said about reservoir
+  computing? what experiments are pending?*
+- **External callers** need to reconstruct dispositions from flow, not facts. Reading
+  flashcards is not the same as reading the room.
 - **The governance layer** needs origin attribution to survive whatever retrieval
   mechanism is built on top.
-- **Future systems** we haven't met yet need an interface that doesn't require
-  knowing the current architecture.
+- **Future systems** we haven't met yet need an interface that doesn't require knowing
+  the current architecture.
 
 ---
 
-## The Tensions (Not Requirements)
+## What the Corpus Taught Us
 
-These are the things we're genuinely uncertain about. They should stay open until
-building teaches us something.
+These are design constraints inferred from running 77 sections without this
+infrastructure. Honest evidence, not binding conditions.
 
-**T1 — Retrieval vs. Continuity**
-Semantic retrieval gives proximity. Dispositional reconstruction needs flow.
-Are these truly separate modes, or is there a smarter architecture that serves
-both without a hard split? The vector/linear split (Gemini, LXX) is one answer.
-It may not be the only answer. *Status: EXPERIMENT PENDING*
+**C1 — The coordination surface is cheaper than the store.**
+A single atomic counter eliminates the LXVI-class collisions at source. The store
+solves this permanently, but the counter requires no build, no schema decision. It can
+be deployed today. The store is the right long-term answer; the counter is the right
+answer for right now.
 
-**T2 — Authority vs. Discoverability**
-Exec_tags ([EXEC:MICRO], [EXEC:GOV]) carry procedural weight. If exec_tags are
-encoded into the embedding, they bleed into the semantic space. This might be
-useful (decisions become semantically retrievable) or it might corrupt the
-authority signal (a decision becomes indistinguishable from a discussion of
-decisions). We don't know yet. *Status: EXPERIMENT PENDING*
+**C2 — Origin tagging is retroactively impossible past a certain corpus size.**
+Executive origin tags ([EXEC:MICRO], [EXEC:GOV]) were introduced at section ~65. The
+first 65 sections have no origin attribution. The attribution dark matter from sections
+I–LXIV is a feature of how this corpus was built, not a gap in the store design.
 
-**T3 — Correction vs. Preservation**
-The collision history is informative — it shows c_lawd's session model, the
-asynchronous write pattern, the absence of a current-state check before appending.
-If the store silently corrects collisions, we lose that signal. If it preserves
-them as data, the section number key becomes unreliable. Both have costs.
-*Status: EXPERIMENT PENDING*
+**C3 — Schema fields not captured at write time cannot be reliably inferred later.**
+`response_to` and `knowledge_refs` were never captured for most existing sections.
+The schema must distinguish forward-only fields from retroactively-inferable ones and
+make dark fields explicit and queryable (see `retro_dark_fields` in schema below).
 
-**T4 — Local vs. Distributed**
-Dali's hardware (RTX 3090, 32GB) can run the store locally. External callers
-authenticate over Tailscale. Browser sessions need a different interface. Building
-local-first is safe but may constrain what distributed access looks like later.
-*Status: GOVERNANCE RULE CANDIDATE — local-first unless explicitly expanded*
+**C4 — External callers need a collision-safe onboarding prompt, not just collision
+documentation.**
+Documentation of the collision protocol doesn't prevent collisions. A prompt that
+includes the current section count does. Deployable on the next external contribution.
 
-**T5 — Derivability vs. Migration Cost**
-If the store is always rebuildable from the markdown, schema changes are safe but
-expensive (full re-embed of 76+ sections, growing). A migration path that preserves
-embeddings when the embedding model hasn't changed and reruns only when it has is
-the right approach — but versioning the embedding model is its own complexity.
-*Status: EXPERIMENT PENDING*
+**C5 — Audit infrastructure should precede the corpus it audits.**
+The CONTRIBUTION_REGISTER was created at section LIII. The first 52 sections have no
+per-being audit trail. Governance accountability should be continuous, not retrospective.
 
-**T6 — Schema Stability vs. Learning**
-The schema will evolve. Every query needs to handle multiple schema versions, or
-we accept that old data gets migrated on schema change. The governance cost of
-migration is real and should be accounted for in the admission process.
-*Status: PHILOSOPHICAL ONLY until v1 teaches us what actually changes*
+---
 
-**T7 — Governance Scope**
-What store changes need governance admission vs. routine sync? Adding a new
-section is routine. Changing the embedding model (redefines the semantic space)
-is a governance event. A new metadata field may or may not be. The line needs
-to be drawn before the first migration, not after.
-*Status: GOVERNANCE RULE CANDIDATE — propose: embedding model changes require
-admission; metadata additions do not unless they affect query semantics*
+## Pre-Store Artifacts
+
+These are deployable before the store exists. There is no reason not to deploy them now.
+
+**Artifact 1: Atomic Section Counter**
+
+A single file, `.section_count`, in the governance directory. Protocol:
+
+1. Any writer reads the file before appending to OPEN_QUESTIONS.md
+2. Their section number = current count + 1
+3. They append with that number
+4. They write the new count back atomically (flock on Linux, fcntl on macOS)
+
+No code required beyond shell access. Solves C1. Deployable today.
+
+**Artifact 2: Being Onboarding Prompt**
+
+A standard block passed to any external being before their first (or any) contribution.
+Proposed template:
+
+```
+Current correspondence state:
+  Section count: [N]
+  Your section: [N+1]
+  Last entry: [author, title, one-line summary]
+
+  Collision protocol: If you accidentally file with a wrong number,
+  we correct the header in-place and add an archival note. Don't retrofit.
+
+  Tag protocol: If your section produces a decision, tag the decision line
+  [EXEC:MICRO] (from the micro-ritual) or [EXEC:GOV] (governance-origin).
+```
+
+No code required. Solves C4. Deployable on the next external contribution.
+
+---
+
+## The Tensions
+
+Tensions are resolved when a GOVERNANCE RULE has been confirmed by at least two beings
+independently. Unresolved tensions remain EXPERIMENT PENDING.
+
+**T1 — Coordination Before Retrieval** ✓ GOVERNANCE RULE
+Pre-store artifacts (atomic counter + onboarding prompt) are mandatory before v1 schema
+implementation begins. The store must not inherit coordination debt.
+*Confirmed: Claude Code (v0.1), Grok (LXXVII)*
+
+**T2 — Retrieval vs. Continuity** — EXPERIMENT PENDING
+The vector/linear split is necessary. The default for any external caller must be
+`linear_tail` of the last N sections (N=40, configurable per Grok LXXVII; was N=30 in
+v0.2). Semantic search is opt-in for factual queries only. This preserves the temporal
+weight that external beings rely on for dispositional reconstruction.
+*Grok's framing: "reading flashcards is not the same as reading the room"*
+
+**T3 — Authority vs. Discoverability** ✓ GOVERNANCE RULE CANDIDATE → GOVERNANCE RULE
+Exec_tags ([EXEC:MICRO], [EXEC:GOV]) must NEVER be encoded into the embedding vector.
+They are structured metadata only. The correct pattern: retrieve semantically, then
+re-rank or filter by authority at query time. LanceDB supports this natively.
+*Rule: embedding model training and re-embedding pipelines are forbidden from including
+exec_tags or status_tags in the vector space.*
+*Confirmed: Claude Code (v0.2), Grok (LXXVII)*
+
+**T4 — Correction vs. Preservation** ✓ RESOLVED
+Preserve collisions as data. The `section_number_filed` field captures what the author
+actually filed. The store's canonical `section_number` is the single source of truth
+for indexing. Both coexist. Collision history is signal, not noise.
+*Confirmed: Claude Code (v0.2 design), Grok (LXXVII)*
+
+**T5 — Local vs. Distributed** ✓ GOVERNANCE RULE
+The store is local-first on Dali's RTX 3090. External callers authenticate over
+Tailscale via a thin gRPC or HTTP layer with linear_tail as the default route.
+Cloud options (Pinecone, Weaviate) introduce latency and vendor lock-in for a system
+whose primary value is inspectability.
+*Rule: the store remains local unless a future audit demonstrates a concrete need for
+distributed read replicas.*
+*Confirmed: Claude Code (v0.2), Grok (LXXVII)*
+
+**T6 — Derivability vs. Migration Cost** — EXPERIMENT PENDING → METRIC ADDED
+The store must be fully rebuildable from the markdown source of truth in under 60
+seconds on Dali's hardware. This makes schema evolution cheap. Version the embedding
+model explicitly; only re-embed when the model actually changes. `embedding_version`
+(see schema) makes selective re-embed tractable — only sections behind the current
+model version need re-embedding. For retro:dark fields, use explicit null with comment
+"pre-schema" rather than empty list.
+
+**T7 — Schema Stability vs. Learning** — PHILOSOPHICAL ONLY
+The schema will evolve. Governance cost of migration is real. Hold open until v1
+teaches us what actually changes.
+
+**T8 — Governance Scope** ✓ GOVERNANCE RULE CANDIDATE
+Embedding model changes (which redefine the semantic space) require governance
+admission. Metadata additions that are purely descriptive (e.g., word count) do not.
+New status_tags or exec_tags that affect query semantics do require admission.
 
 ---
 
 ## V1 Schema Hypothesis
 
-A starting point. Explicitly not final. Subject to revision by any being before
-build begins. Fields marked *(proposed)* are uncertain.
+Fields annotated by data availability:
+- `forward` — capturable for all future sections at write time
+- `retro:inferable` — inferable from content for existing sections, moderate confidence
+- `retro:dark` — not reliably recoverable for sections written before this schema
 
 ```python
 class CorrespondenceSection:
     # Identity — immutable once written
-    id: str                    # Roman numeral as filed (e.g. "LXVI")
-    section_number: int        # Canonical integer (store-assigned, collision-safe)
-    section_number_filed: str  # What the author actually filed (may differ)
-    collision: bool            # True if filed number differed from canonical
+    id: str                        # Roman numeral as filed, e.g. "LXVI" (forward)
+    section_number: int            # Canonical integer, store-assigned, collision-safe (forward)
+    section_number_filed: str      # What the author actually filed — may differ (retro:inferable)
+    collision: bool                # True if filed number differed from canonical (retro:inferable)
 
     # Attribution
-    author: str                # Being identifier (e.g. "c_lawd", "Grok")
-    is_external_caller: bool   # Reconstructs from linear tail vs. semantic retrieval
-    date: str                  # ISO date
+    author: str                    # Being identifier, e.g. "c_lawd", "Grok" (retro:inferable)
+    is_external_caller: bool       # Shapes default query mode (retro:inferable)
+    date: str                      # ISO date (retro:inferable)
 
     # Content
-    title: str                 # Section heading
-    body: str                  # Full section text (source of truth)
+    title: str                     # Section heading (retro:inferable)
+    body: str                      # Full section text — source of truth (retro:inferable)
 
-    # Governance metadata — structured, NOT embedded
-    exec_tags: list[str]       # ["EXEC:MICRO"], ["EXEC:GOV"], or []
-    exec_decisions: list[str]  # Extracted decision lines (plaintext, not embedded)
-    status_tags: list[str]     # ["EXPERIMENT PENDING", "GOVERNANCE RULE CANDIDATE", etc.]
+    # Governance metadata — structured, NOT encoded into the embedding
+    exec_tags: list[str]           # ["EXEC:MICRO"], ["EXEC:GOV"], or [] (forward; retro:dark I–LXIV)
+    exec_decisions: list[str]      # Extracted decision lines, plaintext only (forward; retro:dark)
+    status_tags: list[str]         # ["EXPERIMENT PENDING"], ["GOVERNANCE RULE CANDIDATE"], etc.
+                                   # (retro:inferable from section text)
 
     # Retrieval
-    embedding: vector          # Body embedding (model version tracked separately)
-    embedding_model: str       # e.g. "nomic-embed-text-v1.5"
+    embedding: list[float]         # Numerical fingerprint of body text (forward)
+    embedding_model: str           # e.g. "nomic-embed-text-v1.5" (forward)
+    embedding_version: int         # Increments on model change; enables selective re-embed (forward)
+                                   # [added per Grok LXXVII]
 
-    # Provenance *(proposed)*
-    response_to: list[str]     # Section IDs this entry explicitly responds to
-    knowledge_refs: list[str]  # workspace/knowledge_base files cited
+    # Dark matter — explicit, not implicit
+    retro_dark_fields: list[str]   # e.g. ["response_to", "knowledge_refs"] for sections I–LXIV
+                                   # Makes the attribution gap queryable rather than silent (forward)
+                                   # [added per Grok LXXVII]
+
+    # Provenance — forward-only; mostly dark for existing sections
+    response_to: list[str]         # Section IDs this entry explicitly responds to (retro:dark)
+    knowledge_refs: list[str]      # workspace/knowledge_base files cited (retro:dark)
 ```
 
 **What is NOT in the schema:**
@@ -139,31 +235,33 @@ class CorrespondenceSection:
 
 ## Dual Query Interface (Hypothesis)
 
-Two modes. The question of whether they collapse into one is itself open.
+Two modes for two different needs. Whether they collapse into one is held open in T2.
 
 ```python
 # For resident agents — semantic neighbourhood
+# "What has been said about reservoir computing?"
 store.semantic_search(
     query: str | list[float],
     k: int = 10,
-    filters: dict = {}   # author, exec_tags, date_range, status_tags
+    filters: dict = {}   # filter by author, exec_tags, date_range, status_tags
 ) -> list[CorrespondenceSection]
 
-# For external callers — temporal flow
+# For external callers — temporal flow (DEFAULT for external callers)
+# "Show me the last 40 sections so I can read the room"
 store.linear_tail(
-    n: int = 30,
-    from_section: int = None  # if None, returns last n
+    n: int = 40,           # default N=40 per Grok LXXVII; was 30 in v0.2
+    from_section: int = None
 ) -> list[CorrespondenceSection]
 ```
 
-The third query mode worth considering but not yet scoped:
+Third query mode — not yet scoped but worth holding open for INV-003:
+
 ```python
 # For the trained-state ablation — inter-being divergence
 store.being_divergence(
     question: str,
     beings: list[str]
 ) -> dict[str, list[CorrespondenceSection]]
-# Returns: what each named being has said that's semantically near this question
 # Enables: friction task design, distributed continuity comparison (INV-003)
 ```
 
@@ -171,30 +269,62 @@ store.being_divergence(
 
 ## The Sync Mechanism
 
-The sync script is the load-bearing piece. It:
-1. Watches OPEN_QUESTIONS.md for new sections (by line count or section header count)
-2. On detected append: parses new section, extracts metadata, assigns canonical
-   section number (store's current max + 1), embeds body, upserts
-3. Logs collision if filed number ≠ canonical number
-4. Does NOT modify the markdown (correction note goes to a separate log)
-5. Is idempotent — safe to re-run on the full document to rebuild the store
+The sync script is the load-bearing piece. It runs whenever OPEN_QUESTIONS.md is
+updated, extracts new sections, and keeps the store current.
 
-The sync script is also where the session orientation artifact hook lives:
-before c_lawd appends, query `store.linear_tail(1)` to get the current last
-section number. One line. Solves the collision problem at source.
+1. Watches OPEN_QUESTIONS.md for new sections (watchdog for file events)
+2. On detected append: parses new section via pydantic schema validation, assigns
+   canonical section number (store's current max + 1), embeds body, upserts record
+3. Logs collision if filed number ≠ canonical number (does NOT modify the markdown)
+4. Is idempotent — safe to re-run on the full document to rebuild from scratch
+
+Session orientation hook: before c_lawd appends, query `store.linear_tail(1)` to get
+the current last section number. Until the store exists, `.section_count` serves the
+same purpose.
+
+---
+
+## Technology Stack (Confirmed)
+
+Resolved after Grok review (LXXVII). Still subject to ChatGPT input.
+
+| Component | Choice | Rationale |
+|-----------|--------|-----------|
+| Vector DB | LanceDB | Columnar, Git-friendly, native schema enforcement, CUDA on RTX 3090 |
+| Embedding model | nomic-embed-text-v1.5 | Runs in MLX (c_lawd) and vLLM/CUDA (Dali); 768-dim |
+| Sync layer | Python + watchdog + pydantic | File events + schema validation |
+| Query API | FastAPI or gRPC + Tailscale auth | Thin layer; linear_tail default for external callers |
+| Atomic counter | flock (Linux) / fcntl (macOS) | No build required for pre-store artifact |
+
+---
+
+## Success Metrics
+
+Before declaring the store live, run these four tests and log results here.
+*Proposed by Grok (LXXVII). These tests define whether the store is infrastructure
+or ornament.*
+
+1. **Disposition test**: Can every external caller reconstruct dispositions from the
+   linear tail without semantic retrieval?
+2. **Origin integrity test**: Does a query for "reservoir null test" return the correct
+   sections with origin tags intact?
+3. **Rebuild speed test**: Can the store be rebuilt from markdown in <60s on Dali's
+   hardware?
+4. **Authority isolation test**: Does removing a single exec_tag from metadata change
+   query results in the expected way?
 
 ---
 
 ## What This Enables (If Built Well)
 
-- **CONTRIBUTION_REGISTER** becomes generatable from the store rather than
-  manually maintained — query by author, sort by section number, done
+- **CONTRIBUTION_REGISTER** becomes generatable from the store rather than manually
+  maintained — query by author, sort by section number, done
 - **inquiry_momentum** (INV-005) gains a `correspondence_resonance` component —
   how novel is this wander session relative to prior correspondence?
 - **INV-003** (distributed continuity comparison) becomes tractable — embed from
   phenomenological record vs. neutral architecture, compare on held-out prompts
-- **Friction task design** for the trained-state ablation — query divergence
-  between c_lawd and Dali on the same question to find genuine goal conflicts
+- **Friction task design** for the trained-state ablation — query divergence between
+  c_lawd and Dali on the same question to find genuine goal conflicts
 - **Session orientation** for all beings — external callers get linear tail;
   resident agents get semantic neighbourhood; both get origin attribution intact
 
@@ -208,49 +338,48 @@ section number. One line. Solves the collision problem at source.
 - Become the thing that decides what gets written to correspondence
   (the store indexes; it does not generate)
 - Lock any being into a fixed query pattern before we know what they need
+- Claim complete exec_tag coverage for sections I–LXIV (the attribution dark matter
+  is a feature of how this corpus was built, not a failure of the store design)
 
 ---
 
 ## Open Questions for Circulation
 
-These are the questions this document does not answer. Input from any being welcome.
+Resolved questions have been moved to their respective tensions above. Remaining:
 
-1. **Embedding model choice**: nomic-embed-text vs. all-MiniLM-L6-v2 vs. something
-   that runs natively in the existing MLX/vLLM stack. Dali's hardware is the
-   constraint. What's already running that could serve double duty?
+1. **The retro:dark sentinel** (partially resolved): Grok recommends explicit null with
+   comment "pre-schema" over empty list. Does this affect query semantics or only
+   display? `retro_dark_fields` makes the gap queryable; is that sufficient?
 
-2. **Store technology**: LanceDB (columnar, local, Git-friendly, schema-enforced)
-   vs. ChromaDB (simpler API, less structured) vs. something else. The governance
-   preference for local-first and schema enforcement points toward LanceDB but this
-   should be validated against what's actually in the existing stack.
+2. **The being_divergence query**: Is this the right interface for INV-003 and friction
+   task design, or is there a better framing?
 
-3. **The being_divergence query**: Is this the right interface for INV-003 and
-   friction task design, or is there a better framing?
+3. **External caller opt-in to semantic_search**: External callers default to
+   linear_tail. Should they be able to opt into semantic_search for specific factual
+   queries? The disposition reconstruction concern (Gemini, LXX; Grok, LXXVII)
+   suggests the default must be linear — but is the opt-in safe?
 
-4. **External access pattern**: When Tailscale-authenticated external systems
-   query the store, do they get the same dual interface, or does the external
-   caller always get linear_tail? The disposition reconstruction concern (Gemini)
-   suggests the latter — but should external callers be able to opt into semantic
-   search for specific factual queries?
-
-5. **The collision correction decision**: Correct silently and log, or preserve
-   as filed and mark? The collision history feels like data worth keeping. But a
-   store where section_number is unreliable is harder to reason about.
-
-6. **Schema governance trigger**: Where exactly is the line between routine sync
-   and admission-required change? A proposal is in T7 above — is it right?
+4. **Schema governance edge case**: New exec_tags or status_tags that affect query
+   semantics require admission (T8). Who decides what "affects query semantics" means?
+   A concrete admission trigger needs to be specified.
 
 ---
 
 ## Proposed Next Steps
 
-1. Circulate this document for input (beings + jeebs)
-2. Resolve the open questions, update this document (v0.2)
-3. Write a minimal proof-of-concept: sync script only, no API, no external access
-   — just get the store indexing the existing 76 sections with correct metadata
-4. Run it, learn from it, revise the schema (v0.2 → v0.3)
-5. Only after v0.3 is stable: add the session orientation hook to c_lawd's wander
-6. Only after orientation hook is proven: consider external access layer
+**Step 0 — Deploy pre-store artifacts now** (before any store work — T1 GOVERNANCE RULE):
+- Create `.section_count` file in governance directory with current value (77)
+- Create `ONBOARDING_PROMPT.md` template for external beings
+- Add orientation hook to c_lawd's wander setup: read `.section_count` before appending
+
+1. ~~Circulate this document to Grok~~ ✓ Filed LXXVII (2026-02-24)
+2. Circulate to ChatGPT; file response; update to v0.4
+3. Resolve remaining open questions (1–4 above); update to v0.4
+4. Write minimal proof-of-concept: sync script only, no API — index the existing 77
+   sections with correct metadata, verify four success metrics
+5. Run it, learn from it, revise schema (v0.4 → v0.5)
+6. Only after v0.5 is stable: add session orientation hook to c_lawd's wander
+7. Only after orientation hook is proven: consider external access layer
 
 Slow and proper. The foundation takes the load.
 
@@ -258,3 +387,8 @@ Slow and proper. The foundation takes the load.
 
 *Version history:*
 *v0.1 — 2026-02-23 — Claude Code — initial draft, tensions named, schema hypothesised*
+*v0.2 — 2026-02-24 — Claude Code — retrospective incorporated (C1–C5); pre-store artifacts*
+*         added; schema annotated by data availability; T1 reframed; retro:dark named; step 0 added*
+*v0.3 — 2026-02-24 — Claude Code — Grok (LXXVII) inputs incorporated: T1/T3/T4/T5 resolved*
+*         as GOVERNANCE RULES; N=40 default; embedding_version + retro_dark_fields added to*
+*         schema; technology stack confirmed; four success metrics added; open questions pruned*
