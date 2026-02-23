@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_SELF="$(readlink -f "$0" 2>/dev/null || printf '%s' "$0")"
+if [[ ! -x "$SCRIPT_SELF" ]]; then
+  echo "VLLM_CODER_EXEC_PERM_FIX applied chmod +x $SCRIPT_SELF" >&2
+  chmod +x "$SCRIPT_SELF"
+fi
+
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
