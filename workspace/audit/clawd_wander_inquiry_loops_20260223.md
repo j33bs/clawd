@@ -195,3 +195,24 @@ Verification:
 
 Rollback:
 - `git revert <item6_commit_sha>`
+
+## Item 7 — Prosthetic curiosity calibration
+Intent:
+- Measure inquiry momentum by trigger type and compare cron vs task tendencies.
+
+Touched files:
+- `workspace/scripts/analyze_inquiry_momentum.py`
+- `tests_unittest/test_analyze_inquiry_momentum.py`
+
+Implementation notes:
+- Added grouped aggregator over `wander_log.jsonl` with `unknown` fallback trigger.
+- Outputs per trigger: `n`, `mean`, `median`, `std`, `exceed_rate`.
+
+Verification:
+- `python3 -m unittest tests_unittest.test_analyze_inquiry_momentum -v`
+  - PASS (1 test)
+- `python3 workspace/scripts/analyze_inquiry_momentum.py --log-path /tmp/inquiry_log_fixture.jsonl --json`
+  - PASS; deterministic grouped stats emitted.
+
+Rollback:
+- `git revert <item7_commit_sha>`
