@@ -138,3 +138,31 @@ Key markers observed:
 ## Residual Uncertainties
 - fetched `origin/main` did not include prior Tranche B merge in this environment; this tranche was implemented on the canonical fetched head (`728877a...`).
 - runtime assistant vLLM health on `:8001` remains host-dependent and outside these repo changes.
+
+## Post-Commit Verification
+$ python3 -m unittest -v tests_unittest.test_policy_router_capability_classes tests_unittest.test_policy_router_context_guard tests_unittest.test_policy_router_task_router
+Ran 13 tests in 1.272s
+OK
+
+$ node tests/provider_diag_format.test.js
+PASS provider_diag includes grep-friendly providers_summary section
+provider_diag_format tests complete
+
+$ node tests/provider_diag_never_unknown.test.js
+PASS journal unavailable maps to UNAVAILABLE and never UNKNOWN
+PASS journal marker maps to DEGRADED reason from marker
+PASS journal with no marker maps to NO_BLOCK_MARKER and DOWN
+provider_diag_never_unknown tests complete
+
+$ node scripts/system2/provider_diag.js || true
+Confirmed context/routing diagnostics markers present with configured values:
+- `router_local_context_max_tokens_assistant=32768`
+- `router_local_context_soft_limit_tokens=24576`
+- `router_context_compression_enabled=true`
+- `router_remote_routing_enabled=false`
+
+## Commit Sequence
+- `90769c3` feat(context): raise local context limits; add compression fallback and structured overflow
+- `1b4ccf6` feat(router): task-class routing local-first; remote only with breaker+budget
+- `20d8555` feat(diag): surface context limits, compression, and router policy
+- `cc34819` docs(audit): record tranche C capacity+routing evidence
