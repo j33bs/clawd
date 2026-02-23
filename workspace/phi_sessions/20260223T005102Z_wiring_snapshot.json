@@ -1,0 +1,24 @@
+{
+  "commit_sha": "2e02e515c150318ca1a775132c2fed822c0b136c",
+  "dataset_version": "hivemind_wiring_snapshot_v1",
+  "date_utc": "2026-02-23T00:51:02Z",
+  "host": "Mac-2.modem",
+  "node": "Dali/C_Lawd",
+  "wiring": {
+    "flags": {
+      "ENABLE_MURMURATION": false,
+      "ENABLE_PHYSARUM_ROUTER": false,
+      "ENABLE_RESERVOIR": false,
+      "ENABLE_TRAIL_MEMORY": false,
+      "OPENCLAW_COUNTERFACTUAL_REPLAY": false
+    },
+    "modules": {
+      "active_inference": "wired_but_passive",
+      "peer_graph": "wired_but_passive",
+      "physarum_router": "wired_but_passive",
+      "reservoir": "wired_but_passive",
+      "trail_memory": "wired_but_passive"
+    },
+    "seed": 23
+  }
+}

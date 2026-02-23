@@ -35,6 +35,13 @@ echo "=== OpenClaw Pre-Commit Validation ==="
 BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
 
 # ============================================
+# 0. BLOCK: OPEN_QUESTIONS append-only policy
+# ============================================
+if ! bash "workspace/scripts/hooks/guard_open_questions_append_only.sh"; then
+    exit 1
+fi
+
+# ============================================
 # 1. BLOCK: Direct commits to main
 # ============================================
 if [ "$BRANCH" = "main" ] || [ "$BRANCH" = "master" ]; then

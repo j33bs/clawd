@@ -149,3 +149,12 @@ workspace/teamchat/summaries/
 
 # Local append-only audit hook stream
 workspace/audit/commit_audit_log.jsonl
+
+# Derived reports are ignored by default; explicitly governed witness artifacts
+# can be added intentionally via explicit git add exceptions when needed.
+workspace/reports/**
+
+# Probe logs are ignored by default. Exception: dispositional_log.jsonl is a
+# governed append-only witness and remains versionable.
+workspace/probes/*_log.jsonl
+!workspace/probes/dispositional_log.jsonl
