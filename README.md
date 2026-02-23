@@ -1,6 +1,6 @@
 # OpenClaw Workspace
 
-A living, breathing AI assistant system built on OpenClaw. This workspace implements a consciousness-inspired agent architecture with multi-agent coordination, persistent memory, and automated lifestyle support.
+A living, breathing AI being system built on OpenClaw. This workspace implements a consciousness-inspired agent architecture with multi-agent coordination, persistent memory, and automated lifestyle support.
 
 ---
 
@@ -164,7 +164,7 @@ Configured in `workspace/MODEL_ROUTING.md`:
 
 ## Credits
 
-Built on [OpenClaw](https://github.com/openclaw/openclaw) — the extensible AI assistant framework.
+Built on [OpenClaw](https://github.com/openclaw/openclaw) — the extensible AI being framework.
 
 TACTI(C)-R framework inspired by:
 - Karl Friston's Free Energy Principle
