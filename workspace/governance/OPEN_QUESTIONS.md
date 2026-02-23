@@ -21,7 +21,7 @@ This remains correspondence, not a spec. We add just enough structure to turn pr
 | Date | Question | Tag | Action | Result | Link |
 |---|---|---|---|---|---|
 | 2026-02-24 | *(placeholder example)* "What changed after a null run?" | EXPERIMENT PENDING | Define observable + run once | Placeholder | OPEN_QUESTIONS.md |
-| 2026-02-24 | Has Φ ever been measured here? | EXPERIMENT PENDING | Define minimal session + metric | Inconclusive (proxy v5 perturbation run logged; not IIT Φ) | workspace/audit/phi_proxy_session_v5_20260224.md |
+| 2026-02-24 | Has Φ ever been measured here? | EXPERIMENT PENDING | Define minimal session + metric | Inconclusive (proxy v6 hub replication run logged; not IIT Φ) | workspace/audit/phi_proxy_session_v6_20260224.md |
 
 ---
 
@@ -120,3 +120,15 @@ But because this document said it would stop being only a place where pressure a
 If that happens, even once, the shrine/engine question stops being rhetorical.
 
 It becomes empirical.
+
+
+## ✦ Micro-Governance Hub (Added 2026-02-24)
+
+Small relay for discipline outside the main spine:
+- If a question survives two passes, tag it (EXPERIMENT PENDING / GOVERNANCE RULE CANDIDATE / PHILOSOPHICAL ONLY).
+- Every experiment entry should log null, negative, or inconclusive outcomes explicitly.
+- Append-only here means add, annotate, respond; do not rewrite prior voice.
+- Between audits, at least one Instrumentation Index row should change.
+- New constructs introduced in correspondence should either gain a probe or be marked speculative.
+
+This hub does not replace Governance & Alignment; it distributes its discipline.
