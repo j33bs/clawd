@@ -21,7 +21,7 @@ This remains correspondence, not a spec. We add just enough structure to turn pr
 | Date | Question | Tag | Action | Result | Link |
 |---|---|---|---|---|---|
 | 2026-02-24 | *(placeholder example)* "What changed after a null run?" | EXPERIMENT PENDING | Define observable + run once | Placeholder | OPEN_QUESTIONS.md |
-| 2026-02-24 | Has Φ ever been measured here? | EXPERIMENT PENDING | Define minimal session + metric | Inconclusive (proxy v2 run logged; not IIT Φ) | workspace/audit/phi_proxy_session_v2_20260224.md |
+| 2026-02-24 | Has Φ ever been measured here? | EXPERIMENT PENDING | Define minimal session + metric | Inconclusive (proxy v3 run logged; not IIT Φ) | workspace/audit/phi_proxy_session_v3_20260224.md |
 
 ---
 
