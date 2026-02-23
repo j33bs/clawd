@@ -18,6 +18,7 @@ const { makeEnvelope, SCHEMA_ID } = require('./event_envelope');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const { execFileSync } = require('node:child_process');
 const http = require('node:http');
 const https = require('node:https');
 
@@ -74,18 +75,75 @@ function appendEnvelope(env, envelope) {
   }
 }
 
+function parseCoderStartBlocked(line) {
+  if (!line || !line.includes('VLLM_CODER_START_BLOCKED')) return null;
+  const reasonMatch = String(line).match(/reason=([A-Z0-9_]+)/);
+  const freeMatch = String(line).match(/free_mb=([A-Za-z0-9._-]+)/);
+  const minMatch = String(line).match(/min_free_mb=([A-Za-z0-9._-]+)/);
+  return {
+    reason: (reasonMatch && reasonMatch[1]) ? reasonMatch[1] : 'UNKNOWN',
+    free_mb: (freeMatch && freeMatch[1]) ? freeMatch[1] : 'na',
+    min_free_mb: (minMatch && minMatch[1]) ? minMatch[1] : 'na'
+  };
+}
+
+function readCoderJournalTail(env) {
+  if (env.PROVIDER_DIAG_JOURNAL_TEXT) {
+    return { ok: true, text: String(env.PROVIDER_DIAG_JOURNAL_TEXT), source: 'env_override' };
+  }
+  try {
+    const out = execFileSync(
+      'journalctl',
+      ['--user', '-u', 'openclaw-vllm-coder.service', '-n', '50', '--no-pager'],
+      { encoding: 'utf8' }
+    );
+    return { ok: true, text: String(out || ''), source: 'journalctl' };
+  } catch (err) {
+    const code = err && (err.code || err.name);
+    if (code === 'ENOENT' || code === 'EACCES') {
+      return { ok: false, unavailable: true, reason: String(code || 'unavailable') };
+    }
+    return { ok: false, unavailable: false, reason: String(code || 'error') };
+  }
+}
+
 function detectCoderDegradedReason(env) {
+  const journal = readCoderJournalTail(env);
+  if (journal.ok) {
+    const lines = String(journal.text || '').split(/\r?\n/).reverse();
+    for (const line of lines) {
+      const parsed = parseCoderStartBlocked(line);
+      if (parsed) {
+        return {
+          reason: parsed.reason,
+          note: `source=${journal.source} free_mb=${parsed.free_mb} min_free_mb=${parsed.min_free_mb}`
+        };
+      }
+    }
+  } else if (journal.unavailable) {
+    return {
+      reason: 'UNAVAILABLE',
+      note: `journal_unavailable:${journal.reason}`
+    };
+  }
+
   const target = coderLogPath(env);
   try {
-    if (!fs.existsSync(target)) return 'UNKNOWN';
+    if (!fs.existsSync(target)) return { reason: 'UNKNOWN', note: 'no_file_log' };
     const content = fs.readFileSync(target, 'utf8');
-    const lines = content.trim().split(/\r?\n/);
-    const tail = lines.slice(-20).reverse().find((line) => line.includes('VRAM_GUARD_BLOCKED'));
-    if (!tail) return 'UNKNOWN';
-    const m = tail.match(/reason=([A-Z0-9_]+)/);
-    return (m && m[1]) ? m[1] : 'VRAM_LOW';
-  } catch (_) {
-    return 'UNKNOWN';
+    const lines = content.trim().split(/\r?\n/).reverse();
+    for (const line of lines.slice(0, 50)) {
+      const parsed = parseCoderStartBlocked(line);
+      if (parsed) {
+        return {
+          reason: parsed.reason,
+          note: `source=file_log free_mb=${parsed.free_mb} min_free_mb=${parsed.min_free_mb}`
+        };
+      }
+    }
+    return { reason: 'UNKNOWN', note: 'no_marker' };
+  } catch (err) {
+    return { reason: 'UNKNOWN', note: `file_read_error:${(err && (err.code || err.name)) || 'error'}` };
   }
 }
 
@@ -299,8 +357,11 @@ async function generateDiagnostics(envInput) {
   const localProbe = await probeLocalVllm(env);
   const coderProbe = await probeCoderVllm(env);
   const replay = checkReplayWritable(env);
-  const coderDegradedReason = coderProbe.endpoint_present ? 'OK' : detectCoderDegradedReason(env);
-  const coderStatus = coderProbe.endpoint_present ? 'UP' : (coderDegradedReason === 'UNKNOWN' ? 'DOWN' : 'DEGRADED');
+  const coderDegraded = coderProbe.endpoint_present ? { reason: 'OK', note: 'endpoint_reachable' } : detectCoderDegradedReason(env);
+  const coderDegradedReason = coderDegraded.reason || 'UNKNOWN';
+  const coderStatus = coderProbe.endpoint_present ? 'UP' : (
+    (coderDegradedReason === 'UNKNOWN' || coderDegradedReason === 'UNAVAILABLE') ? 'DOWN' : 'DEGRADED'
+  );
 
   lines.push(`local_vllm_endpoint_present=${localProbe.endpoint_present ? 'true' : 'false'}`);
   lines.push(`local_vllm_models_fetch_ok=${localProbe.models_fetch_ok ? 'true' : 'false'}`);
@@ -313,6 +374,7 @@ async function generateDiagnostics(envInput) {
   lines.push(`coder_vllm_models_count=${coderProbe.models_count}`);
   lines.push(`coder_status=${coderStatus}`);
   lines.push(`coder_degraded_reason=${coderDegradedReason}`);
+  lines.push(`coder_degraded_note=${coderDegraded.note || ''}`);
   lines.push(`replay_log_path=${replay.path}`);
   lines.push(`replay_log_writable=${replay.writable ? 'true' : 'false'}`);
   lines.push(`replay_log_reason=${replay.reason}`);
