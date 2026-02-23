@@ -1770,3 +1770,55 @@ $ systemctl --user status openclaw-vllm-coder.service --no-pager -l || true
 Feb 23 18:42:08 jeebs-Z490-AORUS-MASTER systemd[1648]: Started openclaw-vllm-coder.service - OpenClaw local vLLM coder lane (:8002).
 $ curl -fsS -m 5 http://127.0.0.1:8002/health && echo FINAL_CODER_HEALTH_OK || echo FINAL_CODER_HEALTH_DOWN
 FINAL_CODER_HEALTH_OK
+### Post-merge final snapshot
+$ curl -fsS -m 5 http://127.0.0.1:8002/health && echo FINAL_CODER_HEALTH_OK || echo FINAL_CODER_HEALTH_DOWN
+FINAL_CODER_HEALTH_OK
+$ node scripts/system2/provider_diag.js || true
+=== System-2 Provider Diagnostics (safe) ===
+freecompute_enabled=false
+freecompute_env_keys_seen=(none)
+secrets_bridge_enabled=false
+
+local_vllm_endpoint_present=false
+local_vllm_models_fetch_ok=false
+local_vllm_models_count=0
+local_vllm_generation_probe_ok=false
+local_vllm_generation_probe_reason=unknown
+coder_vllm_endpoint=http://127.0.0.1:8002/v1/models
+coder_vllm_endpoint_present=true
+coder_vllm_models_fetch_ok=true
+coder_vllm_models_count=1
+coder_status=UP
+coder_degraded_reason=OK
+coder_degraded_note=endpoint_reachable
+replay_log_path=/home/jeebs/.local/share/openclaw/replay/replay.jsonl
+replay_log_writable=true
+replay_log_reason=ok
+event_envelope_schema=openclaw.event_envelope.v1
+
+event_envelope_log_path=/home/jeebs/.local/share/openclaw/events/gate_health.jsonl
+event_envelope_write_ok=true
+event_envelope_write_reason=ok
+
+canary_recommendations:
+- run: python3 scripts/dali_canary_runner.py
+- optional timer: systemctl --user enable --now openclaw-canary.timer
+- if coder DEGRADED with VRAM_LOW, reduce load or raise VLLM_CODER_MIN_FREE_VRAM_MB policy
+
+providers:
+- gemini: configured=no enabled=yes eligible=no reason=missing_api_key auth_env_keys=OPENCLAW_GEMINI_API_KEY
+- groq: configured=no enabled=yes eligible=no reason=missing_api_key auth_env_keys=OPENCLAW_GROQ_API_KEY
+- local_vllm: configured=yes enabled=yes eligible=no reason=generation_probe_failed auth_env_keys=OPENCLAW_VLLM_API_KEY
+- minimax-portal: configured=no enabled=yes eligible=no reason=missing_api_key auth_env_keys=OPENCLAW_MINIMAX_PORTAL_API_KEY
+- openrouter: configured=no enabled=yes eligible=no reason=missing_api_key auth_env_keys=OPENCLAW_OPENROUTER_API_KEY
+- qwen_alibaba: configured=no enabled=yes eligible=no reason=missing_api_key auth_env_keys=OPENCLAW_QWEN_API_KEY
+
+providers_summary:
+gemini: configured=no enabled=yes eligible=no reason=missing_api_key
+groq: configured=no enabled=yes eligible=no reason=missing_api_key
+local_vllm: configured=yes enabled=yes eligible=no reason=generation_probe_failed
+minimax-portal: configured=no enabled=yes eligible=no reason=missing_api_key
+openrouter: configured=no enabled=yes eligible=no reason=missing_api_key
+qwen_alibaba: configured=no enabled=yes eligible=no reason=missing_api_key
+$ python3 scripts/dali_canary_runner.py || true
+CANARY status=OK coder=UP replay=WRITABLE pairing=OK ts=2026-02-23T08:46:15Z
