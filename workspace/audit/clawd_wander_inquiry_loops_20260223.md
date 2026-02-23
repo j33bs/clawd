@@ -290,3 +290,24 @@ Verification:
 
 Rollback:
 - `git revert <item10_commit_sha>`
+
+## Final integration gates
+Commands run:
+- `python3 -m unittest tests_unittest.test_research_wanderer_logging tests_unittest.test_research_wanderer_observe_outcome tests_unittest.test_research_wanderer_staging tests_unittest.test_research_wanderer_open_questions_pipeline tests_unittest.test_hivemind_dynamics_pipeline tests_unittest.test_hivemind_trails tests_unittest.test_session_context_assembler tests_unittest.test_render_trail_landscape tests_unittest.test_analyze_inquiry_momentum tests_unittest.test_extract_open_question_commitments tests_unittest.test_inv_003_scaffold -v`
+- `bash workspace/scripts/tests/test_guard_open_questions_append_only.sh`
+- `node --test workspace/skills/**/tests/*.test.js`
+- `bash workspace/scripts/verify_coding_ladder.sh`
+- `bash workspace/scripts/verify_dream_consolidation.sh`
+- `bash workspace/scripts/verify_intent_failure_scan.sh`
+
+Results:
+- Python targeted suite: PASS (22 tests)
+- OPEN_QUESTIONS hook test: PASS (expected reject + bypass path)
+- Node skills suite: PASS (30 tests)
+- Governance verify scripts: PASS (`ok` for all three)
+
+Runtime artifact hygiene:
+- During verification, `workspace/state/tacti_cr/events.jsonl` was mutated incidentally and runtime logs were generated under `workspace/memory/`.
+- Restored/removed to keep branch scope clean:
+  - `git restore --worktree --staged workspace/state/tacti_cr/events.jsonl`
+  - `rm -f workspace/memory/wander_log.jsonl workspace/memory/wander_observed_outcomes.jsonl`
