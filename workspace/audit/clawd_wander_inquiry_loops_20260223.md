@@ -266,3 +266,27 @@ Verification:
 
 Rollback:
 - `git revert <item9_commit_sha>`
+
+## Item 10 — Wander-to-contribution staging pipeline
+Intent:
+- Auto-stage candidate OPEN_QUESTIONS contributions when inquiry momentum is high and philosophical signals are present.
+
+Touched files:
+- `workspace/scripts/research_wanderer.py`
+- `tests_unittest/test_research_wanderer_staging.py`
+
+Implementation notes:
+- Added philosophical tag inference markers: `philosophy|metaphysics|epistemology|ethics|ontology`.
+- Added staging output controls:
+  - draft file: `workspace/staging/open_questions_drafts/{session_id}.md` (configurable via flags/env)
+  - review index: `workspace/staging/open_questions_drafts/index.jsonl`
+- No automatic merge into `OPEN_QUESTIONS.md`; staging only.
+
+Verification:
+- `python3 -m unittest tests_unittest.test_research_wanderer_staging tests_unittest.test_research_wanderer_observe_outcome tests_unittest.test_research_wanderer_logging tests_unittest.test_research_wanderer_open_questions_pipeline -v`
+  - PASS (6 tests)
+- Staging header sample generated at `/tmp/wander_item10_drafts/item10-session.md`:
+  - contains session_id, trigger, inquiry score/threshold, and referenced trail IDs.
+
+Rollback:
+- `git revert <item10_commit_sha>`

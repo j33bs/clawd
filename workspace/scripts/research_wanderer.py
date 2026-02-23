@@ -24,6 +24,8 @@ DEFAULT_OPEN_QUESTIONS = REPO_ROOT / "workspace" / "OPEN_QUESTIONS.md"
 DEFAULT_WANDER_LOG = REPO_ROOT / "workspace" / "memory" / "wander_log.jsonl"
 DEFAULT_TRAILS_PATH = REPO_ROOT / "workspace" / "hivemind" / "data" / "trails.jsonl"
 DEFAULT_OBSERVED_OUTCOMES = REPO_ROOT / "workspace" / "memory" / "wander_observed_outcomes.jsonl"
+DEFAULT_DRAFT_DIR = REPO_ROOT / "workspace" / "staging" / "open_questions_drafts"
+DEFAULT_DRAFT_INDEX = DEFAULT_DRAFT_DIR / "index.jsonl"
 
 HIVEMIND_ROOT = REPO_ROOT / "workspace" / "hivemind"
 if str(HIVEMIND_ROOT) not in sys.path:
@@ -41,6 +43,13 @@ EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
 TOKEN_RE = re.compile(r"\b[A-Za-z0-9_-]{24,}\b")
 ARABIC_RE = re.compile(r"^\s*(\d+)\.\s+")
 ROMAN_RE = re.compile(r"^\s*([IVXLCDM]+)\.\s+", re.IGNORECASE)
+PHILOSOPHY_MARKERS = [
+    "philosophy",
+    "metaphysics",
+    "epistemology",
+    "ethics",
+    "ontology",
+]
 
 
 @dataclass
@@ -82,6 +91,12 @@ def _inquiry_momentum(candidates: list[QuestionCandidate]) -> dict[str, float]:
     return {"score": round(score, 6), "avg_significance": round(avg_sig, 6), "question_count_score": 0.0, "token_diversity": 0.0}
 
 
+def _philosophy_tags(text: str) -> list[str]:
+    lowered = str(text).lower()
+    tags = [marker for marker in PHILOSOPHY_MARKERS if marker in lowered]
+    return sorted(dict.fromkeys(tags))
+
+
 def _write_trails(
     *,
     selected: list[QuestionCandidate],
@@ -98,7 +113,7 @@ def _write_trails(
         trail_id = store.add(
             {
                 "text": _sanitize(cand.text),
-                "tags": ["wander", "inquiry"],
+                "tags": ["wander", "inquiry", *_philosophy_tags(cand.text)],
                 "strength": max(0.1, float(cand.significance)),
                 "source": "wander",
                 "meta": {
@@ -170,6 +185,65 @@ def observe_wander_outcome(
     }
     _append_jsonl(observed_path, marker)
     return {"called": True, "reason": "recorded", "path": path}
+
+
+def stage_open_questions_draft(
+    *,
+    session_id: str,
+    run_id: str,
+    trigger: str,
+    score: float,
+    threshold: float,
+    selected: list[QuestionCandidate],
+    trail_ids: list[str],
+    drafts_dir: Path,
+    index_path: Path,
+    dry_run: bool,
+) -> dict[str, Any]:
+    if score < threshold:
+        return {"staged": False, "reason": "below_threshold"}
+    philosophical = [q for q in selected if _philosophy_tags(q.text)]
+    if not philosophical:
+        return {"staged": False, "reason": "no_philosophical_trails"}
+
+    ts = _utc_now()
+    draft_name = f"{session_id}.md"
+    draft_path = drafts_dir / draft_name
+    lines = [
+        f"# Open Questions Draft ({session_id})",
+        "",
+        f"- timestamp_utc: {ts}",
+        f"- run_id: {run_id}",
+        f"- session_id: {session_id}",
+        f"- trigger: {trigger}",
+        f"- inquiry_momentum_score: {score:.3f}",
+        f"- threshold: {threshold:.3f}",
+        f"- trails_referenced: {', '.join(trail_ids) if trail_ids else '(none)'}",
+        "",
+        "## Candidate section (review required)",
+        "- Drafted automatically from wander session; do not auto-merge.",
+    ]
+    for idx, cand in enumerate(philosophical, start=1):
+        lines.append(f"- Q{idx}: {_sanitize(cand.text)}")
+    content = "\n".join(lines) + "\n"
+
+    if not dry_run:
+        drafts_dir.mkdir(parents=True, exist_ok=True)
+        draft_path.write_text(content, encoding="utf-8")
+        _append_jsonl(
+            index_path,
+            {
+                "timestamp": ts,
+                "session_id": session_id,
+                "run_id": run_id,
+                "trigger": trigger,
+                "score": float(score),
+                "threshold": float(threshold),
+                "draft_path": str(draft_path),
+                "trail_ids": list(trail_ids),
+            },
+        )
+    return {"staged": True, "draft_path": str(draft_path), "philosophical_count": len(philosophical)}
 
 
 def _roman_to_int(value: str) -> int:
@@ -317,10 +391,13 @@ def main() -> int:
     parser.add_argument("--session-id", default=os.environ.get("OPENCLAW_SESSION_ID", uuid.uuid4().hex[:16]))
     parser.add_argument("--trigger", default=os.environ.get("OPENCLAW_WANDER_TRIGGER", "manual"))
     parser.add_argument("--inquiry-threshold", type=float, default=float(os.environ.get("OPENCLAW_INQUIRY_MOMENTUM_THRESHOLD", "0.65")))
+    parser.add_argument("--draft-threshold", type=float, default=float(os.environ.get("OPENCLAW_WANDER_DRAFT_THRESHOLD", "0.65")))
     parser.add_argument("--open-questions-path", default=str(DEFAULT_OPEN_QUESTIONS))
     parser.add_argument("--wander-log-path", default=str(Path(os.environ.get("OPENCLAW_WANDER_LOG_PATH", str(DEFAULT_WANDER_LOG)))))
     parser.add_argument("--trail-path", default=str(Path(os.environ.get("OPENCLAW_WANDER_TRAIL_PATH", str(DEFAULT_TRAILS_PATH)))))
     parser.add_argument("--observed-outcomes-path", default=str(Path(os.environ.get("OPENCLAW_WANDER_OBSERVED_PATH", str(DEFAULT_OBSERVED_OUTCOMES)))))
+    parser.add_argument("--draft-dir", default=str(Path(os.environ.get("OPENCLAW_WANDER_DRAFT_DIR", str(DEFAULT_DRAFT_DIR)))))
+    parser.add_argument("--draft-index-path", default=str(Path(os.environ.get("OPENCLAW_WANDER_DRAFT_INDEX_PATH", str(DEFAULT_DRAFT_INDEX)))))
     parser.add_argument("--session-context-path", default=str(Path(os.environ.get("OPENCLAW_SESSION_CONTEXT_PATH", str(REPO_ROOT / "workspace" / "memory" / "session_context.md")))))
     parser.add_argument("--session-context-top-k", type=int, default=int(os.environ.get("OPENCLAW_SESSION_CONTEXT_TOP_K", "7")))
     parser.add_argument("--dry-run", action="store_true")
@@ -389,6 +466,22 @@ def main() -> int:
             )
         except Exception as exc:
             errors.append(f"observe_outcome_failed:{type(exc).__name__}:{exc}")
+    draft_state = {"staged": False, "reason": "not_applicable"}
+    try:
+        draft_state = stage_open_questions_draft(
+            session_id=str(args.session_id),
+            run_id=str(args.run_id),
+            trigger=str(args.trigger or "unknown"),
+            score=score,
+            threshold=float(args.draft_threshold),
+            selected=selected,
+            trail_ids=trail_ids,
+            drafts_dir=Path(args.draft_dir),
+            index_path=Path(args.draft_index_path),
+            dry_run=bool(args.dry_run),
+        )
+    except Exception as exc:
+        errors.append(f"draft_stage_failed:{type(exc).__name__}:{exc}")
     log_row = {
         "timestamp": _utc_now(),
         "session_id": str(args.session_id),
@@ -422,6 +515,7 @@ def main() -> int:
     result["trails_written_count"] = len(trail_ids)
     result["observe_outcome"] = observe_state
     result["session_context"] = context_status
+    result["open_questions_draft"] = draft_state
     if errors:
         result["errors"] = errors
 
