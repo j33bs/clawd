@@ -10,7 +10,7 @@ import sys
 if str(REPO_ROOT / "workspace" / "scripts") not in sys.path:
     sys.path.insert(0, str(REPO_ROOT / "workspace" / "scripts"))
 
-from policy_router import PolicyRouter, classify_intent
+from policy_router import PolicyRouter, classify_intent, classify_task_class
 
 
 class TestPolicyRouterCapabilityClasses(unittest.TestCase):
@@ -20,6 +20,12 @@ class TestPolicyRouterCapabilityClasses(unittest.TestCase):
             "defaults": {
                 "allowPaid": True,
                 "maxTokensPerRequest": 2048,
+                "local_context_max_tokens_assistant": 32768,
+                "local_context_max_tokens_coder": 32768,
+                "local_context_soft_limit_tokens": 24576,
+                "local_context_overflow_policy": "compress",
+                "remoteRoutingEnabled": True,
+                "remoteAllowlistTaskClasses": ["planning_synthesis", "research_browse", "code_generation_large"],
                 "circuitBreaker": {"failureThreshold": 3, "cooldownSec": 60, "windowSec": 60, "failOn": []},
             },
             "budgets": {
@@ -81,11 +87,11 @@ class TestPolicyRouterCapabilityClasses(unittest.TestCase):
             sel = router.select_model("conversation", {"input_text": "run tests and refactor src/app.py"})
             self.assertEqual(sel["provider"], "local_vllm_assistant", sel)
 
-    def test_planning_synthesis_prefers_cloud(self):
+    def test_planning_synthesis_within_local_limit_stays_local_first(self):
         with tempfile.TemporaryDirectory() as td:
             router = self._build_router(Path(td))
             sel = router.select_model("conversation", {"input_text": "plan architecture and evaluate trade-offs"})
-            self.assertEqual(sel["provider"], "openai_gpt52_chat", sel)
+            self.assertEqual(sel["provider"], "local_vllm_assistant", sel)
 
     def test_router_logs_request_id_latency_outcome(self):
         with tempfile.TemporaryDirectory() as td:
@@ -115,6 +121,16 @@ class TestPolicyRouterCapabilityClasses(unittest.TestCase):
         self.assertEqual(classify_intent("Write code to parse jsonl"), "mechanical_execution")
         self.assertEqual(classify_intent("Apply this patch to the repo"), "mechanical_execution")
         self.assertEqual(classify_intent("Explain this code and apply the patch"), "mechanical_execution")
+
+    def test_task_classifier_additional_classes(self):
+        self.assertEqual(classify_task_class("browse web sources and cite links"), "research_browse")
+        self.assertEqual(
+            classify_task_class(
+                "implement code changes across modules",
+                {"expected_change_size": "large", "expected_loc": 400},
+            ),
+            "code_generation_large",
+        )
 
     def test_explain_and_apply_patch_routes_to_mechanical_provider(self):
         with tempfile.TemporaryDirectory() as td:

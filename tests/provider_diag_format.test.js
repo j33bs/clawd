@@ -28,6 +28,11 @@ async function main() {
     assert.match(out, /^coder_status=/m);
     assert.match(out, /^coder_degraded_reason=/m);
     assert.match(out, /^replay_log_writable=/m);
+    assert.match(out, /^router_local_context_max_tokens_assistant=/m);
+    assert.match(out, /^router_local_context_soft_limit_tokens=/m);
+    assert.match(out, /^router_context_compression_enabled=/m);
+    assert.match(out, /^router_remote_routing_enabled=/m);
+    assert.match(out, /^router_budget_state_loaded=/m);
     assert.match(out, /^event_envelope_schema=openclaw\.event_envelope\.v1$/m);
     assert.match(out, /^canary_recommendations:\n/m);
 

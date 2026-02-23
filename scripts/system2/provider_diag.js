@@ -52,6 +52,83 @@ function coderLogPath(env) {
   return env.OPENCLAW_VLLM_CODER_LOG_PATH || path.join(os.homedir(), '.local', 'state', 'openclaw', 'vllm-coder.log');
 }
 
+function repoRoot() {
+  return path.resolve(__dirname, '..', '..');
+}
+
+function llmPolicyPath(env) {
+  return env.OPENCLAW_LLM_POLICY_PATH || path.join(repoRoot(), 'workspace', 'policy', 'llm_policy.json');
+}
+
+function routerBudgetPath(env) {
+  return env.OPENCLAW_ROUTER_BUDGET_PATH || path.join(repoRoot(), 'itc', 'llm_budget.json');
+}
+
+function loadPolicyRoutingContext(env) {
+  const target = llmPolicyPath(env);
+  try {
+    const raw = JSON.parse(fs.readFileSync(target, 'utf8'));
+    const defaults = (raw && raw.defaults && typeof raw.defaults === 'object') ? raw.defaults : {};
+    const remoteRaw = env.OPENCLAW_REMOTE_ROUTING_ENABLED != null
+      ? String(env.OPENCLAW_REMOTE_ROUTING_ENABLED)
+      : (defaults.remoteRoutingEnabled ? '1' : '0');
+    return {
+      ok: true,
+      path: target,
+      local_context_max_tokens_assistant: Number(defaults.local_context_max_tokens_assistant || 32768),
+      local_context_max_tokens_coder: Number(defaults.local_context_max_tokens_coder || 32768),
+      local_context_soft_limit_tokens: Number(defaults.local_context_soft_limit_tokens || 24576),
+      local_context_overflow_policy: String(defaults.local_context_overflow_policy || 'compress'),
+      remote_routing_enabled: /^(1|true|yes|on)$/i.test(remoteRaw),
+      remote_allowlist_task_classes: Array.isArray(defaults.remoteAllowlistTaskClasses)
+        ? defaults.remoteAllowlistTaskClasses.map((v) => String(v))
+        : []
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      path: target,
+      local_context_max_tokens_assistant: 32768,
+      local_context_max_tokens_coder: 32768,
+      local_context_soft_limit_tokens: 24576,
+      local_context_overflow_policy: 'compress',
+      remote_routing_enabled: false,
+      remote_allowlist_task_classes: [],
+      reason: (err && (err.code || err.name)) || 'unknown'
+    };
+  }
+}
+
+function loadRouterBudgetState(env) {
+  const target = routerBudgetPath(env);
+  try {
+    const raw = JSON.parse(fs.readFileSync(target, 'utf8'));
+    const date = String(raw && raw.date ? raw.date : '');
+    const intents = (raw && raw.intents && typeof raw.intents === 'object') ? raw.intents : {};
+    const tiers = (raw && raw.tiers && typeof raw.tiers === 'object') ? raw.tiers : {};
+    return {
+      ok: true,
+      path: target,
+      date,
+      conversation_tokens: Number((intents.conversation && intents.conversation.tokens) || 0),
+      coding_tokens: Number((intents.coding && intents.coding.tokens) || 0),
+      auth_tokens: Number((tiers.auth && tiers.auth.tokens) || 0),
+      paid_tokens: Number((tiers.paid && tiers.paid.tokens) || 0)
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      path: target,
+      date: '',
+      conversation_tokens: 0,
+      coding_tokens: 0,
+      auth_tokens: 0,
+      paid_tokens: 0,
+      reason: (err && (err.code || err.name)) || 'unknown'
+    };
+  }
+}
+
 function checkReplayWritable(env) {
   const target = replayLogPath(env);
   try {
@@ -360,6 +437,8 @@ async function generateDiagnostics(envInput) {
   const localProbe = await probeLocalVllm(env);
   const coderProbe = await probeCoderVllm(env);
   const replay = checkReplayWritable(env);
+  const routingCtx = loadPolicyRoutingContext(env);
+  const budgetState = loadRouterBudgetState(env);
   const coderDegraded = coderProbe.endpoint_present ? { reason: 'OK', note: 'endpoint_reachable' } : detectCoderDegradedReason(env);
   const coderDegradedReason = coderDegraded.reason || 'NO_BLOCK_MARKER';
   const coderStatus = coderProbe.endpoint_present ? 'UP' : (
@@ -381,6 +460,22 @@ async function generateDiagnostics(envInput) {
   lines.push(`replay_log_path=${replay.path}`);
   lines.push(`replay_log_writable=${replay.writable ? 'true' : 'false'}`);
   lines.push(`replay_log_reason=${replay.reason}`);
+  lines.push(`router_policy_path=${routingCtx.path}`);
+  lines.push(`router_policy_loaded=${routingCtx.ok ? 'true' : 'false'}`);
+  lines.push(`router_local_context_max_tokens_assistant=${routingCtx.local_context_max_tokens_assistant}`);
+  lines.push(`router_local_context_max_tokens_coder=${routingCtx.local_context_max_tokens_coder}`);
+  lines.push(`router_local_context_soft_limit_tokens=${routingCtx.local_context_soft_limit_tokens}`);
+  lines.push(`router_local_context_overflow_policy=${routingCtx.local_context_overflow_policy}`);
+  lines.push(`router_context_compression_enabled=${routingCtx.local_context_overflow_policy === 'reject' ? 'false' : 'true'}`);
+  lines.push(`router_remote_routing_enabled=${routingCtx.remote_routing_enabled ? 'true' : 'false'}`);
+  lines.push(`router_remote_allowlist_task_classes=${routingCtx.remote_allowlist_task_classes.length ? routingCtx.remote_allowlist_task_classes.join(',') : '(none)'}`);
+  lines.push(`router_budget_state_path=${budgetState.path}`);
+  lines.push(`router_budget_state_loaded=${budgetState.ok ? 'true' : 'false'}`);
+  lines.push(`router_budget_date=${budgetState.date || '(none)'}`);
+  lines.push(`router_budget_conversation_tokens=${budgetState.conversation_tokens}`);
+  lines.push(`router_budget_coding_tokens=${budgetState.coding_tokens}`);
+  lines.push(`router_budget_auth_tokens=${budgetState.auth_tokens}`);
+  lines.push(`router_budget_paid_tokens=${budgetState.paid_tokens}`);
   lines.push(`event_envelope_schema=${SCHEMA_ID}`);
   lines.push('');
 
@@ -394,7 +489,9 @@ async function generateDiagnostics(envInput) {
       local_vllm_generation_probe_ok: localProbe.generation_probe_ok,
       coder_status: coderStatus,
       coder_degraded_reason: coderDegradedReason,
-      replay_log_writable: replay.writable
+      replay_log_writable: replay.writable,
+      router_remote_routing_enabled: routingCtx.remote_routing_enabled,
+      router_local_context_soft_limit_tokens: routingCtx.local_context_soft_limit_tokens
     }
   });
   const envelopeWrite = appendEnvelope(env, envelope);
