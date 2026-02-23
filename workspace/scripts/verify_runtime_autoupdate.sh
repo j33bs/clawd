@@ -36,6 +36,8 @@ grep -q "dry_run=1" "$log_file"
 grep -q "new_sha=${current_sha}" "$log_file"
 grep -q "target_branch=${current_branch}" "$log_file"
 grep -q "planned:" "$log_file"
+grep -q "planned:health_gate:pre:" "$log_file"
+grep -q "planned:health_gate:post:" "$log_file"
 if grep -q "executed:deps:npm ci" "$log_file"; then
   echo "error: dry-run executed npm ci" >&2
   exit 1
