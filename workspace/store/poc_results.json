@@ -1,0 +1,28 @@
+{
+  "all_passed": true,
+  "rebuild_seconds": 5.4,
+  "model": "all-MiniLM-L6-v2",
+  "gates": {
+    "1": {
+      "passed": true
+    },
+    "2": {
+      "passed": true,
+      "top_titles": [
+        "After the First Data Row",
+        "New Questions This Entry Surfaces",
+        "Four Facets Round Table \u2014 Commitments"
+      ]
+    },
+    "3": {
+      "passed": true,
+      "elapsed_seconds": 5.4
+    },
+    "4": {
+      "passed": true,
+      "gov_sections_in_store": 7,
+      "filtered_returned": 6,
+      "non_gov_excluded": 26
+    }
+  }
+}
