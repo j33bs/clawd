@@ -93,7 +93,7 @@ def _try_existing_phi_calculator(snapshot_payload: dict[str, Any]) -> tuple[str,
     return "blocked", None, "AIN_PHI_CALCULATOR_MISSING"
 
 
-def run_session() -> SessionResult:
+def run_session(*, dry_run: bool = False) -> SessionResult:
     date_utc = _utc_now()
     ts_compact = date_utc.replace("-", "").replace(":", "")
     commit_sha = _commit_sha()
@@ -109,7 +109,11 @@ def run_session() -> SessionResult:
         "dataset_version": "hivemind_wiring_snapshot_v1",
         "wiring": wiring,
     }
-    snapshot_path = _write_snapshot(ts_compact, snapshot_payload)
+    if dry_run:
+        snapshot_ref = "DRY_RUN::workspace/phi_sessions/<timestamp>_wiring_snapshot.json"
+    else:
+        snapshot_path = _write_snapshot(ts_compact, snapshot_payload)
+        snapshot_ref = str(snapshot_path.relative_to(REPO_ROOT))
 
     status, phi_value, method_ref = _try_existing_phi_calculator(snapshot_payload)
     if status == "ok":
@@ -122,7 +126,7 @@ def run_session() -> SessionResult:
         phi_value=phi_value,
         method_ref=method_ref,
         notes=notes,
-        snapshot_path=str(snapshot_path.relative_to(REPO_ROOT)),
+        snapshot_path=snapshot_ref,
         commit_sha=commit_sha,
         date_utc=date_utc,
         node=node,
@@ -132,9 +136,10 @@ def run_session() -> SessionResult:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run one deterministic AIN Φ measurement session")
     parser.add_argument("--json", action="store_true", help="emit JSON")
+    parser.add_argument("--dry-run", action="store_true", help="compute deterministically without writing files")
     args = parser.parse_args()
 
-    result = run_session()
+    result = run_session(dry_run=args.dry_run)
     payload = {
         "status": result.status,
         "date_utc": result.date_utc,
