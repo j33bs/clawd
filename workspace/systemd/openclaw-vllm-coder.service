@@ -1,0 +1,18 @@
+[Unit]
+Description=OpenClaw local vLLM coder lane (:8002)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/src/clawd
+Environment=VLLM_CODER_PORT=8002
+Environment=VLLM_CODER_MIN_FREE_VRAM_MB=7000
+ExecStart=%h/src/clawd/scripts/vllm_launch_coder.sh
+Restart=on-failure
+RestartSec=5
+StandardOutput=append:%h/.local/state/openclaw/vllm-coder.log
+StandardError=append:%h/.local/state/openclaw/vllm-coder.log
+
+[Install]
+WantedBy=default.target
