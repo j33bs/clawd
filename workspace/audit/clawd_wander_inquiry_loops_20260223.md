@@ -93,3 +93,31 @@ Verification:
 
 Rollback:
 - `git revert <item2_commit_sha>`
+
+## Item 3 — Reservoir mode propagation (`response_plan.mode`)
+Intent:
+- Make `response_plan.mode` influence planning behavior deterministically.
+
+Touched files:
+- `workspace/hivemind/hivemind/dynamics_pipeline.py`
+- `workspace/hivemind/hivemind/integrations/main_flow_hook.py`
+- `workspace/scripts/verify_reservoir_mode_plan.py`
+- `tests_unittest/test_hivemind_dynamics_pipeline.py`
+
+Implementation notes:
+- `plan_consult_order(...)` now accepts `response_mode` and applies mode profiles:
+  - `focused`: retrieval_breadth=1, tangent_budget=1, narrower weighted routing.
+  - `exploratory`: broader retrieval_breadth, tangent_budget=3.
+- Returned plan now includes `response_plan` and `consult_order_all`.
+- Integration wrapper passes mode from context (`response_mode` or `response_plan.mode`) and exposes it in annotations.
+
+Verification:
+- `python3 -m unittest tests_unittest.test_hivemind_dynamics_pipeline -v`
+  - PASS (5 tests)
+- `python3 workspace/scripts/verify_reservoir_mode_plan.py`
+  - Deterministic divergence observed for same seed/context:
+    - focused consult order length 1, tangent_budget 1
+    - exploratory consult order length 3, tangent_budget 3
+
+Rollback:
+- `git revert <item3_commit_sha>`

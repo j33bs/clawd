@@ -182,6 +182,11 @@ def tacti_enhance_plan(
     session_id = str(context_data.get("session_id", "")).strip() or None
     context_text = str(context_data.get("input_text", "")).strip()
     intent = str(context_data.get("intent", "routing")).strip() or "routing"
+    response_mode = str(
+        context_data.get("response_mode")
+        or (context_data.get("response_plan") or {}).get("mode")
+        or ""
+    ).strip().lower() or None
 
     agent_ids = resolve_agent_ids(context=context_data, candidates=ordered_candidates, policy=policy)
     if source_agent not in agent_ids:
@@ -201,6 +206,7 @@ def tacti_enhance_plan(
         context_text=context_text,
         candidate_agents=ordered_candidates,
         n_paths=min(3, max(1, len(ordered_candidates))),
+        response_mode=response_mode,
     )
     consult_order = [str(x) for x in plan.get("consult_order", []) if str(x) in ordered_candidates]
     if consult_order:
@@ -217,6 +223,7 @@ def tacti_enhance_plan(
         "paths": plan.get("paths", []),
         "scores": plan.get("scores", {}),
         "trail_bias": plan.get("trail_bias", {}),
+        "response_plan": plan.get("response_plan", {}),
         "reservoir_confidence": (
             ((plan.get("reservoir") or {}).get("routing_hints") or {}).get("confidence")
         ),

@@ -87,6 +87,7 @@ class TactiDynamicsPipeline:
         context_text: str,
         candidate_agents: List[str],
         n_paths: int = 3,
+        response_mode: str | None = None,
     ) -> Dict[str, Any]:
         source = str(source_agent)
         candidates = [str(a) for a in candidate_agents if str(a) and str(a) != source]
@@ -125,13 +126,34 @@ class TactiDynamicsPipeline:
         readout = self.reservoir.readout(state)
         reservoir_gain = float(readout.get("routing_hints", {}).get("confidence", 0.0))
 
+        mode = str(
+            response_mode
+            or ((readout.get("response_plan") or {}).get("mode"))
+            or "default"
+        ).strip().lower()
+        if mode not in {"focused", "exploratory"}:
+            mode = "default"
+
+        if mode == "focused":
+            weights = {"peer": 1.15, "votes": 0.95, "trail": 0.35, "reservoir": 0.45}
+            retrieval_breadth = 1
+            tangent_budget = 1
+        elif mode == "exploratory":
+            weights = {"peer": 0.85, "votes": 1.05, "trail": 0.85, "reservoir": 0.25}
+            retrieval_breadth = max(2, min(len(candidates), 4))
+            tangent_budget = 3
+        else:
+            weights = {"peer": 1.0, "votes": 0.9, "trail": 0.6, "reservoir": 0.3}
+            retrieval_breadth = min(len(candidates), 2)
+            tangent_budget = 2
+
         combined = {}
         for agent in candidates:
             combined[agent] = (
-                (1.0 * peer_scores.get(agent, 0.0))
-                + (0.9 * first_hop_votes.get(agent, 0.0))
-                + (0.6 * trail_bias.get(agent, 0.0))
-                + (0.3 * reservoir_gain)
+                (weights["peer"] * peer_scores.get(agent, 0.0))
+                + (weights["votes"] * first_hop_votes.get(agent, 0.0))
+                + (weights["trail"] * trail_bias.get(agent, 0.0))
+                + (weights["reservoir"] * reservoir_gain)
             )
         normalized = _norm(combined)
         counterfactual_meta = {
@@ -194,11 +216,18 @@ class TactiDynamicsPipeline:
                 "reason": "temporarily_disabled",
                 "retry_after_epoch": round(float(self._counterfactual_disabled_until), 3),
             }
-        consult_order = sorted(candidates, key=lambda aid: (-normalized.get(aid, 0.0), aid))
+        consult_order_all = sorted(candidates, key=lambda aid: (-normalized.get(aid, 0.0), aid))
+        consult_order = list(consult_order_all[: max(1, retrieval_breadth)])
         return {
             "consult_order": consult_order,
+            "consult_order_all": consult_order_all,
             "paths": paths,
             "reservoir": readout,
+            "response_plan": {
+                "mode": mode,
+                "retrieval_breadth": retrieval_breadth,
+                "tangent_budget": tangent_budget,
+            },
             "scores": normalized,
             "trail_bias": trail_bias,
             "counterfactual": counterfactual_meta,

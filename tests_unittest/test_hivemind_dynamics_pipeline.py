@@ -162,6 +162,40 @@ class TestTactiDynamicsPipeline(unittest.TestCase):
                         )
                     self.assertIn(plan["counterfactual"]["reason"], {"error", "temporarily_disabled"})
 
+    def test_response_mode_changes_plan_characteristics(self):
+        with tempfile.TemporaryDirectory() as td:
+            trails = TrailStore(path=Path(td) / "trails.jsonl")
+            with patch.dict(
+                os.environ,
+                {
+                    "ENABLE_MURMURATION": "1",
+                    "ENABLE_RESERVOIR": "1",
+                    "ENABLE_PHYSARUM_ROUTER": "1",
+                    "ENABLE_TRAIL_MEMORY": "1",
+                },
+                clear=False,
+            ):
+                pipeline = TactiDynamicsPipeline(agent_ids=["main", "codex", "claude-code", "dali"], seed=17, trail_store=trails)
+                focused = pipeline.plan_consult_order(
+                    source_agent="main",
+                    target_intent="memory_query",
+                    context_text="design tradeoff synthesis",
+                    candidate_agents=["codex", "claude-code", "dali"],
+                    response_mode="focused",
+                )
+                exploratory = pipeline.plan_consult_order(
+                    source_agent="main",
+                    target_intent="memory_query",
+                    context_text="design tradeoff synthesis",
+                    candidate_agents=["codex", "claude-code", "dali"],
+                    response_mode="exploratory",
+                )
+
+                self.assertEqual(focused["response_plan"]["mode"], "focused")
+                self.assertEqual(exploratory["response_plan"]["mode"], "exploratory")
+                self.assertLessEqual(len(focused["consult_order"]), len(exploratory["consult_order"]))
+                self.assertNotEqual(focused["response_plan"]["tangent_budget"], exploratory["response_plan"]["tangent_budget"])
+
 
 if __name__ == "__main__":
     unittest.main()
