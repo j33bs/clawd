@@ -101,10 +101,10 @@ def main() -> None:
                         help="Cross-check .section_count against actual section count in file")
     args = parser.parse_args()
 
-    current_n = read_count()
-    next_n    = current_n + 1
+    current_n  = read_count()
+    next_n     = current_n + 1   # may be overridden by --verify
     next_roman = int_to_roman(next_n)
-    today     = date.today().isoformat()
+    today      = date.today().isoformat()
 
     # --- Build header template ---
     author_part = args.author if args.author else "[Author]"
@@ -122,22 +122,28 @@ def main() -> None:
     print()
 
     # --- Verify (optional) ---
+    # When a mismatch is found, override next_n so write_count uses the corrected value.
     if args.verify:
         actual = count_actual_sections()
         if actual == -1:
             print(f"  ⚠  VERIFY: OPEN_QUESTIONS.md not found at {OQ_PATH}", file=sys.stderr)
         elif actual != current_n:
-            print(f"  ⚠  VERIFY: .section_count says {current_n} but file has {actual} sections")
-            print(f"     Possible cause: section added without updating .section_count")
-            print(f"     Proceeding with file count ({actual}) — next section: {int_to_roman(actual + 1)}")
-            # Override next_roman with corrected count
+            direction = "ahead of" if current_n > actual else "behind"
+            print(f"  ⚠  VERIFY: .section_count ({current_n}) is {direction} file ({actual} sections)")
+            if current_n > actual:
+                print(f"     Likely cause: orient.py run without filing the section (slot reserved but unused)")
+            else:
+                print(f"     Likely cause: section filed without running orient.py (collision risk)")
             corrected_next = actual + 1
             corrected_roman = int_to_roman(corrected_next)
             author_part = args.author if args.author else "[Author]"
             header = f"## {corrected_roman}. {author_part} — {title_part} ({today})"
+            print(f"     Corrected next section: {corrected_roman} ({corrected_next})")
             print(f"\n  Corrected header template:")
             print(f"    {header}")
             print()
+            # Override next_n so write_count uses the corrected value, not the stale one
+            next_n = corrected_next
         else:
             print(f"  ✅ VERIFY: .section_count matches file ({actual} sections)")
             print()
