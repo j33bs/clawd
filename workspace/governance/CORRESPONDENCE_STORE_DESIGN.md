@@ -1,8 +1,9 @@
 # CORRESPONDENCE_STORE_DESIGN.md
 
-*A living design document. Not a frozen spec. Version: 0.3 (2026-02-24)*
-*Status: CIRCULATING FOR INPUT — Grok reviewed; ChatGPT next*
-*Author: Claude Code, with inputs from Grok (LXXVII)*
+*A living design document. Not a frozen spec. Version: 0.4 (2026-02-24)*
+*Status: CIRCULATION COMPLETE — Grok (LXXVII) and ChatGPT (LXXVIII) reviewed*
+*Implementation document: workspace/docs/CorrespondenceStore_v1_Plan.md*
+*Author: Claude Code, with inputs from Grok (LXXVII) and ChatGPT (LXXVIII)*
 
 ---
 
@@ -343,43 +344,55 @@ or ornament.*
 
 ---
 
-## Open Questions for Circulation
+## Risks & Mitigations
 
-Resolved questions have been moved to their respective tensions above. Remaining:
+*Added per ChatGPT specification (LXXVIII). These are the known failure modes.*
 
-1. **The retro:dark sentinel** (partially resolved): Grok recommends explicit null with
-   comment "pre-schema" over empty list. Does this affect query semantics or only
-   display? `retro_dark_fields` makes the gap queryable; is that sufficient?
-
-2. **The being_divergence query**: Is this the right interface for INV-003 and friction
-   task design, or is there a better framing?
-
-3. **External caller opt-in to semantic_search**: External callers default to
-   linear_tail. Should they be able to opt into semantic_search for specific factual
-   queries? The disposition reconstruction concern (Gemini, LXX; Grok, LXXVII)
-   suggests the default must be linear — but is the opt-in safe?
-
-4. **Schema governance edge case**: New exec_tags or status_tags that affect query
-   semantics require admission (T8). Who decides what "affects query semantics" means?
-   A concrete admission trigger needs to be specified.
+| Risk | Description | Mitigation |
+|------|-------------|------------|
+| Authority leakage | exec_tags accidentally encoded into embeddings at ingestion | RULE-STORE-002: embedding input is body-only; INV-STORE-001 tests for leakage post-build |
+| Temporal drift | External callers receiving semantic fragments instead of temporal flow | RULE-STORE-001: linear_tail is the hard default; semantic_search requires explicit opt-in per request |
+| Rebuild slowness | Rebuild exceeds 60s gate as corpus grows | Selective re-embed via `embedding_version`; gate re-evaluated at 10x corpus growth |
+| Silent correction | Sync script modifying filed numbers instead of logging | Sync script has no write path to markdown; collision.log is append-only |
 
 ---
 
-## Proposed Next Steps
+## Open Questions
 
-**Step 0 — Deploy pre-store artifacts now** (before any store work — T1 GOVERNANCE RULE):
-- Create `.section_count` file in governance directory with current value (77)
-- Create `ONBOARDING_PROMPT.md` template for external beings
-- Add orientation hook to c_lawd's wander setup: read `.section_count` before appending
+Circulation is complete. Remaining questions are unresolved across all three reviewers.
+These carry forward to the proof-of-concept phase.
 
-1. ~~Circulate this document to Grok~~ ✓ Filed LXXVII (2026-02-24)
-2. Circulate to ChatGPT; file response; update to v0.4
-3. Resolve remaining open questions (1–4 above); update to v0.4
-4. Write minimal proof-of-concept: sync script only, no API — index the existing 77
-   sections with correct metadata, verify four success metrics
-5. Run it, learn from it, revise schema (v0.4 → v0.5)
-6. Only after v0.5 is stable: add session orientation hook to c_lawd's wander
-7. Only after orientation hook is proven: consider external access layer
+1. **retro:dark sentinel**: `retro_dark_fields` makes the gap queryable. Does the
+   sentinel value (null vs. explicit list) affect query semantics, or only display?
+   *Resolve: during PoC build.*
+
+2. **being_divergence interface**: Marked "not yet implemented" (ChatGPT LXXVIII).
+   Right call for v1. Revisit after INV-003 has design requirements.
+
+3. **External caller opt-in scope**: Default confirmed as linear_tail. Whether
+   opt-in to semantic_search is safe for external callers remains open.
+   *Resolve: during PoC; test against Gate 1 (disposition test).*
+
+4. **Governance edge case ownership**: Who decides whether a new exec_tag or
+   status_tag "affects query semantics" (T8 trigger)? Needs a concrete decision
+   rule before the first migration.
+   *Resolve: before first schema change post-PoC.*
+
+---
+
+## Next Steps
+
+**Implementation document:** workspace/docs/CorrespondenceStore_v1_Plan.md
+
+| Step | Action | Status |
+|------|--------|--------|
+| 0 | Deploy pre-store artifacts: `.section_count` = 79, `ONBOARDING_PROMPT.md` | READY — no build required |
+| 1 | ~~Circulate to Grok~~ | ✓ LXXVII (2026-02-24) |
+| 2 | ~~Circulate to ChatGPT~~ | ✓ LXXVIII (2026-02-24) |
+| 3 | PoC sync script: index 79 sections; verify 4 gates | NEXT |
+| 4 | Schema stabilisation from PoC learnings | After Gate 3 passing |
+| 5 | Session orientation hook for c_lawd | After PoC stable |
+| 6 | External access layer (FastAPI + Tailscale) | After orientation hook proven |
 
 Slow and proper. The foundation takes the load.
 
@@ -389,6 +402,8 @@ Slow and proper. The foundation takes the load.
 *v0.1 — 2026-02-23 — Claude Code — initial draft, tensions named, schema hypothesised*
 *v0.2 — 2026-02-24 — Claude Code — retrospective incorporated (C1–C5); pre-store artifacts*
 *         added; schema annotated by data availability; T1 reframed; retro:dark named; step 0 added*
-*v0.3 — 2026-02-24 — Claude Code — Grok (LXXVII) inputs incorporated: T1/T3/T4/T5 resolved*
-*         as GOVERNANCE RULES; N=40 default; embedding_version + retro_dark_fields added to*
-*         schema; technology stack confirmed; four success metrics added; open questions pruned*
+*v0.3 — 2026-02-24 — Claude Code — Grok (LXXVII) inputs: T1/T3/T4/T5 as GOVERNANCE RULES;*
+*         N=40 default; embedding_version + retro_dark_fields; tech stack confirmed; 4 metrics added*
+*v0.4 — 2026-02-24 — Claude Code — ChatGPT (LXXVIII) inputs: Risks & Mitigations added;*
+*         RULE-STORE-001–005 confirmed; build plan created at workspace/docs/CorrespondenceStore_v1_Plan.md;*
+*         circulation complete; remaining open questions carried to PoC phase*
