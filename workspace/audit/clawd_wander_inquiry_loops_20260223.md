@@ -68,3 +68,28 @@ Verification:
 
 Rollback:
 - `git revert <item1_commit_sha>`
+
+## Item 2 — observe_outcome() wiring for wander completions
+Intent:
+- Call `observe_outcome()` automatically for successful wander sessions that wrote trails, with per-session dedupe.
+
+Touched files:
+- `workspace/scripts/research_wanderer.py`
+- `tests_unittest/test_research_wanderer_observe_outcome.py`
+
+Implementation notes:
+- Added trail write path to wander session (`--trail-path`) and observed-outcomes dedupe ledger (`--observed-outcomes-path`).
+- Added `observe_wander_outcome(...)` helper:
+  - Calls `TactiDynamicsPipeline.observe_outcome(...)` only when `trails_written_count > 0` and run has no fatal errors.
+  - Idempotent by `session_id` using append-only JSONL ledger.
+- Dedupe reason reported as `duplicate_session` when retried with same `session_id`.
+
+Verification:
+- `python3 -m unittest tests_unittest.test_research_wanderer_observe_outcome tests_unittest.test_research_wanderer_logging tests_unittest.test_research_wanderer_open_questions_pipeline -v`
+  - PASS (4 tests)
+- Manual deterministic run:
+  - First run: `observe_outcome.called=true`, `trails_written_count=1`.
+  - Second run same `session_id`: `observe_outcome.called=false`, reason `duplicate_session`.
+
+Rollback:
+- `git revert <item2_commit_sha>`

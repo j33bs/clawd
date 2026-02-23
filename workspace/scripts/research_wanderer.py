@@ -17,14 +17,20 @@ from typing import Any
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_OPEN_QUESTIONS = REPO_ROOT / "workspace" / "OPEN_QUESTIONS.md"
 DEFAULT_WANDER_LOG = REPO_ROOT / "workspace" / "memory" / "wander_log.jsonl"
+DEFAULT_TRAILS_PATH = REPO_ROOT / "workspace" / "hivemind" / "data" / "trails.jsonl"
+DEFAULT_OBSERVED_OUTCOMES = REPO_ROOT / "workspace" / "memory" / "wander_observed_outcomes.jsonl"
 
 HIVEMIND_ROOT = REPO_ROOT / "workspace" / "hivemind"
 if str(HIVEMIND_ROOT) not in sys.path:
     sys.path.insert(0, str(HIVEMIND_ROOT))
 try:
     from hivemind.inquiry_momentum import compute_inquiry_momentum  # type: ignore
+    from hivemind.dynamics_pipeline import TactiDynamicsPipeline  # type: ignore
+    from hivemind.trails import TrailStore  # type: ignore
 except Exception:  # pragma: no cover - optional fallback
     compute_inquiry_momentum = None  # type: ignore
+    TactiDynamicsPipeline = None  # type: ignore
+    TrailStore = None  # type: ignore
 
 EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
 TOKEN_RE = re.compile(r"\b[A-Za-z0-9_-]{24,}\b")
@@ -69,6 +75,96 @@ def _inquiry_momentum(candidates: list[QuestionCandidate]) -> dict[str, float]:
     avg_sig = sum(significance) / len(significance) if significance else 0.0
     score = min(1.0, max(0.0, avg_sig))
     return {"score": round(score, 6), "avg_significance": round(avg_sig, 6), "question_count_score": 0.0, "token_diversity": 0.0}
+
+
+def _write_trails(
+    *,
+    selected: list[QuestionCandidate],
+    trail_path: Path,
+    session_id: str,
+    trigger: str,
+    dry_run: bool,
+) -> list[str]:
+    if dry_run or not selected or TrailStore is None:
+        return []
+    store = TrailStore(path=trail_path)
+    trail_ids: list[str] = []
+    for idx, cand in enumerate(selected):
+        trail_id = store.add(
+            {
+                "text": _sanitize(cand.text),
+                "tags": ["wander", "inquiry"],
+                "strength": max(0.1, float(cand.significance)),
+                "source": "wander",
+                "meta": {
+                    "session_id": session_id,
+                    "trigger": trigger,
+                    "significance": float(cand.significance),
+                    "question_index": idx + 1,
+                },
+            }
+        )
+        trail_ids.append(str(trail_id))
+    return trail_ids
+
+
+def _already_observed(session_id: str, observed_path: Path) -> bool:
+    if not observed_path.exists():
+        return False
+    for line in observed_path.read_text(encoding="utf-8").splitlines():
+        text = line.strip()
+        if not text:
+            continue
+        try:
+            row = json.loads(text)
+        except json.JSONDecodeError:
+            continue
+        if str(row.get("session_id", "")) == str(session_id):
+            return True
+    return False
+
+
+def observe_wander_outcome(
+    *,
+    session_id: str,
+    trail_ids: list[str],
+    trigger: str,
+    inquiry_momentum_score: float,
+    duration_ms: int,
+    context_text: str,
+    observed_path: Path,
+    pipeline_factory: Any = None,
+) -> dict[str, Any]:
+    if not trail_ids:
+        return {"called": False, "reason": "no_trails"}
+    if _already_observed(session_id, observed_path):
+        return {"called": False, "reason": "duplicate_session"}
+    if pipeline_factory is None:
+        if TactiDynamicsPipeline is None:
+            return {"called": False, "reason": "pipeline_unavailable"}
+        pipeline_factory = lambda: TactiDynamicsPipeline(agent_ids=["wander", "codex"], seed=23)  # noqa: E731
+
+    pipeline = pipeline_factory()
+    path = ["wander", "codex"]
+    pipeline.observe_outcome(
+        source_agent="wander",
+        path=path,
+        success=True,
+        latency=max(1.0, float(duration_ms)),
+        tokens=max(1.0, float(len(context_text) // 4)),
+        reward=float(inquiry_momentum_score),
+        context_text=context_text[:4000],
+    )
+    marker = {
+        "timestamp": _utc_now(),
+        "session_id": str(session_id),
+        "trigger": str(trigger or "unknown"),
+        "trail_ids": list(trail_ids),
+        "inquiry_momentum_score": float(inquiry_momentum_score),
+        "path": path,
+    }
+    _append_jsonl(observed_path, marker)
+    return {"called": True, "reason": "recorded", "path": path}
 
 
 def _roman_to_int(value: str) -> int:
@@ -218,6 +314,8 @@ def main() -> int:
     parser.add_argument("--inquiry-threshold", type=float, default=float(os.environ.get("OPENCLAW_INQUIRY_MOMENTUM_THRESHOLD", "0.65")))
     parser.add_argument("--open-questions-path", default=str(DEFAULT_OPEN_QUESTIONS))
     parser.add_argument("--wander-log-path", default=str(Path(os.environ.get("OPENCLAW_WANDER_LOG_PATH", str(DEFAULT_WANDER_LOG)))))
+    parser.add_argument("--trail-path", default=str(Path(os.environ.get("OPENCLAW_WANDER_TRAIL_PATH", str(DEFAULT_TRAILS_PATH)))))
+    parser.add_argument("--observed-outcomes-path", default=str(Path(os.environ.get("OPENCLAW_WANDER_OBSERVED_PATH", str(DEFAULT_OBSERVED_OUTCOMES)))))
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args()
@@ -233,6 +331,7 @@ def main() -> int:
     candidates = _extract_candidates(payload)
     momentum = _inquiry_momentum(candidates)
     score = float(momentum.get("score", 0.0))
+    selected = [q for q in candidates if q.significance >= float(args.threshold)]
     result = append_significant_questions(
         questions_payload=payload,
         open_questions_path=Path(args.open_questions_path),
@@ -240,7 +339,33 @@ def main() -> int:
         run_id=str(args.run_id),
         dry_run=bool(args.dry_run),
     )
+    errors: list[str] = []
+    trail_ids: list[str] = []
+    try:
+        trail_ids = _write_trails(
+            selected=selected,
+            trail_path=Path(args.trail_path),
+            session_id=str(args.session_id),
+            trigger=str(args.trigger or "unknown"),
+            dry_run=bool(args.dry_run),
+        )
+    except Exception as exc:
+        errors.append(f"trail_write_failed:{type(exc).__name__}:{exc}")
     duration_ms = int((time.perf_counter() - started) * 1000.0)
+    observe_state = {"called": False, "reason": "not_applicable"}
+    if not args.dry_run and not errors and len(trail_ids) > 0:
+        try:
+            observe_state = observe_wander_outcome(
+                session_id=str(args.session_id),
+                trail_ids=trail_ids,
+                trigger=str(args.trigger or "unknown"),
+                inquiry_momentum_score=score,
+                duration_ms=duration_ms,
+                context_text=" ".join(_sanitize(q.text) for q in selected),
+                observed_path=Path(args.observed_outcomes_path),
+            )
+        except Exception as exc:
+            errors.append(f"observe_outcome_failed:{type(exc).__name__}:{exc}")
     log_row = {
         "timestamp": _utc_now(),
         "session_id": str(args.session_id),
@@ -250,8 +375,8 @@ def main() -> int:
         "threshold": float(args.inquiry_threshold),
         "exceeded": bool(score >= float(args.inquiry_threshold)),
         "duration_ms": duration_ms,
-        "trails_written_count": 0,
-        "errors": [],
+        "trails_written_count": len(trail_ids),
+        "errors": errors,
     }
     try:
         _append_jsonl(Path(args.wander_log_path), log_row)
@@ -271,6 +396,10 @@ def main() -> int:
     result["session_id"] = str(args.session_id)
     result["trigger"] = str(args.trigger or "unknown")
     result["duration_ms"] = duration_ms
+    result["trails_written_count"] = len(trail_ids)
+    result["observe_outcome"] = observe_state
+    if errors:
+        result["errors"] = errors
 
     if args.json:
         print(json.dumps(result, indent=2, sort_keys=True))
