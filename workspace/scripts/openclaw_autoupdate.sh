@@ -10,6 +10,7 @@ dry_run="${OPENCLAW_AUTOUPDATE_DRYRUN:-0}"
 target_branch="${OPENCLAW_AUTOUPDATE_TARGET_BRANCH:-main}"
 allow_branches_raw="${OPENCLAW_AUTOUPDATE_ALLOW_BRANCHES:-}"
 force_run="${OPENCLAW_AUTOUPDATE_FORCE:-0}"
+config_path_override="${OPENCLAW_CONFIG_PATH:-}"
 
 mkdir -p "$(dirname "$state_file")" "$(dirname "$log_file")"
 
@@ -32,6 +33,7 @@ result="success"
 reason=""
 error_detail=""
 state_write_pending=0
+state_backup_file=""
 
 join_csv() {
   local IFS=,
@@ -174,10 +176,43 @@ restart_gateway() {
   log_action "restart: manual_start_required"
 }
 
+restore_state_backup() {
+  if [[ -n "$state_backup_file" ]] && [[ -f "$state_backup_file" ]]; then
+    cp "$state_backup_file" "$state_file"
+    log_action "rollback:state_restore:$state_file"
+  fi
+}
+
+run_health_gate() {
+  local stage="$1"
+  local guard_cmd=(python3 "$repo_root/workspace/scripts/openclaw_config_guard.py")
+  if [[ -n "$config_path_override" ]]; then
+    guard_cmd+=(--config "$config_path_override")
+  fi
+  guard_cmd+=(--strict)
+
+  if [[ "$dry_run" == "1" ]]; then
+    log_action "planned:health_gate:$stage:${guard_cmd[*]}"
+    return 0
+  fi
+
+  if "${guard_cmd[@]}" >/dev/null 2>&1; then
+    log_action "executed:health_gate:$stage:pass"
+    return 0
+  fi
+
+  log_action "executed:health_gate:$stage:fail"
+  return 1
+}
+
 finalize() {
   local exit_code="$1"
   if [[ "$exit_code" -ne 0 ]]; then
     result="failure"
+  fi
+
+  if [[ "$exit_code" -ne 0 ]] && [[ "$dry_run" != "1" ]]; then
+    restore_state_backup
   fi
 
   if [[ "$exit_code" -eq 0 ]] && [[ "$dry_run" != "1" ]] && [[ "$state_write_pending" == "1" ]]; then
@@ -258,6 +293,17 @@ else
 fi
 
 state_write_pending=1
+if [[ "$dry_run" != "1" ]] && [[ -f "$state_file" ]]; then
+  state_backup_file="${state_file}.bak.$$"
+  cp "$state_file" "$state_backup_file"
+  log_action "executed:state_backup:$state_backup_file"
+fi
+
+if ! run_health_gate "pre"; then
+  verify_outcome="health_gate_pre_fail"
+  reason="health_gate_pre"
+  exit 1
+fi
 
 quiesce_gateway
 
@@ -327,4 +373,10 @@ if [[ -f "$repo_root/workspace/scripts/verify_policy_router.sh" ]]; then
 else
   verify_outcome="missing"
   log_action "verify: missing workspace/scripts/verify_policy_router.sh"
+fi
+
+if ! run_health_gate "post"; then
+  verify_outcome="health_gate_post_fail"
+  reason="health_gate_post"
+  exit 1
 fi

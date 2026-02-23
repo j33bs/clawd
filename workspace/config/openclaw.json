@@ -1,0 +1,12 @@
+{
+  "plugins": {
+    "allow": [
+      "openclaw_secrets_plugin"
+    ],
+    "entries": {
+      "openclaw_secrets_plugin": {
+        "enabled": true
+      }
+    }
+  }
+}

@@ -30,7 +30,13 @@ _cwd_root = _resolve_repo_root(Path.cwd())
 BASE_DIR = Path(_env_root) if _env_root else (_file_root or _cwd_root or Path("C:/Users/heath/.openclaw"))
 POLICY_FILE = BASE_DIR / "workspace" / "policy" / "llm_policy.json"
 SYSTEM_MAP_FILE = BASE_DIR / "workspace" / "policy" / "system_map.json"
-OPENCLAW_FILE = BASE_DIR / "openclaw.json"
+OPENCLAW_WORKSPACE_FILE = BASE_DIR / "workspace" / "config" / "openclaw.json"
+OPENCLAW_LEGACY_FILE = BASE_DIR / "openclaw.json"
+OPENCLAW_FILE = (
+    Path(os.environ["OPENCLAW_CONFIG_PATH"]).expanduser()
+    if os.environ.get("OPENCLAW_CONFIG_PATH")
+    else (OPENCLAW_WORKSPACE_FILE if OPENCLAW_WORKSPACE_FILE.exists() else OPENCLAW_LEGACY_FILE)
+)
 PAIRING = BASE_DIR / "credentials" / "telegram-pairing.json"
 
 sys.path.insert(0, str((BASE_DIR / "workspace" / "scripts").resolve()))
@@ -739,6 +745,35 @@ def check_requests(failures):
         )
 
 
+def check_plugins_allowlist(failures, warnings):
+    guard_script = BASE_DIR / "workspace" / "scripts" / "openclaw_config_guard.py"
+    if not guard_script.exists():
+        warn("plugin allowlist guard missing; skipping plugin allow checks", warnings)
+        return
+    cmd = [sys.executable, str(guard_script), "--strict"]
+    if os.environ.get("OPENCLAW_CONFIG_PATH"):
+        cmd.extend(["--config", os.environ["OPENCLAW_CONFIG_PATH"]])
+    proc = subprocess.run(cmd, capture_output=True, text=True, check=False)
+    payload_raw = (proc.stdout or "").strip()
+    if proc.returncode == 0:
+        return
+    issues = []
+    try:
+        payload = json.loads(payload_raw) if payload_raw else {}
+        issues = payload.get("issues") or []
+    except Exception:
+        issues = [payload_raw or "unknown_plugin_allowlist_error"]
+    issue_text = ", ".join(str(i) for i in issues) if issues else "plugin allowlist validation failed"
+    fail(
+        f"plugins_not_allowlisted: {issue_text}",
+        [
+            "Set plugins.allow in workspace/config/openclaw.json (or OPENCLAW_CONFIG_PATH target)",
+            "Allow only explicitly trusted plugin ids",
+        ],
+        failures,
+    )
+
+
 def check_telegram(failures, warnings):
     cfg = load_json(OPENCLAW_FILE) or {}
     tg = cfg.get("channels", {}).get("telegram")
@@ -843,6 +878,7 @@ def main():
         sys.exit(2)
 
     check_requests(failures)
+    check_plugins_allowlist(failures, warnings)
     policy = check_policy(failures)
     if policy:
         check_router(policy, failures)
