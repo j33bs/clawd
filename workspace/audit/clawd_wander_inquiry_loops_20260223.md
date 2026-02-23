@@ -171,3 +171,27 @@ Verification:
 
 Rollback:
 - `git revert <item5_commit_sha>`
+
+## Item 6 — Trail landscape view script
+Intent:
+- Render deterministic trail landscape buckets (`hot`, `fading`, `almost-gone`) with optional source/time filters.
+
+Touched files:
+- `workspace/scripts/render_trail_landscape.py`
+- `tests_unittest/test_render_trail_landscape.py`
+
+Implementation notes:
+- Added deterministic bucket logic:
+  - hot: `strength > 0.8`
+  - fading: `0.3 <= strength <= 0.8`
+  - almost-gone: `strength < 0.3`
+- Script supports `--source`, `--since-hours`, and optional `--output` report path.
+
+Verification:
+- `python3 -m unittest tests_unittest.test_render_trail_landscape -v`
+  - PASS (1 test)
+- `python3 workspace/scripts/render_trail_landscape.py --trail-path /tmp/trail_landscape_fixture.jsonl --output /tmp/trail_landscape_report.md | sed -n '1,20p'`
+  - PASS; first lines show correct bucket counts and top trails.
+
+Rollback:
+- `git revert <item6_commit_sha>`
