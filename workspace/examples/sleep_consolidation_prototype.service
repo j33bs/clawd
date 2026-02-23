@@ -1,0 +1,7 @@
+[Unit]
+Description=OpenClaw Sleep Consolidation Prototype (manual example)
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/clawd
+ExecStart=/usr/bin/env python3 workspace/scripts/sleep_consolidation_prototype.py --last-n 8 --window-hours 72
