@@ -19,17 +19,27 @@ VRAM_JSON="$($VLLM_PYTHON "$ROOT_DIR/scripts/vram_guard.py" --json 2>&1)"
 VRAM_RC=$?
 set -e
 if [[ $VRAM_RC -ne 0 ]]; then
-  REASON="$($VLLM_PYTHON - <<'PY' "$VRAM_JSON"
+  PARSED="$($VLLM_PYTHON - <<'PY' "$VRAM_JSON" "${VLLM_CODER_MIN_FREE_VRAM_MB:-7000}"
 import json, sys
 raw = sys.argv[1] if len(sys.argv) > 1 else '{}'
+threshold = sys.argv[2] if len(sys.argv) > 2 else '7000'
 try:
     obj = json.loads(raw)
 except Exception:
     obj = {}
-print(str(obj.get('reason') or 'UNKNOWN'))
+reason = str(obj.get('reason') or 'UNKNOWN')
+free_mb = obj.get('max_free_vram_mb')
+if free_mb is None:
+    free_mb = "na"
+print(f"{reason}|{free_mb}|{threshold}")
 PY
 )"
-  MSG="VRAM_GUARD_BLOCKED: reason=${REASON} details=${VRAM_JSON}"
+  REASON="${PARSED%%|*}"
+  REST="${PARSED#*|}"
+  FREE_MB="${REST%%|*}"
+  MIN_FREE_MB="${REST##*|}"
+  MARKER="VLLM_CODER_START_BLOCKED reason=${REASON} free_mb=${FREE_MB} min_free_mb=${MIN_FREE_MB}"
+  MSG="${MARKER} details=${VRAM_JSON}"
   echo "$MSG" >&2
   printf '%s\n' "$MSG" >> "$CODER_LOG_PATH" || true
   exit 42
