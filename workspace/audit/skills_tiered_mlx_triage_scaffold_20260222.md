@@ -458,3 +458,11 @@ node --test workspace/skills/**/tests/*.test.js
   - `git revert <docs-audit-sha>`
   - `git revert <tests-sha>`
   - `git revert <feat-sha>`
+
+## Merge Verification for coreml evidence bundling (2026-02-23T00:20:01Z)
+- Merge source branch: origin/codex/feat/coreml-evidence-bundling-20260223
+- Merge commit hash: c335ca9
+- Test command: node --test workspace/skills/**/tests/*.test.js
+- Test summary: PASS (30 tests, 0 failures)
+- Note: task-triage evidence_bundle now supports coreml_embed (health-gated) with keyword_stub fallback.
+- Rollback note: revert audit commit first, then revert merge commit.
