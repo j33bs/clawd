@@ -216,3 +216,28 @@ Verification:
 
 Rollback:
 - `git revert <item7_commit_sha>`
+
+## Item 8 — Commitment extractor for OPEN_QUESTIONS.md
+Intent:
+- Extract commitment-language lines into structured reports for review.
+
+Touched files:
+- `workspace/scripts/extract_open_question_commitments.py`
+- `tests_unittest/test_extract_open_question_commitments.py`
+- generated reports:
+  - `workspace/reports/commitments.json`
+  - `workspace/reports/commitments.md`
+
+Implementation notes:
+- Conservative regex extractor keyed to heading path + line number.
+- Reports include snippet (<=140 chars), section path, and count.
+- False-positive minimization favored over recall.
+
+Verification:
+- `python3 -m unittest tests_unittest.test_extract_open_question_commitments -v`
+  - PASS (1 test)
+- `python3 workspace/scripts/extract_open_question_commitments.py --json`
+  - PASS; current repository `OPEN_QUESTIONS.md` commitments count: `0`.
+
+Rollback:
+- `git revert <item8_commit_sha>`
