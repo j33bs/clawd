@@ -1,0 +1,12 @@
+[Unit]
+Description=Run OpenClaw Dali Canary every 30 minutes (opt-in)
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=30min
+AccuracySec=1min
+Persistent=true
+Unit=openclaw-canary.service
+
+[Install]
+WantedBy=timers.target
