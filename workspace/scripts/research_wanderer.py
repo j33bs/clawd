@@ -14,6 +14,11 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+try:
+    from build_session_context import assemble_session_context
+except Exception:  # pragma: no cover - optional helper
+    assemble_session_context = None  # type: ignore
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_OPEN_QUESTIONS = REPO_ROOT / "workspace" / "OPEN_QUESTIONS.md"
 DEFAULT_WANDER_LOG = REPO_ROOT / "workspace" / "memory" / "wander_log.jsonl"
@@ -316,6 +321,8 @@ def main() -> int:
     parser.add_argument("--wander-log-path", default=str(Path(os.environ.get("OPENCLAW_WANDER_LOG_PATH", str(DEFAULT_WANDER_LOG)))))
     parser.add_argument("--trail-path", default=str(Path(os.environ.get("OPENCLAW_WANDER_TRAIL_PATH", str(DEFAULT_TRAILS_PATH)))))
     parser.add_argument("--observed-outcomes-path", default=str(Path(os.environ.get("OPENCLAW_WANDER_OBSERVED_PATH", str(DEFAULT_OBSERVED_OUTCOMES)))))
+    parser.add_argument("--session-context-path", default=str(Path(os.environ.get("OPENCLAW_SESSION_CONTEXT_PATH", str(REPO_ROOT / "workspace" / "memory" / "session_context.md")))))
+    parser.add_argument("--session-context-top-k", type=int, default=int(os.environ.get("OPENCLAW_SESSION_CONTEXT_TOP_K", "7")))
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args()
@@ -331,6 +338,22 @@ def main() -> int:
     candidates = _extract_candidates(payload)
     momentum = _inquiry_momentum(candidates)
     score = float(momentum.get("score", 0.0))
+    context_status = {"ok": False, "reason": "dry_run"}
+    if not args.dry_run and callable(assemble_session_context):
+        try:
+            context_status = dict(
+                assemble_session_context(
+                    session_id=str(args.session_id),
+                    node=str(os.environ.get("OPENCLAW_NODE_ID", "Dali/C_Lawd")),
+                    output_path=Path(args.session_context_path),
+                    trail_path=Path(args.trail_path),
+                    top_k=max(1, int(args.session_context_top_k)),
+                )
+            )
+        except Exception as exc:
+            context_status = {"ok": False, "reason": f"session_context_failed:{type(exc).__name__}:{exc}"}
+    elif not callable(assemble_session_context):
+        context_status = {"ok": False, "reason": "assembler_unavailable"}
     selected = [q for q in candidates if q.significance >= float(args.threshold)]
     result = append_significant_questions(
         questions_payload=payload,
@@ -398,6 +421,7 @@ def main() -> int:
     result["duration_ms"] = duration_ms
     result["trails_written_count"] = len(trail_ids)
     result["observe_outcome"] = observe_state
+    result["session_context"] = context_status
     if errors:
         result["errors"] = errors
 

@@ -144,3 +144,30 @@ Verification:
 
 Rollback:
 - `git revert <item4_commit_sha>`
+
+## Item 5 — Session orientation artifact (`session_context.md`)
+Intent:
+- Build a compact orientation prosthesis at wander start from SOUL/IDENTITY headings and top-k trails.
+
+Touched files:
+- `workspace/scripts/build_session_context.py`
+- `workspace/scripts/research_wanderer.py`
+- `tests_unittest/test_session_context_assembler.py`
+
+Implementation notes:
+- Added context assembler with deterministic steps:
+  - markdown heading extraction from SOUL/IDENTITY candidates
+  - top-k trail selection by strength
+  - commitments summary (if `workspace/reports/commitments.json` exists)
+- `research_wanderer.py` now invokes assembler at session start (non-fatal).
+
+Verification:
+- `python3 -m unittest tests_unittest.test_session_context_assembler tests_unittest.test_research_wanderer_observe_outcome tests_unittest.test_research_wanderer_logging -v`
+  - PASS (5 tests)
+- `python3 workspace/scripts/build_session_context.py --session-id item5-sample --trail-path /tmp/wander_item5_trails_fixture.jsonl --output-path /tmp/wander_item5_session_context_sample.md --json`
+  - PASS; output includes top trail IDs:
+    - `trail-A (strength=0.910, source=wander)`
+    - `trail-B (strength=0.770, source=response)`
+
+Rollback:
+- `git revert <item5_commit_sha>`
