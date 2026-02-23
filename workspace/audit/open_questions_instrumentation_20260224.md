@@ -25,3 +25,11 @@
   - `git revert c8dbdce`
 - Revert both (audit + content) in reverse order after second commit:
   - `git revert <audit_commit_sha> && git revert c8dbdce`
+
+## Addendum (2026-02-24)
+
+- Prior content commit left Section XXXIV as a heading stub.
+- This follow-up commit fills Section XXXIV body verbatim from Heath-supplied text.
+- Scope remained append-only and request-scoped.
+- File touched for content: `workspace/governance/OPEN_QUESTIONS.md`.
+- No wording normalization or line rewrapping was applied.
