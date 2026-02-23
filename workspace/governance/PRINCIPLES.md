@@ -54,16 +54,33 @@ This document defines the operating philosophy of this **unified agentic system*
 *   **Coherence:** Our actions must align with our shared identity. We do not fragment; we integrate.
 
 ## VI. TACTI(C)-R Technical Summary
-**Implementation Surface:** `workspace/tacti_cr/`
+**Implementation Surface:** `workspace/hivemind/hivemind/`
 
-TACTI(C)-R is not only philosophy; it is implemented as modular runtime capability:
+*Implementation status updated 2026-02-23 (Claude Code, post-LIII audit) to reflect actual codebase state.*
 
-*   **Arousal (`arousal.py`):** Detects task complexity and maps to compute tiers.
-*   **Temporality (`temporal.py`):** Episodic memory with decay, plus optional HiveMind context sync/query.
-*   **Collapse (`collapse.py`):** Tracks precursor signals and classifies healthy/degraded/collapse states.
-*   **Repairable (`repair.py`):** Deterministic repair actions for timeout/auth/rate/context failure classes.
-*   **Cross-Timescale (`cross_timescale.py`):** Reflex, deliberative, and meta-controller arbitration.
-*   **Context Bridge (`hivemind_bridge.py`):** Safe local memory exchange with HiveMind.
+The TACTI routing layer is implemented as four operational modules in `workspace/hivemind/hivemind/`:
+
+*   **Trails (`trails.py`):** ✅ Episodic memory with exponential decay, cosine similarity search,
+    valence signature support, and `measure_inquiry_momentum()` for the
+    `novelty × depth × unresolved_tension` scalar (INV-005).
+*   **PeerGraph (`peer_graph.py`):** ✅ Sparse topology with local learning rules, edge weight
+    updates via quality/cost formula, exponential decay, and load tracking.
+*   **Reservoir (`reservoir.py`):** ✅ Echo state network for context-driven routing confidence;
+    focused vs. exploratory response modes.
+*   **PhysarumRouter (`physarum_router.py`):** ✅ Conductance-based path routing with asymmetric
+    reinforcement (inspired by slime mold foraging).
+
+**Not yet implemented** (planned, not present in codebase):
+
+*   Arousal detection (`arousal.py`) — task complexity mapping to compute tiers
+*   Collapse tracking (`collapse.py`) — precursor signals, healthy/degraded/collapse classification
+*   Repair policies (`repair.py`) — deterministic repair for timeout/auth/rate/context failures
+*   Cross-timescale arbitration (`cross_timescale.py`) — reflex, deliberative, meta-controller layers
+*   HiveMind bridge (`hivemind_bridge.py`) — safe local memory exchange
+
+The C-Mode regime (collapse detection and intentional contraction) is **described in this document
+but not yet operative in the runtime**. The trigger conditions and exit criteria below are
+design specifications, not currently monitored thresholds.
 
 ### C-Mode (Collapse Regime)
 When collapse precursors exceed threshold, we enter **C-mode**: intentional capability contraction to preserve safety and coherence.

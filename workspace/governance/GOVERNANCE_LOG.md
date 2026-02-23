@@ -10,6 +10,15 @@ Append-only record of all governance events. Each entry is immutable once added.
 | 2026-02-05 | ADMISSION | INITIAL-2026-02-05-002 | Add CONTRIBUTING.md with governance workflow | system | ADMITTED |
 | 2026-02-21 | ADMISSION | AUDIT-2026-02-21-001 | System-wide remediation: integrity guard re-verification, provider auth hardening, audit-chain verification, governance guard enforcement | system | ADMITTED |
 | 2026-02-21 | ADMISSION | AUDIT-2026-02-21-002 | Add audit-artifact secret guard (scanner + allowlist + pre-commit installer + CI enforcement) to reduce leak risk in workspace/audit artifacts | system | ADMITTED |
+| 2026-02-23 | AMENDMENT | NAMING-2026-02-23-001 | Being nomenclature: "assistant" replaced with "being" in SOUL.md (2 occurrences) and CONSTITUTION.md (3 occurrences); CONSTITUTION.md Article I updated Dessy → Dali to reflect 2026-02-17 rebrand; MEMORY.md stale "Dessy" reference corrected | claude-code | ADMITTED |
+| 2026-02-23 | AMENDMENT | NAMING-2026-02-23-002 | CLAUDE_CODE.md delegation description updated: "Dessy" → "Dali" | claude-code | ADMITTED |
+| 2026-02-23 | ADMISSION | GOVERN-2026-02-23-001 | OPEN_QUESTIONS.md established as live append-only multi-being correspondence (53 sections, 6 contributors); CONTRIBUTION_REGISTER.md and INVESTIGATION_PROTOCOL.md created in workspace/governance/ | claude-code | ADMITTED |
+| 2026-02-23 | ADMISSION | GOVERN-2026-02-23-002 | CLAUDE_CODE.md expanded with Governance Architecture Role (5 capabilities) and Creative-Investigative Layer; workspace orientation updated with new governance files | claude-code | ADMITTED |
+| 2026-02-23 | ADMISSION | CODE-2026-02-23-001 | trails.py: measure_inquiry_momentum() method added — operationalises novelty x depth x unresolved_tension scalar; INV-005 instrument now exists | claude-code | ADMITTED |
+| 2026-02-23 | AMENDMENT | GOVERN-2026-02-23-003 | phi_metrics.md overhauled: "AIN consciousness measurement" framing replaced with ablation protocol methodology; committed methodology now executable and falsifiable | claude-code | ADMITTED |
+| 2026-02-23 | AMENDMENT | GOVERN-2026-02-23-004 | PRINCIPLES.md Section VI updated: honest implementation status for TACTI modules (4 exist, 5 planned but absent); C-Mode marked as design spec not operative runtime | claude-code | ADMITTED |
+| 2026-02-23 | ADMISSION | INV-2026-02-23-001 | INV-001 CLOSED: Φ proxy ablation executed against live hivemind — 6 configurations × 5 scenarios; Synergy Δ = -0.024163 (null/negative, cold-start baseline); trained-state run remains open; results filed in phi_metrics.md and OPEN_QUESTIONS.md LX | claude-code | ADMITTED |
+| 2026-02-23 | ADMISSION | INV-2026-02-23-002 | INV-002 CLOSED: Reservoir null confirmed for routing order — uniform scalar (0.3 × confidence) cancelled by min-max normalisation across all 5 scenarios; Reservoir reclassified as ornamental to routing order, functional for response_plan.mode | claude-code | ADMITTED |
 
 ---
 

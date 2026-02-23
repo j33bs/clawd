@@ -195,6 +195,90 @@ class TrailStore:
             self._write_all(rows)
         return changed
 
+    def measure_inquiry_momentum(
+        self,
+        query: "str | List[float]",
+        k: int = 5,
+        unresolved_threshold: float = 0.15,
+        now: Any = None,
+    ) -> Dict[str, float]:
+        """Compute inquiry_momentum = novelty x depth x unresolved_tension.
+
+        Operationalises the scalar defined in OPEN_QUESTIONS.md using the existing
+        trail store state. All three components derive from what the store already tracks
+        -- no new data collection required.
+
+        Components
+        ----------
+        novelty
+            ``1 - max_cosine_similarity`` of *query* to any existing trail embedding.
+            High when the query is genuinely new territory for the store.
+        depth
+            Mean ``effective_strength`` of the top-*k* trails most relevant to the query.
+            High when the system has deeply reinforced relevant context.
+        unresolved_tension
+            Fraction of all trails whose effective strength is > 0 but below
+            *unresolved_threshold* -- trails that keep recurring but haven't settled.
+            High when the store carries many open threads.
+        inquiry_momentum
+            ``novelty x depth x unresolved_tension``.
+
+        Returns an all-zeros dict (momentum = 0.0) if the store is empty.
+        All values rounded to 6 decimal places for log readability.
+        """
+        current = _parse_ts(now) if now is not None else _utc_now()
+
+        if isinstance(query, list):
+            query_embedding = [float(x) for x in query]
+        else:
+            query_embedding = _embed_text(str(query), tags=None)
+
+        all_rows = self._read_all()
+        if not all_rows:
+            return {
+                "novelty": 1.0,
+                "depth": 0.0,
+                "unresolved_tension": 0.0,
+                "inquiry_momentum": 0.0,
+            }
+
+        # novelty: how different is this query from anything in the store
+        max_sim = 0.0
+        for row in all_rows:
+            emb = row.get("embedding")
+            if not isinstance(emb, list):
+                continue
+            sim = max(0.0, _cosine(query_embedding, [float(x) for x in emb]))
+            if sim > max_sim:
+                max_sim = sim
+        novelty = round(max(0.0, 1.0 - max_sim), 6)
+
+        # depth: mean effective strength of the top-k most relevant trails
+        top_k = self.query(query_embedding, k=max(1, int(k)), now=current)
+        if top_k:
+            raw_depth = sum(float(r.get("effective_strength", 0.0)) for r in top_k) / len(top_k)
+            depth = round(min(1.0, raw_depth), 6)
+        else:
+            depth = 0.0
+
+        # unresolved_tension: trails that are fading but not extinguished
+        total = len(all_rows)
+        threshold = float(unresolved_threshold)
+        unresolved = sum(
+            1
+            for row in all_rows
+            if 0.0 < self._effective_strength(row, current) < threshold
+        )
+        unresolved_tension = round(unresolved / total if total > 0 else 0.0, 6)
+
+        inquiry_momentum = round(novelty * depth * unresolved_tension, 6)
+        return {
+            "novelty": novelty,
+            "depth": depth,
+            "unresolved_tension": unresolved_tension,
+            "inquiry_momentum": inquiry_momentum,
+        }
+
     def snapshot(self) -> Dict[str, Any]:
         return {
             "version": 1,
