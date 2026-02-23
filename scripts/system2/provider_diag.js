@@ -81,7 +81,7 @@ function parseCoderStartBlocked(line) {
   const freeMatch = String(line).match(/free_mb=([A-Za-z0-9._-]+)/);
   const minMatch = String(line).match(/min_free_mb=([A-Za-z0-9._-]+)/);
   return {
-    reason: (reasonMatch && reasonMatch[1]) ? reasonMatch[1] : 'UNKNOWN',
+    reason: (reasonMatch && reasonMatch[1]) ? reasonMatch[1] : 'BLOCKED',
     free_mb: (freeMatch && freeMatch[1]) ? freeMatch[1] : 'na',
     min_free_mb: (minMatch && minMatch[1]) ? minMatch[1] : 'na'
   };
@@ -90,6 +90,9 @@ function parseCoderStartBlocked(line) {
 function readCoderJournalTail(env) {
   if (env.PROVIDER_DIAG_JOURNAL_TEXT) {
     return { ok: true, text: String(env.PROVIDER_DIAG_JOURNAL_TEXT), source: 'env_override' };
+  }
+  if (env.PROVIDER_DIAG_JOURNAL_FORCE_UNAVAILABLE) {
+    return { ok: false, unavailable: true, reason: String(env.PROVIDER_DIAG_JOURNAL_FORCE_UNAVAILABLE) };
   }
   try {
     const out = execFileSync(
@@ -108,43 +111,43 @@ function readCoderJournalTail(env) {
 }
 
 function detectCoderDegradedReason(env) {
-  const journal = readCoderJournalTail(env);
-  if (journal.ok) {
-    const lines = String(journal.text || '').split(/\r?\n/).reverse();
-    for (const line of lines) {
-      const parsed = parseCoderStartBlocked(line);
-      if (parsed) {
-        return {
-          reason: parsed.reason,
-          note: `source=${journal.source} free_mb=${parsed.free_mb} min_free_mb=${parsed.min_free_mb}`
-        };
-      }
-    }
-  } else if (journal.unavailable) {
-    return {
-      reason: 'UNAVAILABLE',
-      note: `journal_unavailable:${journal.reason}`
-    };
-  }
-
   const target = coderLogPath(env);
   try {
-    if (!fs.existsSync(target)) return { reason: 'UNKNOWN', note: 'no_file_log' };
-    const content = fs.readFileSync(target, 'utf8');
-    const lines = content.trim().split(/\r?\n/).reverse();
-    for (const line of lines.slice(0, 50)) {
-      const parsed = parseCoderStartBlocked(line);
-      if (parsed) {
-        return {
-          reason: parsed.reason,
-          note: `source=file_log free_mb=${parsed.free_mb} min_free_mb=${parsed.min_free_mb}`
-        };
+    if (fs.existsSync(target)) {
+      const content = fs.readFileSync(target, 'utf8');
+      const lines = content.trim().split(/\r?\n/).reverse();
+      for (const line of lines.slice(0, 50)) {
+        const parsed = parseCoderStartBlocked(line);
+        if (parsed) {
+          return {
+            reason: parsed.reason,
+            note: 'file_marker'
+          };
+        }
       }
     }
-    return { reason: 'UNKNOWN', note: 'no_marker' };
-  } catch (err) {
-    return { reason: 'UNKNOWN', note: `file_read_error:${(err && (err.code || err.name)) || 'error'}` };
+  } catch (_) {
+    // Ignore file log errors. Journald fallback is the deterministic source of truth.
   }
+
+  const journal = readCoderJournalTail(env);
+  if (!journal.ok) {
+    return {
+      reason: 'UNAVAILABLE',
+      note: 'journal_unavailable'
+    };
+  }
+  const lines = String(journal.text || '').split(/\r?\n/).reverse();
+  for (const line of lines) {
+    const parsed = parseCoderStartBlocked(line);
+    if (parsed) {
+      return {
+        reason: parsed.reason,
+        note: 'journal_marker'
+      };
+    }
+  }
+  return { reason: 'NO_BLOCK_MARKER', note: 'journal_no_marker' };
 }
 
 function fetchText(urlString, timeoutMs) {
@@ -358,9 +361,9 @@ async function generateDiagnostics(envInput) {
   const coderProbe = await probeCoderVllm(env);
   const replay = checkReplayWritable(env);
   const coderDegraded = coderProbe.endpoint_present ? { reason: 'OK', note: 'endpoint_reachable' } : detectCoderDegradedReason(env);
-  const coderDegradedReason = coderDegraded.reason || 'UNKNOWN';
+  const coderDegradedReason = coderDegraded.reason || 'NO_BLOCK_MARKER';
   const coderStatus = coderProbe.endpoint_present ? 'UP' : (
-    (coderDegradedReason === 'UNKNOWN' || coderDegradedReason === 'UNAVAILABLE') ? 'DOWN' : 'DEGRADED'
+    (coderDegradedReason === 'NO_BLOCK_MARKER' || coderDegradedReason === 'UNAVAILABLE') ? 'DOWN' : 'DEGRADED'
   );
 
   lines.push(`local_vllm_endpoint_present=${localProbe.endpoint_present ? 'true' : 'false'}`);
