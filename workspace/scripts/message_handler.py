@@ -13,15 +13,67 @@ import os
 import sys
 import json
 import asyncio
-import aiohttp
+import uuid
 from datetime import datetime
+from pathlib import Path
 from typing import Optional
+
+try:
+    import aiohttp
+except ModuleNotFoundError:  # pragma: no cover - exercised in minimal test environments
+    aiohttp = None
+
+from event_envelope import append_envelope, make_envelope
+from pairing_preflight import ensure_pairing_healthy
 
 # Configuration
 GATEWAY_URL = os.environ.get("GATEWAY_URL", "http://127.0.0.1:18789")
 GATEWAY_TOKEN = os.environ.get("GATEWAY_TOKEN", "")  # Set your token
 MAX_QUEUE_DEPTH = int(os.environ.get("MAX_QUEUE_DEPTH", "5"))
 MAX_LATENCY_MS = int(os.environ.get("MAX_LATENCY_MS", "30000"))
+
+
+def _event_log_path() -> Path:
+    return Path(
+        os.environ.get("OPENCLAW_EVENT_ENVELOPE_LOG_PATH")
+        or (Path.home() / ".local" / "share" / "openclaw" / "events" / "gate_health.jsonl")
+    ).expanduser()
+
+
+def _append_gate_event(corr_id: str, severity: str, details: dict) -> dict:
+    event = make_envelope(
+        event="subagent.spawn.blocked",
+        severity=severity,
+        component="message_handler",
+        corr_id=corr_id,
+        details=details,
+    )
+    return append_envelope(_event_log_path(), event)
+
+
+def _build_pairing_error(corr_id: str, preflight: dict) -> dict:
+    reason = str(preflight.get("reason") or "PAIRING_REMEDIATION_FAILED")
+    return {
+        "ok": False,
+        "error": {
+            "type": "PAIRING_UNHEALTHY",
+            "tier": "LOCAL",
+            "confidence": 0.9,
+            "corr_id": corr_id,
+            "reason": reason,
+            "remediation": [
+                str(preflight.get("remedy") or ""),
+                "run `workspace/scripts/check_gateway_pairing_health.sh`",
+                "run `openclaw pairing list --json`",
+            ],
+            "observations": preflight.get("observations", {}),
+        },
+    }
+
+
+def _is_pairing_error_response(payload: dict) -> bool:
+    text = json.dumps(payload or {}, ensure_ascii=True).lower()
+    return "pairing required" in text or "\"code\":1008" in text or "\"type\":\"pairing_unhealthy\"" in text
 
 
 class MessageHandler:
@@ -127,6 +179,8 @@ class MessageHandler:
 
 async def send_telegram_reply(chat_id: str, message_id: str, text: str, gateway_url: str, token: str):
     """Send a Telegram reply to a specific message."""
+    if aiohttp is None:
+        raise RuntimeError("aiohttp is required for Telegram reply dispatch")
     headers = {"Authorization": f"Bearer {token}"} if token else {}
     
     payload = {
@@ -146,21 +200,10 @@ async def send_telegram_reply(chat_id: str, message_id: str, text: str, gateway_
             return await resp.json()
 
 
-async def spawn_chatgpt_subagent(task: str, context: dict, gateway_url: str, token: str):
-    """Spawn a ChatGPT subagent to handle a message.
-    
-    Uses OpenClaw's sessions_spawn internally.
-    """
+async def _spawn_once(payload: dict, gateway_url: str, token: str) -> dict:
+    if aiohttp is None:
+        raise RuntimeError("aiohttp is required for subagent spawn")
     headers = {"Authorization": f"Bearer {token}"} if token else {}
-    
-    payload = {
-        "agentId": "main",
-        "model": "openai-codex/gpt-5.3-codex",
-        "task": task,
-        "context": context,
-        "timeoutSeconds": 120
-    }
-    
     async with aiohttp.ClientSession() as session:
         async with session.post(
             f"{gateway_url}/api/agents/spawn",
@@ -168,6 +211,67 @@ async def spawn_chatgpt_subagent(task: str, context: dict, gateway_url: str, tok
             headers=headers
         ) as resp:
             return await resp.json()
+
+
+async def spawn_chatgpt_subagent(task: str, context: dict, gateway_url: str, token: str):
+    """Spawn a ChatGPT subagent to handle a message.
+    
+    Uses OpenClaw's sessions_spawn internally.
+    """
+    corr_id = str((context or {}).get("corr_id") or f"spawn_{uuid.uuid4().hex[:12]}")
+    preflight = ensure_pairing_healthy(corr_id=corr_id)
+    if not preflight.get("ok"):
+        _append_gate_event(
+            corr_id,
+            "ERROR",
+            {
+                "reason": preflight.get("reason"),
+                "remedy": preflight.get("remedy"),
+            },
+        )
+        return _build_pairing_error(corr_id, preflight)
+
+    payload = {
+        "agentId": "main",
+        "model": "openai-codex/gpt-5.3-codex",
+        "task": task,
+        "context": {**(context or {}), "corr_id": corr_id},
+        "timeoutSeconds": 120
+    }
+
+    result = await _spawn_once(payload, gateway_url, token)
+    if _is_pairing_error_response(result) and preflight.get("safe_to_retry_now"):
+        retry_corr = f"{corr_id}_retry"
+        retry_preflight = ensure_pairing_healthy(corr_id=retry_corr)
+        if retry_preflight.get("ok"):
+            return await _spawn_once(payload, gateway_url, token)
+        _append_gate_event(
+            retry_corr,
+            "WARN",
+            {
+                "reason": retry_preflight.get("reason"),
+                "remedy": retry_preflight.get("remedy"),
+            },
+        )
+        return _build_pairing_error(retry_corr, retry_preflight)
+    if _is_pairing_error_response(result):
+        _append_gate_event(
+            corr_id,
+            "WARN",
+            {
+                "reason": "PAIRING_REMOTE_REQUIRED",
+                "remedy": "run `openclaw pairing list --json` and retry spawn",
+            },
+        )
+        return _build_pairing_error(
+            corr_id,
+            {
+                "reason": "PAIRING_REMOTE_REQUIRED",
+                "remedy": "run `openclaw pairing list --json` and retry spawn",
+                "observations": {"spawn_response": "pairing_required"},
+            },
+        )
+    return result
 
 
 async def handle_incoming_message(message: dict, handler: MessageHandler) -> dict:
@@ -199,8 +303,11 @@ async def handle_incoming_message(message: dict, handler: MessageHandler) -> dic
             gateway_url=GATEWAY_URL,
             token=GATEWAY_TOKEN
         )
-        
-        reply_text = result.get("response", "Sorry, I couldn't process your request.")
+        if result.get("ok") is False and isinstance(result.get("error"), dict):
+            reason = str(result["error"].get("reason") or "PAIRING_UNHEALTHY")
+            reply_text = f"Temporary routing hold ({reason}). Please retry shortly."
+        else:
+            reply_text = result.get("response", "Sorry, I couldn't process your request.")
     else:
         # Use MiniMax (normal flow) - would integrate with gateway here
         reply_text = f"[Would route to MiniMax] {content[:100]}..."
