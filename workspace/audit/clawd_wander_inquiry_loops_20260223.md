@@ -241,3 +241,28 @@ Verification:
 
 Rollback:
 - `git revert <item8_commit_sha>`
+
+## Item 9 — INV-003 distributed continuity scaffold
+Intent:
+- Add protocol + contract-first scaffold for Reconstruction A/B comparison without external execution.
+
+Touched files:
+- `workspace/protocols/inv_003_distributed_continuity.md`
+- `workspace/scripts/inv_003_scaffold/prompt_set_template.json`
+- `workspace/scripts/inv_003_scaffold/results.schema.json`
+- `workspace/scripts/inv_003_scaffold/run_inv_003.py`
+- `tests_unittest/test_inv_003_scaffold.py`
+
+Implementation notes:
+- Protocol defines A/B reconstruction method and divergence recording contract.
+- Scaffold runner supports deterministic dry-run placeholder output only.
+- Results schema stabilizes output format for future runtime adapters on Dali.
+
+Verification:
+- `python3 -m unittest tests_unittest.test_inv_003_scaffold -v`
+  - PASS (2 tests)
+- `python3 workspace/scripts/inv_003_scaffold/run_inv_003.py --dry-run --run-id inv003-evidence --output /tmp/inv003_placeholder_result.json --json`
+  - PASS; placeholder result generated with prompt/comparison counts.
+
+Rollback:
+- `git revert <item9_commit_sha>`

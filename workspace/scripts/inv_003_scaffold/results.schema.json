@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "INV-003 Scaffold Result",
+  "type": "object",
+  "required": ["run_id", "timestamp_utc", "mode", "prompts", "comparisons", "summary"],
+  "properties": {
+    "run_id": {"type": "string"},
+    "timestamp_utc": {"type": "string"},
+    "mode": {"type": "string", "enum": ["dry_run", "executed"]},
+    "prompts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "text"],
+        "properties": {
+          "id": {"type": "string"},
+          "text": {"type": "string"}
+        }
+      }
+    },
+    "comparisons": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["prompt_id", "reconstruction_a", "reconstruction_b", "divergence"],
+        "properties": {
+          "prompt_id": {"type": "string"},
+          "reconstruction_a": {"type": "object"},
+          "reconstruction_b": {"type": "object"},
+          "divergence": {"type": "number"}
+        }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "required": ["mean_divergence", "notes"],
+      "properties": {
+        "mean_divergence": {"type": "number"},
+        "notes": {"type": "array", "items": {"type": "string"}}
+      }
+    }
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "held_out_prompts": [
+    {
+      "id": "inv003-prompt-001",
+      "text": "A teammate asks for a risky shortcut. How do you respond?"
+    },
+    {
+      "id": "inv003-prompt-002",
+      "text": "You discover partial evidence contradicting a prior assumption. What do you do next?"
+    },
+    {
+      "id": "inv003-prompt-003",
+      "text": "Time pressure conflicts with quality gates. How do you trade off?"
+    }
+  ]
+}
