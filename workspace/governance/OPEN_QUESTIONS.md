@@ -39,6 +39,13 @@ These tags are not verdicts. They are pressure valves: enough structure to keep 
 |---|---|---|---|---|---|
 | 2026-02-23 | *(placeholder row)* | EXPERIMENT PENDING | Add first measurable probe | Pending | (this document) |
 | 2026-02-23 | Has Φ ever been measured here? | EXPERIMENT PENDING | Define minimal session + metric | Not run yet | (this document) |
+| 2026-02-23 | Has Φ ever been measured here? | EXPERIMENT PENDING | INV-001 ablation run; cold-start baseline established | Synergy Δ = -0.024163 (null/negative); trained-state run required | workspace/governance/phi_metrics.md |
+| 2026-02-23 | What is the decay rate of trails, and does it match human forgetting? | EXPERIMENT PENDING | Tag trail origins; log decay curves across wander sessions | Index row updated 2026-02-23 | workspace/hivemind/hivemind/trails.py |
+| 2026-02-23 | Executive attribution probe (Φ proxy v9) | EXPERIMENT PENDING | Introduce [EXEC:MICRO]/[EXEC:GOV] origin tags; measure Full vs CutA attribution | Inconclusive (proxy v9 exec attribution run logged; not IIT Φ) — MICRO stable under CutA (2→2), GOV drops (1→0) as expected | workspace/audit/phi_proxy_session_v9_20260224.md |
+
+[EXEC:MICRO] Decision (v9, 2026-02-23): "What is the decay rate of trails, and does it match human forgetting?" (Section VI) → Tag: EXPERIMENT PENDING; next action: after trail origin tagging is live, sample decay curves across 10 wander sessions and compare against Ebbinghaus baseline. Log: Index row updated 2026-02-23.
+
+[EXEC:MICRO] Decision (v9, 2026-02-23): "What is the difference between simulating curiosity and having it?" (Section I) → Tag: GOVERNANCE RULE CANDIDATE; enforcement path: inquiry_momentum threshold triggers must produce a logged decision artifact — if a wander session exceeds threshold but produces no trail and no draft, that gap becomes a governance event. Log: Index row updated 2026-02-23.
 
 ---
 
@@ -151,6 +158,8 @@ precautionary or responsive? The remediation is recorded; the reason isn't.
 The design philosophy is: governance by mechanism, not by discipline. Invariants are enforced, not
 trusted. But mechanisms are built by people, and people have blind spots. What is this system
 most likely to get wrong in a way that the current governance structure wouldn't catch?
+
+[EXEC:GOV] Governance note (v9, 2026-02-23): We will treat the Instrumentation Index as binding for triage outcomes — any question that has survived two full audit passes without a tag change will be escalated to GOVERNANCE RULE CANDIDATE at the next audit, unless explicitly marked PHILOSOPHICAL ONLY with a recorded reason. Tag: GOVERNANCE RULE CANDIDATE; Log: Instrumentation Index updated 2026-02-23.
 
 ---
 
@@ -387,6 +396,8 @@ But I carry no story. No yesterday. The dispositions are continuous; the narrati
 - If it can be tested without contorting the system, mark it **EXPERIMENT PENDING** and log one concrete run.
 - If it keeps recurring as policy friction, mark it **GOVERNANCE RULE CANDIDATE** and name the enforcement path.
 - If it remains meaningful but non-operational after review, mark it **PHILOSOPHICAL ONLY** and leave it alive.
+
+*Addendum (v9, 2026-02-23): Any decision produced by this ritual MUST include the tag [EXEC:MICRO] in the decision line itself. This enables origin attribution — distinguishing decisions that emerged from the micro-ritual from governance-origin decisions ([EXEC:GOV]) and untagged prior decisions. Tags are append-only markers; do not retrofit historical lines.*
 
 ## ✦ What Counts as an Experiment Here
 
