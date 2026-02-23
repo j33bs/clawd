@@ -28,7 +28,9 @@ async function main() {
     assert.match(out, /^coder_status=/m);
     assert.match(out, /^coder_degraded_reason=/m);
     assert.match(out, /^replay_log_writable=/m);
+    assert.match(out, /^pairing_canary_status=/m);
     assert.match(out, /^event_envelope_schema=openclaw\.event_envelope\.v1$/m);
+    assert.match(out, /^actionable_next_steps:\n/m);
     assert.match(out, /^canary_recommendations:\n/m);
 
     // Detailed section remains unchanged (dash-prefixed lines).

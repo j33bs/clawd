@@ -4,10 +4,13 @@ import os
 import shutil
 import subprocess
 import time
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.request import Request, urlopen
 from urllib.error import URLError, HTTPError
+
+from event_envelope import append_envelope, make_envelope
 
 
 DISK_WARN_THRESHOLD = 80.0
@@ -59,6 +62,13 @@ def _replay_log_path() -> Path:
     return Path(
         os.environ.get("OPENCLAW_REPLAY_LOG_PATH")
         or (Path.home() / ".local" / "share" / "openclaw" / "replay" / "replay.jsonl")
+    ).expanduser()
+
+
+def _event_log_path() -> Path:
+    return Path(
+        os.environ.get("OPENCLAW_EVENT_ENVELOPE_LOG_PATH")
+        or (Path.home() / ".local" / "share" / "openclaw" / "events" / "gate_health.jsonl")
     ).expanduser()
 
 
@@ -262,6 +272,99 @@ def check_security_audit() -> dict:
     }
 
 
+def build_actionable_hints(checks: dict) -> list[dict]:
+    hints: list[dict] = []
+    vllm = checks.get("vllm", {})
+    if vllm and not vllm.get("pass", True):
+        hints.append(
+            {
+                "component": "vllm",
+                "reason": str(vllm.get("error") or "ASSISTANT_DOWN"),
+                "remedy": "run `systemctl --user status openclaw-vllm.service` and verify `curl -sf http://127.0.0.1:8001/health`",
+            }
+        )
+
+    coder = checks.get("coder_vllm", {})
+    if coder.get("status") != "UP":
+        reason = str(coder.get("coder_degraded_reason") or "UNAVAILABLE")
+        if reason == "VRAM_LOW":
+            remedy = "reduce GPU contention or lower `VLLM_CODER_MIN_FREE_VRAM_MB` before restarting coder lane"
+        else:
+            remedy = "run `systemctl --user status openclaw-vllm-coder.service` and inspect `journalctl --user -u openclaw-vllm-coder.service -n 80`"
+        hints.append({"component": "coder_vllm", "reason": reason, "remedy": remedy})
+
+    pairing = checks.get("pairing_canary", {})
+    if pairing.get("status") == "UNHEALTHY":
+        hints.append(
+            {
+                "component": "pairing_canary",
+                "reason": str(pairing.get("reason") or "PAIRING_UNHEALTHY"),
+                "remedy": "run `workspace/scripts/check_gateway_pairing_health.sh` and `openclaw pairing list --json`",
+            }
+        )
+
+    replay = checks.get("replay_log", {})
+    if replay.get("status") == "NOACCESS":
+        hints.append(
+            {
+                "component": "replay_log",
+                "reason": str(replay.get("reason") or "NOACCESS"),
+                "remedy": "run `mkdir -p ~/.local/share/openclaw/replay && chmod -R u+rwX ~/.local/share/openclaw`",
+            }
+        )
+
+    plugin = checks.get("plugin_allowlist", {})
+    if plugin and not plugin.get("pass", True):
+        hints.append(
+            {
+                "component": "plugin_allowlist",
+                "reason": str(plugin.get("reason") or "PLUGIN_ALLOWLIST_VIOLATION"),
+                "remedy": "update `workspace/config/openclaw.json` plugin allowlist and restart OpenClaw",
+            }
+        )
+
+    gateway = checks.get("openclaw_gateway", {})
+    if gateway and not gateway.get("pass", True):
+        hints.append(
+            {
+                "component": "openclaw_gateway",
+                "reason": str(gateway.get("notes") or "GATEWAY_UNHEALTHY")[:240],
+                "remedy": "run `openclaw doctor --repair` then `openclaw gateway status`",
+            }
+        )
+
+    return hints
+
+
+def emit_health_event(*, overall_pass: bool, actionable_hints: list[dict], checks: dict) -> dict:
+    corr_id = f"health_{uuid.uuid4().hex[:10]}"
+    if not overall_pass:
+        event = "health.fail"
+        severity = "ERROR"
+    elif actionable_hints:
+        event = "health.degraded"
+        severity = "WARN"
+    else:
+        event = "health.ok"
+        severity = "INFO"
+    envelope = make_envelope(
+        event=event,
+        severity=severity,
+        component="system_health_monitor",
+        corr_id=corr_id,
+        details={
+            "overall_pass": bool(overall_pass),
+            "hints_count": len(actionable_hints),
+            "actionable_hints": actionable_hints,
+            "coder_status": checks.get("coder_vllm", {}).get("status"),
+            "pairing_status": checks.get("pairing_canary", {}).get("status"),
+            "replay_status": checks.get("replay_log", {}).get("status"),
+        },
+    )
+    out = append_envelope(_event_log_path(), envelope)
+    return {"event": event, "severity": severity, "corr_id": corr_id, "write": out}
+
+
 def main():
     checks = {
         "vllm": check_vllm(),
@@ -274,10 +377,14 @@ def main():
         "security_audit": check_security_audit(),
     }
     overall_pass = all(c.get("pass") for c in checks.values())
+    actionable_hints = build_actionable_hints(checks)
+    event_status = emit_health_event(overall_pass=overall_pass, actionable_hints=actionable_hints, checks=checks)
     payload = {
         "timestamp": now_iso(),
         "overall_pass": overall_pass,
         "checks": checks,
+        "actionable_hints": actionable_hints,
+        "event_envelope": event_status,
     }
     print(json.dumps(payload, indent=2))
 

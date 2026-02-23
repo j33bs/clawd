@@ -75,6 +75,27 @@ function appendEnvelope(env, envelope) {
   }
 }
 
+function pairingGuardPath() {
+  return path.resolve(__dirname, '..', '..', 'workspace', 'scripts', 'check_gateway_pairing_health.sh');
+}
+
+function checkPairingCanary(env) {
+  if (env.PROVIDER_DIAG_SKIP_PAIRING_CANARY === '1') {
+    return { status: 'UNKNOWN', reason: 'skipped' };
+  }
+  const guard = pairingGuardPath();
+  if (!fs.existsSync(guard)) {
+    return { status: 'UNHEALTHY', reason: 'guard_missing' };
+  }
+  try {
+    execFileSync(guard, [], { encoding: 'utf8', timeout: 20000 });
+    return { status: 'OK', reason: 'ok' };
+  } catch (err) {
+    const code = err && (err.code || err.status || err.signal || 'guard_failed');
+    return { status: 'UNHEALTHY', reason: String(code) };
+  }
+}
+
 function parseCoderStartBlocked(line) {
   if (!line || !line.includes('VLLM_CODER_START_BLOCKED')) return null;
   const reasonMatch = String(line).match(/reason=([A-Z0-9_]+)/);
@@ -360,6 +381,7 @@ async function generateDiagnostics(envInput) {
   const localProbe = await probeLocalVllm(env);
   const coderProbe = await probeCoderVllm(env);
   const replay = checkReplayWritable(env);
+  const pairing = checkPairingCanary(env);
   const coderDegraded = coderProbe.endpoint_present ? { reason: 'OK', note: 'endpoint_reachable' } : detectCoderDegradedReason(env);
   const coderDegradedReason = coderDegraded.reason || 'NO_BLOCK_MARKER';
   const coderStatus = coderProbe.endpoint_present ? 'UP' : (
@@ -381,6 +403,8 @@ async function generateDiagnostics(envInput) {
   lines.push(`replay_log_path=${replay.path}`);
   lines.push(`replay_log_writable=${replay.writable ? 'true' : 'false'}`);
   lines.push(`replay_log_reason=${replay.reason}`);
+  lines.push(`pairing_canary_status=${pairing.status}`);
+  lines.push(`pairing_canary_reason=${pairing.reason}`);
   lines.push(`event_envelope_schema=${SCHEMA_ID}`);
   lines.push('');
 
@@ -394,13 +418,33 @@ async function generateDiagnostics(envInput) {
       local_vllm_generation_probe_ok: localProbe.generation_probe_ok,
       coder_status: coderStatus,
       coder_degraded_reason: coderDegradedReason,
-      replay_log_writable: replay.writable
+      replay_log_writable: replay.writable,
+      pairing_canary_status: pairing.status
     }
   });
   const envelopeWrite = appendEnvelope(env, envelope);
   lines.push(`event_envelope_log_path=${envelopeWrite.path}`);
   lines.push(`event_envelope_write_ok=${envelopeWrite.ok ? 'true' : 'false'}`);
   lines.push(`event_envelope_write_reason=${envelopeWrite.ok ? 'ok' : envelopeWrite.reason}`);
+  lines.push('');
+  const actionable = [];
+  if (coderStatus === 'DOWN') {
+    actionable.push('coder lane down: run `systemctl --user status openclaw-vllm-coder.service` and inspect journal');
+  }
+  if (coderDegradedReason === 'VRAM_LOW') {
+    actionable.push('coder blocked by VRAM guard: reduce GPU contention or tune VLLM_CODER_MIN_FREE_VRAM_MB');
+  }
+  if (!replay.writable) {
+    actionable.push('replay log unwritable: run `mkdir -p ~/.local/share/openclaw/replay && chmod -R u+rwX ~/.local/share/openclaw`');
+  }
+  if (pairing.status === 'UNHEALTHY') {
+    actionable.push('pairing canary unhealthy: run `workspace/scripts/check_gateway_pairing_health.sh` then `openclaw pairing list --json`');
+  }
+  if (actionable.length === 0) {
+    actionable.push('none');
+  }
+  lines.push('actionable_next_steps:');
+  for (const step of actionable) lines.push(`- ${step}`);
   lines.push('');
   lines.push('canary_recommendations:');
   lines.push('- run: python3 scripts/dali_canary_runner.py');
