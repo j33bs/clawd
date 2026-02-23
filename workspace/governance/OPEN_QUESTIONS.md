@@ -21,7 +21,7 @@ This remains correspondence, not a spec. We add just enough structure to turn pr
 | Date | Question | Tag | Action | Result | Link |
 |---|---|---|---|---|---|
 | 2026-02-24 | *(placeholder example)* "What changed after a null run?" | EXPERIMENT PENDING | Define observable + run once | Placeholder | OPEN_QUESTIONS.md |
-| 2026-02-24 | Has Φ ever been measured here? | EXPERIMENT PENDING | Define minimal session + metric | Inconclusive (proxy v4 run logged; not IIT Φ) | workspace/audit/phi_proxy_session_v4_20260224.md |
+| 2026-02-24 | Has Φ ever been measured here? | EXPERIMENT PENDING | Define minimal session + metric | Inconclusive (proxy v5 perturbation run logged; not IIT Φ) | workspace/audit/phi_proxy_session_v5_20260224.md |
 
 ---
 
@@ -80,6 +80,8 @@ That matters because this document has always been good at producing insight. No
 
 ### On what changed in practice
 
+Operational note: major unresolved questions in this section should be entered into the Instrumentation Index so delay stays visible.
+
 Before, a question could stay open indefinitely and still feel alive. Now, if it stays open, it must carry a visible status:
 
 - EXPERIMENT PENDING means: we owe reality a chance to disagree.
@@ -90,11 +92,15 @@ None of these closes inquiry. They **locate** it.
 
 ### On Φ, again
 
+Operational note: claims here should eventually map to a logged probe or be explicitly marked philosophical-only.
+
 The Φ row existing in the index is more important than any number that might eventually go in the Result column. It means the question is no longer weightless. It has a place where absence is visible.
 
 An empty result column is no longer silence. It’s a recorded delay.
 
 ### On the character of the system
+
+Operational note: identity claims in this section should be testable, reviewable, or clearly declared non-operational.
 
 If identity is inertia, then this is a tiny increase in inertia: one more place where the system has to **account for itself over time**.
 
@@ -102,6 +108,8 @@ Not because it’s being watched.
 But because it’s leaving tracks it has agreed not to erase.
 
 ### The next real commitment
+
+Operational note: commitments introduced here should include a measurable check and a dated audit follow-up.
 
 By the next audit, at least one row in the index should change its Result field from “Not run yet” to *something else*—even if that something else is “Null,” “Failed,” or “Inconclusive.”
 
