@@ -6,6 +6,8 @@ import json
 import os
 import re
 import subprocess
+import sys
+import time
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -14,6 +16,15 @@ from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_OPEN_QUESTIONS = REPO_ROOT / "workspace" / "OPEN_QUESTIONS.md"
+DEFAULT_WANDER_LOG = REPO_ROOT / "workspace" / "memory" / "wander_log.jsonl"
+
+HIVEMIND_ROOT = REPO_ROOT / "workspace" / "hivemind"
+if str(HIVEMIND_ROOT) not in sys.path:
+    sys.path.insert(0, str(HIVEMIND_ROOT))
+try:
+    from hivemind.inquiry_momentum import compute_inquiry_momentum  # type: ignore
+except Exception:  # pragma: no cover - optional fallback
+    compute_inquiry_momentum = None  # type: ignore
 
 EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
 TOKEN_RE = re.compile(r"\b[A-Za-z0-9_-]{24,}\b")
@@ -39,6 +50,25 @@ def _sanitize(text: str) -> str:
     cleaned = EMAIL_RE.sub("[REDACTED_EMAIL]", str(text))
     cleaned = TOKEN_RE.sub("[REDACTED_TOKEN]", cleaned)
     return " ".join(cleaned.split())
+
+
+def _append_jsonl(path: Path, payload: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(payload, ensure_ascii=False) + "\n")
+
+
+def _inquiry_momentum(candidates: list[QuestionCandidate]) -> dict[str, float]:
+    questions = [c.text for c in candidates]
+    significance = [float(c.significance) for c in candidates]
+    if callable(compute_inquiry_momentum):
+        try:
+            return dict(compute_inquiry_momentum(questions, significance_values=significance))
+        except Exception:
+            pass
+    avg_sig = sum(significance) / len(significance) if significance else 0.0
+    score = min(1.0, max(0.0, avg_sig))
+    return {"score": round(score, 6), "avg_significance": round(avg_sig, 6), "question_count_score": 0.0, "token_diversity": 0.0}
 
 
 def _roman_to_int(value: str) -> int:
@@ -183,11 +213,16 @@ def main() -> int:
     parser.add_argument("--question", action="append", default=[], help="Manual question (significance defaults to 1.0)")
     parser.add_argument("--threshold", type=float, default=float(os.environ.get("OPENCLAW_RESEARCH_Q_SIG_THRESHOLD", "0.80")))
     parser.add_argument("--run-id", default=os.environ.get("OPENCLAW_RUN_ID", uuid.uuid4().hex[:12]))
+    parser.add_argument("--session-id", default=os.environ.get("OPENCLAW_SESSION_ID", uuid.uuid4().hex[:16]))
+    parser.add_argument("--trigger", default=os.environ.get("OPENCLAW_WANDER_TRIGGER", "manual"))
+    parser.add_argument("--inquiry-threshold", type=float, default=float(os.environ.get("OPENCLAW_INQUIRY_MOMENTUM_THRESHOLD", "0.65")))
     parser.add_argument("--open-questions-path", default=str(DEFAULT_OPEN_QUESTIONS))
+    parser.add_argument("--wander-log-path", default=str(Path(os.environ.get("OPENCLAW_WANDER_LOG_PATH", str(DEFAULT_WANDER_LOG)))))
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args()
 
+    started = time.perf_counter()
     payload: Any = []
     if args.input:
         payload = json.loads(Path(args.input).read_text(encoding="utf-8"))
@@ -195,6 +230,9 @@ def main() -> int:
         payload = list(payload) if isinstance(payload, list) else ([] if payload == [] else [payload])
         payload.extend({"question": q, "significance": 1.0} for q in args.question)
 
+    candidates = _extract_candidates(payload)
+    momentum = _inquiry_momentum(candidates)
+    score = float(momentum.get("score", 0.0))
     result = append_significant_questions(
         questions_payload=payload,
         open_questions_path=Path(args.open_questions_path),
@@ -202,6 +240,37 @@ def main() -> int:
         run_id=str(args.run_id),
         dry_run=bool(args.dry_run),
     )
+    duration_ms = int((time.perf_counter() - started) * 1000.0)
+    log_row = {
+        "timestamp": _utc_now(),
+        "session_id": str(args.session_id),
+        "run_id": str(args.run_id),
+        "trigger": str(args.trigger or "unknown"),
+        "inquiry_momentum_score": score,
+        "threshold": float(args.inquiry_threshold),
+        "exceeded": bool(score >= float(args.inquiry_threshold)),
+        "duration_ms": duration_ms,
+        "trails_written_count": 0,
+        "errors": [],
+    }
+    try:
+        _append_jsonl(Path(args.wander_log_path), log_row)
+    except Exception as exc:
+        warning = {
+            "event": "wander_log_append_failed",
+            "path": str(args.wander_log_path),
+            "error": f"{type(exc).__name__}:{exc}",
+        }
+        print(json.dumps(warning, ensure_ascii=False), file=sys.stderr)
+        result["wander_log_warning"] = warning
+    result["inquiry_momentum"] = {
+        "score": score,
+        "threshold": float(args.inquiry_threshold),
+        "exceeded": bool(score >= float(args.inquiry_threshold)),
+    }
+    result["session_id"] = str(args.session_id)
+    result["trigger"] = str(args.trigger or "unknown")
+    result["duration_ms"] = duration_ms
 
     if args.json:
         print(json.dumps(result, indent=2, sort_keys=True))
