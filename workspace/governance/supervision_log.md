@@ -43,6 +43,11 @@
 | 16 Oct 2025 | Thu | 11:30am - 1:30pm | Group supervision (Work) |
 | 6 Nov 2025 | Thu | 6:00pm - 7:30pm | Next MISA Group Supervision (Work) |
 | 13 Nov 2025 | Thu | 2:00pm - 2:30pm | Misa supervision (Work) |
+| 19 Mar 2026 | Thu | 6:00pm - 7:30pm | MISA Group Supervision |
+| 30 Apr 2026 | Thu | 6:00pm - 7:30pm | MISA Group Supervision |
+| 11 Jun 2026 | Thu | 6:00pm - 7:30pm | MISA Group Supervision |
+| 23 Jul 2026 | Thu | 6:00pm - 7:30pm | MISA Group Supervision |
+| 3 Sep 2026 | Thu | 6:00pm - 7:30pm | MISA Group Supervision |
 
 ---
 
@@ -55,8 +60,4 @@
 
 ---
 
-## Next (based on pattern)
-
-- ~12 Mar 2026 (Thu) - individual supervision?
-- ~13 Mar 2026 (Fri) - MISA group supervision?
-- ~16 Apr 2026 (Thu) - individual?
+*Note: 2026 dates confirmed by Heath*

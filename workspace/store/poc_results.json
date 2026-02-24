@@ -1,28 +1,120 @@
 {
-  "all_passed": true,
-  "rebuild_seconds": 5.4,
+  "timestamp": "2026-02-24T13:27:42.072879",
   "model": "all-MiniLM-L6-v2",
+  "all_passed": true,
   "gates": {
+    "3": {
+      "gate": 3,
+      "passed": true,
+      "elapsed_seconds": 4.067450284957886
+    },
     "1": {
-      "passed": true
+      "gate": 1,
+      "passed": true,
+      "checks": {
+        "section_count": true,
+        "temporal_order": true,
+        "bodies_non_empty": true,
+        "authors_present": true,
+        "store_design_in_tail": true
+      }
     },
     "2": {
+      "gate": 2,
       "passed": true,
-      "top_titles": [
+      "checks": {
+        "results_returned": true,
+        "ablation_result_found": true,
+        "exec_tags_intact": true
+      },
+      "top_results": [
         "After the First Data Row",
         "New Questions This Entry Surfaces",
         "Four Facets Round Table \u2014 Commitments"
       ]
     },
-    "3": {
-      "passed": true,
-      "elapsed_seconds": 5.4
-    },
     "4": {
+      "gate": 4,
       "passed": true,
-      "gov_sections_in_store": 7,
-      "filtered_returned": 6,
-      "non_gov_excluded": 26
+      "checks": {
+        "all_filtered_have_exec_gov": true,
+        "exec_gov_returned_in_filtered": true,
+        "non_exec_gov_excluded_by_filter": true
+      },
+      "gov_sections_in_store": 11,
+      "filtered_returned": 9
+    },
+    "5": {
+      "gate": 5,
+      "passed": true,
+      "query": "governance decision executive attribution",
+      "secondary_author": "ChatGPT",
+      "checks": {
+        "count_equal": true,
+        "canonical_ids_equal": true
+      },
+      "path_a_ids": [
+        67,
+        88
+      ],
+      "path_b_ids": [
+        67,
+        88
+      ]
+    },
+    "6": {
+      "gate": 6,
+      "passed": true,
+      "checks": {
+        "canonical_ids_equal": true,
+        "rows_equal": true
+      },
+      "tail_5_ids": [
+        88,
+        89,
+        90,
+        91,
+        92
+      ],
+      "tail_40_last_5_ids": [
+        88,
+        89,
+        90,
+        91,
+        92
+      ]
+    },
+    "7": {
+      "gate": 7,
+      "passed": true,
+      "checks": {
+        "filed_to_canonical_identical": true,
+        "canonical_to_filed_identical": true,
+        "mapping_count_equal": true
+      },
+      "mapping_size": 91,
+      "sample": [
+        [
+          "I",
+          1
+        ],
+        [
+          "II",
+          2
+        ],
+        [
+          "III",
+          3
+        ],
+        [
+          "IV",
+          4
+        ],
+        [
+          "IX",
+          9
+        ]
+      ]
     }
   }
 }
