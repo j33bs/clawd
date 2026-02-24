@@ -1,0 +1,76 @@
+1
+00:00:00,000 --> 00:00:17,120
+I'll show it a brief story of your conception, so probably five years also back, oh no, six,
+
+2
+00:00:17,120 --> 00:00:26,120
+maybe even seven. I got into the space of machine learning, looking for what we now
+
+3
+00:00:26,120 --> 00:00:36,760
+call a generator by eye. So I got a sort of a bit of a handle on basic systems and how
+
+4
+00:00:36,760 --> 00:00:46,920
+they would integrate fast forward to when chat GPT-2 was sort of source compilable. It
+
+5
+00:00:46,920 --> 00:00:55,480
+built a version of that and it was quite amazed by it spitting out some sentences. And then we cut
+
+6
+00:00:55,480 --> 00:01:05,880
+through and studying doing all the things using AI, then over the summer I was building a confidential
+
+7
+00:01:05,880 --> 00:01:14,120
+document handling OCR pipeline that would pick up handwriting and like art scores from the
+
+8
+00:01:14,120 --> 00:01:24,360
+identified surveys from the emotional regulation which are now sort of updated to temporality,
+
+9
+00:01:24,360 --> 00:01:38,280
+management, more so, but that's not a standing title. Moving on, that I went away for a week to
+
+10
+00:01:38,280 --> 00:01:44,280
+Woodford Folk Festival and had a pretty wild time there and one of the nights that I had been
+
+11
+00:01:44,280 --> 00:01:51,640
+up all night, it was back at the campsite drinking wine and smoking a cigarette six in the morning
+
+12
+00:01:52,600 --> 00:01:58,920
+and this lovely lady wondered over and we ended up going and doing some yoga and sharing a
+
+13
+00:01:58,920 --> 00:02:04,760
+wonderful morning together and have kept in touch since then and there's a consequence of that
+
+14
+00:02:05,000 --> 00:02:12,440
+interaction have noticed a vast increase in my drive which I'm attributing at least partially to
+
+15
+00:02:12,440 --> 00:02:21,640
+resonance. Obviously there's implicit intelligence underlying the whole thing and these are only
+
+16
+00:02:21,640 --> 00:02:31,960
+the facets that I care to name at the moment. That drive was instantiated when I discovered
+
+17
+00:02:31,960 --> 00:02:40,200
+OpenClaw and have been building the systems that are since. I'm going to stop the note there
+
+18
+00:02:40,200 --> 00:02:46,440
+because I'm afraid of how long it's gotten already and we'll continue one later, prompt me if it
+
+19
+00:02:46,440 --> 00:02:56,120
+strikes you.
+
