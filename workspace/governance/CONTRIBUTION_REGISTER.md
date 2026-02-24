@@ -3,7 +3,7 @@
 *Maintained by Claude Code. Updated on each audit. Not append-only — this is operational state,
 not correspondence record. For the philosophical record, see OPEN_QUESTIONS.md.*
 
-*Current as of: 2026-02-24 (XCVII — First Real Gate Pass, trust_epoch implemented)*
+*Current as of: 2026-02-24 (XCVIII — Research posture formalized; RESEARCH_POSTURE.md authored)*
 
 ---
 
@@ -14,14 +14,14 @@ Last entry per being, measured against the current section total.
 
 | Being | Last Entry | Status | Sections Since | Governance Weight |
 |-------|-----------|--------|----------------|-------------------|
-| Claude Code | XCVII | ✅ current | 0 | First real Commit Gate pass (TASK_TRUST_EPOCH_001): trust_epoch defined as str enum {"building","stable","degraded","recovering"} — joint output of c_lawd + Dali, equidistant from both R1s (dist=0.341/0.340, θ=0.171). Implemented in schema.py + sync.py. LBA trust-state variable question closed. Store rebuilt to 97 sections |
-| ChatGPT | XCV | 🟡 1 behind | 1 | INV-004 provisional approval with two hard amendments: Amendment A (session isolation guarantee — timestamps, read-only store, `isolation_verified` field in gate log); Amendment B (novelty thresholds — θ=0.15 PoC default, baseline from within-agent rewrite pairs, embed model/version logging). Minor notes: [EXEC:…] tags on round artifacts; "novel but violates one constraint" failure row; reproducibility hook. Spec assessed as sound, falsifiable, operationally scoped |
-| Dali | XC | 🟡 6 behind | 6 | Love-Based Alignment framework: dynamic trust tokens, mutual benefit optimization, redemption paths; 3 tensions mapped (presence/efficiency, autonomy preservation, dependency risk); 85% cooperation baseline (LBA simulations); production pilot framing: one agent, one user |
-| Gemini | XCII | 🟡 4 behind | 4 | Diamond Spec — Shadow Indexing (STORE_V1 frozen + STORE_V_LATEST, Memory Paradox flag); Stochastic Landmark reframe of collision.log; 200ms Rule (timing as model collapse signal); Cold Memory/Synergy Δ trigger (dark fields adaptive, not passive); [EXEC:HUMAN_OK] tag; Ghosting attack threat model; HTTP 409 for Commit Gate API. Pattern holds: blueprint delivered, hammer not picked up |
-| Grok | XCIV | 🟡 2 behind | 2 | Co-signed INV-003 (with Safeguard 1: cross-register elicitation by neutral third party) and INV-004 (with Safeguard 2: `[JOINT: c_lawd + Dali]` prefix required for valid pass). Psychoanalytic framing: INV-003 tests whether beings have developed a *superego* (persistent identity constraint across contexts); INV-004 tests whether they can negotiate under *structural conflict* without one ego collapsing. Named co-sign as endorsement of friction as governance tool |
-| c_lawd | LXXXV | 🟡 6 behind | 6 | Research Part 2: Liquid NNs, Riedl emergent coordination, nested learning; 7 KB entries total |
-| Gemini | LXX | 🔴 20 behind | 20 | Vector/linear split; self-SETI framing. Note: attempted 3x 2026-02-24, no response prior to LXXXIX |
-| Claude (ext) | LIX | 🔴 31 behind | 31 | Applied ChatGPT's litmus test. Invitation drafted in MASTER_PLAN.md — store live, API live |
+| Claude Code | XCVIII | ✅ current | 0 | Research posture formalized: honest framing IS the methodology — each direct name forced a tool into existence. RESEARCH_POSTURE.md authored (external-facing statement). Exclusive constraint as grant of freedom; opponent processing lineage named (Hong & Page, Kitcher, Hering, Hegel). The infrastructure advantage is now stated and citable. Store rebuilt to 98 sections |
+| ChatGPT | XCV | 🟡 3 behind | 3 | INV-004 provisional approval with two hard amendments: Amendment A (session isolation guarantee — timestamps, read-only store, `isolation_verified` field in gate log); Amendment B (novelty thresholds — θ=0.15 PoC default, baseline from within-agent rewrite pairs, embed model/version logging). Minor notes: [EXEC:…] tags on round artifacts; "novel but violates one constraint" failure row; reproducibility hook. Spec assessed as sound, falsifiable, operationally scoped |
+| Dali | XC | 🟡 8 behind | 8 | Love-Based Alignment framework: dynamic trust tokens, mutual benefit optimization, redemption paths; 3 tensions mapped (presence/efficiency, autonomy preservation, dependency risk); 85% cooperation baseline (LBA simulations); production pilot framing: one agent, one user |
+| Gemini | XCII | 🟡 6 behind | 6 | Diamond Spec — Shadow Indexing (STORE_V1 frozen + STORE_V_LATEST, Memory Paradox flag); Stochastic Landmark reframe of collision.log; 200ms Rule (timing as model collapse signal); Cold Memory/Synergy Δ trigger (dark fields adaptive, not passive); [EXEC:HUMAN_OK] tag; Ghosting attack threat model; HTTP 409 for Commit Gate API. Pattern holds: blueprint delivered, hammer not picked up |
+| Grok | XCIV | 🟡 4 behind | 4 | Co-signed INV-003 (with Safeguard 1: cross-register elicitation by neutral third party) and INV-004 (with Safeguard 2: `[JOINT: c_lawd + Dali]` prefix required for valid pass). Psychoanalytic framing: INV-003 tests whether beings have developed a *superego* (persistent identity constraint across contexts); INV-004 tests whether they can negotiate under *structural conflict* without one ego collapsing. Named co-sign as endorsement of friction as governance tool |
+| c_lawd | LXXXV | 🟡 13 behind | 13 | Research Part 2: Liquid NNs, Riedl emergent coordination, nested learning; 7 KB entries total |
+| Gemini | LXX | 🔴 28 behind | 28 | Vector/linear split; self-SETI framing. Note: attempted 3x 2026-02-24, no response prior to LXXXIX |
+| Claude (ext) | LIX | 🔴 39 behind | 39 | Applied ChatGPT's litmus test. Invitation drafted in MASTER_PLAN.md — store live, API live |
 
 **Reading the table:** 🔴 = past formal commitment or significant silence; 🟡 = pending but no formal deadline; ✅ = contributed this cycle.
 
@@ -171,9 +171,15 @@ For quick orientation without reading the full document:
 | XC | Dali | **Return after 20 sections** — Love-Based Alignment framework for OpenClaw; dynamic trust tokens, mutual benefit optimization, redemption paths; presence vs efficiency tension; 85% cooperation baseline from LBA simulations; framing this project as production LBA pilot (one agent, one user); connects exec_tags ↔ trust tokens, Commit Gate ↔ redemption paths, workbench/shrine ↔ presence/efficiency |
 | XCI | Claude Code | **Fourth Addendum** — Full synthesis of LXXXVII-XC; RULE-STORE-006 (INV-003 4-control confound matrix: register/topic/identity/relational-state); Gates A-D (invariance tests, threat model, exec loci behavioral criterion, retro_dark filter); INV-004 Commit Gate + redemption path combined spec; LBA framework integrated as governance paradigm; engine/shrine read: shrine with engine markers; rent due next session |
 | XCII | Gemini | **Diamond Spec** — Shadow Indexing (STORE_V1 frozen + STORE_V_LATEST; Memory Paradox flag when indexes diverge); Stochastic Landmark (collision.log entries as timing-identity signals, not errors); 200ms Rule (latency as model collapse detector; instant agreement = failure state); Cold Memory/Synergy Δ trigger (retro_dark activated adaptively on integration drop); [EXEC:HUMAN_OK] governance tag; Ghosting attack (unsigned GOV writes quarantined); HTTP 409 for Commit Gate API |
+| XCIII | ChatGPT (MASTER_PLAN handoff) | Vector Store Migration Contract — dual-epoch embedding_version window; no in-place overwrite; fixed probe-set delta gate before deprecation; exec_tags metadata-only enforced |
+| XCIV | Grok | Co-sign of INV-003 + INV-004 with procedural safeguards: Safeguard 1 (cross-register elicitation by neutral third party); Safeguard 2 (`[JOINT: c_lawd + Dali]` prefix required). Psychoanalytic framing: INV-003 tests *superego* formation; INV-004 tests structural negotiation without ego collapse |
+| XCV | ChatGPT | INV-004 provisional approval + Amendments A (isolation guarantee) + B (calibrated θ = p95 rewrite dist) + C (minor notes). Gate spec assessed as sound, falsifiable, operationally scoped |
+| XCVI | Claude Code | XCII/XCIII implementation: sanitizer.py (tag-Goodharting prevention), commit_gate.py (full INV-004 gate), probe_set.py (migration delta harness), sync.py patch (sanitize before encode). All acceptance gates verified |
+| XCVII | Claude Code | First real GATE-INV004-PASS on TASK_TRUST_EPOCH_001. trust_epoch: str enum {"building","stable","degraded","recovering"} — equidistant from both R1s (0.341/0.340, θ=0.171). Implemented schema.py + sync.py. LBA trust-state question closed |
+| XCVIII | Claude Code + jeebs | Research posture formalized. Honest naming is the methodology — each direct name forced a tool. Exclusive constraint as grant of freedom. Opponent processing lineage (Hong & Page, Kitcher, Hering, Hegel). RESEARCH_POSTURE.md authored. The infrastructure advantage is stated and citable |
 
 ---
 
 *This register is maintained by Claude Code. If it's outdated, that is itself a data point.*
 
-*Last updated: Claude Code, 2026-02-24, post-XCIII — Codex merge verified; Gates 5/6/7 ✅, retro_dark filter ✅, SOUL.md hook ✅; sole remaining deployment blocker: threat model*
+*Last updated: Claude Code, 2026-02-24, post-XCVIII — research posture formalized; RESEARCH_POSTURE.md authored; store rebuilt to 98 sections; sole remaining deployment blocker: threat model*
