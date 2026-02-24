@@ -1,6 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# NOTE (governance):
+# This repo's package.json may intentionally use a placeholder version (e.g., "0.0.0").
+# The user-visible runtime version is sourced from the installed CLI and recorded in:
+#   $HOME/.local/share/openclaw-build/version_build.json
+# This script is the canonical choke-point: it (re)generates the stamp and validates
+# that package_version/build_sha are present before (re)installing the runtime.
+# Do not infer release versions from repo package.json here unless explicitly overridden
+# via OPENCLAW_PACKAGE_VERSION.
+
 ROOT="/home/jeebs/src/clawd"
 RUNTIME_DIR="$ROOT/.runtime/openclaw"
 RUNTIME_DIST_STAGING_DIR="$ROOT/.runtime/openclaw-dist"
@@ -886,7 +895,26 @@ STAMP_FILE="$STAMP_DIR/version_build.json"
 echo "ensuring build stamp: $STAMP_FILE"
 mkdir -p "$STAMP_DIR"
 # Prefer an explicit env override for package version, else fall back to package.json, else "0.0.0"
+# If package.json reports a placeholder like "0.0.0", prefer the user-visible CLI version
+# when available (ensures stamp matches what `/home/$USER/.local/bin/openclaw --version` prints).
 PKG_VER="${OPENCLAW_PACKAGE_VERSION:-$(node -e 'const p=require("../package.json"); console.log(p.version||"0.0.0")' 2>/dev/null || echo "0.0.0") }"
+# Trim surrounding whitespace that may have been introduced by subshells
+PKG_VER="$(printf '%s' "$PKG_VER" | awk '{$1=$1;print}')"
+
+# If the repo package.json is unset/placeholder, try to derive the package version
+# from the installed user-prefix CLI to ensure stamp matches the runtime-visible string.
+if [ "${PKG_VER:-}" = "0.0.0" ] || [ -z "${PKG_VER:-}" ]; then
+  INST_BIN="${HOME:-/home/jeebs}/.local/bin/openclaw"
+  if [ -x "$INST_BIN" ]; then
+    INST_OUT="$($INST_BIN --version 2>/dev/null || true)"
+    # expected format: "<pkgver> build_sha=..."
+    INST_PKGVER="$(printf '%s' "$INST_OUT" | awk '{print $1}')"
+    if [ -n "$INST_PKGVER" ] && [ "$INST_PKGVER" != "0.0.0" ]; then
+      PKG_VER="$INST_PKGVER"
+    fi
+  fi
+fi
+
 # Compute current repo sha (short) if available
 SHA="$(git -C "$ROOT" rev-parse --short HEAD 2>/dev/null || echo unknown)"
 TS="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
