@@ -84,7 +84,7 @@ Don't ask permission. Just do it.
 ### Section 2.4: Model Routing
 
 Content routes through models based on explicit marking:
-- **#confidential** → Local model (Ollama)
+- **#confidential** → Local model (vLLM)
 - **Coding/complex** → Claude Opus
 - **Default** → Qwen Portal
 

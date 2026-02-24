@@ -36,7 +36,7 @@ Free tier is always attempted first (local + free APIs).
 | GPT-5.2 Chat | OpenAI Auth | Tier-2 coding brain pass | Auth | N/A |
 | GPT-5.3 Codex | OpenAI Auth | Tier-2 coding muscle pass | Auth | N/A |
 | Claude 3 Opus | Anthropic API | Complex/coding tasks | Paid | 200K |
-| qwen14b-tools-32k | Ollama (local) | Confidential processing | Free/local | 32K |
+| qwen2_5_14b | vLLM (local) | Confidential processing | Free/local | 16K |
 
 ---
 
@@ -80,7 +80,7 @@ Free tier is always attempted first (local + free APIs).
 - 200K context window
 - Superior reasoning capability
 
-### LOCAL: Ollama (qwen14b-tools-32k)
+### LOCAL: vLLM (qwen2_5_14b)
 
 **Route to local when:**
 - Content explicitly marked `#confidential`
@@ -91,10 +91,10 @@ Free tier is always attempted first (local + free APIs).
 - Offline/air-gapped requirements
 
 **Characteristics:**
-- Runs locally (no external API)
+- Runs locally via vLLM (no external API)
 - No data leaves the machine
-- 32K context window
-- Requires Ollama running: `ollama serve`
+- 16K context window (current limit)
+- Requires vLLM running on port 8001
 
 ---
 
@@ -169,7 +169,7 @@ Content routes to LOCAL only when **explicitly marked**:
         ▼               ▼
    ┌─────────┐   ┌───────────────────────────────┐
    │  LOCAL  │   │ Is it coding, governance,     │
-   │ (Ollama)│   │ memory/evolution, complex      │
+   │ (vLLM)│   │ memory/evolution, complex      │
    └─────────┘   │ reasoning, or security?        │
                   └───────────────┬───────────────┘
                                   │
@@ -198,7 +198,7 @@ Content routes to LOCAL only when **explicitly marked**:
 Models MAY run in parallel when:
 
 1. **Independent subtasks** with different confidentiality levels
-   - Example: Claude reviews code while Ollama processes confidential context
+   - Example: Claude reviews code while vLLM processes confidential context
 
 2. **Validation/cross-checking**
    - Example: Local model validates external model output
@@ -233,11 +233,6 @@ Models MAY run in parallel when:
         "baseUrl": "https://api.anthropic.com/v1",
         "apiKey": "${ANTHROPIC_API_KEY}",
         "api": "anthropic-messages"
-      },
-      "ollama": {
-        "baseUrl": "${OLLAMA_HOST}",
-        "apiKey": "ollama",
-        "api": "openai-completions"
       },
       "local_vllm_assistant": {
         "provider_id": "local_vllm",
@@ -275,7 +270,6 @@ For node `dali`, keep `local_vllm_assistant` as default and prefer `local_vllm_c
 
 ```bash
 ANTHROPIC_API_KEY=sk-ant-...
-OLLAMA_HOST=http://localhost:11434
 GROQ_API_KEY=...
 ```
 
@@ -288,10 +282,10 @@ GROQ_API_KEY=...
 - Cost-aware: use judiciously for appropriate tasks
 - API key in secrets.env (never committed)
 
-### Ollama Local
-- Requires: `ollama pull qwen14b-tools-32k:latest`
-- Start with: `ollama serve`
-- Verify with: `ollama list`
+### vLLM Local
+- Requires: vLLM running on port 8001
+- Start with: `systemctl --user start openclaw-vllm`
+- Verify with: `curl http://127.0.0.1:8001/v1/models`
 - No data leaves machine - safe for confidential content
 
 ### Qwen Portal

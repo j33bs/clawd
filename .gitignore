@@ -138,6 +138,8 @@ completions/
 # Runtime state/logs (never commit)
 workspace/state/
 workspace/state/**/*.jsonl
+.runtime/openclaw-dist/
+.runtime/openclaw/
 
 # Local audit scratch (untracked)
 workspace/audit/_scratch/

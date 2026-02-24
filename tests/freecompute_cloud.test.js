@@ -712,6 +712,74 @@ await testAsync('registry: dispatch uses local_vllm when it is the only eligible
   reg.dispose();
 });
 
+await testAsync('registry: openai-family intent fails closed without cross-family fallback', async () => {
+  const reg = new ProviderRegistry({ env: {} });
+  let localCalled = false;
+
+  reg._adapters.set('local_vllm', {
+    async generationProbe() {
+      return { ok: true };
+    },
+    async call() {
+      localCalled = true;
+      return {
+        text: 'unexpected',
+        raw: {},
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, estimatedCostUsd: 0 }
+      };
+    },
+    async health() {
+      return { ok: true, models: ['stub-model'] };
+    }
+  });
+
+  await assert.rejects(
+    reg.dispatch({
+      taskClass: 'fast_chat',
+      messages: [{ role: 'user', content: 'use openai chat model' }],
+      metadata: { model: 'openai/gpt-5-chat-latest' }
+    }),
+    (err) => {
+      assert.equal(err && err.code, 'REQUESTED_PROVIDER_UNAVAILABLE');
+      assert.match(String(err && err.message), /Requested OpenAI family but no matching provider lane is enabled in this build\./);
+      return true;
+    }
+  );
+  assert.equal(localCalled, false, 'local_vllm must not be selected on explicit openai intent');
+  reg.dispose();
+});
+
+await testAsync('registry: openai-family intent can cross-family fallback only when override is enabled', async () => {
+  const reg = new ProviderRegistry({
+    env: { OPENCLAW_ALLOW_CROSSFAMILY_FALLBACK: '1' }
+  });
+
+  reg._adapters.set('local_vllm', {
+    async generationProbe() {
+      return { ok: true };
+    },
+    async call() {
+      return {
+        text: 'ok',
+        raw: {},
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, estimatedCostUsd: 0 }
+      };
+    },
+    async health() {
+      return { ok: true, models: ['stub-model'] };
+    }
+  });
+
+  const result = await reg.dispatch({
+    taskClass: 'fast_chat',
+    messages: [{ role: 'user', content: 'use openai chat model' }],
+    metadata: { model: 'openai/gpt-5-chat-latest' }
+  });
+  assert.ok(result);
+  assert.equal(result.provider_id, 'local_vllm');
+  reg.dispose();
+});
+
 await testAsync('registry: generation probe failure skips local and falls back to configured external', async () => {
   const reg = new ProviderRegistry({
     env: { ENABLE_FREECOMPUTE_CLOUD: '1', OPENCLAW_GROQ_API_KEY: 'x' }

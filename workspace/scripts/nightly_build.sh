@@ -113,6 +113,13 @@ run_health() {
     log "=== System Health ==="
 
     run_openclaw_config_preflight
+
+    if bash "$SCRIPT_DIR/verify_vllm_singleton.sh" >>"$LOG_FILE" 2>&1; then
+        log "✅ vLLM singleton invariant: OK"
+    else
+        log "❌ vLLM singleton invariant: FAILED"
+        return 1
+    fi
     
     # Check Gateway
     if "$OPENCLAW_BIN" status 2>&1 | grep -q "running"; then

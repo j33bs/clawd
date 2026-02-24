@@ -226,6 +226,20 @@
         }
       ]
     },
+    "gemini": {
+      "enabled": true,
+      "paid": false,
+      "tier": "free",
+      "type": "catalog",
+      "models": []
+    },
+    "qwen_alibaba": {
+      "enabled": true,
+      "paid": false,
+      "tier": "free",
+      "type": "catalog",
+      "models": []
+    },
     "openai_auth": {
       "enabled": false,
       "paid": false,

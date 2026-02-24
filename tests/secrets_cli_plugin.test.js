@@ -16,13 +16,14 @@ function run(name, fn) {
   }
 }
 
-run('plugin registers CLI command: secrets', () => {
+run('plugin registers CLI commands: secrets and gateway diag', () => {
   const plugin = require('../scripts/openclaw_secrets_plugin');
   const registered = [];
   plugin.register({
     registerCli: (_fn, opts) => registered.push(opts?.commands || []),
   });
   assert.ok(registered.some((cmds) => cmds.includes('secrets')), registered);
+  assert.ok(registered.some((cmds) => cmds.includes('gateway diag')), registered);
 });
 
 run('secrets cli status prints enablement header (no secrets)', () => {

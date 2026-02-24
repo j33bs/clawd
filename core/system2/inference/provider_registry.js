@@ -31,6 +31,9 @@ const COMPACTION_NOTE = '(Context compacted due to provider limits.)';
 function classifyDispatchError(err) {
   const code = err && err.code;
   const msg = String((err && err.message) || '');
+  if (code === 'PROVIDER_TOOLCALL_UNSUPPORTED') {
+    return 'config';
+  }
   if (code === 'PROVIDER_TIMEOUT' || code === 'ETIMEDOUT' || /timeout/i.test(msg)) {
     return 'timeout';
   }
@@ -41,6 +44,69 @@ function classifyDispatchError(err) {
     return 'http_error';
   }
   return 'unknown';
+}
+
+function envFlagEnabled(env, key) {
+  const value = String((env && env[key]) || '').trim().toLowerCase();
+  return value === '1' || value === 'true' || value === 'yes';
+}
+
+function normalizeProviderFamily(raw) {
+  const value = String(raw || '').trim().toLowerCase();
+  if (!value) return null;
+  if (value === 'openai' || value === 'openai_api') return 'openai';
+  if (value === 'openai-codex' || value === 'openai_codex') return 'openai-codex';
+  return null;
+}
+
+function providerFamilyFromModelId(modelId) {
+  const value = String(modelId || '').trim().toLowerCase();
+  if (!value) return null;
+  if (value.startsWith('openai-codex/')) return 'openai-codex';
+  if (value.startsWith('openai/')) return 'openai';
+  return null;
+}
+
+function resolveRequestedProviderFamily(params) {
+  const metadata = (params && params.metadata && typeof params.metadata === 'object') ? params.metadata : {};
+  const explicitFamily = normalizeProviderFamily(
+    metadata.provider_family
+    || metadata.providerFamily
+    || metadata.provider
+    || metadata.provider_id
+  );
+  if (explicitFamily) return explicitFamily;
+  return providerFamilyFromModelId(metadata.model || metadata.model_id);
+}
+
+function resolveCandidateProviderFamily(candidate) {
+  if (!candidate || typeof candidate !== 'object') return null;
+  const pid = normalizeProviderFamily(candidate.provider_id);
+  if (pid) return pid;
+  return providerFamilyFromModelId(candidate.model_id);
+}
+
+function createRequestedProviderUnavailableError(requestedFamily) {
+  const err = new Error(
+    `Requested OpenAI family but no matching provider lane is enabled in this build. ` +
+    `Either (a) enable/open the openai/openai-codex lane in catalog/policy, or (b) choose an available provider explicitly.`
+  );
+  err.code = 'REQUESTED_PROVIDER_UNAVAILABLE';
+  err.details = {
+    requested_provider_family: requestedFamily
+  };
+  return err;
+}
+
+function emitRouteDebug(env, payload) {
+  if (!envFlagEnabled(env, 'OPENCLAW_DEBUG_ROUTE')) return;
+  const safePayload = {
+    requested_model: payload && payload.requested_model ? String(payload.requested_model) : null,
+    requested_provider_family: payload && payload.requested_provider_family ? String(payload.requested_provider_family) : null,
+    selected_provider_id: payload && payload.selected_provider_id ? String(payload.selected_provider_id) : null,
+    reason: payload && payload.reason ? String(payload.reason) : null
+  };
+  console.error('[openclaw.route]', JSON.stringify(safePayload));
 }
 
 function hasAuthCredential(auth, env) {
@@ -441,7 +507,7 @@ class ProviderRegistry {
     }
 
     // Route
-    const { candidates } = routeRequest({
+    const { candidates: routedCandidates } = routeRequest({
       taskClass: params.taskClass,
       contextLength: params.contextLength,
       latencyTarget: params.latencyTarget,
@@ -451,6 +517,47 @@ class ProviderRegistry {
       quotaState,
       config: this.config,
       availableProviderIds: Array.from(this._adapters.keys())
+    });
+
+    const requestedProviderFamily = resolveRequestedProviderFamily(params);
+    const allowCrossFamilyFallback = envFlagEnabled(this._env, 'OPENCLAW_ALLOW_CROSSFAMILY_FALLBACK');
+    const requestedModel = params && params.metadata && typeof params.metadata === 'object'
+      ? (params.metadata.model || params.metadata.model_id || null)
+      : null;
+
+    let candidates = routedCandidates;
+    if (requestedProviderFamily) {
+      const familyCandidates = routedCandidates.filter((candidate) =>
+        resolveCandidateProviderFamily(candidate) === requestedProviderFamily
+      );
+      if (familyCandidates.length > 0) {
+        candidates = familyCandidates;
+      } else if (!allowCrossFamilyFallback) {
+        emitRouteDebug(this._env, {
+          requested_model: requestedModel,
+          requested_provider_family: requestedProviderFamily,
+          selected_provider_id: null,
+          reason: 'requested_provider_family_unavailable'
+        });
+        this._emitEvent('freecompute_requested_provider_unavailable', {
+          taskClass: params.taskClass,
+          requested_provider_family: requestedProviderFamily,
+          requested_model: requestedModel
+        });
+        throw createRequestedProviderUnavailableError(requestedProviderFamily);
+      } else {
+        this._emitEvent('freecompute_crossfamily_fallback_enabled', {
+          taskClass: params.taskClass,
+          requested_provider_family: requestedProviderFamily
+        });
+      }
+    }
+
+    emitRouteDebug(this._env, {
+      requested_model: requestedModel,
+      requested_provider_family: requestedProviderFamily,
+      selected_provider_id: candidates[0] ? candidates[0].provider_id : null,
+      reason: candidates[0] ? candidates[0].reason : 'no_candidates'
     });
 
     if (candidates.length === 0) {

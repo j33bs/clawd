@@ -10,6 +10,7 @@ import sys
 import argparse
 import logging
 import threading
+import time
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Optional
@@ -201,6 +202,10 @@ class SourceUIHandler(SimpleHTTPRequestHandler):
     
     def do_GET(self):
         parsed = urlparse(self.path)
+
+        if parsed.path == '/events':
+            self.stream_events()
+            return
         
         # API endpoints
         if parsed.path.startswith('/api/'):
@@ -348,6 +353,47 @@ class SourceUIHandler(SimpleHTTPRequestHandler):
         self.send_header('Content-Type', 'application/json')
         self.end_headers()
         self.wfile.write(json.dumps(data).encode())
+
+    def stream_events(self):
+        repo_root = Path(__file__).resolve().parents[2]
+        router_events = repo_root / 'itc' / 'llm_router_events.jsonl'
+        vllm_metrics = repo_root / 'workspace' / 'state' / 'vllm_metrics.json'
+
+        self.send_response(200)
+        self.send_header('Content-Type', 'text/event-stream')
+        self.send_header('Cache-Control', 'no-cache')
+        self.send_header('Connection', 'keep-alive')
+        self.end_headers()
+
+        router_offset = 0
+        for _ in range(30):
+            try:
+                if router_events.exists():
+                    with open(router_events, 'r', encoding='utf-8') as handle:
+                        handle.seek(router_offset)
+                        line = handle.readline().strip()
+                        if line:
+                            router_offset = handle.tell()
+                            self._emit_sse('router_tick', {'line': line})
+                gpu_payload = {}
+                if vllm_metrics.exists():
+                    try:
+                        gpu_payload = json.loads(vllm_metrics.read_text(encoding='utf-8'))
+                    except Exception:
+                        gpu_payload = {}
+                self._emit_sse('gpu_tick', gpu_payload)
+                time.sleep(1)
+            except (BrokenPipeError, ConnectionResetError):
+                break
+            except Exception as exc:
+                self._emit_sse('gpu_tick', {'error': str(exc)})
+                break
+
+    def _emit_sse(self, event_name: str, payload: Any):
+        body = json.dumps(payload, ensure_ascii=False)
+        self.wfile.write(f"event: {event_name}\n".encode('utf-8'))
+        self.wfile.write(f"data: {body}\n\n".encode('utf-8'))
+        self.wfile.flush()
     
     def serve_file(self, filename, content_type):
         """Serve a file from static directory."""

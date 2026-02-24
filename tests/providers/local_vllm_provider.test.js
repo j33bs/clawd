@@ -3,7 +3,7 @@
 
 const assert = require('node:assert');
 
-const { LocalVllmProvider, normalizeBaseUrl } = require('../../core/system2/inference/local_vllm_provider');
+const { LocalVllmProvider, normalizeBaseUrl, forwardGeneratedStream } = require('../../core/system2/inference/local_vllm_provider');
 
 const tests = [];
 function test(name, fn) {
@@ -66,11 +66,97 @@ test('generateChat returns expected output shape from vLLM response', async func
   assert.ok(output.raw);
 });
 
+test('generateChat strips tool payload fields by default', async function () {
+  const provider = new LocalVllmProvider({
+    env: { OPENCLAW_VLLM_BASE_URL: 'http://localhost:18888' }
+  });
+  let seenBody = null;
+  provider._httpRequest = async function (_method, _url, body) {
+    seenBody = body;
+    return {
+      model: 'qwen2.5',
+      choices: [{ message: { content: 'ok' } }],
+      usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 }
+    };
+  };
+
+  await provider.generateChat({
+    messages: [{ role: 'user', content: 'hi' }],
+    options: {
+      model: 'qwen2.5',
+      tools: [{ type: 'function', function: { name: 'sum', parameters: { type: 'object' } } }],
+      tool_choice: 'auto',
+      parallel_tool_calls: true,
+      tool_calls: [{ id: 'call_1' }],
+      function_call: { name: 'sum' }
+    }
+  });
+
+  assert.ok(seenBody, 'expected request payload');
+  assert.ok(!Object.prototype.hasOwnProperty.call(seenBody, 'tools'));
+  assert.ok(!Object.prototype.hasOwnProperty.call(seenBody, 'tool_choice'));
+  assert.ok(!Object.prototype.hasOwnProperty.call(seenBody, 'parallel_tool_calls'));
+  assert.ok(!Object.prototype.hasOwnProperty.call(seenBody, 'tool_calls'));
+  assert.ok(!Object.prototype.hasOwnProperty.call(seenBody, 'function_call'));
+});
+
+test('generateChat removes tool_choice when tools are absent', async function () {
+  const provider = new LocalVllmProvider({
+    env: {
+      OPENCLAW_VLLM_BASE_URL: 'http://localhost:18888',
+      OPENCLAW_VLLM_ENABLE_AUTO_TOOL_CHOICE: '1',
+      OPENCLAW_VLLM_TOOLCALL: '1'
+    }
+  });
+  let seenBody = null;
+  provider._httpRequest = async function (_method, _url, body) {
+    seenBody = body;
+    return {
+      model: 'qwen2.5',
+      choices: [{ message: { content: 'ok' } }],
+      usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 }
+    };
+  };
+
+  await provider.generateChat({
+    messages: [{ role: 'user', content: 'hi' }],
+    options: {
+      model: 'qwen2.5',
+      tool_choice: 'auto'
+    }
+  });
+
+  assert.ok(seenBody, 'expected request payload');
+  assert.ok(!Object.prototype.hasOwnProperty.call(seenBody, 'tools'));
+  assert.ok(!Object.prototype.hasOwnProperty.call(seenBody, 'tool_choice'));
+});
+
 test('normalizeBaseUrl appends /v1 only when missing', function () {
   assert.strictEqual(normalizeBaseUrl('http://localhost:18888'), 'http://localhost:18888/v1');
   assert.strictEqual(normalizeBaseUrl('http://localhost:18888/v1'), 'http://localhost:18888/v1');
   assert.strictEqual(normalizeBaseUrl('http://localhost:18888/'), 'http://localhost:18888/v1');
   assert.strictEqual(normalizeBaseUrl('http://localhost:18888/v1/'), 'http://localhost:18888/v1');
+});
+
+test('forwardGeneratedStream forwards ordered deltas and done payload', async function () {
+  async function* fakeStream() {
+    yield { type: 'delta', text: 'hel' };
+    yield { type: 'delta', text: 'lo' };
+    yield { type: 'done', usage: { total_tokens: 2 }, model: 'local-assistant', finishReason: 'stop' };
+  }
+  const sent = [];
+  const sink = {
+    send(payload) { sent.push(payload); },
+    close() { sent.push({ type: 'closed' }); }
+  };
+
+  const done = await forwardGeneratedStream(fakeStream(), sink);
+  assert.deepStrictEqual(sent[0], { type: 'delta', text: 'hel' });
+  assert.deepStrictEqual(sent[1], { type: 'delta', text: 'lo' });
+  assert.strictEqual(sent[2].type, 'done');
+  assert.strictEqual(sent[2].model, 'local-assistant');
+  assert.strictEqual(sent[3].type, 'closed');
+  assert.strictEqual(done.model, 'local-assistant');
 });
 
 async function run() {

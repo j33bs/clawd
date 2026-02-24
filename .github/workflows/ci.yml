@@ -1,52 +1,52 @@
-name: ci
+name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [ main, 'feat/dali-wire-existing-components-*' ]
   pull_request:
-    branches: [main]
-  workflow_dispatch:
-
-permissions:
-  contents: read
+    branches: [ main ]
 
 jobs:
-  ci:
-    name: ci
+  test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout source
+        uses: actions/checkout@v3
 
-      - name: Detect Node project
-        id: detect
+      - name: Set up Node.js v22
+        uses: actions/setup-node@v3
+        with:
+          node-version: '22'
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
+
+      - name: Install Node dependencies (optional)
         run: |
           if [ -f package.json ]; then
-            echo "has_node=true" >> "$GITHUB_OUTPUT"
+            if [ -f package-lock.json ]; then
+              npm ci
+            else
+              npm install
+            fi
           else
-            echo "has_node=false" >> "$GITHUB_OUTPUT"
+            echo "No package.json found; skipping npm install."
           fi
 
-      - name: Setup Node
-        if: steps.detect.outputs.has_node == 'true'
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-          cache: npm
+      - name: Run shell syntax check
+        run: bash -n scripts/vllm_launch_optimal.sh
 
-      - name: Install dependencies
-        if: steps.detect.outputs.has_node == 'true'
+      - name: Run Python glue tests
         run: |
-          npm ci || npm install
+          python3 -m unittest \
+            tests_unittest.test_policy_router_tacti_main_flow \
+            tests_unittest.test_policy_router_glue_integrations \
+            tests_unittest.test_itc_ingestion_boundary_forwarding \
+            tests_unittest.test_source_ui_sse
 
-      - name: Smoke test
-        if: steps.detect.outputs.has_node == 'true'
+      - name: Run Node glue tests
         run: |
-          npm run test --if-present
-          npm run smoke --if-present
-          node --version
-
-      - name: Smoke test (no package.json)
-        if: steps.detect.outputs.has_node != 'true'
-        run: |
-          echo "No package.json found; CI status check is active."
-          git --version
+          node tests/providers/local_vllm_provider.test.js
+          node tests/router_gpu_guard.test.js

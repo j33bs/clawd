@@ -1,0 +1,6 @@
+[Service]
+# Hard lock providers: exclude Anthropic entirely.
+Environment=OPENCLAW_PROVIDER_ALLOWLIST=local_vllm,minimax-portal
+Environment=ENABLE_LOCAL_VLLM=1
+Environment=OPENCLAW_PREFER_LOCAL=0
+Environment=OPENCLAW_DEFAULT_PROVIDER=minimax-portal
