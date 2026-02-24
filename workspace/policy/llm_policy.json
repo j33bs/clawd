@@ -146,7 +146,7 @@
       ]
     },
     "openai-codex": {
-      "enabled": true,
+      "enabled": false,
       "paid": true,
       "tier": "auth",
       "type": "openai_compatible",
