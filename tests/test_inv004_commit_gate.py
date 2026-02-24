@@ -1,7 +1,10 @@
 import hashlib
+import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 import sys
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -9,7 +12,12 @@ WORKSPACE_TOOLS = REPO_ROOT / "workspace" / "tools"
 if str(WORKSPACE_TOOLS) not in sys.path:
     sys.path.insert(0, str(WORKSPACE_TOOLS))
 
-from commit_gate import run_inv004
+from commit_gate import (
+    SANITIZER_RULES_VERSION,
+    run_inv004,
+    run_inv004_calibrate,
+    sanitize_for_embedding,
+)
 
 
 class DeterministicEmbedder:
@@ -107,9 +115,9 @@ class TestINV004CommitGate(unittest.TestCase):
                 embedder=DeterministicEmbedder(),
             )
 
-            self.assertAlmostEqual(one.dist_joint_dali, two.dist_joint_dali, places=12)
-            self.assertAlmostEqual(one.dist_joint_clawd, two.dist_joint_clawd, places=12)
-            self.assertAlmostEqual(one.min_dist, two.min_dist, places=12)
+            self.assertAlmostEqual(one.dist_joint_dali or 0.0, two.dist_joint_dali or 0.0, places=12)
+            self.assertAlmostEqual(one.dist_joint_clawd or 0.0, two.dist_joint_clawd or 0.0, places=12)
+            self.assertAlmostEqual(one.min_dist or 0.0, two.min_dist or 0.0, places=12)
         finally:
             tempdir.cleanup()
 
@@ -130,8 +138,9 @@ class TestINV004CommitGate(unittest.TestCase):
                 embedder=DeterministicEmbedder(),
             )
             self.assertTrue(baseline.overall_pass)
+            self.assertIsNotNone(baseline.min_dist)
 
-            pass_threshold = max(0.0, baseline.min_dist - 1e-9)
+            pass_threshold = max(0.0, (baseline.min_dist or 0.0) - 1e-9)
             pass_case = run_inv004(
                 run_id="theta-pass",
                 mode="enforce",
@@ -150,7 +159,7 @@ class TestINV004CommitGate(unittest.TestCase):
             fail_case = run_inv004(
                 run_id="theta-fail",
                 mode="enforce",
-                theta=baseline.min_dist + 1e-9,
+                theta=(baseline.min_dist or 0.0) + 1e-9,
                 embedder_name="sentence-transformers/all-MiniLM-L6-v2",
                 inputs=str(root / "inputs"),
                 isolation_verified=True,
@@ -186,9 +195,103 @@ class TestINV004CommitGate(unittest.TestCase):
             self.assertIn("isolation_verified: true", text)
             self.assertIn("embed_model: deterministic-hash", text)
             self.assertIn("embed_version: 1.0", text)
-            self.assertIn("theta:", text)
-            self.assertIn("dist_joint_dali:", text)
-            self.assertIn("dist_joint_clawd:", text)
+            self.assertIn("embedding_input_sanitized: true", text)
+            self.assertIn(f"sanitizer_rules_version: {SANITIZER_RULES_VERSION}", text)
+            self.assertIn("python_version:", text)
+            self.assertIn("platform:", text)
+            self.assertIn("transformers_version:", text)
+            self.assertIn("torch_version:", text)
+        finally:
+            tempdir.cleanup()
+
+    def test_enforce_fails_when_isolation_missing(self):
+        tempdir, root, spec = self._build_workspace()
+        try:
+            result = run_inv004(
+                run_id="iso-missing",
+                mode="enforce",
+                theta=0.0,
+                embedder_name="sentence-transformers/all-MiniLM-L6-v2",
+                inputs=str(root / "inputs"),
+                isolation_verified=False,
+                isolation_evidence="",
+                spec_path=spec,
+                repo_root=root,
+                workspace_root=root / "workspace",
+                embedder=DeterministicEmbedder(),
+            )
+
+            self.assertFalse(result.overall_pass)
+            reasons = "\n".join(result.failure_reasons).lower()
+            self.assertIn("isolation_verified", reasons)
+            self.assertIn("isolation_evidence", reasons)
+        finally:
+            tempdir.cleanup()
+
+    def test_enforce_fails_when_model_unavailable_offline(self):
+        tempdir, root, spec = self._build_workspace()
+        try:
+            with mock.patch.dict(os.environ, {"HF_HUB_OFFLINE": "1"}, clear=False):
+                result = run_inv004(
+                    run_id="offline-missing-model",
+                    mode="enforce",
+                    theta=0.15,
+                    embedder_name="sentence-transformers/nonexistent-inv004-model",
+                    inputs=str(root / "inputs"),
+                    isolation_verified=True,
+                    isolation_evidence="timestamps captured",
+                    spec_path=spec,
+                    repo_root=root,
+                    workspace_root=root / "workspace",
+                    require_offline_model=True,
+                )
+            self.assertFalse(result.overall_pass)
+            reasons = "\n".join(result.failure_reasons).lower()
+            self.assertIn("offline", reasons)
+            self.assertIn("model not available", reasons)
+        finally:
+            tempdir.cleanup()
+
+    def test_sanitizer_removes_governance_tags(self):
+        raw = """[EXEC:HUMAN_OK] Keep this control line.
+[JOINT: c_lawd + dali] EXPERIMENT PENDING
+[ALERT:TAG] GOVERNANCE RULE CANDIDATE remains testable.
+PHILOSOPHICAL ONLY should vanish phrase.
+[UPPER:XYZ] payload survives
+"""
+        cleaned = sanitize_for_embedding(raw)
+        self.assertNotIn("[EXEC:", cleaned)
+        self.assertNotIn("[JOINT:", cleaned)
+        self.assertNotIn("EXPERIMENT PENDING", cleaned)
+        self.assertNotIn("GOVERNANCE RULE CANDIDATE", cleaned)
+        self.assertNotIn("PHILOSOPHICAL ONLY", cleaned)
+        self.assertIn("payload survives", cleaned)
+
+    def test_calibration_writes_baseline_with_required_fields(self):
+        tempdir, root, _ = self._build_workspace()
+        try:
+            baseline_path = root / "workspace" / "artifacts" / "inv004" / "calibration" / "test-run" / "baseline.json"
+            baseline = run_inv004_calibrate(
+                inputs=str(root / "inputs"),
+                embedder_name="sentence-transformers/all-MiniLM-L6-v2",
+                out_path=baseline_path,
+                require_offline_model=False,
+                repo_root=root,
+                workspace_root=root / "workspace",
+                embedder=DeterministicEmbedder(),
+            )
+            self.assertTrue(baseline_path.exists())
+            loaded = json.loads(baseline_path.read_text(encoding="utf-8"))
+            self.assertIn("recommended_theta", loaded)
+            self.assertIn("sentence_transformers_version", loaded)
+            self.assertIn("transformers_version", loaded)
+            self.assertIn("torch_version", loaded)
+            self.assertIn("embedder_id", loaded)
+            self.assertIn("buckets", loaded)
+            self.assertIn("within_agent_rewrite_dist", loaded["buckets"])
+            self.assertEqual(loaded["sanitizer_rules_version"], SANITIZER_RULES_VERSION)
+            self.assertGreaterEqual(loaded["recommended_theta"], 0.0)
+            self.assertIn("audit_note", baseline)
         finally:
             tempdir.cleanup()
 
