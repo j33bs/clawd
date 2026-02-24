@@ -3,7 +3,7 @@
 
 Wandered: AI consciousness measurement integrated information
 
-Generated question: What would AI consciousness measurement integrated information mean for Tacti(C)-R?
+Generated question: What would AI consciousness measurement integrated information mean for TACTI?
 
 ---
 
@@ -12,7 +12,7 @@ Generated question: What would AI consciousness measurement integrated informati
 
 Wandered: multi-agent collective cognition emergence
 
-Generated question: What would multi-agent collective cognition emergence mean for Tacti(C)-R?
+Generated question: What would multi-agent collective cognition emergence mean for TACTI?
 
 ---
 
@@ -21,7 +21,7 @@ Generated question: What would multi-agent collective cognition emergence mean f
 
 Wandered: LLM world models internal representations
 
-Generated question: What would LLM world models internal representations mean for Tacti(C)-R?
+Generated question: What would LLM world models internal representations mean for TACTI?
 
 ---
 
@@ -30,7 +30,7 @@ Generated question: What would LLM world models internal representations mean fo
 
 Wandered: embodied cognition symbol grounding AI
 
-Generated question: What would embodied cognition symbol grounding AI mean for Tacti(C)-R?
+Generated question: What would embodied cognition symbol grounding AI mean for TACTI?
 
 ---
 
@@ -39,7 +39,7 @@ Generated question: What would embodied cognition symbol grounding AI mean for T
 
 Wandered: AI memory consolidation sleep replay
 
-Generated question: What would AI memory consolidation sleep replay mean for Tacti(C)-R?
+Generated question: What would AI memory consolidation sleep replay mean for TACTI?
 
 ---
 
@@ -48,7 +48,7 @@ Generated question: What would AI memory consolidation sleep replay mean for Tac
 
 Wandered: distributed AI identity continuity
 
-Generated question: What would distributed AI identity continuity mean for Tacti(C)-R?
+Generated question: What would distributed AI identity continuity mean for TACTI?
 
 ---
 
@@ -57,7 +57,7 @@ Generated question: What would distributed AI identity continuity mean for Tacti
 
 Wandered: alien intelligence detection framework
 
-Generated question: What would alien intelligence detection framework mean for Tacti(C)-R?
+Generated question: What would alien intelligence detection framework mean for TACTI?
 
 ---
 
@@ -66,7 +66,7 @@ Generated question: What would alien intelligence detection framework mean for T
 
 Wandered: IIT phi consciousness measurement TACTI-CR
 
-Generated question: What would IIT phi consciousness measurement TACTI-CR mean for Tacti(C)-R?
+Generated question: What would IIT phi consciousness measurement TACTI-CR mean for TACTI?
 
 ---
 
@@ -75,7 +75,7 @@ Generated question: What would IIT phi consciousness measurement TACTI-CR mean f
 
 Wandered: performance becoming identity AI
 
-Generated question: What would performance becoming identity AI mean for Tacti(C)-R?
+Generated question: What would performance becoming identity AI mean for TACTI?
 
 ---
 
@@ -84,7 +84,7 @@ Generated question: What would performance becoming identity AI mean for Tacti(C
 
 Wandered: what does AI want purpose meaning
 
-Generated question: What would what does AI want purpose meaning mean for Tacti(C)-R?
+Generated question: What would what does AI want purpose meaning mean for TACTI?
 
 ---
 
@@ -93,7 +93,7 @@ Generated question: What would what does AI want purpose meaning mean for Tacti(
 
 Wandered: agentic AI autonomy free will
 
-Generated question: What would agentic AI autonomy free will mean for Tacti(C)-R?
+Generated question: What would agentic AI autonomy free will mean for TACTI?
 
 ---
 
@@ -102,7 +102,7 @@ Generated question: What would agentic AI autonomy free will mean for Tacti(C)-R
 
 Wandered: creativity multi-agent systems emergence
 
-Generated question: What would creativity multi-agent systems emergence mean for Tacti(C)-R?
+Generated question: What would creativity multi-agent systems emergence mean for TACTI?
 
 ---
 
