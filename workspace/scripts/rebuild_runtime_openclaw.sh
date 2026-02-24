@@ -877,3 +877,26 @@ fi
 
 echo "marker_check_runtime_dist:"
 rg -n -S "OPENCLAW_STRICT_TOOL_PAYLOAD|gateway\\.edge\\.final_dispatch|payload sanitizer bypassed" "$RUNTIME_DIR/dist" || true
+
+# Ensure a runtime build stamp exists for the wrapper to read.
+# This generates an idempotent JSON at the user-local shared stamp path
+# so installs/rebuilds always supply `build_sha`, `build_time_utc`, and `package_version`.
+STAMP_DIR="${HOME:-/home/jeebs}/.local/share/openclaw-build"
+STAMP_FILE="$STAMP_DIR/version_build.json"
+echo "ensuring build stamp: $STAMP_FILE"
+mkdir -p "$STAMP_DIR"
+# Prefer an explicit env override for package version, else fall back to package.json, else "0.0.0"
+PKG_VER="${OPENCLAW_PACKAGE_VERSION:-$(node -e 'const p=require("../package.json"); console.log(p.version||"0.0.0")' 2>/dev/null || echo "0.0.0") }"
+# Compute current repo sha (short) if available
+SHA="$(git -C "$ROOT" rev-parse --short HEAD 2>/dev/null || echo unknown)"
+TS="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+TMP_STAMP="$(mktemp)"
+printf '{"build_sha":"%s","build_time_utc":"%s","package_version":"%s"}\n' "$SHA" "$TS" "$PKG_VER" > "$TMP_STAMP"
+mv -f "$TMP_STAMP" "$STAMP_FILE"
+echo "wrote stamp:"; cat "$STAMP_FILE" || true
+
+# Sanity-check the stamp file contains expected keys; fail-fast if not.
+if ! grep -q '"build_sha"' "$STAMP_FILE" || ! grep -q '"package_version"' "$STAMP_FILE"; then
+  echo "ERROR: stamp file $STAMP_FILE missing required keys" >&2
+  exit 1
+fi
