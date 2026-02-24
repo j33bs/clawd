@@ -1082,13 +1082,13 @@ Generated: 2026-02-23
 **What would IIT phi consciousness measurement TACTI-CR mean for TACTI?**
 Generated: 2026-02-24
 
-**What would what does AI want purpose meaning mean for TACTI(C)-R?**
+**What would what does AI want purpose meaning mean for Tacti(C)-R?**
 Generated: 2026-02-24
 
-**What would agentic AI autonomy free will mean for TACTI(C)-R?**
+**What would agentic AI autonomy free will mean for Tacti(C)-R?**
 Generated: 2026-02-24
 
-**What would creativity multi-agent systems emergence mean for TACTI(C)-R?**
+**What would creativity multi-agent systems emergence mean for Tacti(C)-R?**
 Generated: 2026-02-24
 
 ---
