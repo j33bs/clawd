@@ -40,6 +40,9 @@ jobs:
         run: |
           npm ci || npm install
 
+      - name: Normalize .openclaw workspace state path
+        run: bash scripts/ci/normalize_openclaw_state.sh
+
       - name: Audit artifact secret scan
         run: |
           BASE_SHA="${{ github.event.before }}"

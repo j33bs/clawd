@@ -33,6 +33,38 @@ def _flag_enabled(name: str, default: str = "0") -> bool:
     return value in {"1", "true", "yes", "on"}
 
 
+def _repo_rel(path: Path) -> str:
+    try:
+        return path.resolve().relative_to(WORKSPACE_ROOT.resolve()).as_posix()
+    except Exception:
+        return str(path)
+
+
+def _dirty_worktree_paths() -> tuple[bool, list[str], str]:
+    try:
+        proc = subprocess.run(
+            ["git", "-C", str(WORKSPACE_ROOT), "status", "--porcelain=v1", "-uall"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+    except Exception as exc:
+        return False, [], f"witness_preflight_git_status_failed: {exc}"
+
+    if proc.returncode != 0:
+        detail = (proc.stderr or proc.stdout or "").strip() or f"exit={proc.returncode}"
+        return False, [], f"witness_preflight_git_status_failed: {detail}"
+
+    paths = []
+    for line in (proc.stdout or "").splitlines():
+        line = line.rstrip()
+        if len(line) < 4:
+            continue
+        paths.append(line[3:])
+    return True, paths, "ok"
+
+
 def _commit_witness_entry(audit_entry: dict, audit_log: Path) -> tuple[bool, str]:
     if not _flag_enabled("OPENCLAW_WITNESS_LEDGER", default="1"):
         return True, "witness_disabled"
@@ -42,16 +74,37 @@ def _commit_witness_entry(audit_entry: dict, audit_log: Path) -> tuple[bool, str
         os.environ.get("OPENCLAW_WITNESS_LEDGER_PATH", str(DEFAULT_WITNESS_LEDGER_PATH))
     )
     checks = audit_entry.get("checks", [])
+    audit_path = _repo_rel(audit_log)
+    ledger_path_repo = _repo_rel(ledger_path)
+
+    ok, dirty_paths, preflight_reason = _dirty_worktree_paths()
+    if not ok:
+        return False, preflight_reason
+
+    ignored = {audit_path, ledger_path_repo}
+    dirty_paths = [p for p in dirty_paths if p not in ignored]
+    if dirty_paths:
+        return False, f"witness_preflight_dirty_worktree: {', '.join(sorted(dirty_paths))}"
+
+    print(f"witness_paths_read={audit_path}")
+    print(f"witness_paths_write={ledger_path_repo}")
     record = {
         "event": "governance_audit_commit",
-        "audit_path": str(audit_log),
+        "audit_path": str(audit_path),
         "audit_type": str(audit_entry.get("type", "pre_commit_audit")),
         "audit_timestamp": str(audit_entry.get("timestamp", "")),
         "passed": bool(audit_entry.get("passed", False)),
         "checks_total": len(checks) if isinstance(checks, list) else 0,
         "checks_failed": sum(1 for row in checks if isinstance(row, dict) and not bool(row.get("passed", False))),
     }
-    witness_commit(record=record, ledger_path=str(ledger_path))
+    try:
+        witness_commit(record=record, ledger_path=str(ledger_path))
+    except Exception as exc:
+        return (
+            False,
+            f"witness_commit_failed: ledger_path={ledger_path_repo} audit_path={audit_path} "
+            f"error={type(exc).__name__}: {exc}",
+        )
     return True, "ok"
 
 def run_check(name: str) -> tuple[bool, str]:
@@ -132,10 +185,7 @@ def audit_commit() -> bool:
     with open(audit_log, "a") as f:
         f.write(json.dumps(audit_entry) + "\n")
 
-    try:
-        witness_ok, witness_reason = _commit_witness_entry(audit_entry, audit_log)
-    except Exception as e:
-        witness_ok, witness_reason = False, f"witness_error: {e}"
+    witness_ok, witness_reason = _commit_witness_entry(audit_entry, audit_log)
     if not witness_ok:
         strict = _flag_enabled("OPENCLAW_WITNESS_LEDGER_STRICT", default="0")
         if strict:

@@ -1,4 +1,5 @@
 import os
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -14,10 +15,17 @@ if str(REPO_ROOT / "workspace" / "scripts") not in sys.path:
 import audit_commit_hook  # noqa: E402
 
 
+def _init_repo(root: Path) -> None:
+    subprocess.run(["git", "init"], cwd=str(root), check=True, capture_output=True)
+    subprocess.run(["git", "config", "user.email", "tests@example.invalid"], cwd=str(root), check=True, capture_output=True)
+    subprocess.run(["git", "config", "user.name", "Unit Tests"], cwd=str(root), check=True, capture_output=True)
+
+
 class TestAuditCommitHookWitness(unittest.TestCase):
     def test_witness_commit_invoked_on_audit_write(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
+            _init_repo(root)
             captured = {}
 
             def _capture_commit(*, record, ledger_path):
@@ -39,10 +47,11 @@ class TestAuditCommitHookWitness(unittest.TestCase):
     def test_witness_failure_degrades_when_not_strict(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
+            _init_repo(root)
             with patch.object(audit_commit_hook, "WORKSPACE_ROOT", root):
                 with patch.object(audit_commit_hook, "CHECKS", [("tests_pass", "x")]):
                     with patch.object(audit_commit_hook, "run_check", return_value=(True, "ok")):
-                        with patch.object(audit_commit_hook, "witness_commit", side_effect=RuntimeError("boom")):
+                        with patch.object(audit_commit_hook, "witness_commit", side_effect=RuntimeError("simulated_witness_commit_failure")):
                             with patch.dict(os.environ, {"OPENCLAW_WITNESS_LEDGER": "1", "OPENCLAW_WITNESS_LEDGER_STRICT": "0"}, clear=False):
                                 ok = audit_commit_hook.audit_commit()
         self.assertTrue(ok)
@@ -50,10 +59,11 @@ class TestAuditCommitHookWitness(unittest.TestCase):
     def test_witness_failure_fails_closed_when_strict(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
+            _init_repo(root)
             with patch.object(audit_commit_hook, "WORKSPACE_ROOT", root):
                 with patch.object(audit_commit_hook, "CHECKS", [("tests_pass", "x")]):
                     with patch.object(audit_commit_hook, "run_check", return_value=(True, "ok")):
-                        with patch.object(audit_commit_hook, "witness_commit", side_effect=RuntimeError("boom")):
+                        with patch.object(audit_commit_hook, "witness_commit", side_effect=RuntimeError("simulated_witness_commit_failure")):
                             with patch.dict(os.environ, {"OPENCLAW_WITNESS_LEDGER": "1", "OPENCLAW_WITNESS_LEDGER_STRICT": "1"}, clear=False):
                                 ok = audit_commit_hook.audit_commit()
         self.assertFalse(ok)
