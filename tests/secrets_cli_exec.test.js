@@ -34,6 +34,7 @@ test('secrets cli exec injects alias env keys without printing values', function
     env: {
       ...process.env,
       ENABLE_SECRETS_BRIDGE: '1',
+      NODE_ENV: 'test',
       // Keep test deterministic: do not rely on OS keychain/secret-service state.
       SECRETS_BACKEND: 'file',
       SECRETS_FILE_PASSPHRASE: 'test-passphrase',

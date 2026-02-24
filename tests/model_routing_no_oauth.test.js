@@ -108,4 +108,11 @@ function main() {
   console.log('PASS model routing no oauth/codex regression gate');
 }
 
-main();
+const runningUnderJest = typeof process !== 'undefined' && process.env && process.env.JEST_WORKER_ID;
+if (runningUnderJest && typeof test === 'function') {
+  test('model routing no oauth/codex regression gate', () => {
+    main();
+  });
+} else {
+  main();
+}

@@ -57,7 +57,18 @@ if [ "$BRANCH" = "main" ] || [ "$BRANCH" = "master" ]; then
 fi
 
 # ============================================
-# 2. BLOCK: Forbidden files
+# 2. BLOCK: Audit artifact secret scan
+# ============================================
+echo "[1/6] Scanning staged workspace/audit artifacts for secrets..."
+if ! bash workspace/scripts/scan_audit_secrets.sh; then
+    echo ""
+    echo -e "${RED}ERROR: audit artifact secret scan failed.${NC}"
+    exit 1
+fi
+echo -e "${GREEN}  Audit artifact secret scan passed${NC}"
+
+# ============================================
+# 3. BLOCK: Forbidden files
 # ============================================
 FORBIDDEN_FILES=(
     "secrets.env"
@@ -82,9 +93,9 @@ for forbidden in "${FORBIDDEN_FILES[@]}"; do
 done
 
 # ============================================
-# 3. BLOCK: Secret patterns in content
+# 4. BLOCK: Secret patterns in content
 # ============================================
-echo "[1/5] Scanning for secrets in staged content..."
+echo "[2/6] Scanning for secrets in staged content..."
 
 SECRET_PATTERNS=(
     # Keep these patterns effective at runtime, but avoid self-matching the
@@ -159,9 +170,9 @@ fi
 echo -e "${GREEN}  No secrets detected${NC}"
 
 # ============================================
-# 4. WARN: Non-conforming branch names
+# 5. WARN: Non-conforming branch names
 # ============================================
-echo "[2/5] Checking branch naming convention..."
+echo "[3/6] Checking branch naming convention..."
 
 VALID_PREFIXES="feature/|security/|docs/|governance/|hotfix/|develop"
 
@@ -178,9 +189,9 @@ if [ -n "$BRANCH" ] && [ "$BRANCH" != "HEAD" ]; then
 fi
 
 # ============================================
-# 5. WARN: .gitignore modifications
+# 6. WARN: .gitignore modifications
 # ============================================
-echo "[3/5] Checking for .gitignore changes..."
+echo "[4/6] Checking for .gitignore changes..."
 
 if echo "$STAGED_FILES" | grep -q "\.gitignore"; then
     echo -e "${YELLOW}WARNING: .gitignore is being modified.${NC}"
@@ -190,9 +201,9 @@ if echo "$STAGED_FILES" | grep -q "\.gitignore"; then
 fi
 
 # ============================================
-# 6. INFO: Category/branch alignment check
+# 7. INFO: Category/branch alignment check
 # ============================================
-echo "[4/5] Checking category alignment..."
+echo "[5/6] Checking category alignment..."
 
 if echo "$BRANCH" | grep -q "^security/"; then
     echo "  Branch: security/* - expect sec: prefix in commit"
@@ -205,9 +216,9 @@ elif echo "$BRANCH" | grep -q "^governance/"; then
 fi
 
 # ============================================
-# 7. INFO: File count check
+# 8. INFO: File count check
 # ============================================
-echo "[5/5] Reviewing staged changes..."
+echo "[6/6] Reviewing staged changes..."
 
 FILE_COUNT=$(echo "$STAGED_FILES" | wc -l)
 echo "  $FILE_COUNT file(s) staged for commit"

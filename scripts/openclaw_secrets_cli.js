@@ -64,6 +64,10 @@ function promptHidden(promptText) {
   });
 }
 
+function hasConfiguredFilePassphrase() {
+  return Boolean(process.env.SECRETS_FILE_PASSPHRASE || process.env.SECRETS_FILE_PASSPHRASE_FILE);
+}
+
 async function main() {
   const args = process.argv.slice(2);
   const command = args[0];
@@ -100,7 +104,7 @@ async function main() {
     }
 
     let passphrase = null;
-    if ((process.env.SECRETS_BACKEND || '').toLowerCase() === 'file' && !process.env.SECRETS_FILE_PASSPHRASE) {
+    if ((process.env.SECRETS_BACKEND || '').toLowerCase() === 'file' && !hasConfiguredFilePassphrase()) {
       passphrase = await promptHidden('Enter passphrase for file backend: ');
     }
 
@@ -112,7 +116,7 @@ async function main() {
 
   if (command === 'unset') {
     let passphrase = null;
-    if ((process.env.SECRETS_BACKEND || '').toLowerCase() === 'file' && !process.env.SECRETS_FILE_PASSPHRASE) {
+    if ((process.env.SECRETS_BACKEND || '').toLowerCase() === 'file' && !hasConfiguredFilePassphrase()) {
       passphrase = await promptHidden('Enter passphrase for file backend: ');
     }
     const removed = bridge.unsetSecret(provider, { passphrase });
@@ -122,7 +126,7 @@ async function main() {
 
   if (command === 'test') {
     let passphrase = null;
-    if ((process.env.SECRETS_BACKEND || '').toLowerCase() === 'file' && !process.env.SECRETS_FILE_PASSPHRASE) {
+    if ((process.env.SECRETS_BACKEND || '').toLowerCase() === 'file' && !hasConfiguredFilePassphrase()) {
       passphrase = await promptLine('Passphrase for file backend (input visible): ');
     }
     const probe = await bridge.testProvider(provider, { passphrase });

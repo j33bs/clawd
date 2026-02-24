@@ -1246,6 +1246,65 @@ test('adapter: uses healthcheck chat timeout override when present', async () =>
   }
 });
 
+test('adapter: gemini uses x-goog-api-key header and never querystring key', async () => {
+  const https = require('node:https');
+  const { EventEmitter } = require('node:events');
+
+  const originalRequest = https.request;
+  try {
+    const observed = [];
+    https.request = (options, cb) => {
+      observed.push({
+        path: options.path,
+        apiKeyHeader: options.headers && options.headers['x-goog-api-key']
+      });
+
+      const res = new EventEmitter();
+      res.statusCode = 200;
+      process.nextTick(() => {
+        cb(res);
+        if (options.path === '/v1beta/models') {
+          res.emit('data', JSON.stringify({ models: [{ name: 'models/gemini-2.0-flash' }] }));
+        } else {
+          res.emit('data', JSON.stringify({
+            candidates: [{ content: { parts: [{ text: 'ok' }] } }],
+            usageMetadata: { promptTokenCount: 1, candidatesTokenCount: 1, totalTokenCount: 2 }
+          }));
+        }
+        res.emit('end');
+      });
+
+      const req = new EventEmitter();
+      req.write = () => {};
+      req.end = () => {};
+      req.destroy = () => {};
+      return req;
+    };
+
+    const entry = getProvider('gemini');
+    const adapter = new ProviderAdapter(entry, {
+      env: { OPENCLAW_GEMINI_API_KEY: 'gemini_test_key' }
+    });
+
+    const health = await adapter.health();
+    assert.equal(health.ok, true);
+
+    const out = await adapter.call({
+      messages: [{ role: 'user', content: 'hello' }],
+      metadata: { model: 'gemini-2.0-flash', maxTokens: 8, temperature: 0 }
+    });
+    assert.equal(out.text, 'ok');
+
+    assert.ok(observed.length >= 2);
+    for (const request of observed) {
+      assert.ok(!String(request.path || '').includes('key='), 'Gemini API key must not be in URL querystring');
+      assert.equal(request.apiKeyHeader, 'gemini_test_key', 'Gemini API key must be sent via x-goog-api-key header');
+    }
+  } finally {
+    https.request = originalRequest;
+  }
+});
+
 // ════════════════════════════════════════════════════════════════════
 // 9. INTEGRATION TESTS (skipped by default)
 // ════════════════════════════════════════════════════════════════════

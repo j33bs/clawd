@@ -57,8 +57,8 @@ test('buildEvidenceBundle captures raw, writes redacted output, and emits manife
   const rawStatus = fs.readFileSync(path.join(outDir, 'raw', 'status.stdout.txt'), 'utf8');
   const redactedStatus = fs.readFileSync(path.join(outDir, 'redacted', 'status.stdout.txt'), 'utf8');
 
-  assert.ok(rawStatus.includes('sk-TEST1234567890ABCDE'), 'raw output should preserve synthetic token');
-  assert.ok(!redactedStatus.includes('sk-TEST1234567890ABCDE'), 'redacted output should remove synthetic token');
+  assert.ok(rawStatus.includes('TEST_STATUS_TOKEN_PLACEHOLDER_ALPHA'), 'raw output should preserve synthetic token placeholder');
+  assert.ok(!redactedStatus.includes('TEST_STATUS_TOKEN_PLACEHOLDER_ALPHA'), 'redacted output should remove synthetic token placeholder');
   assert.ok(!redactedStatus.includes('/Users/demo'), 'redacted output should remove absolute path');
   assert.ok(redactedStatus.includes('{{SECRET_TOKEN}}'), 'redacted output should include placeholder');
   assert.ok(result.summary.redaction_summary.replacements_total > 0, 'redaction counts should be nonzero');

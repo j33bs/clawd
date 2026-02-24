@@ -1,0 +1,21 @@
+{
+  "topics_file": "/Users/heathyeager/clawd/workspace/research/TOPICS.md",
+  "topics_count": 5,
+  "topics": [
+    "temporality",
+    "arousal",
+    "cross_timescale",
+    "collapse",
+    "repairable"
+  ],
+  "docs_ingested": 0,
+  "fetched_by_topic": {},
+  "dry_run": true,
+  "connectivity": {
+    "ok": true,
+    "status": 200,
+    "url": "https://export.arxiv.org/api/query?search_query=all%3A%22artificial+intelligence%22&start=0&max_results=1&sortBy=submittedDate&sortOrder=descending"
+  },
+  "errors": [],
+  "ts": "2026-02-18T13:24:34.276682+00:00"
+}

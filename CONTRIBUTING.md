@@ -180,13 +180,13 @@ For critical issues requiring immediate action outside normal process:
 
 ### Requirements
 1. **Two-step authorization** - Two reviewers MUST approve
-2. **Governance event logging** - MUST be recorded in `governance/GOVERNANCE_LOG.md`
+2. **Governance event logging** - MUST be recorded in `workspace/governance/GOVERNANCE_LOG.md`
 3. **Follow-up brief** - MUST be created within 24 hours
 4. **Post-incident validation** - MUST pass full regression before resuming normal ops
 
 ### Process
 1. Create `hotfix/{description}` branch
-2. Document emergency in `governance/incidents/INCIDENT-YYYY-MM-DD-NNN.md`
+2. Document emergency in `workspace/governance/incidents/INCIDENT-YYYY-MM-DD-NNN.md`
 3. Obtain dual authorization (two approved reviewers)
 4. Make minimal necessary changes
 5. Add governance log entry with type `OVERRIDE`
@@ -210,9 +210,10 @@ Before any PR can be merged:
 - [ ] Correct branch prefix used
 - [ ] Commit messages follow format
 - [ ] `scripts/regression.sh` passes
+- [ ] `workspace/scripts/verify_governance_log.sh` passes for protected changes
 - [ ] No secrets in diff (pre-commit + pre-push hooks pass)
 - [ ] Category/branch alignment verified
-- [ ] Governance log entry added (if Category A or override)
+- [ ] Governance log entry added (required for protected changes and overrides)
 - [ ] Rollback plan documented (Category A/B/C)
 
 ---

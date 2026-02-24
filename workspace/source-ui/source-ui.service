@@ -1,20 +1,17 @@
 [Unit]
-Description=Source UI - OpenClaw System Management Dashboard
-After=network.target openclaw-gateway.service
-Wants=openclaw-gateway.service
+Description=Source UI - OpenClaw System Management Dashboard (user unit template)
+After=network.target
 
 [Service]
 Type=simple
-User=root
-Group=root
-WorkingDirectory=/home/jeebs/src/clawd/workspace/source-ui
-ExecStart=/home/jeebs/src/clawd/workspace/source-ui/app.py --host 0.0.0.0 --port 18990
+EnvironmentFile=-%h/.config/openclaw/source-ui.env
+Environment=SOURCE_UI_HOST=127.0.0.1
+Environment=SOURCE_UI_PORT=18990
+Environment=GATEWAY_URL=http://127.0.0.1:18789
+WorkingDirectory=%h/src/clawd/workspace/source-ui
+ExecStart=/usr/bin/env python3 %h/src/clawd/workspace/source-ui/app.py --host ${SOURCE_UI_HOST} --port ${SOURCE_UI_PORT}
 Restart=always
 RestartSec=10
-
-# Environment
-Environment=GATEWAY_URL=http://127.0.0.1:18789
-Environment=OPENCLAW_TOKEN=4d6f7b84b1236e250ff79def5c11727669c0de5132793bda
 
 # Logging
 StandardOutput=journal
@@ -22,4 +19,4 @@ StandardError=journal
 SyslogIdentifier=source-ui
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=default.target

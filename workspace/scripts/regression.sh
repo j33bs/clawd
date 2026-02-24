@@ -355,7 +355,7 @@ fi
 # ============================================
 # 9. BRANCH PROTECTION (local check)
 # ============================================
-echo "[9/9] Checking branch state..."
+echo "[9/10] Checking branch state..."
 
 CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
 
@@ -364,6 +364,21 @@ if [ "$CURRENT_BRANCH" = "main" ] || [ "$CURRENT_BRANCH" = "master" ]; then
 else
     echo "    Current branch: $CURRENT_BRANCH"
     check_pass
+fi
+
+# ============================================
+# 10. GOVERNANCE LOG ENFORCEMENT
+# ============================================
+echo "[10/10] Verifying governance log enforcement..."
+
+if [ -x "workspace/scripts/verify_governance_log.sh" ]; then
+    if bash workspace/scripts/verify_governance_log.sh; then
+        check_pass
+    else
+        check_fail "Governance log guard failed"
+    fi
+else
+    check_fail "workspace/scripts/verify_governance_log.sh missing or not executable"
 fi
 
 # ============================================

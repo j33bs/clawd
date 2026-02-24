@@ -16,6 +16,10 @@ function defaultAuditPath() {
   return path.join(os.homedir(), '.openclaw', 'audit', 'edge.jsonl');
 }
 
+function isSha256Hex(value) {
+  return /^[0-9a-f]{64}$/.test(String(value || '').trim().toLowerCase());
+}
+
 function sha256Hex(s) {
   return createHash('sha256').update(String(s), 'utf8').digest('hex');
 }
@@ -64,15 +68,121 @@ function readChainHash(chainPath) {
   try {
     const s = fs.readFileSync(chainPath, 'utf8');
     const h = String(s || '').trim();
-    if (/^[0-9a-f]{64}$/i.test(h)) return h.toLowerCase();
+    if (isSha256Hex(h)) return h.toLowerCase();
   } catch (_) {}
   return '0'.repeat(64);
 }
 
+function readChainHashStrict(chainPath) {
+  let raw;
+  try {
+    raw = fs.readFileSync(chainPath, 'utf8');
+  } catch (error) {
+    const err = new Error(`audit chain file unreadable: ${chainPath}`);
+    err.code = 'AUDIT_CHAIN_READ_ERROR';
+    err.cause = error;
+    throw err;
+  }
+  const chainHash = String(raw || '').trim().toLowerCase();
+  if (!isSha256Hex(chainHash)) {
+    const err = new Error(`audit chain file invalid hash: ${chainPath}`);
+    err.code = 'AUDIT_CHAIN_INVALID_HASH';
+    throw err;
+  }
+  return chainHash;
+}
+
 function writeChainHash(chainPath, h) {
   const s = String(h || '').trim().toLowerCase();
-  if (!/^[0-9a-f]{64}$/.test(s)) return;
+  if (!isSha256Hex(s)) return;
   fs.writeFileSync(chainPath, s + '\n', { encoding: 'utf8', mode: 0o600 });
+}
+
+function verifyHashChainFile(filePath, chainPath, opts = {}) {
+  const emitTamperEvent = typeof opts.emitTamperEvent === 'function'
+    ? opts.emitTamperEvent
+    : () => {};
+  const failTamper = (reason, detail = {}) => {
+    const payload = { reason, ...detail };
+    try {
+      emitTamperEvent(payload);
+    } catch (_) {}
+    const err = new Error(`audit hash chain verification failed: ${reason}`);
+    err.code = 'AUDIT_CHAIN_TAMPERED';
+    err.detail = payload;
+    throw err;
+  };
+
+  let lines = [];
+  if (fs.existsSync(filePath)) {
+    const raw = fs.readFileSync(filePath, 'utf8');
+    lines = String(raw || '')
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean);
+  }
+
+  let expectedPrev = '0'.repeat(64);
+  for (let i = 0; i < lines.length; i += 1) {
+    const lineNo = i + 1;
+    let obj;
+    try {
+      obj = JSON.parse(lines[i]);
+    } catch (_) {
+      failTamper('invalid_json', { line: lineNo });
+    }
+
+    if (!obj || typeof obj !== 'object' || Array.isArray(obj)) {
+      failTamper('invalid_record_shape', { line: lineNo });
+    }
+    if (!isSha256Hex(obj.prev_hash) || !isSha256Hex(obj.entry_hash)) {
+      failTamper('invalid_hash_shape', { line: lineNo });
+    }
+    if (String(obj.prev_hash).toLowerCase() !== expectedPrev) {
+      failTamper('prev_hash_mismatch', {
+        line: lineNo,
+        expected_prev_hash: expectedPrev,
+        actual_prev_hash: String(obj.prev_hash).toLowerCase()
+      });
+    }
+
+    const base = { ...obj };
+    delete base.prev_hash;
+    delete base.entry_hash;
+    const expectedEntryHash = sha256Hex(expectedPrev + '\n' + JSON.stringify(base));
+    if (String(obj.entry_hash).toLowerCase() !== expectedEntryHash) {
+      failTamper('entry_hash_mismatch', {
+        line: lineNo,
+        expected_entry_hash: expectedEntryHash,
+        actual_entry_hash: String(obj.entry_hash).toLowerCase()
+      });
+    }
+    expectedPrev = expectedEntryHash;
+  }
+
+  const chainHash = readChainHashStrict(chainPath);
+  if (chainHash !== expectedPrev) {
+    failTamper('chain_tip_mismatch', {
+      expected_chain_hash: expectedPrev,
+      actual_chain_hash: chainHash
+    });
+  }
+
+  return {
+    ok: true,
+    entries: lines.length,
+    chainHash
+  };
+}
+
+function appendTamperEvent(filePath, detail) {
+  const eventPath = filePath + '.tamper.jsonl';
+  const event = {
+    ts_utc: new Date().toISOString(),
+    event: 'audit_chain_tamper_detected',
+    detail: detail || {}
+  };
+  fs.appendFileSync(eventPath, JSON.stringify(event) + '\n', { encoding: 'utf8' });
 }
 
 function rotateIfNeeded(filePath, rotateBytes, keep) {
@@ -114,6 +224,11 @@ function createAuditSink(opts = {}) {
   const chainPath = filePath + '.chain';
   if (hashChainEnabled) {
     ensureChainFile(chainPath, { strictPerms });
+    verifyHashChainFile(filePath, chainPath, {
+      emitTamperEvent(detail) {
+        appendTamperEvent(filePath, detail);
+      }
+    });
   }
 
   function writeLine(line) {
@@ -155,4 +270,5 @@ function createAuditSink(opts = {}) {
 module.exports = {
   createAuditSink,
   defaultAuditPath,
+  verifyHashChainFile,
 };

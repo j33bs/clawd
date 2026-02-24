@@ -2,5 +2,5 @@
   "service": "redaction-fixture",
   "contact": "ops@example.internal",
   "path": "/Users/demo/clawd/workspace/docs/audits/input",
-  "token": "sk-TESTABCDEFGHIJKLMN123456"
+  "token": "TEST_JSON_TOKEN_PLACEHOLDER_ALPHA"
 }

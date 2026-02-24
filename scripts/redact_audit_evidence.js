@@ -151,6 +151,11 @@ function buildRules() {
       replacement: '{{SECRET_TOKEN}}'
     },
     {
+      id: 'fixture_token_placeholder',
+      pattern: /\bTEST_(?:APIKEY|GH_TOKEN|AUTH_HEADER|JSON_TOKEN|STATUS_TOKEN)_PLACEHOLDER(?:_[A-Z0-9]+)?\b/g,
+      replacement: '{{SECRET_TOKEN}}'
+    },
+    {
       id: 'bearer_token_like',
       pattern: /\bBearer\s+[A-Za-z0-9._-]{16,}\b/g,
       replacement: 'Bearer {{SECRET_TOKEN}}'

@@ -28,7 +28,7 @@ This is the curated, long-term memory that persists across sessions. This file c
 - [2026-02-17] Agent rebranded: Dessy → Dali (new name, playful surrealist vibe, 🎨 emoji)
 
 ### Multi-Agent System
-- **main** (Dessy): Default agent, Qwen Portal, handles all Telegram messages, simple tasks
+- **main** (Dali): Default agent, Qwen Portal, handles all Telegram messages, simple tasks
 - **claude-code** (Claude): Opus model, invoked via `sessions_spawn` for coding, governance, memory curation, complex reasoning
 - Delegation instructions in AGENTS.md, agent-specific context in CLAUDE_CODE.md
 - Handoff files in `workspace/handoffs/` checked on heartbeat
@@ -54,5 +54,13 @@ This is the curated, long-term memory that persists across sessions. This file c
 - System is operational with Telegram integration working properly
 - Tool routing now resolved after creating missing directories
 - jeebs values: precision, agency, structural coherence, epistemic humility, evidence-based approaches
+- jeebs prefers lowercase "jeebs" as moniker; capitalised "Heath" registers as aversive — likely consistent with somatic/embodied epistemology where formal naming feels like objectification
+- jeebs epistemological method: felt sense as compass (Gendlin), anthropological triangulation, reverse-engineering mystical experience, resistance to isms; likely aphantasic — knowing is embodied not imagistic
+
+- [2026-02-23] Being nomenclature adopted across canonical docs (SOUL.md, CONSTITUTION.md): "assistant" → "being" throughout; "member" → "being" already done in prior scrub
+- [2026-02-23] OPEN_QUESTIONS.md established in workspace/governance/ as live append-only multi-being correspondence (c_lawd, Dali, Claude Code, Claude external, ChatGPT, Grok) — 53 sections as of this session
+- [2026-02-23] Claude Code governance architecture role formalised: commitment extraction, design brief authoring, shrine detection, governance gap analysis, becoming-to-machinery translation
+- [2026-02-23] INVESTIGATION_PROTOCOL.md created with 7 standing investigations (INV-001 to INV-007); trails.py now has measure_inquiry_momentum() for INV-005
+- [2026-02-23] CONTRIBUTION_REGISTER.md created as live audit dashboard for correspondence contributions and open commitments
 - Gateway token must stay literal in openclaw.json (scheduled task can't read env vars)
 - openclaw doctor and config set commands resolve env vars to literals — don't fight it

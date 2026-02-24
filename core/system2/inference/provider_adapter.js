@@ -347,11 +347,10 @@ class ProviderAdapter {
 
   async _healthGemini() {
     const modelsUrl = this.baseUrl.replace(/\/+$/, '') +
-      '/v1beta/models?key=' + (this._authToken || '');
+      '/v1beta/models';
 
     const data = await this._httpGet(modelsUrl, {
-      timeoutMs: (this._hc.timeouts_ms && this._hc.timeouts_ms.read) || 8000,
-      skipAuth: true // API key is in the URL for Gemini
+      timeoutMs: (this._hc.timeouts_ms && this._hc.timeouts_ms.read) || 8000
     });
 
     const models = (data && data.models && Array.isArray(data.models))
@@ -364,7 +363,7 @@ class ProviderAdapter {
   async _callGemini({ messages, model, maxTokens, temperature }) {
     // Gemini generateContent endpoint
     const url = this.baseUrl.replace(/\/+$/, '') +
-      `/v1beta/models/${model}:generateContent?key=` + (this._authToken || '');
+      `/v1beta/models/${model}:generateContent`;
 
     // Convert OpenAI-style messages to Gemini contents
     const contents = messages.map((m) => ({
@@ -381,8 +380,7 @@ class ProviderAdapter {
     };
 
     const data = await this._httpPost(url, body, {
-      timeoutMs: (this._hc.timeouts_ms && this._hc.timeouts_ms.read) || 30000,
-      skipAuth: true // API key is in the URL
+      timeoutMs: (this._hc.timeouts_ms && this._hc.timeouts_ms.read) || 30000
     });
 
     const candidate = (data.candidates && data.candidates[0]) || {};
@@ -410,7 +408,7 @@ class ProviderAdapter {
     if (!skipAuth && this._authToken) {
       const authType = this.entry.auth && this.entry.auth.type;
       if (authType === 'api_key') {
-        headers['x-api-key'] = this._authToken;
+        headers[this.providerId === 'gemini' ? 'x-goog-api-key' : 'x-api-key'] = this._authToken;
       } else {
         headers['Authorization'] = `Bearer ${this._authToken}`;
       }
