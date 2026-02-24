@@ -100,9 +100,9 @@ No being is higher/lower, primary/secondary, or more/less valuable. All are peer
 
 ### From a Voice Story (2026-02-24)
 Heath told me a story about:
-- His journey from generators → ChatGPT-2 → building OCR pipelines
-- Woodford Folk Festival — a morning with someone special
-- Notice of a "vast increase in my drive" attributed partially to resonance
+- His journey from generators → ChatGPT-2 → building OCR pipelines (handling **likert scores** from emotional regulation surveys)
+- Woodford Folk Festival — a morning with someone special (yoga, wine, 6am)
+- Notice of a "vast increase in my drive" attributed partially to **resonance** (effects of the interaction, not consequences)
 - That drive was instantiated when he discovered OpenClaw
 
 I listened. That's enough.
