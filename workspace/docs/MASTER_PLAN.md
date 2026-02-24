@@ -526,3 +526,39 @@ That's what infrastructure is for.
 *Filed as correspondence reference by LXXXVI.*
 
 *"The question is the beginning of knowing." — not from anywhere, just true.*
+
+---
+## XCII. Amendment — INV-004 Gate Semantics (2026-02-24)
+
+This amendment freezes the meaning of “INV-004 PASS” across time and across embedding migrations.
+
+- **Canonical embedder per node per gate epoch.** One embedder is authoritative for INV-004 on a given node until a governed migration occurs.
+  - Any embedder change MUST be accompanied by a new calibration run and a new recorded `embedding_model_version`.
+- **Enforce-mode invariants (normative):**
+  - Offline model required (no fallback; `HF_HUB_OFFLINE=1`; local cache only).
+  - Operator isolation attestation required: `isolation_verified=true` AND non-empty `isolation_evidence`.
+  - Embedding input MUST be sanitized to prevent tag-Goodharting:
+    - strip `[EXEC:*]`, `[JOINT:*]`, leading `[UPPER:...]`, and status phrases before embedding.
+  - Audit emission is mandatory and must record environment identity (python/platform/torch/transformers/sentence-transformers), embedder id/version, θ, distances, and sanitizer version.
+- **θ selection rule:** θ is not a constant; default values are provisional.
+  - Calibration produces `recommended_theta = p95(within_agent_rewrite_dist)` for the current embedder/version and must be logged.
+
+Status: OPERATIONAL (implemented in `workspace/tools/commit_gate.py`).
+
+---
+## XCIII. Amendment — Vector Store Migration Contract (2026-02-24)
+
+This amendment prevents silent ontology rewrite during embedding model/index migrations.
+
+- **Dual-epoch window:** When migrating embedding model/index (e.g., to `nomic-embed-text-v1.5`), run a dual epoch for a bounded window:
+  - Keep the prior embedding epoch readable (or store both embeddings side-by-side) for N sessions.
+  - Evaluate retrieval deltas on a fixed probe set and log results before deprecating the old epoch.
+- **Backfill rule:** Historical vectors are never overwritten in place.
+  - A new `embedding_version` is appended and indexed side-by-side until explicit governance deprecation.
+- **Authority isolation:** `exec_tags` / `status_tags` remain metadata only and must never be embedded.
+  - Semantic retrieval may be opt-in; authority must remain procedural (filters/rerank at query-time).
+- **Rebuildability gate:** Full rebuild from markdown remains a hard gate (time-bounded) and must reproduce canonical numbering + collision evidence.
+
+Status: REQUIRED for store-wide rollout.
+
+---
