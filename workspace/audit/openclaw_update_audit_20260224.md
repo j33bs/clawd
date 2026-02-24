@@ -727,3 +727,32 @@ Feb 24 12:33:17 jeebs-Z490-AORUS-MASTER systemd[1645]: Started openclaw-gateway.
 209400 bash /home/jeebs/.local/bin/openclaw gateway --port 18789
 
 === END PACKAGE INSTALL PHASE 2026-02-24T12:33:17+10:00 ===
+
+## 2026-02-24T04:09:17Z - Hardening: regenerate build stamp during rebuild
+
+Rationale: runtime-visible version data is governed by /home/jeebs/.local/share/openclaw-build/version_build.json. Installs alone did not reliably update that file; adding an idempotent stamp generation step to the canonical workspace/scripts/rebuild_runtime_openclaw.sh makes stamp creation explicit and reproducible.
+
+Change: patched workspace/scripts/rebuild_runtime_openclaw.sh to write the stamp file with build_sha, build_time_utc, and package_version. The script prefers the OPENCLAW_PACKAGE_VERSION environment variable and otherwise reads package.json from the repo root.
+
+Verification:
+- stamp written: {"build_sha":"1595fd9","build_time_utc":"2026-02-24T04:09:17Z","package_version":"0.0.0"}
+- runtime: 2026.2.22-2 build_sha=1595fd9 build_time=2026-02-24T04:09:17Z
+
+Rollback:
+- Revert the commit locally: git checkout -- workspace/scripts/rebuild_runtime_openclaw.sh && git reset --hard HEAD~1 or use git revert <commit> to preserve history.
+
+=== DASHBOARD PARITY CHECK 2026-02-24T12:21:00+10:00 ===
+
+- Action: Queried the running Gateway snapshot and service state with
+  `openclaw gateway call status --json` and inspected the running CLI and
+  local build stamp.
+- Observations: the Gateway status snapshot contains no `updateAvailable` (null),
+  the running gateway and installed CLI report `2026.2.22-2` with
+  `build_sha=45a382d` (CLI: `/home/jeebs/.local/bin/openclaw --version` →
+  `2026.2.22-2 build_sha=45a382d build_time=2026-02-24T04:17:20Z`), and the
+  stamp file `/home/jeebs/.local/share/openclaw-build/version_build.json` now
+  contains `"package_version":"2026.2.22-2"` and `"build_sha":"45a382d"`.
+- Result: Dashboard parity confirmed — the Control UI should no longer show an
+  "Update available" banner and terminal/service/dashboard are reporting the
+  same OpenClaw version and build SHA.
+
