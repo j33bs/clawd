@@ -27,6 +27,22 @@ const TIER = Object.freeze({
   HIGH: 'high'
 });
 
+function _flagEnabled(name) {
+  const value = String(process.env[name] || '').trim().toLowerCase();
+  return value === '1' || value === 'true' || value === 'yes' || value === 'on';
+}
+
+function _proprioceptionSample(params, candidates) {
+  return {
+    decisions_last_n: Array.isArray(candidates) ? candidates.length : 0,
+    error_rate: 0.0,
+    breaker_open_providers: [],
+    task_class: String((params && params.taskClass) || ''),
+    context_length: Number((params && params.contextLength) || 0),
+    timestamp_utc: new Date().toISOString()
+  };
+}
+
 function inferArousalTier(taskInput) {
   const text = String(taskInput || '');
   if (!text.trim()) return TIER.MEDIUM;
@@ -295,7 +311,11 @@ function routeRequest(params) {
     }
   }
 
-  return { candidates: scored, explanation };
+  const result = { candidates: scored, explanation };
+  if (_flagEnabled('OPENCLAW_ROUTER_PROPRIOCEPTION')) {
+    result.meta = { proprioception: _proprioceptionSample(params, scored) };
+  }
+  return result;
 }
 
 /**

@@ -8,7 +8,6 @@ const {
   adapterPublicErrorFields,
   formatAdapterPublicError
 } = require('../workspace/scripts/safe_error_surface');
-const { buildAdapterSafeError } = require('../workspace/scripts/telegram_hardening_helpers');
 
 function run(name, fn) {
   Promise.resolve()
@@ -52,13 +51,13 @@ run('safe envelope redacts malicious public message text', () => {
 });
 
 run('adapter error text excludes internal log hints', () => {
-  const built = buildAdapterSafeError({
+  const envelope = createSafeErrorEnvelope({
     requestId: 'req-222',
     errorCode: 'tg-gateway',
     publicMessage: 'Request failed. Please retry shortly.',
     debugSummary: 'provider_unavailable'
   });
-  const text = formatAdapterPublicError(built.envelope);
+  const text = formatAdapterPublicError(envelope);
   assert.equal(text.includes('Gateway logs contain details'), false);
   assert.equal(text.includes('stack trace'), false);
   assert.equal(text.includes('error_code:'), true);

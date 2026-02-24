@@ -14,6 +14,13 @@ const { loadFreeComputeConfig } = require('../../core/system2/inference/config')
 const { getProvider } = require('../../core/system2/inference/catalog');
 const { ProviderAdapter } = require('../../core/system2/inference/provider_adapter');
 const { SecretsBridge } = require('../../core/system2/inference/secrets_bridge');
+const { makeEnvelope, SCHEMA_ID } = require('./event_envelope');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const { execFileSync } = require('node:child_process');
+const http = require('node:http');
+const https = require('node:https');
 
 function isConfigured(entry, env) {
   if (entry && entry.provider_id === 'remote_vllm') {
@@ -31,6 +38,269 @@ function isConfigured(entry, env) {
 
 function envKeysSeen(env, keys) {
   return keys.filter((k) => k && env[k]);
+}
+
+function replayLogPath(env) {
+  return env.OPENCLAW_REPLAY_LOG_PATH || path.join(os.homedir(), '.local', 'share', 'openclaw', 'replay', 'replay.jsonl');
+}
+
+function canaryEnvelopeLogPath(env) {
+  return env.OPENCLAW_EVENT_ENVELOPE_LOG_PATH || path.join(os.homedir(), '.local', 'share', 'openclaw', 'events', 'gate_health.jsonl');
+}
+
+function coderLogPath(env) {
+  return env.OPENCLAW_VLLM_CODER_LOG_PATH || path.join(os.homedir(), '.local', 'state', 'openclaw', 'vllm-coder.log');
+}
+
+function repoRoot() {
+  return path.resolve(__dirname, '..', '..');
+}
+
+function llmPolicyPath(env) {
+  return env.OPENCLAW_LLM_POLICY_PATH || path.join(repoRoot(), 'workspace', 'policy', 'llm_policy.json');
+}
+
+function routerBudgetPath(env) {
+  return env.OPENCLAW_ROUTER_BUDGET_PATH || path.join(repoRoot(), 'itc', 'llm_budget.json');
+}
+
+function loadPolicyRoutingContext(env) {
+  const target = llmPolicyPath(env);
+  try {
+    const raw = JSON.parse(fs.readFileSync(target, 'utf8'));
+    const defaults = (raw && raw.defaults && typeof raw.defaults === 'object') ? raw.defaults : {};
+    const remoteRaw = env.OPENCLAW_REMOTE_ROUTING_ENABLED != null
+      ? String(env.OPENCLAW_REMOTE_ROUTING_ENABLED)
+      : (defaults.remoteRoutingEnabled ? '1' : '0');
+    return {
+      ok: true,
+      path: target,
+      local_context_max_tokens_assistant: Number(defaults.local_context_max_tokens_assistant || 32768),
+      local_context_max_tokens_coder: Number(defaults.local_context_max_tokens_coder || 32768),
+      local_context_soft_limit_tokens: Number(defaults.local_context_soft_limit_tokens || 24576),
+      local_context_overflow_policy: String(defaults.local_context_overflow_policy || 'compress'),
+      remote_routing_enabled: /^(1|true|yes|on)$/i.test(remoteRaw),
+      remote_allowlist_task_classes: Array.isArray(defaults.remoteAllowlistTaskClasses)
+        ? defaults.remoteAllowlistTaskClasses.map((v) => String(v))
+        : []
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      path: target,
+      local_context_max_tokens_assistant: 32768,
+      local_context_max_tokens_coder: 32768,
+      local_context_soft_limit_tokens: 24576,
+      local_context_overflow_policy: 'compress',
+      remote_routing_enabled: false,
+      remote_allowlist_task_classes: [],
+      reason: (err && (err.code || err.name)) || 'unknown'
+    };
+  }
+}
+
+function loadRouterBudgetState(env) {
+  const target = routerBudgetPath(env);
+  try {
+    const raw = JSON.parse(fs.readFileSync(target, 'utf8'));
+    const date = String(raw && raw.date ? raw.date : '');
+    const intents = (raw && raw.intents && typeof raw.intents === 'object') ? raw.intents : {};
+    const tiers = (raw && raw.tiers && typeof raw.tiers === 'object') ? raw.tiers : {};
+    return {
+      ok: true,
+      path: target,
+      date,
+      conversation_tokens: Number((intents.conversation && intents.conversation.tokens) || 0),
+      coding_tokens: Number((intents.coding && intents.coding.tokens) || 0),
+      auth_tokens: Number((tiers.auth && tiers.auth.tokens) || 0),
+      paid_tokens: Number((tiers.paid && tiers.paid.tokens) || 0)
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      path: target,
+      date: '',
+      conversation_tokens: 0,
+      coding_tokens: 0,
+      auth_tokens: 0,
+      paid_tokens: 0,
+      reason: (err && (err.code || err.name)) || 'unknown'
+    };
+  }
+}
+
+function checkReplayWritable(env) {
+  const target = replayLogPath(env);
+  try {
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    const fd = fs.openSync(target, 'a');
+    fs.closeSync(fd);
+    return { writable: true, path: target, reason: 'ok' };
+  } catch (err) {
+    return { writable: false, path: target, reason: (err && (err.code || err.name)) || 'unknown' };
+  }
+}
+
+function appendEnvelope(env, envelope) {
+  const target = canaryEnvelopeLogPath(env);
+  try {
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    fs.appendFileSync(target, JSON.stringify(envelope) + '\n', 'utf8');
+    return { ok: true, path: target };
+  } catch (err) {
+    return { ok: false, path: target, reason: (err && (err.code || err.name)) || 'unknown' };
+  }
+}
+
+function parseCoderStartBlocked(line) {
+  if (!line || !line.includes('VLLM_CODER_START_BLOCKED')) return null;
+  const reasonMatch = String(line).match(/reason=([A-Z0-9_]+)/);
+  const freeMatch = String(line).match(/free_mb=([A-Za-z0-9._-]+)/);
+  const minMatch = String(line).match(/min_free_mb=([A-Za-z0-9._-]+)/);
+  return {
+    reason: (reasonMatch && reasonMatch[1]) ? reasonMatch[1] : 'BLOCKED',
+    free_mb: (freeMatch && freeMatch[1]) ? freeMatch[1] : 'na',
+    min_free_mb: (minMatch && minMatch[1]) ? minMatch[1] : 'na'
+  };
+}
+
+function readCoderJournalTail(env) {
+  if (env.PROVIDER_DIAG_JOURNAL_TEXT) {
+    return { ok: true, text: String(env.PROVIDER_DIAG_JOURNAL_TEXT), source: 'env_override' };
+  }
+  if (env.PROVIDER_DIAG_JOURNAL_FORCE_UNAVAILABLE) {
+    return { ok: false, unavailable: true, reason: String(env.PROVIDER_DIAG_JOURNAL_FORCE_UNAVAILABLE) };
+  }
+  try {
+    const out = execFileSync(
+      'journalctl',
+      ['--user', '-u', 'openclaw-vllm-coder.service', '-n', '50', '--no-pager'],
+      { encoding: 'utf8' }
+    );
+    return { ok: true, text: String(out || ''), source: 'journalctl' };
+  } catch (err) {
+    const code = err && (err.code || err.name);
+    if (code === 'ENOENT' || code === 'EACCES') {
+      return { ok: false, unavailable: true, reason: String(code || 'unavailable') };
+    }
+    return { ok: false, unavailable: false, reason: String(code || 'error') };
+  }
+}
+
+function detectCoderDegradedReason(env) {
+  const target = coderLogPath(env);
+  try {
+    if (fs.existsSync(target)) {
+      const content = fs.readFileSync(target, 'utf8');
+      const lines = content.trim().split(/\r?\n/).reverse();
+      for (const line of lines.slice(0, 50)) {
+        const parsed = parseCoderStartBlocked(line);
+        if (parsed) {
+          return {
+            reason: parsed.reason,
+            note: 'file_marker'
+          };
+        }
+      }
+    }
+  } catch (_) {
+    // Ignore file log errors. Journald fallback is the deterministic source of truth.
+  }
+
+  const journal = readCoderJournalTail(env);
+  if (!journal.ok) {
+    return {
+      reason: 'UNAVAILABLE',
+      note: 'journal_unavailable'
+    };
+  }
+  const lines = String(journal.text || '').split(/\r?\n/).reverse();
+  for (const line of lines) {
+    const parsed = parseCoderStartBlocked(line);
+    if (parsed) {
+      return {
+        reason: parsed.reason,
+        note: 'journal_marker'
+      };
+    }
+  }
+  return { reason: 'NO_BLOCK_MARKER', note: 'journal_no_marker' };
+}
+
+function fetchText(urlString, timeoutMs) {
+  return new Promise((resolve, reject) => {
+    let parsed;
+    try {
+      parsed = new URL(urlString);
+    } catch (err) {
+      reject(new Error(`invalid_url:${err.message}`));
+      return;
+    }
+    const client = parsed.protocol === 'https:' ? https : http;
+    const req = client.request(
+      parsed,
+      { method: 'GET', timeout: timeoutMs },
+      (res) => {
+        let data = '';
+        res.setEncoding('utf8');
+        res.on('data', (chunk) => { data += chunk; });
+        res.on('end', () => {
+          resolve({ status: res.statusCode || 0, body: data });
+        });
+      }
+    );
+    req.on('timeout', () => req.destroy(new Error('timeout')));
+    req.on('error', (err) => reject(err));
+    req.end();
+  });
+}
+
+async function probeCoderVllm(env) {
+  const base = env.OPENCLAW_VLLM_CODER_BASE_URL || 'http://127.0.0.1:8002/v1';
+  const modelsUrl = `${String(base).replace(/\/$/, '')}/models`;
+  if (env.PROVIDER_DIAG_NO_PROBES === '1') {
+    return {
+      endpoint: modelsUrl,
+      endpoint_present: false,
+      models_fetch_ok: false,
+      models_count: 0,
+      reason: 'skipped'
+    };
+  }
+  try {
+    const res = await fetchText(modelsUrl, 5000);
+    let modelsCount = 0;
+    if (res.status >= 200 && res.status < 300) {
+      try {
+        const parsed = JSON.parse(res.body || '{}');
+        if (parsed && Array.isArray(parsed.data)) modelsCount = parsed.data.length;
+      } catch (_) {
+        modelsCount = 0;
+      }
+      return {
+        endpoint: modelsUrl,
+        endpoint_present: true,
+        models_fetch_ok: true,
+        models_count: modelsCount,
+        reason: 'ok'
+      };
+    }
+    return {
+      endpoint: modelsUrl,
+      endpoint_present: false,
+      models_fetch_ok: false,
+      models_count: 0,
+      reason: `http_${res.status}`
+    };
+  } catch (err) {
+    return {
+      endpoint: modelsUrl,
+      endpoint_present: false,
+      models_fetch_ok: false,
+      models_count: 0,
+      reason: (err && err.message) ? err.message.slice(0, 80) : 'unknown'
+    };
+  }
 }
 
 function classifyProvider(entry, env, cfg) {
@@ -135,9 +405,9 @@ async function probeLocalVllm(env) {
   }
 }
 
-async function main() {
+async function generateDiagnostics(envInput) {
   // Secret-safety: never mutate process.env during diagnostics.
-  const env = { ...process.env };
+  const env = { ...(envInput || process.env) };
   const cfg = loadFreeComputeConfig(env);
 
   const lines = [];
@@ -165,12 +435,76 @@ async function main() {
   lines.push('');
 
   const localProbe = await probeLocalVllm(env);
+  const coderProbe = await probeCoderVllm(env);
+  const replay = checkReplayWritable(env);
+  const routingCtx = loadPolicyRoutingContext(env);
+  const budgetState = loadRouterBudgetState(env);
+  const coderDegraded = coderProbe.endpoint_present ? { reason: 'OK', note: 'endpoint_reachable' } : detectCoderDegradedReason(env);
+  const coderDegradedReason = coderDegraded.reason || 'NO_BLOCK_MARKER';
+  const coderStatus = coderProbe.endpoint_present ? 'UP' : (
+    (coderDegradedReason === 'NO_BLOCK_MARKER' || coderDegradedReason === 'UNAVAILABLE') ? 'DOWN' : 'DEGRADED'
+  );
+
   lines.push(`local_vllm_endpoint_present=${localProbe.endpoint_present ? 'true' : 'false'}`);
   lines.push(`local_vllm_models_fetch_ok=${localProbe.models_fetch_ok ? 'true' : 'false'}`);
   lines.push(`local_vllm_models_count=${localProbe.models_count}`);
   lines.push(`local_vllm_generation_probe_ok=${localProbe.generation_probe_ok ? 'true' : 'false'}`);
   lines.push(`local_vllm_generation_probe_reason=${localProbe.generation_probe_reason}`);
+  lines.push(`coder_vllm_endpoint=${coderProbe.endpoint}`);
+  lines.push(`coder_vllm_endpoint_present=${coderProbe.endpoint_present ? 'true' : 'false'}`);
+  lines.push(`coder_vllm_models_fetch_ok=${coderProbe.models_fetch_ok ? 'true' : 'false'}`);
+  lines.push(`coder_vllm_models_count=${coderProbe.models_count}`);
+  lines.push(`coder_status=${coderStatus}`);
+  lines.push(`coder_degraded_reason=${coderDegradedReason}`);
+  lines.push(`coder_degraded_note=${coderDegraded.note || ''}`);
+  lines.push(`replay_log_path=${replay.path}`);
+  lines.push(`replay_log_writable=${replay.writable ? 'true' : 'false'}`);
+  lines.push(`replay_log_reason=${replay.reason}`);
+  lines.push(`router_policy_path=${routingCtx.path}`);
+  lines.push(`router_policy_loaded=${routingCtx.ok ? 'true' : 'false'}`);
+  lines.push(`router_local_context_max_tokens_assistant=${routingCtx.local_context_max_tokens_assistant}`);
+  lines.push(`router_local_context_max_tokens_coder=${routingCtx.local_context_max_tokens_coder}`);
+  lines.push(`router_local_context_soft_limit_tokens=${routingCtx.local_context_soft_limit_tokens}`);
+  lines.push(`router_local_context_overflow_policy=${routingCtx.local_context_overflow_policy}`);
+  lines.push(`router_context_compression_enabled=${routingCtx.local_context_overflow_policy === 'reject' ? 'false' : 'true'}`);
+  lines.push(`router_remote_routing_enabled=${routingCtx.remote_routing_enabled ? 'true' : 'false'}`);
+  lines.push(`router_remote_allowlist_task_classes=${routingCtx.remote_allowlist_task_classes.length ? routingCtx.remote_allowlist_task_classes.join(',') : '(none)'}`);
+  lines.push(`router_budget_state_path=${budgetState.path}`);
+  lines.push(`router_budget_state_loaded=${budgetState.ok ? 'true' : 'false'}`);
+  lines.push(`router_budget_date=${budgetState.date || '(none)'}`);
+  lines.push(`router_budget_conversation_tokens=${budgetState.conversation_tokens}`);
+  lines.push(`router_budget_coding_tokens=${budgetState.coding_tokens}`);
+  lines.push(`router_budget_auth_tokens=${budgetState.auth_tokens}`);
+  lines.push(`router_budget_paid_tokens=${budgetState.paid_tokens}`);
+  lines.push(`event_envelope_schema=${SCHEMA_ID}`);
   lines.push('');
+
+  const corrId = `provider_diag_${Date.now()}`;
+  const envelope = makeEnvelope({
+    event: 'provider_diag_status',
+    severity: (coderStatus === 'UP' && replay.writable) ? 'INFO' : 'WARN',
+    component: 'provider_diag',
+    corr_id: corrId,
+    details: {
+      local_vllm_generation_probe_ok: localProbe.generation_probe_ok,
+      coder_status: coderStatus,
+      coder_degraded_reason: coderDegradedReason,
+      replay_log_writable: replay.writable,
+      router_remote_routing_enabled: routingCtx.remote_routing_enabled,
+      router_local_context_soft_limit_tokens: routingCtx.local_context_soft_limit_tokens
+    }
+  });
+  const envelopeWrite = appendEnvelope(env, envelope);
+  lines.push(`event_envelope_log_path=${envelopeWrite.path}`);
+  lines.push(`event_envelope_write_ok=${envelopeWrite.ok ? 'true' : 'false'}`);
+  lines.push(`event_envelope_write_reason=${envelopeWrite.ok ? 'ok' : envelopeWrite.reason}`);
+  lines.push('');
+  lines.push('canary_recommendations:');
+  lines.push('- run: python3 scripts/dali_canary_runner.py');
+  lines.push('- optional timer: systemctl --user enable --now openclaw-canary.timer');
+  lines.push('- if coder DEGRADED with VRAM_LOW, reduce load or raise VLLM_CODER_MIN_FREE_VRAM_MB policy');
+  lines.push('');
+
   lines.push('providers:');
 
   const summaryRows = [];
@@ -197,10 +531,21 @@ async function main() {
     );
   }
 
-  process.stdout.write(lines.join('\n') + '\n');
+  return lines.join('\n') + '\n';
 }
 
-main().catch((err) => {
-  process.stderr.write(`provider_diag_failed: ${err.message}\n`);
-  process.exitCode = 1;
-});
+async function main() {
+  const out = await generateDiagnostics(process.env);
+  process.stdout.write(out);
+}
+
+if (require.main === module) {
+  main().catch((err) => {
+    process.stderr.write(`provider_diag_failed: ${err.message}\n`);
+    process.exitCode = 1;
+  });
+}
+
+module.exports = {
+  generateDiagnostics
+};

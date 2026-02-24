@@ -4,12 +4,19 @@ Pre-commit audit hook for teamchat auto-commit.
 Ensures: stability, coherence, constitution/governance/ethos adherence.
 """
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
 from datetime import datetime, timezone
 
 WORKSPACE_ROOT = Path(__file__).resolve().parents[1]
+DEFAULT_WITNESS_LEDGER_PATH = WORKSPACE_ROOT / "state_runtime" / "teamchat" / "witness_ledger.jsonl"
+
+try:
+    from witness_ledger import commit as witness_commit
+except Exception:  # pragma: no cover - optional integration
+    witness_commit = None
 
 # Checks to run before commit
 CHECKS = [
@@ -19,6 +26,33 @@ CHECKS = [
     ("no_secrets", "No secrets accidentally staged"),
     ("governance_compliant", "Governance files intact"),
 ]
+
+
+def _flag_enabled(name: str, default: str = "0") -> bool:
+    value = str(os.environ.get(name, default)).strip().lower()
+    return value in {"1", "true", "yes", "on"}
+
+
+def _commit_witness_entry(audit_entry: dict, audit_log: Path) -> tuple[bool, str]:
+    if not _flag_enabled("OPENCLAW_WITNESS_LEDGER", default="1"):
+        return True, "witness_disabled"
+    if not callable(witness_commit):
+        return False, "witness_unavailable"
+    ledger_path = Path(
+        os.environ.get("OPENCLAW_WITNESS_LEDGER_PATH", str(DEFAULT_WITNESS_LEDGER_PATH))
+    )
+    checks = audit_entry.get("checks", [])
+    record = {
+        "event": "governance_audit_commit",
+        "audit_path": str(audit_log),
+        "audit_type": str(audit_entry.get("type", "pre_commit_audit")),
+        "audit_timestamp": str(audit_entry.get("timestamp", "")),
+        "passed": bool(audit_entry.get("passed", False)),
+        "checks_total": len(checks) if isinstance(checks, list) else 0,
+        "checks_failed": sum(1 for row in checks if isinstance(row, dict) and not bool(row.get("passed", False))),
+    }
+    witness_commit(record=record, ledger_path=str(ledger_path))
+    return True, "ok"
 
 def run_check(name: str) -> tuple[bool, str]:
     """Run a specific check. Returns (passed, details)."""
@@ -97,6 +131,18 @@ def audit_commit() -> bool:
     audit_log.parent.mkdir(parents=True, exist_ok=True)
     with open(audit_log, "a") as f:
         f.write(json.dumps(audit_entry) + "\n")
+
+    try:
+        witness_ok, witness_reason = _commit_witness_entry(audit_entry, audit_log)
+    except Exception as e:
+        witness_ok, witness_reason = False, f"witness_error: {e}"
+    if not witness_ok:
+        strict = _flag_enabled("OPENCLAW_WITNESS_LEDGER_STRICT", default="0")
+        if strict:
+            all_passed = False
+            print(f"❌ witness ledger commit failed (strict): {witness_reason}")
+        else:
+            print(f"⚠️ witness ledger commit skipped: {witness_reason}")
     
     print("=" * 50)
     if all_passed:

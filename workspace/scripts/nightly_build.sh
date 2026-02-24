@@ -29,16 +29,25 @@ sanitize_doctor_output() {
 }
 
 run_openclaw_config_preflight() {
-    local config_source doctor_output doctor_sanitized
+    local config_source doctor_output doctor_sanitized guard_output
     local doctor_status=0
     local invalid_config=0
 
-    if [ -n "${OPENCLAW_CONFIG_PATH:-}" ]; then
-        config_source="$OPENCLAW_CONFIG_PATH"
-        log "OpenClaw config source: $config_source (OPENCLAW_CONFIG_PATH override)"
+    config_source="$(python3 "$CLAWD_DIR/workspace/scripts/openclaw_config_guard.py" --config "${OPENCLAW_CONFIG_PATH:-}" 2>/dev/null \
+        | python3 -c 'import json,sys; raw=sys.stdin.read().strip(); print((json.loads(raw).get("config_path") if raw else "") or "")' 2>/dev/null || true)"
+    if [ -n "$config_source" ]; then
+        log "OpenClaw config source: $config_source"
     else
-        config_source="$HOME/.openclaw/openclaw.json"
-        log "OpenClaw config source: $config_source (default)"
+        log "OpenClaw config source: <none> (no config file found)"
+    fi
+
+    guard_output="$(python3 "$CLAWD_DIR/workspace/scripts/openclaw_config_guard.py" --config "${OPENCLAW_CONFIG_PATH:-}" --strict 2>&1)" || invalid_config=1
+    if [ "$invalid_config" -eq 1 ]; then
+        log "OpenClaw config invalid (plugin allowlist guard)."
+        while IFS= read -r line; do
+            [ -n "$line" ] && log "  $line"
+        done < <(printf '%s\n' "$guard_output" | tail -n 20)
+        return 1
     fi
 
     doctor_output="$("$OPENCLAW_BIN" doctor --non-interactive --no-workspace-suggestions 2>&1)" || doctor_status=$?

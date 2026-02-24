@@ -29,24 +29,20 @@ Message Schema (normalized):
 
 import os
 import json
-import time
 import logging
-import sys
+import hashlib
+import importlib.util
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any, Optional, Set
 from dataclasses import dataclass, asdict
 
 from .allowlist import is_chat_allowed, log_allowlist_on_startup
-from workspace.itc.ingest.interfaces import FileDropAdapter, RawPayload, persist_artifacts, validate_signal
-
-SCRIPTS_DIR = Path(__file__).resolve().parents[1] / "scripts"
-if str(SCRIPTS_DIR) not in sys.path:
-    sys.path.insert(0, str(SCRIPTS_DIR))
 try:
-    from policy_router import PolicyRouter
-except Exception:  # pragma: no cover - optional runtime integration
-    PolicyRouter = None
+    from workspace.memory.message_hooks import build_message_event, process_message_event
+except Exception:  # pragma: no cover
+    build_message_event = None
+    process_message_event = None
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +54,9 @@ DEDUPE_STATE_PATH = Path(os.environ.get(
 
 # Maximum dedupe entries to keep (rolling window)
 DEDUPE_MAX_ENTRIES = 10000
+_ITC_CLASSIFIER_PATH = Path(__file__).resolve().parents[2] / "scripts" / "itc_classify.py"
+_ITC_CANON_PATH = Path(__file__).resolve().parents[2] / "itc" / "canon" / "messages.jsonl"
+_CLASSIFY_RULES = None
 
 
 @dataclass
@@ -203,6 +202,19 @@ def ingest_message(
         f"msg_id={message.message_id} chat='{message.chat_title}' "
         f"text_len={len(message.text)}"
     )
+    if callable(build_message_event) and callable(process_message_event):
+        try:
+            event = build_message_event(
+                session_id=f"{message.source}:{message.chat_id}",
+                role="user",
+                content=message.text,
+                ts_utc=message.date,
+                source=message.source,
+                tone="unlabeled",
+            )
+            process_message_event(event, repo_root=Path(__file__).resolve().parents[2])
+        except Exception:
+            pass
 
     if dry_run:
         logger.info(f"DRY-RUN: Would process message {dedupe_key}")
@@ -227,52 +239,68 @@ def _forward_to_pipeline(message: IngestedMessage):
     - Apply authority weights
     - Store in digest format
     """
-    if PolicyRouter is None:
-        logger.error("Forward drop: policy router unavailable")
-        return
-    router = PolicyRouter()
-    prompt = (
-        "Classify this ITC message and return only JSON matching itc_signal schema.\n"
-        f"message={json.dumps(message.to_dict(), ensure_ascii=False)}"
-    )
-    result = router.execute_with_escalation(
-        "itc_classify",
-        {"prompt": prompt},
-        context_metadata={
-            "input_text": message.text,
+    # Preserve existing queue contract.
+    output_path = DEDUPE_STATE_PATH.parent / "itc_incoming_queue.jsonl"
+
+    try:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(output_path, "a") as f:
+            f.write(json.dumps(message.to_dict()) + "\n")
+        logger.debug(f"Queued message to {output_path}")
+    except Exception as e:
+        logger.error(f"Failed to queue message: {e}")
+
+    # Also forward to classifier input contract consumed by scripts/itc_classify.py.
+    classify = _resolve_classifier()
+    primary_tag = "noise"
+    all_tags = ["noise"]
+    if callable(classify):
+        try:
+            primary, tags = classify(message.text or "")
+            if isinstance(primary, str) and primary:
+                primary_tag = primary
+            if isinstance(tags, list) and tags:
+                all_tags = [str(tag) for tag in tags if str(tag).strip()]
+        except Exception as e:
+            logger.warning(f"ITC classifier bridge failed; using fallback tag: {e}")
+    try:
+        _ITC_CANON_PATH.parent.mkdir(parents=True, exist_ok=True)
+        canonical_row = {
+            "hash": hashlib.sha256(f"{message.dedupe_key()}:{message.text}".encode("utf-8")).hexdigest(),
             "source": message.source,
             "chat_id": message.chat_id,
             "message_id": message.message_id,
-        },
-    )
-    if not result.get("ok"):
-        logger.error("Forward drop: router failed reason=%s", result.get("reason_code"))
-        return
+            "date": message.date,
+            "text": message.text,
+            "primary_tag": primary_tag,
+            "all_tags": all_tags,
+            "classifier": "ingestion_boundary.forwarder/rules",
+        }
+        with _ITC_CANON_PATH.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(canonical_row, ensure_ascii=False) + "\n")
+    except Exception as e:
+        logger.error(f"Failed classifier forward write: {e}")
 
-    text_out = result.get("text", "")
+
+def _resolve_classifier():
+    global _CLASSIFY_RULES
+    if _CLASSIFY_RULES is not None:
+        return _CLASSIFY_RULES
+    if not _ITC_CLASSIFIER_PATH.exists():
+        return None
     try:
-        signal = json.loads(text_out) if isinstance(text_out, str) else text_out
-    except Exception:
-        logger.error("Forward drop: router returned non-JSON payload")
-        return
-
-    ok, reason = validate_signal(signal if isinstance(signal, dict) else {})
-    if not ok:
-        logger.error("Forward drop: signal validation failed reason=%s", reason)
-        return
-
-    raw = RawPayload(
-        content=json.dumps(message.to_dict(), ensure_ascii=False).encode("utf-8"),
-        extension="json",
-        metadata={"source": "itc_pipeline.ingestion_boundary"},
-    )
-    run_id = f"itc_ingest_{int(time.time())}"
-    adapter = FileDropAdapter()
-    if hasattr(adapter, "persist_artifacts") and callable(getattr(adapter, "persist_artifacts")):
-        adapter.persist_artifacts(raw, signal, run_id)  # pragma: no cover - optional adapter API
-    else:
-        persist_artifacts(raw, signal, run_id)
-    logger.debug("Persisted normalized ITC signal via ingestion boundary")
+        spec = importlib.util.spec_from_file_location("itc_classify_bridge", str(_ITC_CLASSIFIER_PATH))
+        if spec is None or spec.loader is None:
+            return None
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        fn = getattr(module, "classify_rules", None)
+        if callable(fn):
+            _CLASSIFY_RULES = fn
+            return _CLASSIFY_RULES
+    except Exception as e:
+        logger.warning(f"Classifier module load failed: {e}")
+    return None
 
 
 def initialize_ingestion():

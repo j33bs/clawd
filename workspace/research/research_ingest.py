@@ -23,6 +23,12 @@ from urllib.parse import urlencode
 from urllib.request import urlopen
 import xml.etree.ElementTree as ET
 
+try:
+    from gap_analyzer import analyze_gaps, publish_gap_report
+except Exception:  # pragma: no cover
+    analyze_gaps = None
+    publish_gap_report = None
+
 DATA_DIR = Path(__file__).parent / "data"
 PAPERS_FILE = DATA_DIR / "papers.jsonl"
 ARXIV_API = "https://export.arxiv.org/api/query"
@@ -30,6 +36,20 @@ DATA_DIR.mkdir(exist_ok=True)
 
 if not PAPERS_FILE.exists():
     PAPERS_FILE.touch()
+
+
+def _run_gap_bridge(*, topics_file: Path) -> dict:
+    if not callable(analyze_gaps) or not callable(publish_gap_report):
+        return {"ok": False, "reason": "gap_analyzer_unavailable"}
+    repo_root = Path(__file__).resolve().parents[2]
+    report = analyze_gaps(
+        papers_path=PAPERS_FILE,
+        topics_file=topics_file,
+        low_coverage_threshold=1,
+        top_k=5,
+    )
+    publish = publish_gap_report(report=report, repo_root=repo_root)
+    return {"ok": True, "report": report, "publish": publish}
 
 
 def compute_hash(content: str) -> str:
@@ -150,6 +170,15 @@ def cmd_add(args: argparse.Namespace) -> int:
         print(f"   Indexed in Knowledge Graph")
     except Exception as e:
         print(f"   Note: Could not index to KB: {e}")
+
+    gap_topics = Path(__file__).parent / "TOPICS.md"
+    try:
+        bridge = _run_gap_bridge(topics_file=gap_topics)
+        if bridge.get("ok"):
+            publish = bridge.get("publish", {})
+            print(f"   Gap report bridge: {publish.get('reason', 'ok')} -> {publish.get('path', '')}")
+    except Exception as e:
+        print(f"   Note: Gap analyzer bridge skipped: {e}")
     
     return 0
 
@@ -397,6 +426,11 @@ def cmd_ingest_topics(args: argparse.Namespace) -> int:
         dry_run=bool(args.dry_run),
         max_results=max(1, int(args.max_results_per_topic)),
     )
+    try:
+        bridge = _run_gap_bridge(topics_file=topics_file)
+        status["gap_report"] = bridge
+    except Exception as err:
+        status["gap_report"] = {"ok": False, "reason": f"bridge_error:{err}"}
     print(json.dumps(status, ensure_ascii=False, indent=2))
     return code
 

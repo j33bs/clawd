@@ -37,3 +37,27 @@ Broad actions require explicit operator approval (deny-by-default):
 - No `system2-litellm`.
 - No OpenAI/Codex provider lanes and no model IDs starting with `openai/` or `openai-codex/`.
 
+## Audit Quiesce Fallback (When `systemctl --user` Is Unavailable)
+- First attempt `systemctl --user stop <service>`.
+- If user bus is unavailable, use exact PID targeting only:
+  - `pgrep -f '^openclaw-gateway$'`
+  - `kill <exact_pid_list>`
+  - verify with `pgrep -af '^openclaw-gateway$'`
+- Record all quiesce commands and PID values in the audit evidence section before verification.
+
+## Runtime Autoupdate Hooks
+- Install with: `bash workspace/scripts/install_git_hooks.sh`.
+- Hooks `post-merge` and `post-checkout` call `workspace/scripts/openclaw_autoupdate.sh`.
+- The autoupdate script:
+  - detects HEAD movement from `workspace/.runtime_autoupdate_state`,
+  - applies a branch gate with `OPENCLAW_AUTOUPDATE_TARGET_BRANCH` (default: `main`),
+  - supports optional `OPENCLAW_AUTOUPDATE_ALLOW_BRANCHES` (comma-separated exact names or globs like `release/*`),
+  - supports `OPENCLAW_AUTOUPDATE_FORCE=1` to override branch gating,
+  - guarantees `OPENCLAW_AUTOUPDATE_DRYRUN=1` is side-effect free (plan + log only),
+  - stops gateway (`systemctl --user` first, exact-PID fallback when bus is unavailable),
+  - runs bounded dependency/build/install steps,
+  - restarts gateway (or logs manual-start requirement),
+  - verifies with `workspace/scripts/verify_policy_router.sh`.
+- Audit log path: `workspace/audit/runtime_autoupdate.log` (append-only).
+- Disable by removing hooks: `.git/hooks/post-merge` and `.git/hooks/post-checkout`.
+- If needed, rerun installer and delete those two hook files manually to disable autoupdate.

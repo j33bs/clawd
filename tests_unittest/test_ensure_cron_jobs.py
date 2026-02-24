@@ -115,6 +115,8 @@ class TestEnsureCronJobs(unittest.TestCase):
         by_name = {item["name"]: item for item in templates}
         self.assertEqual(by_name["Session Pattern Analysis"]["schedule"]["expr"], "0 9 * * 5")
         self.assertEqual(by_name["Session Pattern Analysis"]["schedule"]["tz"], "Australia/Brisbane")
+        self.assertIn("run_narrative_distill.py", by_name["Daily Morning Briefing"]["command"])
+        self.assertIn("reports/automation/narrative_distill.log", by_name["Daily Morning Briefing"]["command"])
         self.assertTrue(ensure_cron_jobs.template_requires_heartbeat(templates))
 
     def test_ensure_jobs_create_then_unchanged_then_update(self):

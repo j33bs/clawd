@@ -19,29 +19,15 @@ except ImportError:
     requests = None
 
 try:
-    from tool_payload_sanitizer import (
-        enforce_tool_payload_invariant,
-        resolve_tool_call_capability,
-    )
-except ModuleNotFoundError:
-    _THIS_DIR = Path(__file__).resolve().parent
-    if str(_THIS_DIR) not in sys.path:
-        sys.path.insert(0, str(_THIS_DIR))
-    from tool_payload_sanitizer import (
-        enforce_tool_payload_invariant,
-        resolve_tool_call_capability,
-    )
-try:
-    from vllm_metrics_sink import read_metrics_artifact
+    from proprioception import ProprioceptiveSampler
 except Exception:  # pragma: no cover - optional integration
-    read_metrics_artifact = None
+    ProprioceptiveSampler = None
 
 try:
-    from itc.api import get_itc_signal
+    from event_envelope import append_envelope, make_envelope
 except Exception:  # pragma: no cover - optional integration
-    get_itc_signal = None
-
-POLICY_ROUTER_FINAL_DISPATCH_TAG = "policy_router.final_dispatch"
+    append_envelope = None
+    make_envelope = None
 
 def _resolve_repo_root(start: Path):
     current = start
@@ -63,16 +49,15 @@ EVENT_LOG = BASE_DIR / "itc" / "llm_router_events.jsonl"
 QWEN_AUTH_FILE = BASE_DIR / "agents" / "main" / "agent" / "auth-profiles.json"
 TACTI_EVENT_LOG = BASE_DIR / "workspace" / "state" / "tacti_cr" / "events.jsonl"
 ACTIVE_INFERENCE_STATE_PATH = BASE_DIR / "workspace" / "state" / "active_inference_state.json"
+WITNESS_LEDGER_PATH = BASE_DIR / "workspace" / "state_runtime" / "teamchat" / "witness_ledger.jsonl"
 
 TACTI_ROOT = BASE_DIR / "workspace"
 if str(TACTI_ROOT) not in sys.path:
     sys.path.insert(0, str(TACTI_ROOT))
-HIVEMIND_ROOT = TACTI_ROOT / "hivemind"
-if str(HIVEMIND_ROOT) not in sys.path:
-    sys.path.insert(0, str(HIVEMIND_ROOT))
 
 try:
     from tacti_cr.arousal_oscillator import ArousalOscillator
+    from tacti_cr.active_inference_agent import ActiveInferenceAgent
     from tacti_cr.config import is_enabled as tacti_enabled
     from tacti_cr.expression import compute_expression
     from tacti_cr.collapse import emit_recommendation as collapse_emit_recommendation
@@ -80,21 +65,12 @@ try:
     from tacti_cr.events import emit as tacti_emit
 except Exception:  # pragma: no cover - optional integration
     ArousalOscillator = None
+    ActiveInferenceAgent = None
     tacti_enabled = None
     compute_expression = None
     collapse_emit_recommendation = None
     tacti_routing_bias = None
     tacti_emit = None
-
-try:
-    from hivemind.integrations.main_flow_hook import tacti_enhance_plan as _tacti_main_flow_enhance_plan
-except Exception:  # pragma: no cover - optional integration
-    _tacti_main_flow_enhance_plan = None
-
-try:
-    from hivemind.reservoir import Reservoir
-except Exception:  # pragma: no cover - optional integration
-    Reservoir = None
 
 DEFAULT_POLICY = {
     "version": 2,
@@ -102,6 +78,16 @@ DEFAULT_POLICY = {
         "allowPaid": False,
         "preferLocal": True,
         "maxTokensPerRequest": 1024,
+        "local_context_max_tokens_assistant": 32768,
+        "local_context_max_tokens_coder": 32768,
+        "local_context_soft_limit_tokens": 24576,
+        "local_context_overflow_policy": "compress",
+        "remoteRoutingEnabled": False,
+        "remoteAllowlistTaskClasses": [
+            "planning_synthesis",
+            "research_browse",
+            "code_generation_large",
+        ],
         "circuitBreaker": {
             "failureThreshold": 3,
             "cooldownSec": 900,
@@ -259,7 +245,7 @@ DEFAULT_POLICY = {
 
 # Alias normalization to reconcile invariant/policy strings with registry IDs.
 PROVIDER_ID_ALIASES = {
-    "google-gemini-cli": "gemini",
+    "google-gemini-cli": "google-gemini-cli",
     "qwen-portal": "qwen_alibaba",
     "minimax-portal": "minimax-portal",
     "gemini": "gemini",
@@ -273,8 +259,6 @@ PROVIDER_ID_TO_POLICY_PROVIDER = {
     "qwen_alibaba": "qwen",
 }
 
-_RESERVOIR_ROUTER = None
-
 
 class PolicyValidationError(Exception):
     pass
@@ -287,6 +271,21 @@ def normalize_provider_id(value):
     if not key:
         return key
     return PROVIDER_ID_ALIASES.get(key, key)
+
+
+def denormalize_provider_ids(value):
+    out = []
+    for raw, norm in PROVIDER_ID_ALIASES.items():
+        if norm == value:
+            out.append(raw)
+    return out
+
+
+def canonical_intent(intent):
+    raw = str(intent or "")
+    if raw.startswith("teamchat:"):
+        return "coding"
+    return raw
 
 
 def _normalize_provider_order(items):
@@ -518,6 +517,18 @@ def _flag_enabled(name):
     return str(os.environ.get(name, "")).strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _active_inference_enabled():
+    return _flag_enabled("OPENCLAW_ACTIVE_INFERENCE") or _flag_enabled("ENABLE_ACTIVE_INFERENCE")
+
+
+def tacti_features_from_proprioception(snapshot):
+    snap = dict(snapshot or {})
+    arousal = 0.05
+    if snap.get("error_rate", 0.0) and float(snap.get("error_rate", 0.0)) > 0.2:
+        arousal = 0.2
+    return {"arousal": float(arousal)}
+
+
 def _legacy_tacti_flags_enabled():
     return any(
         _flag_enabled(name)
@@ -541,89 +552,7 @@ def tacti_enhance_plan(plan, *, context_metadata=None, intent=None):
     plan_dict["agent_ids"] = [str(a) for a in agent_ids if str(a).strip()]
     if intent and "intent" not in plan_dict:
         plan_dict["intent"] = intent
-    if callable(_tacti_main_flow_enhance_plan):
-        candidates = list(plan_dict.get("agent_ids") or [])
-        if not candidates and plan_dict.get("provider"):
-            candidates = [str(plan_dict.get("provider"))]
-        if candidates:
-            context = dict(context_metadata or {})
-            context.setdefault("intent", intent or context.get("intent") or "routing")
-            context.setdefault("source_agent", "router")
-            try:
-                reordered, annotations = _tacti_main_flow_enhance_plan(
-                    context=context,
-                    candidates=candidates,
-                    policy=DEFAULT_POLICY,
-                )
-                if reordered:
-                    reordered_items = [str(item) for item in reordered]
-                    plan_dict["agent_ids"] = reordered_items + [
-                        item for item in candidates if item not in reordered_items
-                    ]
-                if isinstance(annotations, dict):
-                    plan_dict["annotations"] = annotations
-            except Exception:
-                pass
     return plan_dict
-
-
-def _reorder_move_front(items, preferred):
-    preferred = [item for item in preferred if item in items]
-    if not preferred:
-        return list(items)
-    seen = set(preferred)
-    return preferred + [item for item in items if item not in seen]
-
-
-def _safe_float_metric(value):
-    try:
-        return float(value)
-    except Exception:
-        return 0.0
-
-
-def _is_cloud_provider_name(name):
-    lowered = str(name or "").lower()
-    return not (lowered.startswith("local_vllm") or lowered.startswith("ollama"))
-
-
-def _reservoir_readout():
-    global _RESERVOIR_ROUTER
-    if Reservoir is None:
-        return None
-    if _RESERVOIR_ROUTER is None:
-        _RESERVOIR_ROUTER = Reservoir.init(dim=16, leak=0.35, spectral_scale=0.8, seed=11)
-    try:
-        return _RESERVOIR_ROUTER.readout()
-    except Exception:
-        return None
-
-
-def _apply_metrics_gates(order, max_tokens_req):
-    if not callable(read_metrics_artifact):
-        return list(order), max_tokens_req, {}
-    try:
-        metrics = read_metrics_artifact()
-    except Exception:
-        return list(order), max_tokens_req, {}
-    if not isinstance(metrics, dict):
-        return list(order), max_tokens_req, {}
-
-    routing = metrics.get("routing")
-    if not isinstance(routing, dict):
-        return list(order), max_tokens_req, {}
-
-    adjusted = list(order)
-    details = {}
-    queue_depth = int(routing.get("queue_depth") or 0)
-    if queue_depth >= 4:
-        adjusted = [name for name in adjusted if name != "local_vllm_assistant"]
-        details["queue_depth"] = queue_depth
-    kv_cache_usage = _safe_float_metric(routing.get("kv_cache_usage_pct"))
-    if max_tokens_req > 0 and kv_cache_usage >= 85.0:
-        max_tokens_req = max(64, max_tokens_req // 2)
-        details["kv_cache_usage_pct"] = kv_cache_usage
-    return adjusted, max_tokens_req, details
 
 
 def _load_active_inference_state(path):
@@ -650,16 +579,78 @@ def _active_inference_payload(context_metadata):
     concise_hint = "concise" in text or "brief" in text
     runs = int(state.get("runs", 0))
     confidence = min(0.95, 0.5 + (runs * 0.05))
-    preference_params = {
-        "style": "concise" if concise_hint else "balanced",
-        "conciseness": 0.8 if concise_hint else 0.5,
-    }
+    preference_params = {"style": "concise" if concise_hint else "balanced", "conciseness": 0.8 if concise_hint else 0.5}
+    preferred_provider = None
+    if ActiveInferenceAgent is not None:
+        try:
+            arousal = float((context_metadata or {}).get("arousal", 0.35 if concise_hint else 0.6))
+            collapse_mode = bool((context_metadata or {}).get("collapse_mode", False))
+            local_utility = 0.9 if concise_hint else 0.58
+            balanced_utility = 0.55 if concise_hint else 0.72
+            exploratory_utility = 0.35 if concise_hint else 0.8
+            candidate_policies = [
+                {
+                    "id": "local_conservative",
+                    "style": "concise",
+                    "conciseness": 0.9 if concise_hint else 0.55,
+                    "expected_utility": local_utility,
+                    "epistemic_value": 0.35,
+                    "complexity": 0.25,
+                    "preferred_provider": "local_vllm_assistant",
+                },
+                {
+                    "id": "balanced",
+                    "style": "balanced",
+                    "conciseness": 0.5,
+                    "expected_utility": balanced_utility,
+                    "epistemic_value": 0.55,
+                    "complexity": 0.5,
+                    "preferred_provider": "groq",
+                },
+                {
+                    "id": "exploratory",
+                    "style": "deep",
+                    "conciseness": 0.3,
+                    "expected_utility": exploratory_utility,
+                    "epistemic_value": 0.8,
+                    "complexity": 0.9,
+                    "preferred_provider": "openai_gpt52_chat",
+                },
+            ]
+            agent = ActiveInferenceAgent(
+                beliefs=dict(state.get("beliefs", {})),
+                model={
+                    "utility_weight": 1.0,
+                    "epistemic_weight": 0.65,
+                    "arousal_weight": 0.8,
+                    "collapse_penalty_weight": 1.2,
+                    "target_arousal": 0.45,
+                },
+            )
+            agent.beliefs.update({"arousal": arousal, "collapse_mode": collapse_mode})
+            decision = agent.step({"candidate_policies": candidate_policies, "input_text": text})
+            policy = decision.get("policy", {}) if isinstance(decision, dict) else {}
+            if isinstance(policy, dict):
+                preference_params = {
+                    "style": str(policy.get("style", preference_params["style"])),
+                    "conciseness": float(policy.get("conciseness", preference_params["conciseness"])),
+                }
+                preferred_provider = str(policy.get("preferred_provider") or "").strip() or None
+            state["beliefs"] = dict(agent.beliefs)
+            state["lastDecision"] = {
+                "policy_id": str(policy.get("id", "")),
+                "score": float((decision or {}).get("score", 0.0) or 0.0),
+                "preferred_provider": preferred_provider,
+            }
+        except Exception:
+            preferred_provider = None
     state["runs"] = runs + 1
     state["lastPreference"] = preference_params
     _save_active_inference_state(state, ACTIVE_INFERENCE_STATE_PATH)
     return {
         "preference_params": preference_params,
         "confidence": round(confidence, 3),
+        "preferred_provider": preferred_provider,
     }
 
 
@@ -727,6 +718,155 @@ def _truncate_text(text, max_chars):
     if max_chars and len(text) > max_chars:
         return text[:max_chars]
     return text
+
+
+def _event_envelope_path():
+    return Path(
+        os.environ.get("OPENCLAW_EVENT_ENVELOPE_LOG_PATH")
+        or (Path.home() / ".local" / "share" / "openclaw" / "events" / "gate_health.jsonl")
+    ).expanduser()
+
+
+def _emit_envelope_event(event: str, severity: str, corr_id: str, details: dict):
+    if not callable(make_envelope) or not callable(append_envelope):
+        return {"ok": False, "reason": "event_envelope_unavailable"}
+    try:
+        envelope = make_envelope(
+            event=event,
+            severity=severity,
+            component="policy_router",
+            corr_id=str(corr_id or ""),
+            details=dict(details or {}),
+        )
+        return append_envelope(_event_envelope_path(), envelope)
+    except Exception as exc:  # pragma: no cover - defensive
+        return {"ok": False, "reason": f"{type(exc).__name__}:{exc}"}
+
+
+_CONTEXT_CONSTRAINT_LINE = re.compile(
+    r"\b(must|non-negotiable|constraint|fail-closed|do not|never|governance|policy|budget|circuit|local-first|subagent-only|remediation)\b",
+    re.IGNORECASE,
+)
+
+
+def _looks_like_constraint_line(line: str) -> bool:
+    s = str(line or "").strip()
+    if not s:
+        return False
+    if _CONTEXT_CONSTRAINT_LINE.search(s):
+        return True
+    if s.startswith(("System:", "Policy:", "Constraints:", "Guardrails:")):
+        return True
+    return False
+
+
+def _compress_text_preserving_structure(text: str, target_tokens: int):
+    src = str(text or "")
+    if not src.strip():
+        return src, {"before_chars": len(src), "after_chars": len(src), "before_tokens": 0, "after_tokens": 0}
+
+    before_chars = len(src)
+    before_tokens = estimate_tokens(src)
+    target_chars = max(512, int(target_tokens) * 4)
+    if before_chars <= target_chars:
+        return src, {
+            "before_chars": before_chars,
+            "after_chars": before_chars,
+            "before_tokens": before_tokens,
+            "after_tokens": before_tokens,
+            "compressed": False,
+        }
+
+    lines = src.splitlines()
+    constraints = []
+    headings_and_bullets = []
+    code_blocks = []
+
+    in_code = False
+    current_code = []
+    for raw in lines:
+        line = str(raw)
+        stripped = line.strip()
+        if stripped.startswith("```"):
+            if in_code:
+                current_code.append(line)
+                code_blocks.append("\n".join(current_code))
+                current_code = []
+                in_code = False
+            else:
+                if current_code:
+                    current_code = []
+                in_code = True
+                current_code.append(line)
+            continue
+        if in_code:
+            current_code.append(line)
+            continue
+
+        if _looks_like_constraint_line(line):
+            constraints.append(stripped)
+        if stripped.startswith("#") or re.match(r"^[-*+]\s+", stripped) or re.match(r"^\d+\.\s+", stripped):
+            headings_and_bullets.append(stripped)
+
+    if current_code:
+        if not current_code[-1].strip().startswith("```"):
+            current_code.append("```")
+        code_blocks.append("\n".join(current_code))
+
+    constraints = list(dict.fromkeys([c for c in constraints if c]))
+    headings_and_bullets = list(dict.fromkeys([h for h in headings_and_bullets if h]))
+
+    sections = []
+    if constraints:
+        sections.append("## Preserved Constraints")
+        sections.extend(f"- {c}" for c in constraints[:40])
+    if headings_and_bullets:
+        sections.append("## Structure Snapshot")
+        sections.extend(headings_and_bullets[:200])
+    if code_blocks:
+        sections.append("## Code Excerpts (truncated)")
+        for block in code_blocks[:12]:
+            trimmed = block
+            if len(trimmed) > 1200:
+                trimmed = f"{trimmed[:1100]}\n# ... [code truncated]\n```"
+            sections.append(trimmed)
+    sections.append("## Compression Notes")
+    sections.append("- Content reduced to fit local context budget.")
+    sections.append("- Constraints and structure were preserved first.")
+
+    compressed = "\n".join(sections).strip()
+    if len(compressed) > target_chars:
+        marker = "\n\n[TRUNCATED_AFTER_COMPRESSION]"
+        keep = max(0, target_chars - len(marker))
+        compressed = compressed[:keep].rstrip() + marker
+
+    after_chars = len(compressed)
+    after_tokens = estimate_tokens(compressed)
+    info = {
+        "before_chars": before_chars,
+        "after_chars": after_chars,
+        "before_tokens": before_tokens,
+        "after_tokens": after_tokens,
+        "compressed": True,
+        "constraints_preserved": len(constraints),
+        "outline_entries_preserved": len(headings_and_bullets),
+        "code_blocks_preserved": len(code_blocks),
+    }
+    return compressed, info
+
+
+def _rewrite_payload_text(payload, text):
+    if not isinstance(payload, dict):
+        return payload
+    if "prompt" in payload:
+        out = dict(payload)
+        out["prompt"] = text
+        return out
+    if "messages" in payload:
+        out = dict(payload)
+        out["messages"] = [{"role": "user", "content": text}]
+        return out
+    return payload
 
 
 def _coerce_positive_int(value, fallback):
@@ -816,6 +956,8 @@ _INTENT_PLANNING_CUES = [
     re.compile(r"\b(plan|planning|design|architecture|roadmap|strategy|proposal|brainstorm|trade[- ]?offs?|synthesis)\b", re.IGNORECASE),
     re.compile(r"\b(explain|discuss|describe|summari[sz]e|compare|evaluate|reason|why|what is|how does)\b", re.IGNORECASE),
 ]
+_TASK_RESEARCH_CUES = re.compile(r"\b(research|browse|web|search|news|sources?|citations?|link|url|fetch)\b", re.IGNORECASE)
+_TASK_CODE_CUES = re.compile(r"\b(code|diff|patch|refactor|module|function|class|repo|file|tests?)\b", re.IGNORECASE)
 
 
 def classify_intent(text: str) -> str:
@@ -838,6 +980,29 @@ def classify_intent(text: str) -> str:
     if any(rx.search(normalized) for rx in _INTENT_PLANNING_CUES):
         return "planning_synthesis"
 
+    return "planning_synthesis"
+
+
+def classify_task_class(text: str, context_metadata: dict | None = None) -> str:
+    context_metadata = context_metadata or {}
+    normalized = re.sub(r"\s+", " ", str(text or "")).strip()
+    declared = str(context_metadata.get("task_class", "")).strip().lower()
+    if declared in {"mechanical_execution", "planning_synthesis", "research_browse", "code_generation_large"}:
+        return declared
+
+    intent = classify_intent(normalized)
+    expected_loc = _coerce_positive_int(context_metadata.get("expected_loc"), 0)
+    expected_change_size = str(context_metadata.get("expected_change_size", "")).strip().lower()
+
+    if _TASK_RESEARCH_CUES.search(normalized):
+        return "research_browse"
+
+    if _TASK_CODE_CUES.search(normalized):
+        if expected_change_size in {"large", "xl", "huge"} or expected_loc >= 250 or estimate_tokens(normalized) > 18000:
+            return "code_generation_large"
+
+    if intent == "mechanical_execution":
+        return "mechanical_execution"
     return "planning_synthesis"
 
 
@@ -877,26 +1042,14 @@ def _provider_api_key_env(provider):
     return ""
 
 
-def _call_openai_compatible(base_url, api_key, model_id, payload, timeout=15, provider_caps=None):
+def _call_openai_compatible(base_url, api_key, model_id, payload, timeout=15):
     if requests is None:
         return {"ok": False, "reason_code": "no_requests_lib"}
     url = base_url.rstrip("/") + "/chat/completions"
     headers = {"Content-Type": "application/json"}
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
-    # /chat/completions requires `messages`; convert legacy `prompt` key if present
-    if "prompt" in payload and "messages" not in payload:
-        payload = dict(payload)
-        payload["messages"] = [{"role": "user", "content": payload.pop("prompt")}]
-    payload = enforce_tool_payload_invariant(
-        payload,
-        provider_caps,
-        provider_id="openai_compatible",
-        model_id=model_id,
-        callsite_tag=POLICY_ROUTER_FINAL_DISPATCH_TAG,
-    )
     try:
-        # Invariant: tool payload must be sanitized here; do not bypass.
         resp = requests.post(url, json={"model": model_id, **payload}, headers=headers, timeout=timeout)
         if resp.status_code == 429:
             return {"ok": False, "reason_code": "request_http_429"}
@@ -931,13 +1084,6 @@ def _call_anthropic(base_url, api_key, model_id, payload, timeout=15):
         "x-api-key": api_key or "",
         "anthropic-version": "2023-06-01",
     }
-    payload = enforce_tool_payload_invariant(
-        payload,
-        {"tool_calls_supported": False},
-        provider_id="anthropic",
-        model_id=model_id,
-        callsite_tag=POLICY_ROUTER_FINAL_DISPATCH_TAG,
-    )
     body = {
         "model": model_id,
         "max_tokens": payload.get("max_tokens", 256),
@@ -945,7 +1091,6 @@ def _call_anthropic(base_url, api_key, model_id, payload, timeout=15):
         "messages": payload.get("messages", []),
     }
     try:
-        # Invariant: tool payload must be sanitized here; do not bypass.
         resp = requests.post(url, json=body, headers=headers, timeout=timeout)
         if resp.status_code == 429:
             return {"ok": False, "reason_code": "request_http_429"}
@@ -972,13 +1117,6 @@ def _call_ollama(base_url, model_id, payload, timeout=10):
     if requests is None:
         return {"ok": False, "reason_code": "no_requests_lib"}
     url = base_url.rstrip("/") + "/api/generate"
-    payload = enforce_tool_payload_invariant(
-        payload,
-        {"tool_calls_supported": False},
-        provider_id="ollama",
-        model_id=model_id,
-        callsite_tag=POLICY_ROUTER_FINAL_DISPATCH_TAG,
-    )
     prompt = payload.get("prompt")
     if not prompt:
         prompt = _extract_text_from_payload(payload)
@@ -989,7 +1127,6 @@ def _call_ollama(base_url, model_id, payload, timeout=10):
         "options": {"temperature": payload.get("temperature", 0.0), "num_predict": payload.get("max_tokens", 256)},
     }
     try:
-        # Invariant: tool payload must be sanitized here; do not bypass.
         resp = requests.post(url, json=body, timeout=timeout)
         if resp.status_code == 404:
             return {"ok": False, "reason_code": "request_http_404"}
@@ -1064,8 +1201,10 @@ class PolicyRouter:
         self.circuit_state = load_circuit_state(circuit_path)
         self.handlers = handlers or {}
         self.run_counts = {}
+        self._proprio_sampler = ProprioceptiveSampler() if _flag_enabled("OPENCLAW_ROUTER_PROPRIOCEPTION") and ProprioceptiveSampler else None
 
     def _intent_cfg(self, intent):
+        intent = canonical_intent(intent)
         intents = self.policy.get("routing", {}).get("intents", {})
         if isinstance(intent, str) and intent.startswith("teamchat:") and "coding" in intents:
             return intents.get("coding", {})
@@ -1133,6 +1272,181 @@ class PolicyRouter:
                 return env_value
         return manual
 
+    def _context_defaults(self):
+        defaults = self.policy.get("defaults", {}) if isinstance(self.policy, dict) else {}
+        overflow = str(defaults.get("local_context_overflow_policy", "compress")).strip().lower()
+        if overflow not in {"compress", "spill_remote", "reject"}:
+            overflow = "compress"
+        return {
+            "assistant_max_tokens": _coerce_positive_int(defaults.get("local_context_max_tokens_assistant"), 32768),
+            "coder_max_tokens": _coerce_positive_int(defaults.get("local_context_max_tokens_coder"), 32768),
+            "soft_limit_tokens": _coerce_positive_int(defaults.get("local_context_soft_limit_tokens"), 24576),
+            "overflow_policy": overflow,
+        }
+
+    def _is_local_provider_name(self, name):
+        provider = self._provider_cfg(name)
+        ptype = str(provider.get("type", "")).strip().lower()
+        pid = str(provider.get("provider_id", "")).strip().lower()
+        if ptype == "ollama":
+            return True
+        if pid == "local_vllm":
+            return True
+        return str(name).startswith("local_")
+
+    def _local_context_limits_for_provider(self, name):
+        cfg = self._context_defaults()
+        key = str(name or "").lower()
+        hard = cfg["assistant_max_tokens"]
+        if "coder" in key:
+            hard = cfg["coder_max_tokens"]
+        return {
+            "hard_limit_tokens": hard,
+            "soft_limit_tokens": min(cfg["soft_limit_tokens"], hard),
+            "overflow_policy": cfg["overflow_policy"],
+        }
+
+    def _remote_routing_enabled(self):
+        env_val = os.environ.get("OPENCLAW_REMOTE_ROUTING_ENABLED")
+        if env_val is not None:
+            return str(env_val).strip().lower() in {"1", "true", "yes", "on"}
+        defaults = self.policy.get("defaults", {}) if isinstance(self.policy, dict) else {}
+        return bool(defaults.get("remoteRoutingEnabled", False))
+
+    def _remote_allowlist_task_classes(self):
+        defaults = self.policy.get("defaults", {}) if isinstance(self.policy, dict) else {}
+        raw = defaults.get("remoteAllowlistTaskClasses", [])
+        if isinstance(raw, str):
+            raw = [item.strip() for item in raw.split(",")]
+        if not isinstance(raw, list):
+            raw = []
+        out = []
+        for item in raw:
+            value = str(item).strip().lower()
+            if value:
+                out.append(value)
+        return list(dict.fromkeys(out))
+
+    def _remote_allowed_for_task_class(self, task_class):
+        if not self._remote_routing_enabled():
+            return False, "remote_disabled"
+        allowlist = self._remote_allowlist_task_classes()
+        if not allowlist:
+            return True, "remote_enabled_no_allowlist"
+        if str(task_class or "").strip().lower() in allowlist:
+            return True, "remote_allowed_task_class"
+        return False, "remote_task_class_disallowed"
+
+    def _apply_local_context_guard(self, *, payload, text, provider_name, request_id):
+        limits = self._local_context_limits_for_provider(provider_name)
+        hard = limits["hard_limit_tokens"]
+        soft = limits["soft_limit_tokens"]
+        overflow_policy = limits["overflow_policy"]
+        original_tokens = estimate_tokens(text)
+        original_chars = len(text)
+        compression_margin_tokens = int(round(hard * 1.2))
+        if original_tokens <= soft:
+            return {
+                "ok": True,
+                "payload": payload,
+                "text": text,
+                "tokens": original_tokens,
+                "context": {
+                    "context_guard_triggered": False,
+                    "compressed": False,
+                    "hard_limit_tokens": hard,
+                    "soft_limit_tokens": soft,
+                    "overflow_policy": overflow_policy,
+                },
+            }
+
+        if original_tokens > compression_margin_tokens:
+            requires_remote = overflow_policy == "spill_remote"
+            return {
+                "ok": False,
+                "reason_code": "context_too_large_for_local",
+                "error_type": "CONTEXT_TOO_LARGE",
+                "requires_remote": requires_remote,
+                "context": {
+                    "context_guard_triggered": True,
+                    "compressed": False,
+                    "before_tokens": original_tokens,
+                    "hard_limit_tokens": hard,
+                    "soft_limit_tokens": soft,
+                    "compression_margin_tokens": compression_margin_tokens,
+                    "overflow_policy": overflow_policy,
+                },
+            }
+
+        if overflow_policy == "reject":
+            return {
+                "ok": False,
+                "reason_code": "context_too_large",
+                "error_type": "CONTEXT_TOO_LARGE",
+                "requires_remote": False,
+                "context": {
+                    "context_guard_triggered": True,
+                    "compressed": False,
+                    "before_tokens": original_tokens,
+                    "hard_limit_tokens": hard,
+                    "soft_limit_tokens": soft,
+                    "overflow_policy": overflow_policy,
+                },
+            }
+
+        compressed_text, info = _compress_text_preserving_structure(text, soft)
+        compressed_payload = _rewrite_payload_text(payload, compressed_text)
+        _emit_envelope_event(
+            "context.compressed",
+            "WARN",
+            request_id,
+            {
+                "provider": provider_name,
+                "before_tokens": int(info.get("before_tokens", original_tokens)),
+                "after_tokens": int(info.get("after_tokens", estimate_tokens(compressed_text))),
+                "before_chars": int(info.get("before_chars", original_chars)),
+                "after_chars": int(info.get("after_chars", len(compressed_text))),
+                "soft_limit_tokens": soft,
+                "hard_limit_tokens": hard,
+                "overflow_policy": overflow_policy,
+            },
+        )
+
+        compressed_tokens = estimate_tokens(compressed_text)
+        if compressed_tokens <= hard:
+            return {
+                "ok": True,
+                "payload": compressed_payload,
+                "text": compressed_text,
+                "tokens": compressed_tokens,
+                "context": {
+                    "context_guard_triggered": True,
+                    "compressed": True,
+                    "before_tokens": original_tokens,
+                    "after_tokens": compressed_tokens,
+                    "hard_limit_tokens": hard,
+                    "soft_limit_tokens": soft,
+                    "overflow_policy": overflow_policy,
+                },
+            }
+
+        requires_remote = overflow_policy == "spill_remote"
+        return {
+            "ok": False,
+            "reason_code": "context_too_large_after_compression",
+            "error_type": "CONTEXT_TOO_LARGE",
+            "requires_remote": requires_remote,
+            "context": {
+                "context_guard_triggered": True,
+                "compressed": True,
+                "before_tokens": original_tokens,
+                "after_tokens": compressed_tokens,
+                "hard_limit_tokens": hard,
+                "soft_limit_tokens": soft,
+                "overflow_policy": overflow_policy,
+            },
+        }
+
     def _capability_cfg(self):
         return self.policy.get("routing", {}).get("capability_router", {})
 
@@ -1141,14 +1455,25 @@ class PolicyRouter:
         text = "\n".join(
             t for t in [str(context_metadata.get("input_text", "")), str(payload_text or "")] if t
         )
-        return classify_intent(text)
+        return classify_task_class(text, context_metadata)
 
     def _capability_decision(self, context_metadata, payload_text=""):
+        context_metadata = context_metadata or {}
+        ai_payload = context_metadata.get("active_inference")
+        if isinstance(ai_payload, dict):
+            ai_provider = normalize_provider_id(ai_payload.get("preferred_provider"))
+            if ai_provider:
+                return {
+                    "trigger": "active_inference",
+                    "matched": "preferred_provider",
+                    "provider": ai_provider,
+                    "reason": "active inference preferred provider",
+                }
+
         cfg = self._capability_cfg()
         if cfg.get("enabled") is False:
             return None
 
-        context_metadata = context_metadata or {}
         text = "\n".join(
             t for t in [str(context_metadata.get("input_text", "")), str(payload_text or "")] if t
         )
@@ -1180,7 +1505,21 @@ class PolicyRouter:
 
         capability_class = self._capability_class(context_metadata, payload_text)
         if capability_class == "mechanical_execution":
-            provider = cfg.get("mechanicalProvider") or cfg.get("codeProvider") or cfg.get("subagentProvider")
+            default_cap = DEFAULT_POLICY.get("routing", {}).get("capability_router", {})
+            code_provider = cfg.get("codeProvider")
+            mechanical_provider = cfg.get("mechanicalProvider")
+            small_provider = cfg.get("smallCodeProvider")
+            small_by_ctx = str(context_metadata.get("expected_change_size", "")).strip().lower() in {"small", "tiny"}
+            loc_hint = _coerce_positive_int(context_metadata.get("expected_loc"), 0)
+            small_by_loc = 0 < loc_hint <= 50
+            if small_provider and (small_by_ctx or small_by_loc):
+                provider = small_provider
+            elif code_provider and code_provider != default_cap.get("codeProvider"):
+                provider = code_provider
+            elif mechanical_provider and mechanical_provider != default_cap.get("mechanicalProvider"):
+                provider = mechanical_provider
+            else:
+                provider = mechanical_provider or code_provider or cfg.get("subagentProvider")
             if provider:
                 return {
                     "trigger": "capability_class",
@@ -1190,16 +1529,57 @@ class PolicyRouter:
                     "capability_class": capability_class,
                 }
 
-        if capability_class == "planning_synthesis":
-            if not _has_strong_planning_signal(text):
-                return None
-            provider = cfg.get("planningProvider") or cfg.get("reasoningProvider")
-            if provider:
+        if capability_class == "code_generation_large":
+            code_provider = cfg.get("codeProvider") or cfg.get("mechanicalProvider") or cfg.get("subagentProvider")
+            if code_provider:
                 return {
                     "trigger": "capability_class",
                     "matched": capability_class,
-                    "provider": provider,
-                    "reason": "planning/synthesis class prefers cloud reasoning",
+                    "provider": code_provider,
+                    "reason": "large code generation prefers local coder lane first",
+                    "capability_class": capability_class,
+                }
+
+        if capability_class == "research_browse":
+            planning_provider = cfg.get("planningProvider") or cfg.get("reasoningProvider")
+            if planning_provider:
+                return {
+                    "trigger": "capability_class",
+                    "matched": capability_class,
+                    "provider": planning_provider,
+                    "reason": "research browse may require remote reasoning/browse resources",
+                    "capability_class": capability_class,
+                }
+
+        if capability_class == "planning_synthesis":
+            local_provider = cfg.get("mechanicalProvider") or cfg.get("subagentProvider") or "local_vllm_assistant"
+            if not _has_strong_planning_signal(text):
+                if local_provider:
+                    return {
+                        "trigger": "capability_class",
+                        "matched": capability_class,
+                        "provider": local_provider,
+                        "reason": "planning class without strong remote cues keeps local-first routing",
+                        "capability_class": capability_class,
+                    }
+                return None
+            est_tokens = estimate_tokens(text)
+            local_soft = self._context_defaults().get("soft_limit_tokens", 24576)
+            if est_tokens <= local_soft and local_provider:
+                return {
+                    "trigger": "capability_class",
+                    "matched": capability_class,
+                    "provider": local_provider,
+                    "reason": "planning synthesis remains local-first while inside local context budget",
+                    "capability_class": capability_class,
+                }
+            planning_provider = cfg.get("planningProvider") or cfg.get("reasoningProvider")
+            if planning_provider:
+                return {
+                    "trigger": "capability_class",
+                    "matched": capability_class,
+                    "provider": planning_provider,
+                    "reason": "planning synthesis exceeds local soft limit; prefer remote planning lane",
                     "capability_class": capability_class,
                 }
 
@@ -1325,6 +1705,10 @@ class PolicyRouter:
         controls["enabled"] = True
         now_ts = int(time.time())
         now_local = time.localtime(now_ts)
+        proprio_snapshot = (context_metadata or {}).get("proprioception", {})
+        tacti_features = {}
+        if _flag_enabled("OPENCLAW_ROUTER_PROPRIOCEPTION"):
+            tacti_features = tacti_features_from_proprioception(proprio_snapshot)
 
         if callable(compute_expression):
             expression = compute_expression(
@@ -1334,7 +1718,7 @@ class PolicyRouter:
                     "local_available": True,
                     "hour": int(now_local.tm_hour),
                     "valence": float((context_metadata or {}).get("valence", 0.0)),
-                    "arousal": 1.0,
+                    "arousal": float((context_metadata or {}).get("arousal", tacti_features.get("arousal", 1.0))),
                 },
             )
             controls["expression"] = expression
@@ -1433,6 +1817,7 @@ class PolicyRouter:
             unavailable[name] = reason
 
         local_context_tokens = self._provider_context_window_tokens("local_vllm_assistant")
+        ctx_defaults = self._context_defaults()
         return {
             "intent": intent,
             "matched_trigger": (decision or {}).get("trigger") or "default",
@@ -1446,6 +1831,12 @@ class PolicyRouter:
             "unavailable": unavailable,
             "fallback_candidates": [name for name in order if not chosen or name != chosen.get("provider")],
             "local_context_window_tokens": local_context_tokens,
+            "local_context_soft_limit_tokens": ctx_defaults.get("soft_limit_tokens"),
+            "local_context_max_tokens_assistant": ctx_defaults.get("assistant_max_tokens"),
+            "local_context_max_tokens_coder": ctx_defaults.get("coder_max_tokens"),
+            "local_context_overflow_policy": ctx_defaults.get("overflow_policy"),
+            "remote_routing_enabled": self._remote_routing_enabled(),
+            "remote_allowlist_task_classes": self._remote_allowlist_task_classes(),
         }
 
     def execute_with_escalation(self, intent, payload, context_metadata=None, validate_fn=None):
@@ -1467,72 +1858,13 @@ class PolicyRouter:
             event_detail.setdefault("capability_class", capability_class)
             log_event(event_type, event_detail, self.event_log)
 
-        if _flag_enabled("ENABLE_ACTIVE_INFERENCE"):
+        if self._proprio_sampler is not None:
+            snap = self._proprio_sampler.snapshot()
+            runtime_context.setdefault("proprioception", snap)
+        if _active_inference_enabled():
             runtime_context["active_inference"] = _active_inference_payload(runtime_context)
         tacti_controls = self._tacti_runtime_controls(intent, intent_cfg, runtime_context)
         order, decision = self._ordered_providers(intent_cfg, runtime_context, payload_text)
-        max_tokens_req = int(
-            intent_cfg.get(
-                "maxTokensPerRequest",
-                self.policy.get("defaults", {}).get("maxTokensPerRequest", 0),
-            )
-        )
-        order, max_tokens_req, metrics_gate = _apply_metrics_gates(order, max_tokens_req)
-        if metrics_gate:
-            _emit(
-                "router_metrics_gate_applied",
-                {"intent": intent, "details": metrics_gate},
-            )
-        reservoir_hints = _reservoir_readout()
-        if isinstance(reservoir_hints, dict):
-            hints = reservoir_hints.get("routing_hints", {})
-            urgency = _safe_float_metric((hints or {}).get("urgency"))
-            risk_off = _safe_float_metric((hints or {}).get("risk_off"))
-            if urgency > 0.7 and "local_vllm_assistant" in order:
-                order = _reorder_move_front(order, ["local_vllm_assistant"])
-            if risk_off > 0.7:
-                cloud = [name for name in order if _is_cloud_provider_name(name)]
-                order = _reorder_move_front(order, cloud)
-        if intent == "itc_classify" and callable(get_itc_signal):
-            try:
-                now_utc = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-                itc = get_itc_signal(now_utc, lookback="8h")
-                signal = itc.get("signal") if isinstance(itc, dict) else None
-                metrics = signal.get("metrics", {}) if isinstance(signal, dict) else {}
-                risk_on = _safe_float_metric(metrics.get("risk_on"))
-                risk_off = _safe_float_metric(metrics.get("risk_off"))
-                if risk_on > 0.6 and "local_vllm_assistant" in order:
-                    order = _reorder_move_front(order, ["local_vllm_assistant"])
-                if risk_off > 0.7:
-                    cloud = [name for name in order if _is_cloud_provider_name(name)]
-                    order = _reorder_move_front(order, cloud)
-            except Exception:
-                pass
-        if callable(_tacti_main_flow_enhance_plan):
-            try:
-                tacti_context = dict(runtime_context)
-                tacti_context.setdefault("intent", intent)
-                tacti_context.setdefault("source_agent", "router")
-                tacti_order, tacti_annotations = _tacti_main_flow_enhance_plan(
-                    context=tacti_context,
-                    candidates=order,
-                    policy=self.policy,
-                )
-                if isinstance(tacti_order, list) and tacti_order:
-                    order = [str(x) for x in tacti_order if str(x) in order] + [
-                        x for x in order if str(x) not in set(str(i) for i in tacti_order)
-                    ]
-                if isinstance(tacti_annotations, dict):
-                    arousal_factor = _safe_float_metric(tacti_annotations.get("arousal_suppression_factor"))
-                    if 0.0 < arousal_factor < 1.0 and max_tokens_req > 0:
-                        max_tokens_req = max(64, int(max_tokens_req * arousal_factor))
-                    efe = tacti_annotations.get("efe_score")
-                    if isinstance(efe, dict):
-                        efe_map = {str(k): _safe_float_metric(v) for k, v in efe.items()}
-                        if efe_map:
-                            order = sorted(order, key=lambda name: efe_map.get(name, float("-inf")), reverse=True)
-            except Exception:
-                pass
         route_explain = self.explain_route(intent, context_metadata=runtime_context, payload=payload)
         if decision:
             _emit(
@@ -1561,12 +1893,23 @@ class PolicyRouter:
         max_per_run = int(self.policy.get("budgets", {}).get("intents", {}).get(budget_intent, {}).get("maxCallsPerRun", 0))
         self.run_counts.setdefault(budget_intent, 0)
         now = int(time.time())
+        context_needs_remote = False
+        context_guard_snapshot = None
 
         for name in order:
+            provider_start = time.perf_counter()
             if max_per_run and self.run_counts[budget_intent] >= max_per_run:
                 last_reason = "max_calls_per_run_exhausted"
                 _emit("router_skip", {"intent": intent, "provider": name, "reason_code": last_reason})
                 break
+
+            is_local_provider = self._is_local_provider_name(name)
+            if not is_local_provider:
+                remote_allowed, remote_reason = self._remote_allowed_for_task_class(capability_class)
+                if not remote_allowed:
+                    last_reason = remote_reason
+                    _emit("router_skip", {"intent": intent, "provider": name, "reason_code": remote_reason})
+                    continue
 
             ok, reason = self._provider_available(name, intent_cfg)
             if not ok:
@@ -1603,17 +1946,37 @@ class PolicyRouter:
                 continue
             max_chars = self._provider_max_chars(name, model_id)
 
-            # enforce per-request cap and per-provider max chars
-            text = _extract_text_from_payload(payload)
-            text = _truncate_text(text, max_chars or 0)
-            if "prompt" in payload:
-                payload = dict(payload)
-                payload["prompt"] = text
-            elif "messages" in payload:
-                payload = dict(payload)
-                payload["messages"] = [{"role": "user", "content": text}]
+            candidate_payload = dict(payload or {})
+            text = _extract_text_from_payload(candidate_payload)
+            if max_chars and len(text) > max_chars and not is_local_provider:
+                last_reason = "provider_input_limit_exceeded"
+                _emit("router_skip", {"intent": intent, "provider": name, "reason_code": last_reason})
+                continue
+
+            if is_local_provider:
+                guard = self._apply_local_context_guard(
+                    payload=candidate_payload,
+                    text=text,
+                    provider_name=name,
+                    request_id=request_id,
+                )
+                if not guard.get("ok"):
+                    context_needs_remote = bool(guard.get("requires_remote"))
+                    context_guard_snapshot = guard.get("context", {})
+                    last_reason = guard.get("reason_code", "context_too_large")
+                    _emit("router_skip", {"intent": intent, "provider": name, "reason_code": last_reason})
+                    continue
+                candidate_payload = guard.get("payload", candidate_payload)
+                text = guard.get("text", text)
+                context_guard_snapshot = guard.get("context", {})
 
             est_tokens = estimate_tokens(text)
+            max_tokens_req = int(
+                intent_cfg.get(
+                    "maxTokensPerRequest",
+                    self.policy.get("defaults", {}).get("maxTokensPerRequest", 0),
+                )
+            )
             if max_tokens_req and est_tokens > max_tokens_req:
                 last_reason = "request_token_cap_exceeded"
                 _emit(
@@ -1633,16 +1996,35 @@ class PolicyRouter:
                 _emit("router_skip", {"intent": intent, "provider": name, "reason_code": reason})
                 continue
 
+            _emit_envelope_event(
+                "route.decision",
+                "INFO",
+                request_id,
+                {
+                    "task_class": capability_class,
+                    "chosen_provider": name,
+                    "chosen_model": model_id,
+                    "reason": (decision or {}).get("reason") or "provider_passed_gates",
+                    "budget_state": {
+                        "intent": dict(self.budget_state.get("intents", {}).get(budget_intent, {})),
+                        "tier": dict(self.budget_state.get("tiers", {}).get(tier, {})),
+                    },
+                    "remote_routing_enabled": self._remote_routing_enabled(),
+                    "context_guard": context_guard_snapshot or {},
+                },
+            )
+
             attempts += 1
             self.run_counts[budget_intent] += 1
             self._budget_consume(budget_intent, tier, effective_tokens)
+
             started_at = time.perf_counter()
 
             # handler dispatch
             try:
                 handler = self.handlers.get(name)
                 if handler:
-                    result = handler(payload, model_id, runtime_context)
+                    result = handler(candidate_payload, model_id, runtime_context)
                 else:
                     ptype = provider.get("type")
                     if ptype == "openai_compatible":
@@ -1658,15 +2040,15 @@ class PolicyRouter:
                             provider.get("baseUrl", ""),
                             api_key,
                             model_id,
-                            payload,
+                            candidate_payload,
                             provider_caps=provider_caps,
                         )
                     elif ptype == "anthropic":
                         api_key = read_env_or_secrets(provider.get("apiKeyEnv", ""))
-                        result = _call_anthropic(provider.get("baseUrl", ""), api_key, model_id, payload)
+                        result = _call_anthropic(provider.get("baseUrl", ""), api_key, model_id, candidate_payload)
                     elif ptype == "ollama":
                         base = provider.get("baseUrl", "http://localhost:11434")
-                        result = _call_ollama(base, model_id, payload)
+                        result = _call_ollama(base, model_id, candidate_payload)
                     elif ptype == "openai_auth" or ptype == "anthropic_auth":
                         result = {"ok": False, "reason_code": "auth_login_required"}
                     else:
@@ -1707,6 +2089,23 @@ class PolicyRouter:
                         "attempt": attempts,
                     },
                 )
+                if self._proprio_sampler is not None:
+                    breaker_open = []
+                    for prov_name, entry in (self.circuit_state.get("providers", {}) or {}).items():
+                        try:
+                            if int(entry.get("openUntil", 0)) > int(time.time()):
+                                breaker_open.append(str(prov_name))
+                        except Exception:
+                            continue
+                    self._proprio_sampler.set_breaker_open_providers(breaker_open)
+                    self._proprio_sampler.record_decision(
+                        duration_ms=(time.perf_counter() - provider_start) * 1000.0,
+                        tokens_in=est_tokens,
+                        tokens_out=0,
+                        provider=name,
+                        ok=False,
+                        err=reason_code,
+                    )
                 continue
 
             text_out = result.get("text", "")
@@ -1765,8 +2164,28 @@ class PolicyRouter:
                     context_metadata=runtime_context,
                     intent=intent,
                 )
-                _emit("tacti_routing_plan", tacti_plan)
-            return {
+                log_event("tacti_routing_plan", tacti_plan, self.event_log)
+            meta = None
+            if self._proprio_sampler is not None:
+                breaker_open = []
+                for prov_name, entry in (self.circuit_state.get("providers", {}) or {}).items():
+                    try:
+                        if int(entry.get("openUntil", 0)) > int(time.time()):
+                            breaker_open.append(str(prov_name))
+                    except Exception:
+                        continue
+                self._proprio_sampler.set_breaker_open_providers(breaker_open)
+                self._proprio_sampler.record_decision(
+                    duration_ms=(time.perf_counter() - provider_start) * 1000.0,
+                    tokens_in=est_tokens,
+                    tokens_out=estimate_tokens(text_out),
+                    provider=name,
+                    ok=True,
+                )
+                snap = self._proprio_sampler.snapshot()
+                runtime_context.setdefault("proprioception", snap)
+                meta = {"proprioception": snap}
+            result_payload = {
                 "ok": True,
                 "provider": name,
                 "model": model_id,
@@ -1778,6 +2197,9 @@ class PolicyRouter:
                 "capability_class": capability_class,
                 "tacti": tacti_plan,
             }
+            if meta is not None:
+                result_payload["meta"] = meta
+            return result_payload
 
         _emit(
             "router_fail",
@@ -1788,6 +2210,33 @@ class PolicyRouter:
                 "attempts": attempts,
             },
         )
+        if context_needs_remote:
+            reason = str(last_reason or "remote_unavailable_after_context_overflow")
+            remediation = [
+                "reduce input size or split request into smaller steps",
+                "confirm policy defaults.local_context_overflow_policy is `compress` or `spill_remote`",
+            ]
+            if not self._remote_routing_enabled():
+                remediation.append("enable remote routing only if allowed: set `OPENCLAW_REMOTE_ROUTING_ENABLED=true`")
+            if "budget" in reason:
+                remediation.append("increase remote budget caps in `workspace/policy/llm_policy.json` budgets section")
+            if "circuit" in reason:
+                remediation.append("wait for circuit cooldown or clear provider faults before retrying")
+            return {
+                "ok": False,
+                "reason_code": "context_too_large",
+                "attempts": attempts,
+                "request_id": request_id,
+                "capability_class": capability_class,
+                "error": {
+                    "type": "CONTEXT_TOO_LARGE",
+                    "tier": "LOCAL",
+                    "confidence": 0.92,
+                    "reason": reason,
+                    "remediation": remediation,
+                    "context": context_guard_snapshot or {},
+                },
+            }
         return {
             "ok": False,
             "reason_code": last_reason or "no_provider_available",

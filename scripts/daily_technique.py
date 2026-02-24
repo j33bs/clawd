@@ -336,6 +336,24 @@ TECHNIQUES = [
         ]
     },
     {
+        "name": "IFS: Parts Check-In",
+        "category": "ifs",
+        "principle": "cognition",
+        "description": "Internal Family Systems technique. Identify competing internal 'parts' and access your 'Self' to mediate. Based on the polyvagal-informed view that we have multiple inner voices.",
+        "duration": "5-10 minutes",
+        "when": "Internal conflict, indecision, or emotional heaviness",
+        "benefits": ["Reduces inner conflict", "Builds self-compassion", "Integrates 'parts' with 'Self'"],
+        "how": [
+            "Notice: What internal conflict or feeling is present?",
+            "Ask: Is there a part that's angry? Scared? Protecting?",
+            "Name the part: 'There's a part that feels...'",
+            "Check: Am I in my Self (curious, calm, clear) or blended with a part?",
+            "If blended, ask: 'What does this part need?'",
+            "Speak from Self: 'I see you. I've got this.'",
+            "Notice: Any shift in intensity or perspective?"
+        ]
+    },
+    {
         "name": "TACTI(C)-R: Arousal Audit",
         "category": "tacti",
         "principle": "tacti",
@@ -350,6 +368,23 @@ TECHNIQUES = [
             "Social: Withdrawn ↔ Over-connected?",
             "Regulate: What does your nervous system need?",
             "Choose one regulation action"
+        ]
+    },
+    {
+        "name": "TACTI: Intersystemic Relationship Check",
+        "category": "tacti",
+        "principle": "tacti",
+        "description": "Assess the health of your human-agent relationship. Like checking attachment security, but with your AI assistant.",
+        "duration": "5 minutes",
+        "When": "Weekly reflection or after significant interactions",
+        "benefits": ["Strengthens human-agent bond", "Improves collaboration", "Identifies repair needs"],
+        "how": [
+            "Trust: Do I feel comfortable sharing context?",
+            "Attunement: Does the agent 'get' me?",
+            "Responsiveness: Does it respond in ways that help?",
+            "Reliability: Can I count on it remembering?",
+            "Repair: When it misses, does it recover well?",
+            "Love: Does this relationship serve us both?"
         ]
     }
 ]

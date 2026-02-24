@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import json
+import os
 import shutil
 import subprocess
 import time
@@ -46,6 +47,103 @@ def check_vllm() -> dict:
         return {"pass": False, "url": url, "error": str(exc.reason)}
     except Exception as exc:
         return {"pass": False, "url": url, "error": str(exc)}
+
+def _coder_log_path() -> Path:
+    return Path(
+        os.environ.get("OPENCLAW_VLLM_CODER_LOG_PATH")
+        or (Path.home() / ".local" / "state" / "openclaw" / "vllm-coder.log")
+    ).expanduser()
+
+
+def _replay_log_path() -> Path:
+    return Path(
+        os.environ.get("OPENCLAW_REPLAY_LOG_PATH")
+        or (Path.home() / ".local" / "share" / "openclaw" / "replay" / "replay.jsonl")
+    ).expanduser()
+
+
+def _detect_coder_degraded_reason() -> str:
+    path = _coder_log_path()
+    try:
+        if not path.exists():
+            return "UNKNOWN"
+        lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+        for line in reversed(lines[-20:]):
+            if "VRAM_GUARD_BLOCKED" in line:
+                if "reason=VRAM_LOW" in line:
+                    return "VRAM_LOW"
+                return "VRAM_GUARD_BLOCKED"
+    except PermissionError:
+        return "PERMISSION_DENIED"
+    except Exception:
+        return "UNKNOWN"
+    return "UNKNOWN"
+
+
+def check_coder_vllm() -> dict:
+    base = os.environ.get("OPENCLAW_VLLM_CODER_BASE_URL", "http://127.0.0.1:8002/v1")
+    url = base.rstrip("/") + "/models"
+    try:
+        req = Request(url, method="GET")
+        with urlopen(req, timeout=4) as resp:
+            body = resp.read().decode("utf-8", errors="replace")
+            status = getattr(resp, "status", 200)
+            passed = (200 <= status < 300) and ("\"data\"" in body or "\"object\"" in body)
+            return {
+                "pass": passed,
+                "status": "UP" if passed else "DOWN",
+                "coder_degraded_reason": "OK" if passed else "UNKNOWN",
+                "url": url,
+                "http_status": status,
+                "response_sample": body[:160],
+            }
+    except PermissionError:
+        return {
+            "pass": True,
+            "status": "UNKNOWN",
+            "coder_degraded_reason": "PERMISSION_DENIED",
+            "url": url,
+            "reason": "permission_denied",
+        }
+    except Exception as exc:
+        reason = _detect_coder_degraded_reason()
+        status = "DEGRADED" if reason in {"VRAM_LOW", "VRAM_GUARD_BLOCKED"} else "DOWN"
+        return {
+            "pass": status in {"UP", "DEGRADED"},
+            "status": status,
+            "coder_degraded_reason": reason,
+            "url": url,
+            "error": str(exc),
+        }
+
+
+def check_replay_log_writable() -> dict:
+    path = _replay_log_path()
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a", encoding="utf-8"):
+            pass
+        return {"pass": True, "status": "WRITABLE", "path": str(path)}
+    except PermissionError:
+        return {"pass": True, "status": "UNKNOWN", "reason": "permission_denied", "path": str(path)}
+    except Exception as exc:
+        return {"pass": False, "status": "NOACCESS", "reason": f"{type(exc).__name__}:{exc}", "path": str(path)}
+
+
+def check_pairing_canary() -> dict:
+    guard = Path(__file__).resolve().parent / "check_gateway_pairing_health.sh"
+    if not guard.exists():
+        return {"pass": False, "status": "UNHEALTHY", "reason": "pairing_guard_missing", "path": str(guard)}
+    rc, out, err = run_cmd([str(guard)], timeout=20)
+    if rc == 0:
+        return {"pass": True, "status": "OK", "path": str(guard), "summary": "\n".join(out.splitlines()[:3])}
+    return {
+        "pass": False,
+        "status": "UNHEALTHY",
+        "path": str(guard),
+        "return_code": rc,
+        "summary": "\n".join((out or err).splitlines()[:3]),
+    }
 
 
 def check_disk() -> dict:
@@ -167,6 +265,9 @@ def check_security_audit() -> dict:
 def main():
     checks = {
         "vllm": check_vllm(),
+        "coder_vllm": check_coder_vllm(),
+        "replay_log": check_replay_log_writable(),
+        "pairing_canary": check_pairing_canary(),
         "disk": check_disk(),
         "memory": check_memory(),
         "openclaw_gateway": check_gateway(),

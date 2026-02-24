@@ -1,39 +1,18 @@
 #!/usr/bin/env node
-/**
- * Daily Quote Generator
- * 
- * Selects a quote for the day:
- * - 80% from curated quotes.json (local literature, Nietzsche, philosophy)
- * - 20% from QuoteAPI (dynamically fetched)
- */
+const fs = require('fs');
+const path = require('path');
 
-import fs from 'fs';
-import path from 'path';
-import https from 'https';
-import { fileURLToPath } from 'url';
+const LITERATURE_DIR = path.join(process.env.HOME, 'clawd/memory/literature');
+const STATE_FILE = path.join(LITERATURE_DIR, 'state.json');
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-
-const QUOTES_FILE = path.join(process.env.HOME, '.openclaw/workspace/data/quotes.json');
-const STATE_FILE = path.join(process.env.HOME, '.openclaw/workspace/data/quotes-state.json');
-
-// Ensure data dir exists
-const DATA_DIR = path.dirname(QUOTES_FILE);
-if (!fs.existsSync(DATA_DIR)) {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
-}
-
-// Load quotes
-let quotesData;
-try {
-  quotesData = JSON.parse(fs.readFileSync(QUOTES_FILE, 'utf8'));
-} catch (e) {
-  console.error("Quotes file not found:", e.message);
+// Ensure dir exists
+if (!fs.existsSync(LITERATURE_DIR)) {
+  console.error("Literature directory not found. Run extraction first.");
   process.exit(1);
 }
 
 // Load state
-let state = { lastQuoteDate: null, apiUsed: false };
+let state = { lastQuoteDate: null, deliveredQuotes: [] };
 if (fs.existsSync(STATE_FILE)) {
   state = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
 }
@@ -45,60 +24,49 @@ if (process.argv.includes('--check') && state.lastQuoteDate === today) {
   process.exit(0);
 }
 
-// Determine source: 20% chance of API
-const useApi = !state.apiUsed && Math.random() < 0.2;
+// Find text files
+const files = fs.readdirSync(LITERATURE_DIR).filter(f => f.endsWith('.txt'));
+if (files.length === 0) {
+  console.error("No text files found.");
+  process.exit(1);
+}
 
-let quote;
-
-if (useApi) {
-  // Fetch from API
-  quote = await fetchApiQuote();
-  if (!quote) {
-    // Fallback to local if API fails
-    quote = getRandomQuote(quotesData.quotes);
-  } else {
-    state.apiUsed = true;
+// Build list of available chunks (file + offset), exclude delivered
+const chunkSize = 2000;
+const available = [];
+for (const file of files) {
+  const text = fs.readFileSync(path.join(LITERATURE_DIR, file), 'utf8');
+  const maxOffset = Math.max(0, text.length - chunkSize);
+  // Sample offsets (every 2000 chars = ~100 chunks per file)
+  for (let offset = 0; offset < maxOffset; offset += 2000) {
+    const id = `${file}:${offset}`;
+    if (!state.deliveredQuotes.includes(id)) {
+      available.push({ file, offset });
+    }
   }
-} else {
-  // Use local curated quotes
-  quote = getRandomQuote(quotesData.quotes);
 }
 
-// Output
-console.log(`THEME: ${quote.themes.join(', ')}`);
-console.log("--- QUOTE ---");
-console.log(quote.text);
-if (quote.author) {
-  console.log(`— ${quote.author}`);
+if (available.length === 0) {
+  // Reset if all delivered
+  state.deliveredQuotes = [];
+  fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2));
+  console.log("All quotes delivered. Starting over.");
+  process.exit(0);
 }
-console.log("--- END QUOTE ---");
 
-// Update state
+// Pick random available chunk
+const pick = available[Math.floor(Math.random() * available.length)];
+const text = fs.readFileSync(path.join(LITERATURE_DIR, pick.file), 'utf8');
+const chunk = text.substring(pick.offset, pick.offset + chunkSize);
+
+// Output for the agent to refine
+console.log(`SOURCE: ${pick.file}`);
+console.log(`OFFSET: ${pick.offset}`);
+console.log("--- CHUNK ---");
+console.log(chunk);
+console.log("--- END CHUNK ---");
+
+// Update state - track delivered quote
 state.lastQuoteDate = today;
+state.deliveredQuotes.push(`${pick.file}:${pick.offset}`);
 fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2));
-
-function getRandomQuote(quotes) {
-  return quotes[Math.floor(Math.random() * quotes.length)];
-}
-
-function fetchApiQuote() {
-  return new Promise((resolve) => {
-    https.get('https://zenquotes.io/api/today', (res) => {
-      let data = '';
-      res.on('data', chunk => data += chunk);
-      res.on('end', () => {
-        try {
-          const [q] = JSON.parse(data);
-          resolve({
-            text: q.q,
-            author: q.a,
-            source: 'Quote API',
-            themes: ['Vitality'] // default theme for API quotes
-          });
-        } catch (e) {
-          resolve(null);
-        }
-      });
-    }).on('error', () => resolve(null));
-  });
-}
