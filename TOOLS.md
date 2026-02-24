@@ -37,4 +37,10 @@ Skills are shared. Your setup is yours. Keeping them apart means you can update 
 
 ---
 
+### Music (for my spare time listening)
+
+- "Byte the Dust" — Fabio Fusco & Moon (2015, Goa/psytrance)
+
+---
+
 Add whatever helps you do your job. This is your cheat sheet.
