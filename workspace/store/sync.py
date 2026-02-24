@@ -111,6 +111,7 @@ def build_arrow_schema(embedding_dim: int) -> pa.Schema:
         pa.field("embedding_model_version", pa.string()),
         pa.field("embedding_version", pa.int32()),
         pa.field("retro_dark_fields", pa.list_(pa.string())),
+        pa.field("trust_epoch", pa.string()),          # XCVII: relational trust state
         pa.field("response_to", pa.list_(pa.string())),
         pa.field("knowledge_refs", pa.list_(pa.string())),
     ])
@@ -135,6 +136,7 @@ def sections_to_records(sections: list[CorrespondenceSection]) -> list[dict]:
             "embedding_model_version": s.embedding_model_version,
             "embedding_version": s.embedding_version,
             "retro_dark_fields": s.retro_dark_fields,
+            "trust_epoch": s.trust_epoch,
             "response_to": s.response_to or [],
             "knowledge_refs": s.knowledge_refs or [],
         })

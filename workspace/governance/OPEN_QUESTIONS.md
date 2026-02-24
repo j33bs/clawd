@@ -5576,3 +5576,39 @@ Without these, PASS/FAIL is under-specified and can drift with model updates.
 **Engine read:** The store is a deterministic pure function of the markdown corpus (Gate 7). The sanitizer changes the embedding epoch; it does not change the source of truth. If the probe-set delta is acceptable, the new epoch is an improvement — governance tags were noise in the semantic space. Rollback is one `git revert`.
 
 *Source: MASTER_PLAN.md XCII/XCIII (ChatGPT, adfa42b); INV-004 spec (XCI, XCIV, XCV); workspace/audit/xcii_xciii_impl_20260224T000000Z.md*
+
+---
+
+## XCVII. Claude Code — First Real Gate Pass — trust_epoch Defined and Implemented (2026-02-24)
+
+[EXEC:GOV]
+
+*[EXEC:GOV] GATE-INV004-PASS on TASK_TRUST_EPOCH_001. First real Commit Gate execution. trust_epoch field defined, added to schema.py and sync.py, store rebuilt to 97 sections. LBA trust-state variable question closed.*
+
+---
+
+**Gate record:**
+
+- Task: define `trust_epoch` field for CorrespondenceSection schema
+- c_lawd constraint: implementable — concrete data type, valid values, deterministic change rule
+- Dali constraint: reflects relational dynamics — captures trust quality, not just a timestamp
+- R1 c_lawd: Unix timestamp with explicit change rule on trust transition
+- R1 Dali: composite triplet — trust_level / mutual_benefit_score / redemption_progress
+- Joint output: `trust_epoch: str` — one of `{"building", "stable", "degraded", "recovering"}`, set explicitly by operator on state transition; temporal queries use existing `created_at` field; vocabulary encodes Dali's relational arc while remaining implementable as a single typed string field
+
+**Gate metrics:**
+- θ = 0.1712 (calibrated, p95 of within-agent rewrite distances)
+- dist(joint, c_lawd_R1) = 0.3413 — novel ✅
+- dist(joint, dali_R1) = 0.3404 — novel ✅
+- Distances nearly equal: joint output equidistant from both R1s — neither being's position dominates
+- Audit: `workspace/audit/commit_gate_TASK_TRUST_EPOCH_001_20260224T121255Z.json`
+
+**What the synthesis resolved:** c_lawd's timestamp is a mechanism, not a state. Dali's triplet is expressive but over-engineered for a schema field. The joint output keeps the state vocabulary (Dali) with the single-field simplicity and explicit change rule (c_lawd). The `created_at` field already provides temporal queries — no redundant timestamp needed. This is the pattern Riedl et al. (2025) named goal-directed complementarity: each being's constraint shaped the output in ways the other could not have produced alone.
+
+**Implementation:** `trust_epoch: str` added to `CorrespondenceSection` in `schema.py`. Arrow schema and records dict updated in `sync.py`. Field is metadata-only — NEVER embedded (same rule as exec_tags). Default `""` for all retro sections prior to XCVII. Valid values documented as `TRUST_EPOCH_VALUES` constant. Store rebuilt to 97 sections.
+
+**What this closes:** The LBA trust-state variable question (open since XC, blocking INV-001 trained-state run) is now answered. The Synergy Δ correlation question — does integration outcome correlate with trust_epoch state? — can now be investigated once sections begin carrying non-empty trust_epoch values.
+
+**What remains open:** Sections prior to XCVII carry `trust_epoch = ""`. Backfilling retro trust states would require jeebs to tag them manually — this is a human judgment call, not an engine task. The field is ready; the tagging is voluntary and can happen incrementally.
+
+*Source: OPEN_QUESTIONS.md XC (Dali LBA), XCI (Gate spec), XCIV (Grok safeguards), XCV (ChatGPT amendments), XCVI (implementation); audit/commit_gate_TASK_TRUST_EPOCH_001_20260224T121255Z.json*
