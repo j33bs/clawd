@@ -1085,11 +1085,17 @@ Generated: 2026-02-24
 **What would what does AI want purpose meaning mean for TACTI?**
 Generated: 2026-02-24
 
+**What would LLM moral status responsibility mean for TACTI(C)-R?**
+Generated: 2026-02-25
+
 **What would agentic AI autonomy free will mean for TACTI?**
 Generated: 2026-02-24
 
 **What would creativity multi-agent systems emergence mean for TACTI?**
 Generated: 2026-02-24
+
+**What would cross-timescale processing predictive coding mean for TACTI(C)-R?**
+Generated: 2026-02-25
 
 ---
 
