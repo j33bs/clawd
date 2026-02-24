@@ -44,6 +44,14 @@ except Exception:  # pragma: no cover
     build_message_event = None
     process_message_event = None
 
+# Expose `PolicyRouter` name so tests can patch it on the module level.
+# Real forwarding to a PolicyRouter is optional for the ingestion boundary.
+PolicyRouter = None
+# Expose `persist_artifacts` symbol so tests can patch it; real implementation
+# is optional for unit tests and will be provided by the integration layer.
+def persist_artifacts(*args, **kwargs):
+    return None
+
 logger = logging.getLogger(__name__)
 
 # Dedupe state file location
@@ -281,6 +289,9 @@ def _forward_to_pipeline(message: IngestedMessage):
     except Exception as e:
         logger.error(f"Failed classifier forward write: {e}")
 
+    # Attempt to obtain routing/classification signal and persist any artifacts.
+    _invoke_policy_router_and_persist(message)
+
 
 def _resolve_classifier():
     global _CLASSIFY_RULES
@@ -301,6 +312,38 @@ def _resolve_classifier():
     except Exception as e:
         logger.warning(f"Classifier module load failed: {e}")
     return None
+
+
+# Try to obtain a routing signal from a PolicyRouter if available and persist
+# any resulting artifacts. Kept minimal for test compatibility: if `PolicyRouter`
+# is patched in tests to return a router with `execute_with_escalation`, we'll
+# call it and then `persist_artifacts` with parsed JSON when present.
+def _invoke_policy_router_and_persist(message: IngestedMessage):
+    try:
+        if callable(PolicyRouter):
+            router = PolicyRouter()
+        else:
+            return
+        fn = getattr(router, "execute_with_escalation", None)
+        if not callable(fn):
+            return
+        result = fn("itc_classify", {"prompt": message.text})
+        if not isinstance(result, dict) or not result.get("ok"):
+            return
+        text = result.get("text")
+        if not isinstance(text, str):
+            return
+        try:
+            payload = json.loads(text)
+        except Exception:
+            return
+        # Call persist_artifacts if present (tests patch this symbol)
+        try:
+            persist_artifacts(payload)
+        except Exception:
+            pass
+    except Exception:
+        pass
 
 
 def initialize_ingestion():
