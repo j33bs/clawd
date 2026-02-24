@@ -1,6 +1,9 @@
 # MEMORY.md - Long-Term Context
 
-*Last updated: 2026-02-21*
+*Last updated: 2026-02-25*
+
+## Morning Check-ins
+- Feb 25: Morning check-in. Nothing significant to report — quiet day.
 
 ## User Preferences
 - **Name:** Heath

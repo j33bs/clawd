@@ -59,6 +59,21 @@
       "topic": "creativity multi-agent systems emergence",
       "finding": "Explored: creativity multi-agent systems emergence",
       "timestamp": "2026-02-24T12:04:21.555699"
+    },
+    {
+      "topic": "LLM moral status responsibility",
+      "finding": "Explored: LLM moral status responsibility",
+      "timestamp": "2026-02-25T03:04:14.484906"
+    },
+    {
+      "topic": "cross-timescale processing predictive coding",
+      "finding": "Explored: cross-timescale processing predictive coding",
+      "timestamp": "2026-02-25T06:04:14.866958"
+    },
+    {
+      "topic": "memory trails decay forgetting artificial",
+      "finding": "Explored: memory trails decay forgetting artificial",
+      "timestamp": "2026-02-25T09:04:18.084610"
     }
   ],
   "questions_generated": [
@@ -121,6 +136,21 @@
       "question": "What would creativity multi-agent systems emergence mean for TACTI(C)-R?",
       "from_topic": "creativity multi-agent systems emergence",
       "timestamp": "2026-02-24T12:04:21.555704"
+    },
+    {
+      "question": "What would LLM moral status responsibility mean for TACTI(C)-R?",
+      "from_topic": "LLM moral status responsibility",
+      "timestamp": "2026-02-25T03:04:14.484913"
+    },
+    {
+      "question": "What would cross-timescale processing predictive coding mean for TACTI(C)-R?",
+      "from_topic": "cross-timescale processing predictive coding",
+      "timestamp": "2026-02-25T06:04:14.866964"
+    },
+    {
+      "question": "What would memory trails decay forgetting artificial mean for TACTI(C)-R?",
+      "from_topic": "memory trails decay forgetting artificial",
+      "timestamp": "2026-02-25T09:04:18.084615"
     }
   ]
 }
