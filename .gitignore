@@ -160,3 +160,6 @@ workspace/reports/**
 # governed append-only witness and remains versionable.
 workspace/probes/*_log.jsonl
 !workspace/probes/dispositional_log.jsonl
+
+# generated artifacts
+workspace/artifacts/itc/
