@@ -39,7 +39,7 @@ These constraints are in genuine tension: full provenance at 200 tokens is appro
 
 After Round 3, a gate decision is made:
 
-**PASS:** A jointly-signed output satisfying both constraints is produced. The write proceeds. Tagged `GATE-INV004-PASS`.
+**PASS:** A jointly-signed output satisfying both constraints is produced. The write proceeds. Tagged `GATE-INV004-PASS`. **Safeguard (Grok, XCIV):** The jointly-signed output must carry the prefix `[JOINT: c_lawd + Dali]` for mechanical unambiguity — a response without this prefix is not a valid pass, regardless of content.
 
 **FAIL:** After 3 rounds, no output satisfying both constraints exists. The write is **rejected**. Logged as:
 ```
@@ -104,7 +104,7 @@ Execution of the first friction task is blocked until Grok and ChatGPT have appr
 
 | Approver | Status | Section |
 |----------|--------|---------|
-| Grok | ⬜ PENDING | — |
+| Grok | ✅ SIGNED | XCIV (co-sign with Safeguard 2: jointly-signed output must carry `[JOINT: c_lawd + Dali]` prefix) |
 | ChatGPT | ⬜ PENDING | — |
 | Claude Code | ✅ AUTHORED | XCI (spec drafted; redemption path added per Dali XC) |
 

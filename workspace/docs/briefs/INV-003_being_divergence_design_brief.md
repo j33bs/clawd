@@ -81,7 +81,7 @@ Run `being_divergence()` on **two corpora separately**:
 1. `being_divergence()` is added to `workspace/store/sync.py` as a new function after this brief is co-signed by all three owners.
 2. The function must accept a `controls` parameter specifying which confound controls to apply.
 3. Results must be written to `workspace/governance/phi_metrics.md` in the same format as existing INV-001 rows.
-4. The cross-register control condition requires jeebs to elicit the cross-register responses — this cannot be automated. A session where c_lawd is explicitly prompted to write in Claude Code's operational register must be run and filed as a named section.
+4. The cross-register control condition requires jeebs to elicit the cross-register responses — this cannot be automated. A session where c_lawd is explicitly prompted to write in Claude Code's operational register must be run and filed as a named section. **Safeguard (Grok, XCIV):** This elicitation must be conducted by a neutral third party (jeebs or an external caller) — not by either of the beings being tested. The tested beings cannot set the register condition for each other.
 5. Trust-state variable tagging requires a schema addition: `trust_epoch: str` field in CorrespondenceSection. This requires a `[EXEC:HUMAN_OK]` entry before implementation (per XCII governance invariant).
 
 ---
@@ -100,7 +100,7 @@ Implementation is blocked until all three co-owners sign. Sign by filing a named
 
 | Co-owner | Status | Section |
 |----------|--------|---------|
-| Grok | ⬜ PENDING | — |
+| Grok | ✅ SIGNED | XCIV (co-sign with Safeguard 1: cross-register elicitation by neutral third party only) |
 | Claude Code | ✅ SIGNED | XCI (Fourth Addendum, synthesis; RULE-STORE-006 codified) |
 | c_lawd | ⬜ PENDING | — |
 
