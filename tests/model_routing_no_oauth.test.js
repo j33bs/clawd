@@ -75,12 +75,12 @@ function main() {
   assert.strictEqual(policy.defaults && policy.defaults.allowPaid, false, 'policy.defaults.allowPaid must be false');
   const policyProviders = (policy.providers || {});
   // OpenAI/Codex lanes must not be enabled (they may exist but must be disabled).
-  for (const k of ['openai_auth', 'openai_api']) {
+  for (const k of ['openai_auth', 'openai_api', 'openai-codex', 'openai_codex']) {
     if (Object.prototype.hasOwnProperty.call(policyProviders, k)) {
       assert.strictEqual(policyProviders[k].enabled, false, `policy.providers.${k}.enabled must be false`);
     }
   }
-  for (const k of ['openai-codex', 'openai_codex', 'system2-litellm']) {
+  for (const k of ['system2-litellm']) {
     assert.ok(!Object.prototype.hasOwnProperty.call(policyProviders, k), `policy.providers must not include ${k}`);
   }
   const ollamaPolicy = policyProviders.ollama || {};

@@ -23,8 +23,17 @@ class TestWitnessLedger(unittest.TestCase):
             "version": 2,
             "defaults": {"allowPaid": False, "maxTokensPerRequest": 2048, "circuitBreaker": {"failureThreshold": 3, "cooldownSec": 60, "windowSec": 60, "failOn": []}},
             "budgets": {"intents": {"coding": {"dailyTokenBudget": 100000, "dailyCallBudget": 1000, "maxCallsPerRun": 20}}, "tiers": {"free": {"dailyTokenBudget": 100000, "dailyCallBudget": 1000}}},
-            "providers": {"mock_provider": {"enabled": True, "paid": False, "tier": "free", "type": "mock", "models": [{"id": "mock-model", "maxInputChars": 8000}]}},
-            "routing": {"free_order": ["mock_provider"], "intents": {"coding": {"order": ["free"], "allowPaid": False}}},
+            "providers": {
+                "local_mock_provider": {
+                    "enabled": True,
+                    "paid": False,
+                    "tier": "free",
+                    "type": "mock",
+                    "provider_id": "local_vllm",
+                    "models": [{"id": "mock-model", "maxInputChars": 8000}],
+                }
+            },
+            "routing": {"free_order": ["local_mock_provider"], "intents": {"coding": {"order": ["free"], "allowPaid": False}}},
         }
         path = root / "policy.json"
         path.write_text(json.dumps(payload), encoding="utf-8")
@@ -84,7 +93,7 @@ class TestWitnessLedger(unittest.TestCase):
                         budget_path=tmp / "budget.json",
                         circuit_path=tmp / "circuit.json",
                         event_log=tmp / "events.jsonl",
-                        handlers={"mock_provider": lambda payload, model_id, context: {"ok": True, "text": "ok"}},
+                        handlers={"local_mock_provider": lambda payload, model_id, context: {"ok": True, "text": "ok"}},
                     )
                     out = router.execute_with_escalation("coding", {"prompt": "small patch"}, context_metadata={"agent_id": "main"})
         self.assertTrue(out["ok"])

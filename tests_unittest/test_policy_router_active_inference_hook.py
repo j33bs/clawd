@@ -30,12 +30,21 @@ class TestPolicyRouterActiveInferenceHook(unittest.TestCase):
                 "tiers": {"free": {"dailyTokenBudget": 100000, "dailyCallBudget": 1000}},
             },
             "providers": {
-                "groq": {"enabled": True, "paid": False, "tier": "free", "type": "mock", "models": [{"id": "g"}]},
-                "local_vllm_assistant": {"enabled": True, "paid": False, "tier": "free", "type": "mock", "models": [{"id": "l"}]},
+                "local_vllm_assistant": {
+                    "enabled": True,
+                    "paid": False,
+                    "tier": "free",
+                    "type": "mock",
+                    "provider_id": "local_vllm",
+                    "models": [{"id": "l"}],
+                },
             },
             "routing": {
-                "free_order": ["groq", "local_vllm_assistant"],
-                "intents": {"coding": {"order": ["free"], "allowPaid": False}},
+                "free_order": ["local_vllm_assistant"],
+                "intents": {
+                    "coding": {"order": ["free"], "allowPaid": False},
+                    "governance": {"order": ["free"], "allowPaid": False},
+                },
                 "capability_router": {"enabled": True, "explicitTriggers": {}},
             },
         }
@@ -56,17 +65,15 @@ class TestPolicyRouterActiveInferenceHook(unittest.TestCase):
                 captured["context_metadata"] = dict(context_metadata)
                 return {"ok": True, "text": "- concise bullet output"}
 
-            env = {
-                "ENABLE_ACTIVE_INFERENCE": "1",
-                "GROQ_API_KEY": "test-key",
-            }
+            env = {"ENABLE_ACTIVE_INFERENCE": "1", "TACTI_CR_ENABLE": "0"}
             with patch.dict(os.environ, env, clear=False):
                 with patch.object(policy_router, "ACTIVE_INFERENCE_STATE_PATH", ai_state):
                     router = policy_router.PolicyRouter(
+                        policy_path=self._policy_path(tmp),
                         budget_path=budget,
                         circuit_path=circuit,
                         event_log=events,
-                        handlers={"groq": _handler},
+                        handlers={"local_vllm_assistant": _handler},
                     )
                     result = router.execute_with_escalation(
                         "governance",
@@ -94,10 +101,7 @@ class TestPolicyRouterActiveInferenceHook(unittest.TestCase):
                     budget_path=tmp / "budget.json",
                     circuit_path=tmp / "circuit.json",
                     event_log=tmp / "events.jsonl",
-                    handlers={
-                        "groq": lambda payload, model_id, context_metadata: {"ok": True, "text": "groq"},
-                        "local_vllm_assistant": lambda payload, model_id, context_metadata: {"ok": True, "text": "local"},
-                    },
+                    handlers={"local_vllm_assistant": lambda payload, model_id, context_metadata: {"ok": True, "text": "local"}},
                 )
                 result = router.execute_with_escalation(
                     "coding",
@@ -117,7 +121,7 @@ class TestPolicyRouterActiveInferenceHook(unittest.TestCase):
                         budget_path=tmp / "budget.json",
                         circuit_path=tmp / "circuit.json",
                         event_log=tmp / "events.jsonl",
-                        handlers={"groq": lambda payload, model_id, context_metadata: {"ok": True, "text": "groq"}},
+                        handlers={"local_vllm_assistant": lambda payload, model_id, context_metadata: {"ok": True, "text": "local"}},
                     )
                     result = router.execute_with_escalation(
                         "coding",

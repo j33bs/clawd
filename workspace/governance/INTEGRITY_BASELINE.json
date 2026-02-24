@@ -4,7 +4,7 @@
     {
       "role": "constitution",
       "path": "workspace/CONSTITUTION.md",
-      "sha256": "fc273615390e1458d4ddec4f04d99b6c789bd1b1f70248947ced580fe375000d"
+      "sha256": "56b303dbcf314c48181cbe88901272ff8e0e182f0f77b3bbc4113f16bb9c0e98"
     },
     {
       "role": "goals",
@@ -19,7 +19,7 @@
     {
       "role": "soul",
       "path": "workspace/governance/SOUL.md",
-      "sha256": "95c467f710183b2c0397c29ec4ef886bb723671a39ee767dc4d59165f723b68f"
+      "sha256": "f17c1b074c66044b53cd5ba74afb5cdee0e0140575bb156db85ffbfb1858d75a"
     },
     {
       "role": "user",

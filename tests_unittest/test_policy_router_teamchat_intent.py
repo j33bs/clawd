@@ -29,16 +29,17 @@ class TestPolicyRouterTeamChatIntent(unittest.TestCase):
                 "tiers": {"free": {"dailyTokenBudget": 100000, "dailyCallBudget": 1000}},
             },
             "providers": {
-                "mock_provider": {
+                "local_mock_provider": {
                     "enabled": True,
                     "paid": False,
                     "tier": "free",
                     "type": "mock",
+                    "provider_id": "local_vllm",
                     "models": [{"id": "mock-model", "maxInputChars": 8000}],
                 }
             },
             "routing": {
-                "free_order": ["mock_provider"],
+                "free_order": ["local_mock_provider"],
                 "intents": {"coding": {"order": ["free"], "allowPaid": False}},
             },
         }
@@ -54,7 +55,7 @@ class TestPolicyRouterTeamChatIntent(unittest.TestCase):
                 budget_path=tmp / "budget.json",
                 circuit_path=tmp / "circuit.json",
                 event_log=tmp / "events.jsonl",
-                handlers={"mock_provider": lambda payload, model_id, context: {"ok": True, "text": "ok"}},
+                handlers={"local_mock_provider": lambda payload, model_id, context: {"ok": True, "text": "ok"}},
             )
             out = router.execute_with_escalation(
                 "teamchat:planner",
@@ -63,7 +64,7 @@ class TestPolicyRouterTeamChatIntent(unittest.TestCase):
             )
 
         self.assertTrue(out["ok"])
-        self.assertEqual(out["provider"], "mock_provider")
+        self.assertEqual(out["provider"], "local_mock_provider")
         self.assertIn("coding", router.budget_state.get("intents", {}))
         self.assertNotIn("teamchat:planner", router.budget_state.get("intents", {}))
 
