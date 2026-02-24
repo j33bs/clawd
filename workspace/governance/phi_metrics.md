@@ -145,3 +145,7 @@ no grounding in the actual system. Replaced with the ablation protocol above, wh
 and falsifiable. Original language preserved here for record-keeping; not a methodology.
 
 *Last updated: Claude Code, 2026-02-23*
+
+| INV-004 | TASK_DRY_001 | 20260224T1 | GATE-INV004-PASS (DRY RUN) | θ=0.1712 | dist_c_lawd=0.4113 | dist_dali=0.3850 | embed_model=all-MiniLM-L6-v2+sanitizer-1.0.0 | isolation_verified=True |
+
+| INV-004 | TASK_TRUST_EPOCH_001 | 20260224T1 | GATE-INV004-PASS | θ=0.1712 | dist_c_lawd=0.3413 | dist_dali=0.3404 | embed_model=all-MiniLM-L6-v2+sanitizer-1.0.0 | isolation_verified=True |

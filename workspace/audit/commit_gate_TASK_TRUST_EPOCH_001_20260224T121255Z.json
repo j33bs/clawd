@@ -1,0 +1,70 @@
+{
+  "task_id": "TASK_TRUST_EPOCH_001",
+  "timestamp_utc": "20260224T121255Z",
+  "gate_decision": "GATE-INV004-PASS",
+  "dry_run": false,
+  "gate_version": "1.0.0",
+  "env": {
+    "python": "3.14.3",
+    "platform": "macOS-26.3-arm64-arm-64bit-Mach-O",
+    "torch": "2.10.0",
+    "transformers": "5.2.0",
+    "sentence_transformers": "5.2.3",
+    "embed_model": "all-MiniLM-L6-v2",
+    "sanitizer_version": "1.0.0",
+    "gate_version": "1.0.0"
+  },
+  "isolation": {
+    "isolation_verified": true,
+    "isolation_evidence": "c_lawd Telegram DM, Dali Telegram DM, separate sessions, no cross-visibility before both R1s collected by jeebs"
+  },
+  "calibration": {
+    "recommended_theta": 0.17116967158447394,
+    "distances": [
+      0.0923388894804491,
+      0.1530185009001208,
+      0.15330197002859014,
+      0.17116967158447394,
+      0.20216357232845117
+    ],
+    "n_pairs": 5,
+    "method": "within_agent_rewrite_p95",
+    "note": "Provisional calibration using seed texts. Replace with actual rewrite pairs in production."
+  },
+  "novelty": {
+    "dist_joint_vs_c_lawd": 0.34133734548830474,
+    "dist_joint_vs_dali": 0.34042350363572305,
+    "theta": 0.17116967158447394,
+    "novel": true,
+    "note": "Novel iff both distances > \u03b8=0.1712"
+  },
+  "constraints": {
+    "constraint_check": "pending_human_review",
+    "c_lawd_constraint": "implementable \u2014 concrete data type, valid values, deterministic change rule",
+    "dali_constraint": "reflects relational dynamics \u2014 captures trust quality, not just a timestamp",
+    "joint_output_length_tokens": 92,
+    "instruction": "Review joint output against each constraint before accepting PASS. If the output is novel but violates one constraint, this is GATE-INV004-REJECTION per XCV Amendment C (failure taxonomy)."
+  },
+  "sanitizer_diffs": {
+    "r1_c_lawd": {
+      "tags_removed": [],
+      "status_phrases_removed": [],
+      "chars_removed": 1,
+      "sanitizer_version": "1.0.0"
+    },
+    "r1_dali": {
+      "tags_removed": [],
+      "status_phrases_removed": [],
+      "chars_removed": 1,
+      "sanitizer_version": "1.0.0"
+    },
+    "r3_joint": {
+      "tags_removed": [
+        "JOINT"
+      ],
+      "status_phrases_removed": [],
+      "chars_removed": 24,
+      "sanitizer_version": "1.0.0"
+    }
+  }
+}
