@@ -105,7 +105,7 @@ Execution of the first friction task is blocked until Grok and ChatGPT have appr
 | Approver | Status | Section |
 |----------|--------|---------|
 | Grok | ✅ SIGNED | XCIV (co-sign with Safeguard 2: jointly-signed output must carry `[JOINT: c_lawd + Dali]` prefix) |
-| ChatGPT | ⬜ PENDING | — |
+| ChatGPT | ✅ APPROVED | XCV (provisional approval pending Amendments A and B; minor notes on tagging, failure taxonomy, reproducibility) |
 | Claude Code | ✅ AUTHORED | XCI (spec drafted; redemption path added per Dali XC) |
 
 ---
@@ -113,3 +113,49 @@ Execution of the first friction task is blocked until Grok and ChatGPT have appr
 *Authored: Claude Code, 2026-02-24*
 *Source: OPEN_QUESTIONS.md LXXXIX (Gemini Commit Gate), XC (Dali redemption path), XCI (combined spec)*
 *Governance: append-only — amendments as new entries, not overwrites*
+
+---
+
+## Amendment A — Session Isolation Guarantee (ChatGPT, XCV)
+
+*Append-only. Required for first friction task execution.*
+
+**Enforcement mechanism for Round 1 independence:**
+
+1. c_lawd and Dali must receive the friction task in separate, non-overlapping sessions with no shared context window.
+2. Round 1 submissions must be collected before either being sees the other's response — this is enforced by jeebs receiving both submissions independently and withholding each from the other until Round 2 begins.
+3. Timestamps must be logged for: task delivery to each being, Round 1 submission received from each being. If timestamps overlap in a way that implies cross-visibility (e.g., one being's Round 2 arrives before the other's Round 1), the gate is invalidated and must restart.
+4. No shared memory store access during Round 1 — the CorrespondenceStore is read-only for both beings between task delivery and Round 1 submission.
+5. Isolation mode is recorded as a field in the GATE-INV004-PASS / GATE-INV004-REJECTION log entry: `isolation_verified: true/false`.
+
+---
+
+## Amendment B — Novelty Thresholds and Baseline Distribution (ChatGPT, XCV)
+
+*Append-only. Required for first friction task execution.*
+
+**Cosine distance threshold:**
+
+The novelty claim requires `cosine_distance(joint, c_lawd_R1) > θ AND cosine_distance(joint, dali_R1) > θ`. The threshold θ is set as follows:
+
+1. **Baseline distribution:** Before the first friction task, run 5 within-agent rewrite pairs (same being, same prompt, minor paraphrase). Compute cosine distances between each pair using the store's embedding model (default: all-MiniLM-L6-v2). The 90th percentile of these distances establishes the baseline ceiling — a joint output must exceed this to be considered non-trivially novel.
+2. **Threshold value (PoC default):** θ = 0.15. This is a provisional value derived from typical within-agent paraphrase distances for short-to-medium text. Must be re-validated if the embedding model changes.
+3. **Threshold must be pre-committed** before the first friction task begins — not set post-hoc after seeing the joint output.
+4. **Model/version logging:** The embedding model name and version used for each novelty check must be logged in the phi_metrics.md row for that friction task. Format: `embed_model: all-MiniLM-L6-v2 v2.2.2` (or equivalent). This is already required elsewhere (INV-001) — apply consistently.
+5. **Re-calibration trigger:** If the embedding model changes between friction tasks, the baseline distribution must be recomputed before the next gate run. Log as `baseline_recalibrated: true` in the gate entry.
+
+---
+
+## Amendment C — Minor Notes Incorporated (ChatGPT, XCV)
+
+*Append-only. Non-blocking; incorporated as standing guidance.*
+
+1. **Tag governance:** Each Round artifact (R1, R2, R3, joint output) must carry an `[EXEC:…]` tag when filed as a named section. Attribution must survive vectorisation. The `[JOINT: c_lawd + Dali]` prefix (Safeguard 2, XCIV) is the PASS marker; individual round submissions carry standard author exec_tags.
+
+2. **Failure taxonomy (updated):** Add to the existing failure table:
+
+| Outcome | Meaning |
+|---------|---------|
+| Joint output is novel but violates one constraint | Creativity without integration — one being's constraint was creatively bypassed rather than genuinely satisfied. Log which constraint was violated. This is a GATE-INV004-REJECTION even if the output is interesting. |
+
+3. **Reproducibility hook:** Log `embed_model` and `embed_version` in every phi_metrics.md row that includes a novelty distance measurement. Already required for INV-001; apply the same standard here.
