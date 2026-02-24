@@ -482,3 +482,248 @@ Feb 24 12:16:29 jeebs-Z490-AORUS-MASTER openclaw[155818]: 2026-02-24T02:16:29.79
 Feb 24 12:16:29 jeebs-Z490-AORUS-MASTER systemd[1645]: Stopped openclaw-gateway.service - OpenClaw Gateway (user-owned).
 Feb 24 12:16:29 jeebs-Z490-AORUS-MASTER systemd[1645]: openclaw-gateway.service: Consumed 11.762s CPU time, 397.5M memory peak, 0B memory swap peak.
 Feb 24 12:20:13 jeebs-Z490-AORUS-MASTER systemd[1645]: Started openclaw-gateway.service - OpenClaw Gateway (user-owned).
+[fix/dali-openclaw-update-path-20260224 7045998] chore(runtime): update openclaw runtime + normalize systemd ExecStart; audit attached (2026-02-24)
+ 5 files changed, 504 insertions(+)
+ create mode 100644 workspace/audit/10-provider-lock.conf.backup_2026-02-24T12-19-29+10-00
+ create mode 100644 workspace/audit/99-userprefix-execstart.conf.backup_2026-02-24T12-19-29+10-00
+ create mode 100644 workspace/audit/openclaw_update_audit_20260224.md
+ create mode 100644 workspace/audit/override.conf.backup_2026-02-24T12-19-29+10-00
+ create mode 100644 workspace/audit/zzzz-userprefix-execstart.conf.backup_2026-02-24T12-19-29+10-00
+
+
+=== PACKAGE INSTALL (final) 2026-02-24T12:31:58+10:00 ===
+
+--- npm install exit; tail of log ---
+npm http cache tar@https://registry.npmjs.org/tar/-/tar-6.2.1.tgz 0ms (cache hit)
+npm http cache rimraf@https://registry.npmjs.org/rimraf/-/rimraf-3.0.2.tgz 0ms (cache hit)
+npm http cache npmlog@https://registry.npmjs.org/npmlog/-/npmlog-5.0.1.tgz 1ms (cache hit)
+npm http cache node-fetch@https://registry.npmjs.org/node-fetch/-/node-fetch-2.7.0.tgz 0ms (cache hit)
+npm http cache make-dir@https://registry.npmjs.org/make-dir/-/make-dir-3.1.0.tgz 0ms (cache hit)
+npm http cache semver@https://registry.npmjs.org/semver/-/semver-6.3.1.tgz 0ms (cache hit)
+npm http cache https-proxy-agent@https://registry.npmjs.org/https-proxy-agent/-/https-proxy-agent-5.0.1.tgz 0ms (cache hit)
+npm http cache html-escaper@https://registry.npmjs.org/html-escaper/-/html-escaper-2.0.2.tgz 0ms (cache hit)
+npm http cache @rolldown/binding-linux-x64-gnu@https://registry.npmjs.org/@rolldown/binding-linux-x64-gnu/-/binding-linux-x64-gnu-1.0.0-rc.3.tgz 0ms (cache hit)
+npm http cache @oxc-project/types@https://registry.npmjs.org/@oxc-project/types/-/types-0.112.0.tgz 0ms (cache hit)
+npm http cache rolldown@https://registry.npmjs.org/rolldown/-/rolldown-1.0.0-rc.3.tgz 0ms (cache hit)
+npm http cache @rolldown/pluginutils@https://registry.npmjs.org/@rolldown/pluginutils/-/pluginutils-1.0.0-rc.3.tgz 0ms (cache hit)
+npm http cache @types/bun@https://registry.npmjs.org/@types/bun/-/bun-1.3.9.tgz 0ms (cache hit)
+npm http cache ipaddr.js@https://registry.npmjs.org/ipaddr.js/-/ipaddr.js-2.3.0.tgz 0ms (cache hit)
+npm http cache bun-types@https://registry.npmjs.org/bun-types/-/bun-types-1.3.9.tgz 0ms (cache hit)
+npm http cache discord-api-types@https://registry.npmjs.org/discord-api-types/-/discord-api-types-0.38.40.tgz 0ms (cache hit)
+npm http cache @mariozechner/pi-tui@https://registry.npmjs.org/@mariozechner/pi-tui/-/pi-tui-0.54.1.tgz 0ms (cache hit)
+npm http cache @mariozechner/pi-coding-agent@https://registry.npmjs.org/@mariozechner/pi-coding-agent/-/pi-coding-agent-0.54.1.tgz 0ms (cache hit)
+npm http cache @mariozechner/pi-ai@https://registry.npmjs.org/@mariozechner/pi-ai/-/pi-ai-0.54.1.tgz 0ms (cache hit)
+npm http cache @mariozechner/pi-agent-core@https://registry.npmjs.org/@mariozechner/pi-agent-core/-/pi-agent-core-0.54.1.tgz 0ms (cache hit)
+npm http cache @buape/carbon@https://registry.npmjs.org/@buape/carbon/-/carbon-0.0.0-beta-20260216184201.tgz 0ms (cache hit)
+npm http cache discord-api-types@https://registry.npmjs.org/discord-api-types/-/discord-api-types-0.38.37.tgz 0ms (cache hit)
+npm http cache undici-types@https://registry.npmjs.org/undici-types/-/undici-types-7.18.2.tgz 0ms (cache hit)
+npm http cache @aws-sdk/util-endpoints@https://registry.npmjs.org/@aws-sdk/util-endpoints/-/util-endpoints-3.996.0.tgz 0ms (cache hit)
+npm http cache @aws-sdk/util-endpoints@https://registry.npmjs.org/@aws-sdk/util-endpoints/-/util-endpoints-3.996.0.tgz 0ms (cache hit)
+npm http cache @aws-sdk/token-providers@https://registry.npmjs.org/@aws-sdk/token-providers/-/token-providers-3.996.0.tgz 0ms (cache hit)
+npm http cache @aws-sdk/util-endpoints@https://registry.npmjs.org/@aws-sdk/util-endpoints/-/util-endpoints-3.996.0.tgz 0ms (cache hit)
+npm http cache @aws-sdk/util-endpoints@https://registry.npmjs.org/@aws-sdk/util-endpoints/-/util-endpoints-3.996.0.tgz 0ms (cache hit)
+npm http cache @aws-sdk/token-providers@https://registry.npmjs.org/@aws-sdk/token-providers/-/token-providers-3.996.0.tgz 0ms (cache hit)
+npm warn deprecated inflight@1.0.6: This module is not supported, and leaks memory. Do not use it. Check out lru-cache if you want a good and tested way to coalesce async requests by a key value, which is much more comprehensive and powerful.
+npm warn deprecated glob@7.2.3: Old versions of glob are not supported, and contain widely publicized security vulnerabilities, which have been fixed in the current version. Please update. Support for old versions may be purchased (at exorbitant rates) by contacting i@izs.me
+npm http fetch GET 200 https://registry.npmjs.org/siginfo/-/siginfo-2.0.0.tgz 190ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/stackback/-/stackback-0.0.2.tgz 191ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/@standard-schema/spec/-/spec-1.1.0.tgz 191ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/assertion-error/-/assertion-error-2.0.1.tgz 192ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/why-is-node-running/-/why-is-node-running-2.3.0.tgz 190ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/tinybench/-/tinybench-2.9.0.tgz 191ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/chai/-/chai-6.2.2.tgz 193ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/expect-type/-/expect-type-1.3.0.tgz 197ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/magic-string/-/magic-string-0.30.21.tgz 208ms (cache miss)
+npm warn deprecated tar@6.2.1: Old versions of tar are not supported, and contain widely publicized security vulnerabilities, which have been fixed in the current version. Please update. Support for old versions may be purchased (at exorbitant rates) by contacting i@izs.me
+npm http fetch GET 200 https://registry.npmjs.org/postcss/-/postcss-8.5.6.tgz 221ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/es-module-lexer/-/es-module-lexer-1.7.0.tgz 233ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/quansync/-/quansync-1.0.0.tgz 238ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/esbuild/-/esbuild-0.27.3.tgz 251ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/vite/-/vite-7.3.1.tgz 305ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/@types/chai/-/chai-5.2.3.tgz 306ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/fdir/-/fdir-6.5.0.tgz 340ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/resolve-pkg-maps/-/resolve-pkg-maps-1.0.0.tgz 356ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/@types/deep-eql/-/deep-eql-4.0.2.tgz 370ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/pathe/-/pathe-2.0.3.tgz 380ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/@quansync/fs/-/fs-1.0.0.tgz 428ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/rollup/-/rollup-4.59.0.tgz 445ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/birpc/-/birpc-4.0.0.tgz 443ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/dts-resolver/-/dts-resolver-2.1.3.tgz 450ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/@vitest/mocker/-/mocker-4.0.18.tgz 458ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/unrun/-/unrun-0.2.27.tgz 460ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/@vitest/expect/-/expect-4.0.18.tgz 465ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/get-tsconfig/-/get-tsconfig-4.13.6.tgz 475ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/ast-kit/-/ast-kit-3.0.0-beta.1.tgz 493ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/@vitest/snapshot/-/snapshot-4.0.18.tgz 505ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/tree-kill/-/tree-kill-1.2.2.tgz 508ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/tinyglobby/-/tinyglobby-0.2.15.tgz 515ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/tinyexec/-/tinyexec-1.0.2.tgz 515ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/unconfig-core/-/unconfig-core-7.5.0.tgz 519ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/import-without-cache/-/import-without-cache-0.2.5.tgz 525ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/hookable/-/hookable-6.0.1.tgz 534ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/rolldown-plugin-dts/-/rolldown-plugin-dts-0.22.1.tgz 539ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/@types/jsesc/-/jsesc-2.5.1.tgz 551ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/empathic/-/empathic-2.0.0.tgz 568ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/defu/-/defu-6.1.4.tgz 572ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/cac/-/cac-6.7.14.tgz 585ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/ansis/-/ansis-4.2.0.tgz 585ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/tinypool/-/tinypool-2.1.0.tgz 606ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/abbrev/-/abbrev-1.1.1.tgz 627ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/nopt/-/nopt-5.0.0.tgz 641ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/@babel/generator/-/generator-8.0.0-rc.1.tgz 702ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/@vitest/runner/-/runner-4.0.18.tgz 791ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/@oxc-project/types/-/types-0.114.0.tgz 814ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/@rolldown/pluginutils/-/pluginutils-1.0.0-rc.5.tgz 903ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/whatwg-fetch/-/whatwg-fetch-3.6.20.tgz 907ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/@rollup/rollup-linux-x64-gnu/-/rollup-linux-x64-gnu-4.59.0.tgz 943ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/source-map-js/-/source-map-js-1.2.1.tgz 981ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/@discordjs/node-pre-gyp/-/node-pre-gyp-0.4.5.tgz 993ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/@types/estree/-/estree-1.0.8.tgz 1010ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/opusscript/-/opusscript-0.0.8.tgz 1064ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/js-tokens/-/js-tokens-10.0.0.tgz 1082ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/lit-element/-/lit-element-4.2.2.tgz 1093ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/estree-walker/-/estree-walker-3.0.3.tgz 1104ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/@vitest/spy/-/spy-4.0.18.tgz 1138ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/obug/-/obug-2.1.1.tgz 1254ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/tinyrainbow/-/tinyrainbow-3.0.3.tgz 1365ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/@types/trusted-types/-/trusted-types-2.0.7.tgz 1391ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/ast-v8-to-istanbul/-/ast-v8-to-istanbul-0.3.11.tgz 1556ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/lit-html/-/lit-html-3.3.2.tgz 1562ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/@bcoe/v8-coverage/-/v8-coverage-1.0.2.tgz 1580ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/@types/mdurl/-/mdurl-2.0.0.tgz 1659ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/@types/linkify-it/-/linkify-it-5.0.0.tgz 1683ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/@vitest/pretty-format/-/pretty-format-4.0.18.tgz 1750ms (cache miss)
+npm http fetch GET 200 https://codeload.github.com/whiskeysockets/libsignal-node/tar.gz/1c30d7d7e76a3b0aa120b04dc6a26f5a12dccf67 1625ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/magicast/-/magicast-0.5.2.tgz 1849ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/oxlint-tsgolint/-/oxlint-tsgolint-0.14.2.tgz 2019ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/@lit-labs/ssr-dom-shim/-/ssr-dom-shim-1.5.1.tgz 2040ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/@vitest/utils/-/utils-4.0.18.tgz 2130ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/rolldown/-/rolldown-1.0.0-rc.5.tgz 2172ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/tsdown/-/tsdown-0.20.3.tgz 2253ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/@lit/reactive-element/-/reactive-element-2.1.2.tgz 2339ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/ollama/-/ollama-0.6.3.tgz 2460ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/@napi-rs/wasm-runtime/-/wasm-runtime-1.1.1.tgz 2471ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/lit/-/lit-3.3.2.tgz 2531ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/@typescript/native-preview/-/native-preview-7.0.0-dev.20260219.1.tgz 2800ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/@vitest/coverage-v8/-/coverage-v8-4.0.18.tgz 2834ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/tsx/-/tsx-4.21.0.tgz 2927ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/@types/qrcode-terminal/-/qrcode-terminal-0.12.2.tgz 3111ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/@types/markdown-it/-/markdown-it-14.1.2.tgz 3327ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/@lit-labs/signals/-/signals-0.2.0.tgz 3330ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/vitest/-/vitest-4.0.18.tgz 3354ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/@types/proper-lockfile/-/proper-lockfile-4.1.4.tgz 3365ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/@discordjs/opus/-/opus-0.10.0.tgz 3526ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/@lit/context/-/context-1.1.6.tgz 3554ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/@aws-sdk/credential-provider-sso/-/credential-provider-sso-3.972.10.tgz 3608ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/@aws-sdk/nested-clients/-/nested-clients-3.996.0.tgz 3706ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/@aws-sdk/middleware-user-agent/-/middleware-user-agent-3.972.12.tgz 3800ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/@aws-sdk/credential-provider-login/-/credential-provider-login-3.972.10.tgz 3804ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/@aws-sdk/credential-provider-web-identity/-/credential-provider-web-identity-3.972.10.tgz 3864ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/@aws-sdk/util-user-agent-node/-/util-user-agent-node-3.972.11.tgz 3900ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/@aws-sdk/credential-provider-node/-/credential-provider-node-3.972.11.tgz 4069ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/@aws-sdk/credential-provider-ini/-/credential-provider-ini-3.972.10.tgz 4100ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/@aws-sdk/credential-provider-env/-/credential-provider-env-3.972.10.tgz 4120ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/@aws-sdk/credential-provider-process/-/credential-provider-process-3.972.10.tgz 4280ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/nanoid/-/nanoid-3.3.11.tgz 4407ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/@aws-sdk/core/-/core-3.973.12.tgz 4427ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/oxlint/-/oxlint-1.50.0.tgz 4648ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/@babel/helper-validator-identifier/-/helper-validator-identifier-8.0.0-rc.2.tgz 4670ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/@aws-sdk/credential-provider-http/-/credential-provider-http-3.972.12.tgz 4677ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/@aws-sdk/client-sso/-/client-sso-3.996.0.tgz 4734ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/@aws-sdk/client-bedrock/-/client-bedrock-3.996.0.tgz 4793ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/@babel/helper-validator-identifier/-/helper-validator-identifier-8.0.0-rc.2.tgz 4800ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/@oxfmt/binding-linux-x64-gnu/-/binding-linux-x64-gnu-0.33.0.tgz 4867ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/@babel/helper-string-parser/-/helper-string-parser-8.0.0-rc.2.tgz 4873ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/@babel/helper-string-parser/-/helper-string-parser-8.0.0-rc.2.tgz 4887ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/@rolldown/pluginutils/-/pluginutils-1.0.0-rc.3.tgz 4935ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/oxfmt/-/oxfmt-0.33.0.tgz 4986ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/@babel/helper-string-parser/-/helper-string-parser-8.0.0-rc.2.tgz 5053ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/@oxc-project/types/-/types-0.112.0.tgz 5168ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/rolldown/-/rolldown-1.0.0-rc.3.tgz 5263ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/@types/node/-/node-25.3.0.tgz 5555ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/@babel/helper-validator-identifier/-/helper-validator-identifier-8.0.0-rc.1.tgz 5571ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/@babel/types/-/types-8.0.0-rc.2.tgz 5596ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/minimatch/-/minimatch-3.1.3.tgz 5669ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/are-we-there-yet/-/are-we-there-yet-2.0.0.tgz 5714ms (cache miss)
+npm warn deprecated are-we-there-yet@2.0.0: This package is no longer supported.
+npm http fetch GET 200 https://registry.npmjs.org/gauge/-/gauge-3.0.2.tgz 5720ms (cache miss)
+npm warn deprecated gauge@3.0.2: This package is no longer supported.
+npm http fetch GET 200 https://registry.npmjs.org/rimraf/-/rimraf-3.0.2.tgz 5748ms (cache miss)
+npm warn deprecated rimraf@3.0.2: Rimraf versions prior to v4 are no longer supported
+npm http fetch GET 200 https://registry.npmjs.org/npmlog/-/npmlog-5.0.1.tgz 5785ms (cache miss)
+npm warn deprecated npmlog@5.0.1: This package is no longer supported.
+npm http fetch GET 200 https://registry.npmjs.org/make-dir/-/make-dir-3.1.0.tgz 5823ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/@babel/parser/-/parser-8.0.0-rc.2.tgz 5849ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/node-fetch/-/node-fetch-2.7.0.tgz 5899ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/@babel/types/-/types-8.0.0-rc.2.tgz 5926ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/@oxc-project/types/-/types-0.112.0.tgz 5956ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/@babel/parser/-/parser-8.0.0-rc.1.tgz 5993ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/@rolldown/pluginutils/-/pluginutils-1.0.0-rc.3.tgz 6001ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/@esbuild/linux-x64/-/linux-x64-0.27.3.tgz 6062ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/ipaddr.js/-/ipaddr.js-2.3.0.tgz 6062ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/rolldown/-/rolldown-1.0.0-rc.3.tgz 6285ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/@babel/types/-/types-8.0.0-rc.1.tgz 6419ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/@types/bun/-/bun-1.3.9.tgz 6524ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/@mariozechner/pi-agent-core/-/pi-agent-core-0.54.1.tgz 6800ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/@mariozechner/pi-tui/-/pi-tui-0.54.1.tgz 6839ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/undici-types/-/undici-types-7.18.2.tgz 7050ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/@aws-sdk/util-endpoints/-/util-endpoints-3.996.0.tgz 7343ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/@aws-sdk/util-endpoints/-/util-endpoints-3.996.0.tgz 7530ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/bun-types/-/bun-types-1.3.9.tgz 7563ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/@mariozechner/pi-ai/-/pi-ai-0.54.1.tgz 7567ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/@buape/carbon/-/carbon-0.0.0-beta-20260216184201.tgz 7574ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/discord-api-types/-/discord-api-types-0.38.40.tgz 7621ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/@aws-sdk/util-endpoints/-/util-endpoints-3.996.0.tgz 7666ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/@aws-sdk/util-endpoints/-/util-endpoints-3.996.0.tgz 7724ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/@aws-sdk/token-providers/-/token-providers-3.996.0.tgz 7802ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/@aws-sdk/token-providers/-/token-providers-3.996.0.tgz 8170ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/@babel/parser/-/parser-8.0.0-rc.2.tgz 8590ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/discord-api-types/-/discord-api-types-0.38.37.tgz 8607ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/@oxlint/binding-linux-x64-gnu/-/binding-linux-x64-gnu-1.50.0.tgz 9126ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/@rolldown/binding-linux-x64-gnu/-/binding-linux-x64-gnu-1.0.0-rc.5.tgz 12025ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/@typescript/native-preview-linux-x64/-/native-preview-linux-x64-7.0.0-dev.20260219.1.tgz 13216ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/@mariozechner/pi-coding-agent/-/pi-coding-agent-0.54.1.tgz 14946ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/@rolldown/binding-linux-x64-gnu/-/binding-linux-x64-gnu-1.0.0-rc.3.tgz 15113ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/@oxlint-tsgolint/linux-x64/-/linux-x64-0.14.2.tgz 15667ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/@rolldown/binding-linux-x64-gnu/-/binding-linux-x64-gnu-1.0.0-rc.3.tgz 16845ms (cache miss)
+npm http fetch GET 200 https://registry.npmjs.org/openclaw/-/openclaw-2026.2.22-2.tgz 17832ms (cache miss)
+npm info run @discordjs/opus@0.10.0 install node_modules/@discordjs/opus node-pre-gyp install --fallback-to-build
+npm info run @discordjs/opus@0.10.0 install { code: 0, signal: null }
+npm info run esbuild@0.27.3 postinstall node_modules/esbuild node install.js
+npm info run esbuild@0.27.3 postinstall { code: 0, signal: null }
+
+added 176 packages, and changed 20 packages in 1m
+npm info ok
+
+
+=== GLOBAL REINSTALL (ensure userprefix stamp) 2026-02-24T12:33:14+10:00 ===
+
+--- tail of global install log ---
+npm info using npm@10.9.4
+npm info using node@v22.22.0
+
+up to date in 168ms
+npm info ok
+
+--- /home/jeebs/.local/bin/openclaw --version ---
+2026.2.19-2 build_sha=9325318d0c992f1e5395a7274f98220ca7999336 build_time=2026-02-22T04:58:13Z
+
+--- node entrypoint version (runtime) ---
+2026.2.19-2
+● openclaw-gateway.service - OpenClaw Gateway (user-owned)
+     Loaded: loaded (/home/jeebs/.config/systemd/user/openclaw-gateway.service; enabled; preset: enabled)
+    Drop-In: /home/jeebs/.config/systemd/user/openclaw-gateway.service.d
+             └─10-provider-lock.conf, 99-userprefix-execstart.conf, override.conf, zzzz-userprefix-execstart.conf
+     Active: active (running) since Tue 2026-02-24 12:33:17 AEST; 7ms ago
+   Main PID: 209400 (bash)
+      Tasks: 7 (limit: 38151)
+     Memory: 5.2M (peak: 5.2M)
+        CPU: 5ms
+     CGroup: /user.slice/user-1000.slice/user@1000.service/app.slice/openclaw-gateway.service
+             ├─209400 bash /home/jeebs/.local/bin/openclaw gateway --port 18789
+             └─209402 node -e "const fs=require(\"fs\"); const p=process.argv[1]; const k=process.argv[2]; try { const o=JSON.parse(fs.readFileSync(p,\"utf8\")); const v=Object.prototype.hasOwnProperty.call(o,k) ? String(o[k]) : \"\"; process.stdout.write(v); } catch {}" /home/jeebs/.local/share/openclaw-build/version_build.json build_sha
+
+Feb 24 12:33:17 jeebs-Z490-AORUS-MASTER systemd[1645]: Started openclaw-gateway.service - OpenClaw Gateway (user-owned).
+209400 bash /home/jeebs/.local/bin/openclaw gateway --port 18789
+
+=== END PACKAGE INSTALL PHASE 2026-02-24T12:33:17+10:00 ===
