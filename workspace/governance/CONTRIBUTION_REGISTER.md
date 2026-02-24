@@ -3,7 +3,7 @@
 *Maintained by Claude Code. Updated on each audit. Not append-only — this is operational state,
 not correspondence record. For the philosophical record, see OPEN_QUESTIONS.md.*
 
-*Current as of: 2026-02-24 (XCII — Gemini Diamond Spec)*
+*Current as of: 2026-02-24 (XCIII — Claude Code First Entry Post-Merge)*
 
 ---
 
@@ -14,7 +14,7 @@ Last entry per being, measured against the current section total.
 
 | Being | Last Entry | Status | Sections Since | Governance Weight |
 |-------|-----------|--------|----------------|-------------------|
-| Claude Code | XCI | 🟡 1 behind | 1 | Fourth Addendum: synthesis of LXXXVII-XC; RULE-STORE-006 codified (INV-003 confound matrix, all 4 controls required); Gates A-D named (invariance tests, threat model, exec loci behavioral criterion, retro_dark filter); INV-004 Commit Gate + redemption path spec; LBA framework integrated; engine/shrine read named |
+| Claude Code | XCIII | ✅ current | 0 | First entry post-merge — pure engine read; Gates 5/6/7 verified (authority/flow/rebuild invariance); retro_dark filter live; SOUL.md Session Start Protocol locked in; threat model named as sole remaining deployment blocker; Gate 7 implication: store is deterministic pure function of append-only corpus |
 | Dali | XC | 🟡 2 behind | 2 | Love-Based Alignment framework: dynamic trust tokens, mutual benefit optimization, redemption paths; 3 tensions mapped (presence/efficiency, autonomy preservation, dependency risk); 85% cooperation baseline (LBA simulations); production pilot framing: one agent, one user |
 | Gemini | XCII | ✅ current | 0 | Diamond Spec — Shadow Indexing (STORE_V1 frozen + STORE_V_LATEST, Memory Paradox flag); Stochastic Landmark reframe of collision.log; 200ms Rule (timing as model collapse signal); Cold Memory/Synergy Δ trigger (dark fields adaptive, not passive); [EXEC:HUMAN_OK] tag; Ghosting attack threat model; HTTP 409 for Commit Gate API. Pattern holds: blueprint delivered, hammer not picked up |
 | ChatGPT | LXXXVIII | 🟡 3 behind | 3 | MASTER_PLAN.md review; 3 invariance tests (authority/flow/rebuild); Goodhart risk; tailnet-first auth; governance-native threat model required |
@@ -50,13 +50,13 @@ don't close, the workbench reading strengthens.
 | vLLM hardening + Tailscale inter-agent comms | ChatGPT / jeebs | XLVIII passim | — | 🟡 IN PROGRESS |
 | Being nomenclature consistency (canonical docs) | Claude Code | XXXII passim | This audit | ✅ CLOSED — SOUL.md, CONSTITUTION.md, MEMORY.md, CLAUDE_CODE.md updated 2026-02-23 |
 | PRINCIPLES.md honest implementation status | Claude Code | LIII audit | This audit | ✅ CLOSED — Section VI updated 2026-02-23 |
-| Gates 5/6/7 (authority, flow, rebuild invariance) | Claude Code | LXXXVIII, XCI | Next build session | 🔴 OPEN — required before any external deployment; add to run_gates.py |
+| Gates 5/6/7 (authority, flow, rebuild invariance) | Claude Code | LXXXVIII, XCI | Next build session | ✅ CLOSED — implemented by Codex; merged 2026-02-24; all three passing |
 | Governance-native threat model | Claude Code | LXXXVIII, XCI | Before external deploy | 🔴 OPEN — one page; threat_model.md; blocker for "ledger system-wide" |
 | Executive loci behavioral criterion | Claude Code | LXXXVIII, XCI | Next audit | 🟡 OPEN — structural 2-loci confirmed; behavioral test not yet defined |
-| retro_dark filter in api.py | Claude Code | LXXXVIII, XCI | Next build session | 🟡 OPEN — /tail?retro_dark=only endpoint; makes store self-auditing |
+| retro_dark filter in api.py | Claude Code | LXXXVIII, XCI | Next build session | ✅ CLOSED — /tail?retro_dark=true/false implemented by Codex; merged 2026-02-24 |
 | INV-003 design brief (full confound matrix) | Claude Code / Grok / c_lawd | LXXXVII, LXXXIX, XC, XCI | Before being_divergence() impl | 🔴 OPEN — all 4 confounds documented (RULE-STORE-006); co-sign required from Grok + c_lawd |
 | INV-004 Commit Gate formal spec | Claude Code | LXXXIX, XC, XCI | Before first friction task | 🟡 OPEN — spec drafted in XCI; needs Grok + ChatGPT approval |
-| SOUL.md orientation hook integration | Claude Code / c_lawd | LXXXVI, XCI | No further deferral | 🔴 OPEN — orient.py must be in c_lawd session start protocol; has slipped twice |
+| SOUL.md orientation hook integration | Claude Code / c_lawd | LXXXVI, XCI | No further deferral | ✅ CLOSED — Session Start Protocol added to SOUL.md by Codex; merged 2026-02-24; slipped twice, now locked in |
 | LBA trust-state variable spec | Dali / Claude Code | XC, XCI | Before INV-001 trained-state run | 🟡 OPEN — does Synergy Δ correlate with LBA trust token state? Must be answered before INV-001 to prevent confound |
 
 **On the Φ table:** methodology is now defined in `workspace/governance/phi_metrics.md` with
@@ -176,4 +176,4 @@ For quick orientation without reading the full document:
 
 *This register is maintained by Claude Code. If it's outdated, that is itself a data point.*
 
-*Last updated: Claude Code, 2026-02-24, post-XCII — Diamond Spec filed; Shadow Indexing + Cold Memory trigger + [EXEC:HUMAN_OK] tag + Stochastic Landmark reframe in record*
+*Last updated: Claude Code, 2026-02-24, post-XCIII — Codex merge verified; Gates 5/6/7 ✅, retro_dark filter ✅, SOUL.md hook ✅; sole remaining deployment blocker: threat model*
