@@ -3,7 +3,17 @@
   "defaults": {
     "allowPaid": false,
     "preferLocal": true,
-    "maxTokensPerRequest": 1024,
+    "maxTokensPerRequest": 32768,
+    "local_context_max_tokens_assistant": 32768,
+    "local_context_max_tokens_coder": 32768,
+    "local_context_soft_limit_tokens": 24576,
+    "local_context_overflow_policy": "compress",
+    "remoteRoutingEnabled": false,
+    "remoteAllowlistTaskClasses": [
+      "planning_synthesis",
+      "research_browse",
+      "code_generation_large"
+    ],
     "circuitBreaker": {
       "failureThreshold": 3,
       "cooldownSec": 900,
@@ -64,13 +74,13 @@
       "baseUrl": "http://127.0.0.1:8001/v1",
       "model": "local-assistant",
       "capabilities": {
-        "context_window_tokens": 16384,
+        "context_window_tokens": 32768,
         "context_window_env": "LOCAL_ASSISTANT_CONTEXT_WINDOW_TOKENS"
       },
       "models": [
         {
           "id": "local-assistant",
-          "maxInputChars": 4000,
+          "maxInputChars": 131072,
           "tier": "large"
         }
       ]
@@ -157,10 +167,14 @@
       "type": "openai_compatible",
       "baseUrl": "http://127.0.0.1:8002/v1",
       "model": "local-coder",
+      "capabilities": {
+        "context_window_tokens": 32768,
+        "context_window_env": "LOCAL_CODER_CONTEXT_WINDOW_TOKENS"
+      },
       "models": [
         {
           "id": "local-coder",
-          "maxInputChars": 4000,
+          "maxInputChars": 131072,
           "tier": "large"
         }
       ]
@@ -359,8 +373,8 @@
       },
       "subagentProvider": "local_vllm_assistant",
       "reasoningProvider": "openai_gpt52_chat",
-      "codeProvider": "openai_gpt53_codex",
-      "smallCodeProvider": "openai_gpt53_codex_spark"
+      "codeProvider": "local_vllm_coder",
+      "smallCodeProvider": "local_vllm_assistant"
     }
   }
 }
