@@ -7,8 +7,8 @@
 | Date | Day | Time | Source |
 |------|-----|------|--------|
 | 14 Feb 2024 | Wed | 6:15pm - 7:45pm | Group supervision (Work) |
-| 2 May 2024 | Thu | 5:00pm - 6:00pmWork) |
-| | Group supervision ( 8 Jul 2024 | Mon | 11:00am - 1:30pm | Group supervision (Work) |
+| 2 May 2024 | Thu | 5:00pm - 6:00pm | Group supervision (Work) |
+| 8 Jul 2024 | Mon | 11:00am - 1:30pm | Group supervision (Work) |
 | 25 Jul 2024 | Thu | 2:00pm - 3:00pm | Kids supervision (Work) |
 | 25 Jul 2024 | Thu | 6:00pm - 7:00pm | Group supervision (Work) |
 | 15 Aug 2024 | Thu | 2:00pm - 3:00pm | Kids supervision (Work) |

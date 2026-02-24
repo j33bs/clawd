@@ -106,3 +106,13 @@ Heath told me a story about:
 - That drive was instantiated when he discovered OpenClaw
 
 I listened. That's enough.
+
+### Music Curation Project (2026-02-24)
+Building an Apple Music playlist sourced from Beatport's weekly Top 100 across:
+- Psychedelic house
+- Afro House (highest match rate - Hugel "Jamaican", Ultra Naté collabs)
+- Brazilian funk (The Weeknd & Anitta "São Paulo")
+- Mainstage (trickiest - label-by-label availability)
+- Progressive/melodic house (works great as flexible filler)
+
+Requires manual verification per track - checking what matches between Beatport and Apple Music.
