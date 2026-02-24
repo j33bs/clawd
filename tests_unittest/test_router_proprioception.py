@@ -37,16 +37,17 @@ class TestRouterProprioception(unittest.TestCase):
                 "tiers": {"free": {"dailyTokenBudget": 100000, "dailyCallBudget": 1000}},
             },
             "providers": {
-                "mock_provider": {
+                "local_mock_provider": {
                     "enabled": True,
                     "paid": False,
                     "tier": "free",
                     "type": "mock",
+                    "provider_id": "local_vllm",
                     "models": [{"id": "mock-model", "maxInputChars": 8000}],
                 }
             },
             "routing": {
-                "free_order": ["mock_provider"],
+                "free_order": ["local_mock_provider"],
                 "intents": {"coding": {"order": ["free"], "allowPaid": False}},
             },
         }
@@ -70,7 +71,12 @@ class TestRouterProprioception(unittest.TestCase):
             tmp = Path(td)
             with patch.dict(
                 os.environ,
-                {"OPENCLAW_ROUTER_PROPRIOCEPTION": "0", "OPENCLAW_WITNESS_LEDGER": "0"},
+                {
+                    "OPENCLAW_ROUTER_PROPRIOCEPTION": "0",
+                    "OPENCLAW_WITNESS_LEDGER": "0",
+                    "TACTI_CR_ENABLE": "0",
+                    "TACTI_CR_EVENTS_PATH": str(tmp / "runtime_events.jsonl"),
+                },
                 clear=False,
             ):
                 router = policy_router.PolicyRouter(
@@ -78,7 +84,7 @@ class TestRouterProprioception(unittest.TestCase):
                     budget_path=tmp / "budget.json",
                     circuit_path=tmp / "circuit.json",
                     event_log=tmp / "events.jsonl",
-                    handlers={"mock_provider": lambda payload, model_id, context: {"ok": True, "text": "ok"}},
+                    handlers={"local_mock_provider": lambda payload, model_id, context: {"ok": True, "text": "ok"}},
                 )
                 result = router.execute_with_escalation("coding", {"prompt": "small patch"}, context_metadata={"agent_id": "main"})
         self.assertTrue(result["ok"])
@@ -89,7 +95,12 @@ class TestRouterProprioception(unittest.TestCase):
             tmp = Path(td)
             with patch.dict(
                 os.environ,
-                {"OPENCLAW_ROUTER_PROPRIOCEPTION": "1", "OPENCLAW_WITNESS_LEDGER": "0"},
+                {
+                    "OPENCLAW_ROUTER_PROPRIOCEPTION": "1",
+                    "OPENCLAW_WITNESS_LEDGER": "0",
+                    "TACTI_CR_ENABLE": "0",
+                    "TACTI_CR_EVENTS_PATH": str(tmp / "runtime_events.jsonl"),
+                },
                 clear=False,
             ):
                 router = policy_router.PolicyRouter(
@@ -97,7 +108,7 @@ class TestRouterProprioception(unittest.TestCase):
                     budget_path=tmp / "budget.json",
                     circuit_path=tmp / "circuit.json",
                     event_log=tmp / "events.jsonl",
-                    handlers={"mock_provider": lambda payload, model_id, context: {"ok": True, "text": "ok"}},
+                    handlers={"local_mock_provider": lambda payload, model_id, context: {"ok": True, "text": "ok"}},
                 )
                 result = router.execute_with_escalation("coding", {"prompt": "small patch"}, context_metadata={"agent_id": "main"})
         self.assertTrue(result["ok"])
@@ -128,6 +139,7 @@ class TestRouterProprioception(unittest.TestCase):
                     "OPENCLAW_WITNESS_LEDGER": "0",
                     "TACTI_CR_ENABLE": "1",
                     "TACTI_CR_EXPRESSION_ROUTER": "1",
+                    "TACTI_CR_EVENTS_PATH": str(tmp / "runtime_events.jsonl"),
                 },
                 clear=False,
             ):
@@ -137,7 +149,7 @@ class TestRouterProprioception(unittest.TestCase):
                         budget_path=tmp / "budget.json",
                         circuit_path=tmp / "circuit.json",
                         event_log=tmp / "events.jsonl",
-                        handlers={"mock_provider": lambda payload, model_id, context: {"ok": True, "text": "ok"}},
+                        handlers={"local_mock_provider": lambda payload, model_id, context: {"ok": True, "text": "ok"}},
                     )
                     result = router.execute_with_escalation(
                         "coding",

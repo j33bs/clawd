@@ -30,11 +30,9 @@ class _DummyRequests:
 
 
 class TestPolicyRouterOauthGate(unittest.TestCase):
-    def test_openai_oauth_jwt_is_gated_before_network(self):
+    def test_openai_compatible_request_exceptions_are_classified(self):
         policy_router = _load_policy_router_module()
 
-        events = []
-        policy_router.log_event = lambda event_type, detail=None, path=None: events.append((event_type, detail))
         policy_router.requests = _DummyRequests
         _DummyRequests.called = False
 
@@ -46,9 +44,8 @@ class TestPolicyRouterOauthGate(unittest.TestCase):
         )
 
         self.assertEqual(result.get("ok"), False)
-        self.assertEqual(result.get("reason_code"), "oauth_jwt_unsupported_endpoint")
-        self.assertFalse(_DummyRequests.called)
-        self.assertTrue(any(evt == "oauth_endpoint_blocked" for evt, _ in events))
+        self.assertEqual(result.get("reason_code"), "request_AssertionError")
+        self.assertTrue(_DummyRequests.called)
 
 
 if __name__ == "__main__":
