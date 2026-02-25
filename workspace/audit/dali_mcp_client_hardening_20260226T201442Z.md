@@ -274,10 +274,12 @@ Existing workflows that run full `npm test` remain unchanged.
 
 ## Rollback Plan
 
-1. Revert hardening commits in reverse order:
-   - `git revert 1756d03 d504d6e fd46871 9903826 268d4e8`
-2. Rebuild runtime without overlay import (or restore prior rebuild script).
-3. Re-run baseline test command(s) and confirm clean behavior.
+1. Enumerate branch commits relative to `origin/main`:
+   - `git rev-list --reverse --oneline origin/main..HEAD`
+2. Revert branch commits in order:
+   - `git revert $(git rev-list --reverse origin/main..HEAD)`
+3. Rebuild runtime without overlay import (or restore prior rebuild script).
+4. Re-run baseline test command(s) and confirm clean behavior.
 
 ## Known Limitations
 
