@@ -69,6 +69,7 @@ def diagnose(results, has_openclaw):
     status = by_cmd.get("openclaw status")
     deep = by_cmd.get("openclaw status --deep")
     js = by_cmd.get("openclaw status --json")
+    gateway_status = by_cmd.get("openclaw gateway status")
 
     if status and status["timed_out"] and deep and deep["timed_out"]:
         notes.append("Both `openclaw status` and `openclaw status --deep` timed out. Likely CLI/daemon wait, lock contention, or backend hang.")
@@ -78,6 +79,16 @@ def diagnose(results, has_openclaw):
         lower = (js.get("stderr", "") + " " + js.get("stdout", "")).lower()
         if "unknown" in lower or "option" in lower:
             notes.append("`openclaw status --json` appears unsupported in this CLI version.")
+    if gateway_status:
+        gateway_text = f"{gateway_status.get('stdout', '')}\n{gateway_status.get('stderr', '')}".lower()
+        if "launchagent (loaded)" in gateway_text and "not listening" in gateway_text:
+            notes.append(
+                "Gateway service is loaded but not listening on its port; use launchctl kickstart and re-check curl."
+            )
+        if "gateway start blocked: set gateway.mode=local" in gateway_text:
+            notes.append(
+                "Gateway start is blocked by config: set gateway.mode=local or use --allow-unconfigured explicitly."
+            )
     if not notes:
         notes.append("No single root cause proven; inspect command stderr excerpts and optional strace output.")
     return notes
@@ -103,6 +114,7 @@ def main():
         ["openclaw", "status"],
         ["openclaw", "status", "--deep"],
         ["openclaw", "status", "--json"],
+        ["openclaw", "gateway", "status"],
     ]
 
     results = []
