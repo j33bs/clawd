@@ -310,7 +310,11 @@ def _run_doc_compactor(
             break
         text = raw[:take].decode("utf-8", errors="replace")
         used += take
-        chunks.append(f"## {path.relative_to(repo_root)}\n{text[:2000]}")
+        try:
+            display_path = path.resolve().relative_to(repo_root.resolve())
+        except Exception:
+            display_path = path
+        chunks.append(f"## {display_path}\n{text[:2000]}")
 
     # Bounded model request summary; doc compactor currently remains deterministic/offline.
     append_event(
