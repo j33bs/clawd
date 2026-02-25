@@ -21,4 +21,4 @@ Policy router log clarification:
 - It can also write to `workspace/state/tacti_cr/events.jsonl` via TACTI fallback paths; that protected path is quiesce-guarded.
 
 Status helper:
-- `source workspace/scripts/quiesce_status.sh`
+- `workspace/scripts/quiesce_status.sh`
