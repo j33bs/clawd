@@ -40,6 +40,12 @@ test('config validation rejects invalid NODE_ENV', () => {
   });
 });
 
+test('config validation rejects invalid TELEGRAM_REPLY_MODE', () => {
+  withEnv({ ANTHROPIC_API_KEY: 'abc123', NODE_ENV: 'test', TELEGRAM_REPLY_MODE: 'sometimes' }, () => {
+    assert.throws(() => validateConfig(process.env), /TELEGRAM_REPLY_MODE/);
+  });
+});
+
 test('config validation returns normalized defaults', () => {
   withEnv(
     {
@@ -57,6 +63,7 @@ test('config validation returns normalized defaults', () => {
       assert.equal(cfg.workspaceRoot, process.cwd());
       assert.equal(cfg.agentWorkspaceRoot.endsWith('.agent_workspace'), true);
       assert.equal(cfg.skillsRoot.endsWith('skills'), true);
+      assert.equal(cfg.telegramReplyMode, 'never');
     }
   );
 });
