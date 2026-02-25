@@ -104,6 +104,7 @@ _ALLOWED_UNTRACKED_PREFIXES = (
     "workspace/state_runtime/",
     "workspace/research/pdfs/",
     "memory/literature/",
+    ".claude/",
     ".worktrees/",
     "workspace/audit/",
 )

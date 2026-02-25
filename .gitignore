@@ -128,6 +128,7 @@ workspace/operator_transfer_brief.md
 # ============================================
 # CLAUDE CODE SETTINGS (may contain paths)
 # ============================================
+.claude/
 .claude/settings.local.json
 .claude/plans/
 
