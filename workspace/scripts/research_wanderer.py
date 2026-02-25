@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import random
 import re
 import sys
@@ -57,6 +58,15 @@ class NoveltyDecision:
     overlap_max: float
     similarity_max: float
     reason: str
+
+
+def _env_truthy(name: str, default: str = "0") -> bool:
+    return str(os.getenv(name, default)).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def researcher_mode_enabled() -> bool:
+    """Feature flag for novelty/duplicate suppression behavior."""
+    return _env_truthy("OPENCLAW_WANDERER_RESEARCHER", "0")
 
 
 def now_utc() -> datetime:
@@ -157,8 +167,18 @@ def parse_wander_log_questions(path: Path = LOG_FILE, last_n: int = 20) -> list[
     for line in path.read_text(encoding="utf-8").splitlines():
         if line.strip().startswith("|"):
             parts = [p.strip() for p in line.strip().strip("|").split("|")]
-            if len(parts) >= 5 and parts[0].lower() != "date_utc" and parts[0] != "---":
-                rows.append(parts[1])
+            if len(parts) < 2:
+                continue
+            if parts[0].lower() in {"date_utc", "date"}:
+                continue
+            if all(set(p) <= {"-", ":"} for p in parts):
+                continue
+            rows.append(parts[1])
+        elif line.strip().lower().startswith("generated question:"):
+            _, _, question = line.partition(":")
+            question = question.strip()
+            if question:
+                rows.append(question)
     return rows[-last_n:]
 
 
@@ -255,7 +275,7 @@ def select_question(
             best_seed = seed_topic
         if decision.accepted:
             return candidate, {
-                "accepted_after_attempt": attempt + 1,
+                "attempts": attempt + 1,
                 "overlap_max": round(decision.overlap_max, 3),
                 "similarity_max": round(decision.similarity_max, 3),
                 "seed_topic": seed_topic,
@@ -265,7 +285,7 @@ def select_question(
 
     assert best_meta is not None
     return best_q, {
-        "accepted_after_attempt": max_attempts,
+        "attempts": max_attempts,
         "overlap_max": round(best_meta.overlap_max, 3),
         "similarity_max": round(best_meta.similarity_max, 3),
         "seed_topic": best_seed,
@@ -280,19 +300,35 @@ def ensure_log_table(path: Path = LOG_FILE) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
         "# Wander Log\n\n"
-        "| date_utc | question | overlap_max | similarity_max | seed_topic |\n"
-        "|---|---|---:|---:|---|\n",
+        "| date_utc | question | overlap_max | similarity_max | seed_topic | attempts |\n"
+        "|---|---|---:|---:|---|---:|\n",
         encoding="utf-8",
     )
 
 
-def append_wander_log(question: str, *, overlap_max: float, similarity_max: float, seed_topic: str, path: Path = LOG_FILE) -> None:
+def append_wander_log(
+    question: str,
+    *,
+    overlap_max: float,
+    similarity_max: float,
+    seed_topic: str,
+    attempts: int,
+    path: Path = LOG_FILE,
+) -> None:
     ensure_log_table(path)
     safe_question = question.replace("|", "\\|").strip()
     safe_seed = (seed_topic or "").replace("|", "\\|").strip()
-    row = f"| {iso_utc()} | {safe_question} | {overlap_max:.3f} | {similarity_max:.3f} | {safe_seed} |\n"
+    row = (
+        f"| {iso_utc()} | {safe_question} | {overlap_max:.3f} | {similarity_max:.3f} | "
+        f"{safe_seed} | {int(attempts)} |\n"
+    )
     with path.open("a", encoding="utf-8") as f:
         f.write(row)
+
+
+def append_legacy_wander_log(content: str, path: Path = LOG_FILE) -> None:
+    with path.open("a", encoding="utf-8") as f:
+        f.write(f"\n## {now_utc().strftime('%Y-%m-%d %H:%M')}\n\n{content}\n\n---\n\n")
 
 
 def add_topic(topic: str) -> None:
@@ -337,37 +373,55 @@ def do_wander(*, seed: int = 17) -> int:
     findings = load_findings()
     findings["findings"].append({"topic": topic, "finding": f"Explored: {topic}", "timestamp": iso_utc()})
 
-    recent = load_recent_questions()
-    rng = random.Random(seed)
-    question, meta = select_question(topic, recent, rng=rng)
+    if researcher_mode_enabled():
+        recent = load_recent_questions()
+        rng = random.Random(seed)
+        question, meta = select_question(topic, recent, rng=rng)
 
-    findings["questions_generated"].append(
-        {
-            "question": question,
-            "from_topic": topic,
-            "timestamp": iso_utc(),
-            "overlap_max": meta["overlap_max"],
-            "similarity_max": meta["similarity_max"],
-            "seed_topic": meta["seed_topic"],
-            "novelty_reason": meta["novelty_reason"],
-        }
-    )
+        findings["questions_generated"].append(
+            {
+                "question": question,
+                "from_topic": topic,
+                "timestamp": iso_utc(),
+                "overlap_max": meta["overlap_max"],
+                "similarity_max": meta["similarity_max"],
+                "seed_topic": meta["seed_topic"],
+                "attempts": meta["attempts"],
+                "novelty_reason": meta["novelty_reason"],
+            }
+        )
 
-    save_queue(q)
-    save_findings(findings)
-    append_wander_log(
-        question,
-        overlap_max=float(meta["overlap_max"]),
-        similarity_max=float(meta["similarity_max"]),
-        seed_topic=str(meta["seed_topic"]),
-    )
+        save_queue(q)
+        save_findings(findings)
+        append_wander_log(
+            question,
+            overlap_max=float(meta["overlap_max"]),
+            similarity_max=float(meta["similarity_max"]),
+            seed_topic=str(meta["seed_topic"]),
+            attempts=int(meta["attempts"]),
+        )
 
-    print(f"✅ Wandered: {topic}")
-    print(f"   New question: {question}")
-    print(
-        f"   Novelty: overlap={meta['overlap_max']:.3f}, similarity={meta['similarity_max']:.3f}, "
-        f"reason={meta['novelty_reason']}"
-    )
+        print(f"✅ Wandered: {topic}")
+        print(f"   New question: {question}")
+        print(
+            f"   Novelty: overlap={meta['overlap_max']:.3f}, similarity={meta['similarity_max']:.3f}, "
+            f"reason={meta['novelty_reason']}, attempts={meta['attempts']}"
+        )
+    else:
+        # Legacy/default behavior: deterministic single question, no novelty filter.
+        question = f"What would {topic} mean for TACTI(C)-R?"
+        findings["questions_generated"].append(
+            {
+                "question": question,
+                "from_topic": topic,
+                "timestamp": iso_utc(),
+            }
+        )
+        save_queue(q)
+        save_findings(findings)
+        append_legacy_wander_log(f"Wandered: {topic}\n\nGenerated question: {question}")
+        print(f"✅ Wandered: {topic}")
+        print(f"   New question: {question}")
     return 0
 
 
