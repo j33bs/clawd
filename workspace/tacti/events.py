@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
 
 DEFAULT_PATH = Path("workspace/state/tacti_cr/events.jsonl")
+QUIESCE_ENV = "OPENCLAW_QUIESCE"
+PROTECTED_PATH = Path("workspace/state/tacti_cr/events.jsonl")
 
 
 def _utc_iso_z(now: datetime | None = None) -> str:
@@ -38,8 +41,24 @@ def _resolve(path: Path | str | None = None) -> Path:
     return root / target
 
 
+def _is_quiesced() -> bool:
+    return os.getenv(QUIESCE_ENV) == "1"
+
+
+def _is_protected_target(path: Path) -> bool:
+    root = Path(__file__).resolve().parents[2]
+    protected = (root / PROTECTED_PATH).resolve()
+    try:
+        return path.resolve() == protected
+    except Exception:
+        return str(path) == str(protected)
+
+
 def emit(event_type: str, payload: dict, *, now: datetime | None = None, session_id: str | None = None) -> None:
     path = _resolve()
+    if _is_quiesced() and _is_protected_target(path):
+        print(f"QUIESCED: skipping write to {path}", file=sys.stderr)
+        return
     path.parent.mkdir(parents=True, exist_ok=True)
     if not isinstance(event_type, str) or not event_type.strip():
         return

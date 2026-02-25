@@ -489,6 +489,15 @@ def save_circuit_state(state, path=CIRCUIT_FILE):
 
 
 def log_event(event_type, detail=None, path=EVENT_LOG):
+    if os.environ.get("OPENCLAW_QUIESCE") == "1":
+        try:
+            if Path(path).resolve() == TACTI_EVENT_LOG.resolve():
+                print(f"QUIESCED: skipping write to {path}", file=sys.stderr)
+                return
+        except Exception:
+            if str(path).endswith("workspace/state/tacti_cr/events.jsonl"):
+                print(f"QUIESCED: skipping write to {path}", file=sys.stderr)
+                return
     path.parent.mkdir(parents=True, exist_ok=True)
     entry = {
         "ts": int(time.time() * 1000),
