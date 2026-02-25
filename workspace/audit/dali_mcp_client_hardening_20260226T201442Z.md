@@ -144,7 +144,7 @@ marker_check_runtime_dist:
 ## Rollback Plan
 
 1. Revert hardening commits in reverse order:
-   - `git revert <sha5> <sha4> <sha3> <sha2> <sha1>`
+   - `git revert d504d6e fd46871 9903826 268d4e8`
 2. Rebuild runtime without overlay import (or restore prior rebuild script).
 3. Re-run baseline test command(s) and confirm clean behavior.
 
@@ -153,3 +153,4 @@ marker_check_runtime_dist:
 - `npm` registry access was unavailable (`EAI_AGAIN`), so external deps (`zod`, `pino`, `vitest`) were not installable.
 - Equivalent hardening behavior is implemented with local modules and Node test runner instead of those deps.
 - Upstream OpenClaw distributed package does not include original `src/*.ts`; hardening is applied as a runtime overlay layer plus deterministic local modules.
+- Full repository test suite (`npm test`) still reports existing unrelated failures in legacy integration/CLI tests; hardening suite is passing and isolated (`npm run test:hardening`).
