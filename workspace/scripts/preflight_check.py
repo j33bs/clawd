@@ -112,6 +112,10 @@ _ALLOWED_UNTRACKED_PATTERNS = (
     re.compile(r"^memory/\d{4}-\d{2}-\d{2}\.md$"),
     re.compile(r"^docs/AUDIT_.*\.md$"),
 )
+_LOCAL_EXCLUDE_INSTALL_CMD = (
+    "OPENCLAW_ALLOW_LOCAL_GIT_EXCLUDE_WRITE=1 "
+    "python3 -m workspace.scripts.local_git_exclude --install"
+)
 
 
 def fail(msg, fixes, failures):
@@ -219,6 +223,38 @@ def _is_ignorable_root_untracked(rel: str) -> bool:
     if p.startswith(".openclaw/") and ".openclaw" in normalized_allow:
         return True
     return False
+
+
+def _matches_prefix_path(path: str, prefix: str) -> bool:
+    rel = path.replace("\\", "/").strip().strip("/")
+    root = prefix.replace("\\", "/").strip().strip("/")
+    if not rel or not root:
+        return False
+    return rel == root or rel.startswith(root + "/")
+
+
+def _print_local_exclude_hint(disallowed_paths: List[str]) -> None:
+    try:
+        from local_git_exclude import get_recommended_excludes
+    except Exception:
+        return
+
+    roots = get_recommended_excludes()
+    matched = sorted(
+        {
+            root
+            for root in roots
+            if any(_matches_prefix_path(path, root) for path in disallowed_paths)
+        }
+    )
+    if not matched:
+        return
+
+    print("hint_local_only_artifacts:")
+    for root in matched:
+        print(f"- {root}")
+    print("These look like local-only artifact roots; consider installing local excludes via:")
+    print(_LOCAL_EXCLUDE_INSTALL_CMD)
 
 
 def _ts_suffix() -> str:
@@ -344,6 +380,7 @@ def _auto_ingest_allowlisted_teammate_untracked(repo_root: Path) -> Optional[Dic
         print("untracked_disallowed_paths:")
         for p in disallowed:
             print(f"- {p}")
+        _print_local_exclude_hint(disallowed)
         return {"stopped": True, "error": "untracked_disallowed", "disallowed": disallowed}
 
     if not allowlisted:
