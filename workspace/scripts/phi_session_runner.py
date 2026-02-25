@@ -9,9 +9,9 @@ import socket
 import subprocess
 import sys
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Dict, Optional, Tuple
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 HIVEMIND_ROOT = REPO_ROOT / "workspace" / "hivemind"
@@ -22,7 +22,7 @@ if str(HIVEMIND_ROOT) not in sys.path:
 @dataclass
 class SessionResult:
     status: str
-    phi_value: float | None
+    phi_value: Optional[float]
     method_ref: str
     notes: str
     snapshot_path: str
@@ -32,7 +32,7 @@ class SessionResult:
 
 
 def _utc_now() -> str:
-    return datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
 def _commit_sha() -> str:
@@ -46,7 +46,7 @@ def _detect_node() -> str:
     return os.environ.get("OPENCLAW_NODE_ID", "Dali/C_Lawd")
 
 
-def _module_statuses() -> dict[str, Any]:
+def _module_statuses() -> Dict[str, Any]:
     from hivemind.dynamics_pipeline import TactiDynamicsPipeline  # type: ignore
 
     pipeline = TactiDynamicsPipeline(agent_ids=["main", "codex", "claude"], seed=23)
@@ -65,7 +65,7 @@ def _module_statuses() -> dict[str, Any]:
     }
 
 
-def _write_snapshot(ts_compact: str, payload: dict[str, Any]) -> Path:
+def _write_snapshot(ts_compact: str, payload: Dict[str, Any]) -> Path:
     out_dir = REPO_ROOT / "workspace" / "phi_sessions"
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / f"{ts_compact}_wiring_snapshot.json"
@@ -73,7 +73,7 @@ def _write_snapshot(ts_compact: str, payload: dict[str, Any]) -> Path:
     return out_path
 
 
-def _try_existing_phi_calculator(snapshot_payload: dict[str, Any]) -> tuple[str, float | None, str]:
+def _try_existing_phi_calculator(snapshot_payload: Dict[str, Any]) -> Tuple[str, Optional[float], str]:
     candidates = [
         "workspace.tacti.phi_integration",
         "workspace.tacti_cr.phi_integration",

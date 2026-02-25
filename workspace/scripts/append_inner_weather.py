@@ -5,7 +5,7 @@ import argparse
 import json
 import os
 import re
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -21,7 +21,7 @@ def _sanitize(note: str) -> str:
 
 
 def append_inner_weather(note: str, node: str, path: Path) -> dict:
-    ts = datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    ts = datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
     line = f"## {ts} [{node}]\n- { _sanitize(note) }\n\n"
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as f:
