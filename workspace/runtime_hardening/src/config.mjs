@@ -2,6 +2,7 @@ import path from 'node:path';
 import { isPathWithinRoot } from './security/fs_sandbox.mjs';
 
 const NODE_ENVS = new Set(['development', 'test', 'production']);
+const TELEGRAM_REPLY_MODES = new Set(['never', 'auto', 'always']);
 
 const DEFAULTS = Object.freeze({
   nodeEnv: 'development',
@@ -10,7 +11,8 @@ const DEFAULTS = Object.freeze({
   historyMaxMessages: 200,
   mcpServerStartTimeoutMs: 30_000,
   logLevel: 'info',
-  fsAllowOutsideWorkspace: false
+  fsAllowOutsideWorkspace: false,
+  telegramReplyMode: 'never'
 });
 
 let configCache = null;
@@ -49,6 +51,15 @@ function validateConfig(env = process.env) {
   const nodeEnv = typeof env.NODE_ENV === 'string' && env.NODE_ENV.trim() ? env.NODE_ENV.trim() : DEFAULTS.nodeEnv;
   if (!NODE_ENVS.has(nodeEnv)) {
     errors.push(`NODE_ENV: must be one of development|test|production (received "${nodeEnv}")`);
+  }
+  const telegramReplyMode =
+    typeof env.TELEGRAM_REPLY_MODE === 'string' && env.TELEGRAM_REPLY_MODE.trim()
+      ? env.TELEGRAM_REPLY_MODE.trim().toLowerCase()
+      : DEFAULTS.telegramReplyMode;
+  if (!TELEGRAM_REPLY_MODES.has(telegramReplyMode)) {
+    errors.push(
+      `TELEGRAM_REPLY_MODE: must be one of never|auto|always (received "${telegramReplyMode}")`
+    );
   }
 
   const workspaceRoot = resolveWorkspacePath(env.WORKSPACE_ROOT || process.cwd(), process.cwd());
@@ -102,7 +113,8 @@ function validateConfig(env = process.env) {
     historyMaxMessages,
     mcpServerStartTimeoutMs,
     logLevel: typeof env.LOG_LEVEL === 'string' && env.LOG_LEVEL.trim() ? env.LOG_LEVEL.trim() : DEFAULTS.logLevel,
-    fsAllowOutsideWorkspace
+    fsAllowOutsideWorkspace,
+    telegramReplyMode
   };
 }
 

@@ -8,89 +8,216 @@ import {
   assertPathWithinRoot,
   sanitizeToolInvocationOrThrow,
   retryWithBackoff,
-  sanitizeTelegramOutboundPayload
+  sanitizeOutboundPayload,
+  buildTelegramSendPayload
 } from './hardening/index.mjs';
 
 const GLOBAL_KEY = '__openclaw_runtime_hardening';
-const TELEGRAM_FETCH_PATCH_KEY = '__openclaw_telegram_outbound_fetch_patch_installed';
+const OUTBOUND_FETCH_PATCH_KEY = '__openclaw_outbound_fetch_patch_installed';
 
-function isTelegramSendEndpoint(url) {
+function classifyOutboundChannel(url) {
   const raw = String(url || '');
-  return /api\.telegram\.org/i.test(raw) && /\/(sendMessage|editMessageText|sendPhoto|sendVideo|sendDocument|sendAnimation|sendAudio|sendVoice)\b/.test(raw);
+  if (
+    /api\.telegram\.org/i.test(raw) &&
+    /\/(sendMessage|editMessageText|sendPhoto|sendVideo|sendDocument|sendAnimation|sendAudio|sendVoice|sendMediaGroup|sendPoll)\b/i.test(
+      raw
+    )
+  ) {
+    return 'telegram';
+  }
+  if (/discord(?:app)?\.com/i.test(raw) && /\/api\/v\d+\/(webhooks|channels\/\d+\/messages)\b/i.test(raw)) {
+    return 'discord';
+  }
+  if (/slack\.com/i.test(raw) && /\/api\/chat\.(postMessage|update)\b/i.test(raw)) {
+    return 'slack';
+  }
+  if (/mattermost/i.test(raw) && /\/api\/v4\/posts\b/i.test(raw)) {
+    return 'mattermost';
+  }
+  if (/(outlook\.office\.com|office\.com|teams\.microsoft\.com)/i.test(raw) && /(webhook|\/v1\/messages)\b/i.test(raw)) {
+    return 'msteams';
+  }
+  return null;
 }
 
-function hasSanitizableText(payload) {
-  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return false;
-  return typeof payload.text === 'string' || typeof payload.caption === 'string';
+function stringifyValue(value) {
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  if (value == null) return '';
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
 }
 
-function rewriteTelegramJsonBody(bodyText, runtimeLogger) {
+function payloadShallowChanged(before, after) {
+  const beforeKeys = Object.keys(before || {}).sort();
+  const afterKeys = Object.keys(after || {}).sort();
+  if (beforeKeys.length !== afterKeys.length) return true;
+  for (let idx = 0; idx < beforeKeys.length; idx += 1) {
+    if (beforeKeys[idx] !== afterKeys[idx]) return true;
+    if (!Object.is(before[beforeKeys[idx]], after[beforeKeys[idx]])) return true;
+  }
+  return false;
+}
+
+function applyOutboundPolicy(payload, context) {
+  const sanitized = sanitizeOutboundPayload(payload, {
+    channel: context.channel,
+    logger: context.logger
+  });
+  let nextPayload = sanitized.payload;
+  let changed = sanitized.changed;
+  let wantsReply = false;
+
+  if (context.channel === 'telegram') {
+    const hadReplyFields =
+      Object.hasOwn(nextPayload, 'reply_to_message_id') ||
+      Object.hasOwn(nextPayload, 'reply_parameters') ||
+      Object.hasOwn(nextPayload, 'replyToMessageId');
+    const modeApplied = buildTelegramSendPayload({
+      payload: nextPayload,
+      mode: context.config.telegramReplyMode
+    });
+    nextPayload = modeApplied.payload;
+    wantsReply = modeApplied.wantsReply;
+    if (payloadShallowChanged(sanitized.payload, nextPayload)) {
+      changed = true;
+    }
+    if (hadReplyFields && !modeApplied.wantsReply) {
+      context.logger.info('telegram_reply_mode_applied', {
+        channel: 'telegram',
+        mode: context.config.telegramReplyMode,
+        correlation_id: sanitized.meta.correlation_id,
+        chat_id: sanitized.meta.chat_id,
+        message_id: sanitized.meta.message_id
+      });
+    }
+  }
+
+  return {
+    payload: nextPayload,
+    changed,
+    wantsReply
+  };
+}
+
+function rewriteOutboundJsonBody(bodyText, context) {
   try {
     const parsed = JSON.parse(bodyText);
-    if (!hasSanitizableText(parsed)) return { changed: false, body: bodyText };
-    const { payload, changed } = sanitizeTelegramOutboundPayload(parsed, { logger: runtimeLogger });
-    if (!changed) return { changed: false, body: bodyText };
-    return { changed: true, body: JSON.stringify(payload) };
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      return { changed: false, body: bodyText };
+    }
+    const rewritten = applyOutboundPolicy(parsed, context);
+    if (!rewritten.changed) return { changed: false, body: bodyText };
+    return { changed: true, body: JSON.stringify(rewritten.payload) };
   } catch {
     return { changed: false, body: bodyText };
   }
 }
 
-function rewriteTelegramUrlEncodedBody(bodyText, runtimeLogger) {
+function rewriteOutboundUrlEncodedBody(bodyText, context) {
   try {
     const params = new URLSearchParams(bodyText);
-    if (!params.has('text') && !params.has('caption')) return { changed: false, body: bodyText };
     const record = Object.fromEntries(params.entries());
-    const { payload, changed } = sanitizeTelegramOutboundPayload(record, { logger: runtimeLogger });
-    if (!changed) return { changed: false, body: bodyText };
-
-    for (const [key, value] of Object.entries(payload)) {
-      if (typeof value === 'string') params.set(key, value);
+    const rewritten = applyOutboundPolicy(record, context);
+    if (!rewritten.changed) return { changed: false, body: bodyText };
+    const nextParams = new URLSearchParams();
+    for (const [key, value] of Object.entries(rewritten.payload)) {
+      if (value == null) continue;
+      nextParams.set(key, stringifyValue(value));
     }
-    return { changed: true, body: params.toString() };
+    return { changed: true, body: nextParams.toString() };
   } catch {
     return { changed: false, body: bodyText };
   }
 }
 
-function rewriteTelegramFetchBody(body, runtimeLogger) {
+function rewriteOutboundFormDataBody(form, context) {
+  try {
+    const stringValues = {};
+    for (const [key, value] of form.entries()) {
+      if (typeof value === 'string') stringValues[key] = value;
+    }
+    const rewritten = applyOutboundPolicy(stringValues, context);
+    if (!rewritten.changed) return { changed: false, body: form };
+    const flatValues = {};
+    for (const [key, value] of Object.entries(rewritten.payload)) {
+      if (value == null) continue;
+      flatValues[key] = stringifyValue(value);
+    }
+
+    const next = new FormData();
+    const seen = new Set();
+    for (const [key, value] of form.entries()) {
+      if (typeof value === 'string') {
+        if (!Object.hasOwn(flatValues, key)) continue;
+        next.append(key, flatValues[key]);
+        seen.add(key);
+        continue;
+      }
+      next.append(key, value);
+      seen.add(key);
+    }
+    for (const [key, value] of Object.entries(flatValues)) {
+      if (seen.has(key)) continue;
+      next.append(key, value);
+    }
+    return { changed: true, body: next };
+  } catch {
+    return { changed: false, body: form };
+  }
+}
+
+function rewriteOutboundFetchBody(body, context) {
   if (typeof body === 'string') {
     const trimmed = body.trim();
     if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
-      return rewriteTelegramJsonBody(body, runtimeLogger);
+      return rewriteOutboundJsonBody(body, context);
     }
-    return rewriteTelegramUrlEncodedBody(body, runtimeLogger);
+    return rewriteOutboundUrlEncodedBody(body, context);
   }
-
   if (body instanceof URLSearchParams) {
-    const record = Object.fromEntries(body.entries());
-    if (!hasSanitizableText(record)) return { changed: false, body };
-    const { payload, changed } = sanitizeTelegramOutboundPayload(record, { logger: runtimeLogger });
-    if (!changed) return { changed: false, body };
-    const nextParams = new URLSearchParams(body);
-    for (const [key, value] of Object.entries(payload)) {
-      if (typeof value === 'string') nextParams.set(key, value);
-    }
-    return { changed: true, body: nextParams };
+    return rewriteOutboundUrlEncodedBody(body.toString(), context);
   }
-
+  if (typeof FormData !== 'undefined' && body instanceof FormData) {
+    return rewriteOutboundFormDataBody(body, context);
+  }
   return { changed: false, body };
 }
 
-function installTelegramOutboundFetchSanitizer(runtimeLogger) {
-  if (globalThis[TELEGRAM_FETCH_PATCH_KEY]) return;
+function cloneRequestWithBody(request, body) {
+  return new Request(request.url, {
+    method: request.method,
+    headers: request.headers,
+    body,
+    redirect: request.redirect,
+    signal: request.signal
+  });
+}
+
+function installOutboundFetchSanitizer(runtimeLogger, config) {
+  if (globalThis[OUTBOUND_FETCH_PATCH_KEY]) return;
   const originalFetch = globalThis.fetch;
   if (typeof originalFetch !== 'function') return;
 
   globalThis.fetch = async function patchedFetch(input, init) {
     const requestUrl = typeof input === 'string' ? input : input?.url;
-    if (!isTelegramSendEndpoint(requestUrl)) {
+    const channel = classifyOutboundChannel(requestUrl);
+    if (!channel) {
       return originalFetch.call(this, input, init);
     }
 
+    const context = {
+      channel,
+      logger: runtimeLogger,
+      config
+    };
+
     try {
       if (init && Object.hasOwn(init, 'body')) {
-        const rewritten = rewriteTelegramFetchBody(init.body, runtimeLogger);
+        const rewritten = rewriteOutboundFetchBody(init.body, context);
         if (rewritten.changed) {
           return originalFetch.call(this, input, { ...init, body: rewritten.body });
         }
@@ -100,30 +227,30 @@ function installTelegramOutboundFetchSanitizer(runtimeLogger) {
       if (input && typeof input === 'object' && typeof input.clone === 'function') {
         const request = input;
         const clone = request.clone();
-        const bodyText = await clone.text();
-        if (bodyText) {
-          const rewritten = rewriteTelegramFetchBody(bodyText, runtimeLogger);
+        const contentType = String(clone.headers?.get?.('content-type') || '').toLowerCase();
+        if (contentType.includes('application/json') || contentType.includes('application/x-www-form-urlencoded')) {
+          const bodyText = await clone.text();
+          const rewritten = rewriteOutboundFetchBody(bodyText, context);
           if (rewritten.changed) {
-            const patched = new Request(request.url, {
-              method: request.method,
-              headers: request.headers,
-              body: rewritten.body,
-              redirect: request.redirect,
-              signal: request.signal
-            });
-            return originalFetch.call(this, patched);
+            return originalFetch.call(this, cloneRequestWithBody(request, rewritten.body));
+          }
+        } else if (contentType.includes('multipart/form-data') && typeof clone.formData === 'function') {
+          const form = await clone.formData();
+          const rewritten = rewriteOutboundFetchBody(form, context);
+          if (rewritten.changed) {
+            return originalFetch.call(this, cloneRequestWithBody(request, rewritten.body));
           }
         }
       }
     } catch (error) {
-      runtimeLogger.warn('telegram_outbound_sanitize_patch_failed', { error });
+      runtimeLogger.warn('outbound_sanitize_patch_failed', { channel, error });
     }
 
     return originalFetch.call(this, input, init);
   };
 
-  globalThis[TELEGRAM_FETCH_PATCH_KEY] = true;
-  runtimeLogger.info('telegram_outbound_fetch_sanitizer_installed');
+  globalThis[OUTBOUND_FETCH_PATCH_KEY] = true;
+  runtimeLogger.info('outbound_fetch_sanitizer_installed');
 }
 
 if (!globalThis[GLOBAL_KEY]) {
@@ -132,7 +259,7 @@ if (!globalThis[GLOBAL_KEY]) {
 
   const runtimeLogger = logger.child({ module: 'runtime-hardening-overlay' });
   const sessionManager = new SessionManager({ config, logger: runtimeLogger });
-  installTelegramOutboundFetchSanitizer(runtimeLogger);
+  installOutboundFetchSanitizer(runtimeLogger, config);
 
   globalThis[GLOBAL_KEY] = {
     config,
