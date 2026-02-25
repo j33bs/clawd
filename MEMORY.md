@@ -117,3 +117,9 @@ Building an Apple Music playlist sourced from Beatport's weekly Top 100 across:
 - Progressive/melodic house (works great as flexible filler)
 
 Requires manual verification per track - checking what matches between Beatport and Apple Music.
+
+
+## Multi-Being Compute (Feb 26)
+- Use free compute: Google Gemini, Groq, Qwen for parallel work
+- Multiple beings can work simultaneously
+- See: OPEN_QUESTIONS Section CIII
