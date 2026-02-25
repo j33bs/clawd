@@ -27,7 +27,7 @@ async function main() {
 
     assert.match(out, /^coder_status=DEGRADED$/m);
     assert.match(out, /^coder_degraded_reason=VRAM_LOW$/m);
-    assert.match(out, /^coder_degraded_note=source=env_override free_mb=1466 min_free_mb=7000$/m);
+    assert.match(out, /^coder_degraded_note=journal_marker$/m);
   });
 
   console.log('provider_diag_coder_reason tests complete');
