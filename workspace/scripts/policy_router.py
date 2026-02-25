@@ -12,6 +12,7 @@ import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any, Dict, Optional
 
 try:
     import requests
@@ -992,7 +993,7 @@ def classify_intent(text: str) -> str:
     return "planning_synthesis"
 
 
-def classify_task_class(text: str, context_metadata: dict | None = None) -> str:
+def classify_task_class(text: str, context_metadata: Optional[Dict[str, Any]] = None) -> str:
     context_metadata = context_metadata or {}
     normalized = re.sub(r"\s+", " ", str(text or "")).strip()
     declared = str(context_metadata.get("task_class", "")).strip().lower()
@@ -1013,6 +1014,24 @@ def classify_task_class(text: str, context_metadata: dict | None = None) -> str:
     if intent == "mechanical_execution":
         return "mechanical_execution"
     return "planning_synthesis"
+
+
+def _run_memory_ext_hooks(text: str, context_metadata: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    if os.getenv("OPENCLAW_MEMORY_EXT", "0") != "1":
+        return {}
+    ctx = dict(context_metadata or {})
+    try:
+        from memory_ext.hooks import pre_response_hook, relationship_hook
+    except Exception as exc:  # pragma: no cover - optional dependency
+        log_event("memory_ext_hook_warning", {"reason": "import_failed", "error": type(exc).__name__})
+        return {}
+    try:
+        pre_meta = pre_response_hook(text, context=ctx)
+        rel_meta = relationship_hook(text, context=ctx)
+        return {"pre_response": pre_meta, "relationship": rel_meta}
+    except Exception as exc:  # pragma: no cover - safety net
+        log_event("memory_ext_hook_warning", {"reason": "hook_failed", "error": type(exc).__name__})
+        return {}
 
 
 def _has_strong_planning_signal(text: str) -> bool:
@@ -1881,6 +1900,9 @@ class PolicyRouter:
         request_id = str(runtime_context.get("request_id") or _new_request_id("rt"))
         runtime_context["request_id"] = request_id
         payload_text = _extract_text_from_payload(payload)
+        memory_ext_meta = _run_memory_ext_hooks(payload_text, runtime_context)
+        if memory_ext_meta:
+            runtime_context["memory_ext"] = memory_ext_meta
         capability_class = self._capability_class(runtime_context, payload_text)
         runtime_context.setdefault("capability_class", capability_class)
         budget_intent = _budget_intent_key(intent)
@@ -2044,6 +2066,7 @@ class PolicyRouter:
                     },
                     "remote_routing_enabled": self._remote_routing_enabled(),
                     "context_guard": context_guard_snapshot or {},
+                    "memory_ext": memory_ext_meta or {},
                 },
             )
 
@@ -2232,6 +2255,9 @@ class PolicyRouter:
             }
             if meta is not None:
                 result_payload["meta"] = meta
+            if memory_ext_meta:
+                result_payload.setdefault("meta", {})
+                result_payload["meta"]["memory_ext"] = memory_ext_meta
             return result_payload
 
         _emit(
