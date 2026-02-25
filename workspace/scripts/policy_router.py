@@ -1051,9 +1051,33 @@ def _provider_api_key_env(provider):
     return ""
 
 
+def _looks_like_jwt(token):
+    value = str(token or "").strip()
+    if value.count(".") != 2:
+        return False
+    parts = value.split(".")
+    if any(not part for part in parts):
+        return False
+    return all(re.match(r"^[A-Za-z0-9_-]+$", part) for part in parts)
+
+
+def _oauth_endpoint_supported(base_url):
+    lowered = str(base_url or "").strip().lower()
+    return "chatgpt.com/backend-api" in lowered
+
+
 def _call_openai_compatible(base_url, api_key, model_id, payload, timeout=15):
     if requests is None:
         return {"ok": False, "reason_code": "no_requests_lib"}
+    if _looks_like_jwt(api_key) and not _oauth_endpoint_supported(base_url):
+        log_event(
+            "oauth_endpoint_blocked",
+            {
+                "base_url": str(base_url or ""),
+                "provider_type": "openai_compatible",
+            },
+        )
+        return {"ok": False, "reason_code": "oauth_jwt_unsupported_endpoint"}
     url = base_url.rstrip("/") + "/chat/completions"
     headers = {"Content-Type": "application/json"}
     if api_key:
@@ -1913,7 +1937,7 @@ class PolicyRouter:
                 break
 
             is_local_provider = self._is_local_provider_name(name)
-            if not is_local_provider:
+            if not is_local_provider and context_needs_remote:
                 remote_allowed, remote_reason = self._remote_allowed_for_task_class(capability_class)
                 if not remote_allowed:
                     last_reason = remote_reason

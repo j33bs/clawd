@@ -287,7 +287,9 @@ if [[ -n "$old_sha" ]] && [[ "$old_sha" == "$new_sha" ]]; then
 fi
 
 if [[ -n "$old_sha" ]] && git cat-file -e "${old_sha}^{commit}" >/dev/null 2>&1; then
-  mapfile -t changed_files < <(git diff --name-only "$old_sha" "$new_sha")
+  while IFS= read -r changed; do
+    [[ -n "$changed" ]] && changed_files+=("$changed")
+  done < <(git diff --name-only "$old_sha" "$new_sha")
 else
   changed_files=("<state_bootstrap>")
 fi

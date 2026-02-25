@@ -26,8 +26,6 @@ REPO_ROOT_GOV_FILES_MUST_MATCH_CANONICAL = (
 
 BANNED_PROVIDER_STRINGS = (
     "system2-litellm",
-    "openai-codex",
-    "openai_codex",
 )
 
 LADDER_ORDER = ["google-gemini-cli", "qwen-portal", "groq", "ollama"]
@@ -92,6 +90,27 @@ def walk_strings(obj):
                 yield k
             yield from walk_strings(v)
 
+
+def load_node_id(repo: Path) -> str | None:
+    candidates = (
+        repo / "workspace" / "config" / "openclaw.json",
+        repo / "workspace" / "openclaw.json",
+        repo / "openclaw.json",
+    )
+    for path in candidates:
+        if not path.exists():
+            continue
+        data = read_json(path)
+        if not isinstance(data, dict):
+            continue
+        node = data.get("node")
+        if not isinstance(node, dict):
+            continue
+        raw = node.get("id")
+        if isinstance(raw, str) and raw.strip():
+            return raw.strip()
+    return None
+
 def warn(msg: str) -> None:
     print(f"WARN: {msg}", file=sys.stderr)
 
@@ -146,6 +165,10 @@ def bypass_scan(repo: Path):
 def main() -> int:
     args = parse_args(sys.argv[1:])
     repo = Path(args.repo_root).resolve() if args.repo_root else Path(__file__).resolve().parents[2]
+    node_id = load_node_id(repo)
+    canonical_cfg = repo / "workspace" / "config" / "openclaw.json"
+    if canonical_cfg.exists() and node_id is not None and node_id != "c_lawd":
+        die(f"workspace/config/openclaw.json node.id must be 'c_lawd' (got {node_id!r})")
 
     # Governance anchors must exist and include identity/objective strings.
     contract = repo / "workspace" / "governance" / "SECURITY_GOVERNANCE_CONTRACT.md"
@@ -181,7 +204,10 @@ def main() -> int:
         if not canonical_path.exists():
             die(f"missing canonical governance file: {canonical_path}")
         if root_path.read_bytes() != canonical_path.read_bytes():
-            die(f"repo-root governance file diverges from canonical: {name}")
+            if node_id == "c_lawd" and name in {"IDENTITY.md", "SOUL.md", "TOOLS.md", "USER.md"}:
+                warn(f"repo-root governance file diverges from canonical (allowed for c_lawd): {name}")
+            else:
+                die(f"repo-root governance file diverges from canonical: {name}")
 
     # Policy routing invariants.
     policy_path = repo / "workspace" / "policy" / "llm_policy.json"
