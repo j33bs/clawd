@@ -4,9 +4,37 @@ Simple entity-relationship store with JSONL backend
 """
 import json
 import hashlib
+import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from datetime import datetime, timezone
+
+QUIESCE_ENV = "OPENCLAW_QUIESCE"
+_PROTECTED_SUFFIXES = (
+    "MEMORY.md",
+    "workspace/knowledge_base/data/entities.jsonl",
+    "workspace/knowledge_base/data/last_sync.txt",
+    "workspace/state/tacti_cr/events.jsonl",
+)
+
+
+def _is_quiesced() -> bool:
+    return os.getenv(QUIESCE_ENV) == "1"
+
+
+def _is_protected_target(path: Path) -> bool:
+    resolved = str(path.resolve()).replace("\\", "/")
+    for suffix in _PROTECTED_SUFFIXES:
+        if resolved.endswith(suffix):
+            return True
+    return False
+
+
+def _allow_write(path: Path) -> bool:
+    if _is_quiesced() and _is_protected_target(path):
+        print(f"QUIESCED: skipping write to {path}")
+        return False
+    return True
 
 
 class KnowledgeGraphStore:
@@ -17,7 +45,7 @@ class KnowledgeGraphStore:
         
         self.entities_path.parent.mkdir(parents=True, exist_ok=True)
         
-        if not self.entities_path.exists():
+        if not self.entities_path.exists() and _allow_write(self.entities_path):
             self.entities_path.touch()
         if not self.relations_path.exists():
             self.relations_path.touch()
@@ -31,6 +59,8 @@ class KnowledgeGraphStore:
         return entities
     
     def _save_entity(self, entity: Dict):
+        if not _allow_write(self.entities_path):
+            return
         with open(self.entities_path, "a") as f:
             f.write(json.dumps(entity, ensure_ascii=False) + "\n")
     
@@ -103,6 +133,8 @@ class KnowledgeGraphStore:
                 })
         
         # Rewrite entities
+        if not _allow_write(self.entities_path):
+            return
         with open(self.entities_path, "w") as f:
             for e in entities:
                 f.write(json.dumps(e, ensure_ascii=False) + "\n")
