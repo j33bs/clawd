@@ -100,6 +100,18 @@ _KNOWN_SYSTEM2_STRAYS = (
     ".openclaw/workspace-state.json",
 )
 
+_ALLOWED_UNTRACKED_PREFIXES = (
+    "workspace/state_runtime/",
+    "workspace/research/pdfs/",
+    "memory/literature/",
+    ".worktrees/",
+    "workspace/audit/",
+)
+_ALLOWED_UNTRACKED_PATTERNS = (
+    re.compile(r"^memory/\d{4}-\d{2}-\d{2}\.md$"),
+    re.compile(r"^docs/AUDIT_.*\.md$"),
+)
+
 
 def fail(msg, fixes, failures):
     failures.append({"msg": msg, "fixes": fixes})
@@ -150,20 +162,17 @@ def _run_git_status_porcelain_z(repo_root: Path) -> bytes:
 
 
 def _untracked_paths(repo_root: Path) -> List[str]:
-    data = _run_git_status_porcelain_z(repo_root)
-    entries = data.split(b"\x00")
+    proc = subprocess.run(
+        ["git", "-C", str(repo_root), "ls-files", "--others", "--exclude-standard"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if proc.returncode != 0:
+        return []
     out: List[str] = []
-    for entry in entries:
-        if not entry:
-            continue
-        try:
-            status = entry[:2].decode("utf-8", errors="ignore")
-            path = entry[3:].decode("utf-8", errors="ignore")
-        except Exception:
-            continue
-        if status != "??":
-            continue
-        norm = path.replace("\\", "/").strip("/")
+    for path in (proc.stdout or "").splitlines():
+        norm = path.replace("\\", "/").strip().strip("/")
         if not norm:
             continue
         out.append(norm)
@@ -171,25 +180,26 @@ def _untracked_paths(repo_root: Path) -> List[str]:
 
 
 def _untracked_repo_root_files(repo_root: Path) -> List[str]:
-    data = _run_git_status_porcelain_z(repo_root)
-    entries = data.split(b"\x00")
     out: List[str] = []
-    for entry in entries:
-        if not entry:
-            continue
-        try:
-            status = entry[:2].decode("utf-8", errors="ignore")
-            path = entry[3:].decode("utf-8", errors="ignore")
-        except Exception:
-            continue
-        if status != "??":
-            continue
-        norm = path.replace("\\", "/").strip("/")
+    for norm in _untracked_paths(repo_root):
         # Only repo-root files (no slashes).
-        if not norm or "/" in norm:
+        if "/" in norm:
             continue
         out.append(norm)
     return sorted(set(out))
+
+
+def _is_allowed_untracked_path(rel: str) -> bool:
+    p = rel.replace("\\", "/").strip("/")
+    if not p:
+        return False
+    for prefix in _ALLOWED_UNTRACKED_PREFIXES:
+        if p.startswith(prefix):
+            return True
+    for pattern in _ALLOWED_UNTRACKED_PATTERNS:
+        if pattern.match(p):
+            return True
+    return False
 
 
 def _is_ignorable_root_untracked(rel: str) -> bool:
@@ -319,7 +329,11 @@ def _auto_ingest_allowlisted_teammate_untracked(repo_root: Path) -> Optional[Dic
         return None
 
     allowlisted = [p for p in untracked if _is_allowlisted_teammate_path(p)]
-    disallowed = [p for p in untracked if p not in allowlisted]
+    disallowed = [
+        p
+        for p in untracked
+        if p not in allowlisted and not _is_allowed_untracked_path(p)
+    ]
     if disallowed:
         print("STOP (unrelated workspace drift detected)")
         print("untracked_disallowed_paths:")
