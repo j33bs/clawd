@@ -28,7 +28,7 @@ PAUSE_SENTINEL = "(pausing — no value to add)"
 
 def _append_pause_log(decision: dict[str, Any], *, intent: str) -> None:
     repo_root = Path(__file__).resolve().parents[2]
-    log_path = repo_root / "workspace" / "state" / "pause_check_log.jsonl"
+    log_path = repo_root / "workspace" / "state" / "pause_check_events.jsonl"
     log_path.parent.mkdir(parents=True, exist_ok=True)
     row = {
         "ts": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
