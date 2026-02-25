@@ -4,7 +4,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -17,14 +17,14 @@ from hivemind.reservoir import Reservoir  # type: ignore
 
 
 def _utc_now() -> str:
-    return datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
 def _select_memory_files(memory_dir: Path, last_n: int, window_hours: int) -> list[Path]:
-    cutoff = datetime.now(UTC) - timedelta(hours=window_hours)
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=window_hours)
     files = []
     for f in memory_dir.glob("*.md"):
-        mtime = datetime.fromtimestamp(f.stat().st_mtime, tz=UTC)
+        mtime = datetime.fromtimestamp(f.stat().st_mtime, tz=timezone.utc)
         if mtime >= cutoff:
             files.append((mtime, f))
     files.sort(key=lambda x: (x[0], x[1].name), reverse=True)

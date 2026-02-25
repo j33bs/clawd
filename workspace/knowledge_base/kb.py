@@ -15,7 +15,7 @@ from typing import Optional
 # Add current dir to path for imports
 sys.path.insert(0, str(Path(__file__).parent))
 
-from graph.store import KnowledgeGraphStore
+from graph.store import KnowledgeGraphStore, _allow_write
 from graph.entities import extract_entities
 from agentic.intent import classify_intent
 from agentic.retrieve import multi_step_retrieve
@@ -72,6 +72,14 @@ def _prefetch_with_cache(query: str, query_fn, *, repo_root: Path):
 
 DATA_DIR = Path(__file__).parent / "data"
 DATA_DIR.mkdir(exist_ok=True)
+
+
+def _write_last_sync_marker(data_dir: Path) -> bool:
+    target = data_dir / "last_sync.txt"
+    if not _allow_write(target):
+        return False
+    target.write_text(datetime.now(timezone.utc).isoformat() + "\n", encoding="utf-8")
+    return True
 
 
 def cmd_query(args: argparse.Namespace) -> int:
@@ -304,10 +312,7 @@ def cmd_sync(args: argparse.Namespace) -> int:
                 )
                 count += 1
 
-    (DATA_DIR / "last_sync.txt").write_text(
-        datetime.now(timezone.utc).isoformat() + "\n",
-        encoding="utf-8",
-    )
+    _write_last_sync_marker(DATA_DIR)
     print(f"✅ Synced {count} documents to knowledge graph")
     return 0
 

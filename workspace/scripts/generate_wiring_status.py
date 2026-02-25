@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import argparse
 import os
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -51,7 +51,7 @@ def _wired_modules() -> set[str]:
 def generate(out_path: Path) -> str:
     modules = sorted(py.stem for py in HIVE_DIR.glob("*.py") if py.stem != "__init__")
     wired = _wired_modules()
-    date_utc = datetime.now(UTC).date().isoformat()
+    date_utc = datetime.now(timezone.utc).date().isoformat()
 
     lines = [
         "# Hivemind Wiring Status",

@@ -9,6 +9,7 @@ import json
 import subprocess
 import sys
 from pathlib import Path
+from typing import Optional
 
 
 REPO_ROOT_GOV_FILES_FORBIDDEN = (
@@ -91,7 +92,7 @@ def walk_strings(obj):
             yield from walk_strings(v)
 
 
-def load_node_id(repo: Path) -> str | None:
+def load_node_id(repo: Path) -> Optional[str]:
     candidates = (
         repo / "workspace" / "config" / "openclaw.json",
         repo / "workspace" / "openclaw.json",
