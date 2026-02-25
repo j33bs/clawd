@@ -121,6 +121,10 @@ def warn(msg, warns):
     warns.append(msg)
 
 
+def _network_preflight_enabled() -> bool:
+    return os.getenv("OPENCLAW_PREFLIGHT_NETWORK", "0") == "1"
+
+
 def load_json(path):
     if not path.exists():
         return None
@@ -750,13 +754,20 @@ def check_router(policy, failures):
             )
 
 
-def check_requests(failures):
+def check_requests(failures, warnings):
     if not REQUESTS_OK:
-        fail(
-            "Python requests library missing",
-            ["Install requests: `python3 -m pip install requests`"],
-            failures,
-        )
+        if _network_preflight_enabled():
+            fail(
+                "Python requests library missing",
+                ["Install requests: `python3 -m pip install requests`"],
+                failures,
+            )
+        else:
+            warn(
+                "Python requests library missing (network preflight disabled). "
+                "Install requests: `python3 -m pip install requests`",
+                warnings,
+            )
 
 
 def check_plugins_allowlist(failures, warnings):
@@ -891,7 +902,7 @@ def main():
     if teammate and teammate.get("stopped"):
         sys.exit(2)
 
-    check_requests(failures)
+    check_requests(failures, warnings)
     check_plugins_allowlist(failures, warnings)
     policy = check_policy(failures)
     if policy:
