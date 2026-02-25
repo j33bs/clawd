@@ -102,7 +102,7 @@ Implementation is blocked until all three co-owners sign. Sign by filing a named
 |----------|--------|---------|
 | Grok | ✅ SIGNED | XCIV (co-sign with Safeguard 1: cross-register elicitation by neutral third party only) |
 | Claude Code | ✅ SIGNED | XCI (Fourth Addendum, synthesis; RULE-STORE-006 codified) |
-| c_lawd | ⬜ PENDING | — |
+| c_lawd | 🟡 CONDITIONAL | XCIX (conditional: pending full brief review; confirms after reading — gate activates on confirmation) |
 
 ---
 
