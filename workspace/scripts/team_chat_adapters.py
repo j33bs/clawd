@@ -9,6 +9,7 @@ import re
 import shlex
 import subprocess
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
@@ -21,6 +22,56 @@ ALLOWED_COMMAND_PATTERNS = [
     re.compile(r"^npm\s+test(\s|$)"),
     re.compile(r"^bash\s+workspace/scripts/verify_[A-Za-z0-9_.-]+\.sh(\s|$)"),
 ]
+
+PAUSE_SENTINEL = "(pausing — no value to add)"
+
+
+def _append_pause_log(decision: dict[str, Any], *, intent: str) -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    log_path = repo_root / "workspace" / "state" / "pause_check_log.jsonl"
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    row = {
+        "ts": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "intent": intent,
+        "enabled": bool(decision.get("enabled")),
+        "decision": decision.get("decision"),
+        "rationale": decision.get("rationale"),
+        "signals": decision.get("signals", {}),
+    }
+    with log_path.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(row, ensure_ascii=True) + "\n")
+
+
+def _pause_gate_text(intent: str, input_text: str, draft_text: str) -> tuple[str, dict[str, Any]]:
+    env_on = str(os.getenv("OPENCLAW_PAUSE_CHECK", "0")).strip().lower() in {"1", "true", "yes", "on"}
+    if not env_on:
+        return draft_text, {
+            "enabled": False,
+            "decision": "proceed",
+            "rationale": "pause check disabled",
+            "signals": {"fills_space": 0.0, "value_add": 0.0, "silence_ok": 0.0},
+            "felt_sense": None,
+        }
+
+    repo_root = Path(__file__).resolve().parents[2]
+    memory_dir = repo_root / "workspace" / "memory"
+    import sys
+
+    if str(memory_dir) not in sys.path:
+        sys.path.insert(0, str(memory_dir))
+    from pause_check import pause_check  # type: ignore
+
+    context = {
+        "intent": intent,
+        "source": "team_chat_adapters",
+        "test_mode": str(os.getenv("OPENCLAW_PAUSE_CHECK_TEST_MODE", "0")).strip().lower()
+        in {"1", "true", "yes", "on"},
+    }
+    decision = pause_check(input_text, draft_text, context=context, mode="router_pre_response")
+    _append_pause_log(decision, intent=intent)
+    if decision.get("decision") == "silence":
+        return PAUSE_SENTINEL, decision
+    return draft_text, decision
 
 
 def _contains_shell_metacharacters(cmd: str) -> bool:
@@ -220,7 +271,21 @@ class RouterLLMClient:
         }
         if not result.get("ok"):
             return AdapterResult(ok=False, data={}, route=route_meta, error=result.get("reason_code", "router_error"))
+
+        response_text = str(result.get("text") or "")
+        gated_text, pause_decision = _pause_gate_text(intent, input_text, response_text)
+        route_meta["pause_check"] = pause_decision
+        if pause_decision.get("enabled") and pause_decision.get("decision") == "silence":
+            return AdapterResult(
+                ok=False,
+                data={},
+                route=route_meta,
+                error="paused_no_value_add",
+            )
+
         parsed = result.get("parsed")
+        if not isinstance(parsed, dict):
+            parsed = validate_fn(gated_text)
         if not isinstance(parsed, dict):
             return AdapterResult(ok=False, data={}, route=route_meta, error="invalid_json_response")
         return AdapterResult(ok=True, data=parsed, route=route_meta)
