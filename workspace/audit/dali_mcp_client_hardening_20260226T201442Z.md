@@ -141,10 +141,141 @@ marker_check_runtime_dist:
 /home/jeebs/src/clawd/.runtime/openclaw/dist/runtime_hardening_overlay.mjs:48:  runtimeLogger.info('runtime_hardening_initialized', {
 ```
 
+## Final Verification + Merge-Safety Pass (2026-02-25 UTC)
+
+### A) Runtime liveness sanity checks
+
+#### A1. Overlay marker present
+
+```bash
+rg -n "runtime_hardening_overlay" .runtime/openclaw/dist/index.js || true
+```
+
+```text
+2:import "./runtime_hardening_overlay.mjs";
+```
+
+#### A2. Fail-fast config (missing `ANTHROPIC_API_KEY`)
+
+```bash
+( unset ANTHROPIC_API_KEY; node .runtime/openclaw/dist/index.js 2>&1 | head -n 50; echo "exit=$?" )
+```
+
+```text
+file:///home/jeebs/src/clawd/.runtime/openclaw/dist/hardening/config.mjs:91
+    throw new Error(`Invalid runtime hardening configuration:\n- ${errors.join('\n- ')}`);
+          ^
+
+Error: Invalid runtime hardening configuration:
+- ANTHROPIC_API_KEY: required non-empty value is missing
+    at validateConfig (file:///home/jeebs/src/clawd/.runtime/openclaw/dist/hardening/config.mjs:91:11)
+    at getConfig (file:///home/jeebs/src/clawd/.runtime/openclaw/dist/hardening/config.mjs:111:17)
+    at file:///home/jeebs/src/clawd/.runtime/openclaw/dist/runtime_hardening_overlay.mjs:16:18
+    at ModuleJob.run (node:internal/modules/esm/module_job:343:25)
+    at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:665:26)
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:117:5)
+
+Node.js v22.22.0
+exit=1
+```
+
+#### A3. No `console.*` in hardening sources
+
+```bash
+rg -n "console\.(log|warn|error)" workspace/runtime_hardening/src || true
+```
+
+```text
+(no matches)
+```
+
+### B) Unrelated failing suites analysis
+
+#### B1. Files changed by this branch
+
+```bash
+git diff --name-only origin/main...HEAD
+```
+
+```text
+AGENTS.md
+README.md
+package.json
+workspace/audit/dali_mcp_client_hardening_20260226T201442Z.md
+workspace/runtime_hardening/README.md
+workspace/runtime_hardening/overlay/runtime_hardening_overlay.mjs
+workspace/runtime_hardening/src/config.mjs
+workspace/runtime_hardening/src/index.mjs
+workspace/runtime_hardening/src/log.mjs
+workspace/runtime_hardening/src/mcp_singleflight.mjs
+workspace/runtime_hardening/src/paths.mjs
+workspace/runtime_hardening/src/retry_backoff.mjs
+workspace/runtime_hardening/src/security/fs_sandbox.mjs
+workspace/runtime_hardening/src/security/tool_sanitize.mjs
+workspace/runtime_hardening/src/session.mjs
+workspace/runtime_hardening/tests/config.test.mjs
+workspace/runtime_hardening/tests/fs_sandbox.test.mjs
+workspace/runtime_hardening/tests/mcp_singleflight.test.mjs
+workspace/runtime_hardening/tests/retry_backoff.test.mjs
+workspace/runtime_hardening/tests/session.test.mjs
+workspace/runtime_hardening/tests/tool_sanitize.test.mjs
+workspace/scripts/rebuild_runtime_openclaw.sh
+```
+
+#### B2. Re-run previously failing node groups (requested command form)
+
+```bash
+node --test --test-reporter=spec tests/redact_audit_evidence.test.js
+node --test --test-reporter=spec tests/secrets_cli_exec.test.js
+node --test --test-reporter=spec tests/secrets_cli_plugin.test.js
+node --test --test-reporter=spec tests/system2_experiment.test.js
+node --test --test-reporter=spec tests/system2_snapshot_diff.test.js
+```
+
+```text
+✖ tests/redact_audit_evidence.test.js ... EXIT_CODE:1
+✖ tests/secrets_cli_exec.test.js ... EXIT_CODE:1
+✖ tests/secrets_cli_plugin.test.js ... EXIT_CODE:1
+✖ tests/system2_experiment.test.js ... EXIT_CODE:1
+✖ tests/system2_snapshot_diff.test.js ... EXIT_CODE:1
+```
+
+Detailed direct reruns (same test files via `node <file>`) continue to fail with the same historical assertions:
+
+```text
+FAIL CLI redacts synthetic fixtures and writes output bundle: CLI should emit JSON summary
+FAIL secrets cli exec injects alias env keys without printing values: expected injected env key summary
+FAIL secrets cli status prints enablement header (no secrets): expected /secrets_bridge_enabled=(true|false)/
+FAIL no-change fixture yields INCONCLUSIVE: CLI failed (3)
+FAIL JSON output is stable and ignores timestamp fields by default: Unexpected end of JSON input
+```
+
+#### B3. Trace touch check against hardening paths
+
+```bash
+rg -n "workspace/runtime_hardening|rebuild_runtime_openclaw\.sh|\.runtime/openclaw/dist" /tmp/dali_*.out -S || true
+```
+
+```text
+(no matches)
+```
+
+Conclusion: the currently failing groups do not touch hardening module paths or runtime overlay/rebuild paths.
+
+### C) CI / merge-safety adjustment
+
+Added dedicated workflow for first-class hardening gates without weakening existing full-suite checks:
+
+- `.github/workflows/hardening-checks.yml`
+  - `npm run typecheck:hardening`
+  - `npm run test:hardening`
+
+Existing workflows that run full `npm test` remain unchanged.
+
 ## Rollback Plan
 
 1. Revert hardening commits in reverse order:
-   - `git revert d504d6e fd46871 9903826 268d4e8`
+   - `git revert 1756d03 d504d6e fd46871 9903826 268d4e8`
 2. Rebuild runtime without overlay import (or restore prior rebuild script).
 3. Re-run baseline test command(s) and confirm clean behavior.
 
