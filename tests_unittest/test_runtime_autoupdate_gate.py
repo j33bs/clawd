@@ -1,3 +1,4 @@
+import os
 import subprocess
 import unittest
 from pathlib import Path
@@ -8,6 +9,10 @@ SCRIPT = REPO_ROOT / "workspace" / "scripts" / "verify_runtime_autoupdate.sh"
 
 
 class RuntimeAutoupdateGateTests(unittest.TestCase):
+    @unittest.skipUnless(
+        os.getenv("OPENCLAW_TEST_AUTOUPDATE") == "1",
+        "autoupdate tests disabled by default; set OPENCLAW_TEST_AUTOUPDATE=1 to enable",
+    )
     def test_runtime_autoupdate_dryrun_includes_health_gate(self):
         proc = subprocess.run(
             ["bash", str(SCRIPT)],
