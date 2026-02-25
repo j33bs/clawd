@@ -163,3 +163,5 @@ workspace/memory/arousal_state.json
 workspace/memory/events.json
 workspace/memory/relationship.json
 workspace/research/insights.json
+
+workspace/audit/_scratch_local/**
