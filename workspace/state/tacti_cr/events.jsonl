@@ -412,3 +412,136 @@
 {"ts": "2026-02-19T12:00:00Z", "type": "tacti_cr.stigmergy.avoid_topics", "payload": {"threshold": 0.5, "count": 2, "topics": ["routing", "memory"]}, "schema": 1}
 {"ts": "2026-02-19T00:00:00Z", "type": "tacti_cr.temporal_watchdog.beacon_updated", "payload": {"path": "/var/folders/n7/1czk3b2d0_jbr7ngjp_6fth80000gn/T/tmp5a096y6q/workspace/state/temporal/beacon.json", "epoch_ms": 1771459200000}, "schema": 1}
 {"ts": "2026-02-19T02:00:00Z", "type": "tacti_cr.temporal_watchdog.temporal_reset", "payload": {"content_hash": "ae8f4587eea4f5c8", "findings": [{"type": "stale_context_treated_fresh", "detail": "beacon_age_minutes>20", "score": 0.8}, {"type": "future_event_marked_done", "detail": "2026-02-19T03:30:00+00:00", "score": 0.95}]}, "schema": 1}
+{"ts": "2026-02-25T02:22:45Z", "type": "tacti_cr.semantic_immune.quarantined", "payload": {"content_hash": "b79b0d30e0bef612", "score": 1.0, "threshold": 0.6, "reason": "epitope_cache_hit"}, "schema": 1}
+{"ts": "2026-02-25T02:22:49Z", "type": "tacti_cr.expression_profile", "payload": {"intent": "coding", "profile": {"enabled_features": [], "suppressed_features": ["arousal_osc", "dream_consolidation", "semantic_immune", "prefetch", "mirror"], "reasons": {"arousal_osc": ["expression_router_disabled"], "dream_consolidation": ["expression_router_disabled"], "semantic_immune": ["expression_router_disabled"], "prefetch": ["expression_router_disabled"], "mirror": ["expression_router_disabled"]}, "manifest_path": "/Users/heathyeager/clawd/workspace/policy/expression_manifest.json"}}, "schema": 1}
+{"ts": "2026-02-25T02:22:49Z", "type": "tacti_cr.valence_bias", "payload": {"intent": "coding", "agent_id": "main", "bias": {"valence": 0.0, "prefer_local": false, "tighten_budget": false, "exploration_bias": false}}, "schema": 1}
+{"ts": "2026-02-25T02:22:49Z", "type": "tacti_cr.arousal_multiplier", "payload": {"intent": "coding", "multiplier": 0.73, "explain": {"multiplier": 0.73}}, "schema": 1}
+{"ts": "2026-02-25T02:22:49Z", "type": "tacti_cr.expression_profile", "payload": {"intent": "coding", "profile": {"enabled_features": ["arousal_osc", "semantic_immune", "prefetch", "mirror"], "suppressed_features": ["dream_consolidation"], "reasons": {"arousal_osc": ["enabled"], "dream_consolidation": ["activation:time_of_day"], "semantic_immune": ["enabled"], "prefetch": ["enabled"], "mirror": ["enabled"]}, "manifest_path": "/Users/heathyeager/clawd/workspace/policy/expression_manifest.json"}}, "schema": 1}
+{"ts": "2026-02-25T02:22:49Z", "type": "tacti_cr.valence_bias", "payload": {"intent": "coding", "agent_id": "main", "bias": {"valence": 0.0, "prefer_local": false, "tighten_budget": false, "exploration_bias": false}}, "schema": 1}
+{"ts": "2026-02-25T02:22:49Z", "type": "tacti_cr.arousal_multiplier", "payload": {"intent": "coding", "multiplier": 0.643302, "explain": {"baseline": 0.643302, "learned": 0.643302, "multiplier": 0.643302, "bins_used": 0}}, "schema": 1}
+{"ts": "2026-02-25T02:22:49Z", "type": "tacti_cr.expression_profile", "payload": {"intent": "coding", "profile": {"enabled_features": [], "suppressed_features": [], "reasons": {}, "manifest_path": ""}}, "schema": 1}
+{"ts": "2026-02-25T02:22:49Z", "type": "tacti_cr.valence_bias", "payload": {"intent": "coding", "agent_id": "main", "bias": {"valence": 0.0, "prefer_local": false, "tighten_budget": false, "exploration_bias": false}}, "schema": 1}
+{"ts": "2026-02-25T02:22:49Z", "type": "tacti_cr.semantic_immune.quarantined", "payload": {"content_hash": "3b14cff65b5f9b3e", "score": 1.0, "threshold": 0.6, "reason": "epitope_cache_hit"}, "schema": 1}
+{"ts": "2026-02-19T16:00:00Z", "type": "tacti_cr.dream.consolidation_started", "payload": {"day": "2026-02-19"}, "schema": 1}
+{"ts": "2026-02-19T16:00:00Z", "type": "tacti_cr.dream.report_written", "payload": {"day": "2026-02-19", "report_path": "/var/folders/n7/1czk3b2d0_jbr7ngjp_6fth80000gn/T/tmpe7yjv0z3/workspace/memory/dream_reports/2026-02-19.md"}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.mirror.updated", "payload": {"agent": "coder", "event_type": "planner_review", "events": 1, "path": "/var/folders/n7/1czk3b2d0_jbr7ngjp_6fth80000gn/T/tmposocacay/workspace/state/mirror/coder.json"}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.valence.updated", "payload": {"agent": "coder", "valence": -0.28, "delta": -0.28}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.prefetch.recorded", "payload": {"topic": "routing", "docs_count": 1, "depth": 3}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.prefetch.hit_rate", "payload": {"hit": false, "hit_rate": 0.0, "depth": 3, "total": 1}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.prefetch.hit_rate", "payload": {"hit": false, "hit_rate": 0.0, "depth": 3, "total": 2}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.prefetch.hit_rate", "payload": {"hit": false, "hit_rate": 0.0, "depth": 3, "total": 3}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.prefetch.hit_rate", "payload": {"hit": false, "hit_rate": 0.0, "depth": 3, "total": 4}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.prefetch.hit_rate", "payload": {"hit": false, "hit_rate": 0.0, "depth": 3, "total": 5}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.prefetch.hit_rate", "payload": {"hit": false, "hit_rate": 0.0, "depth": 3, "total": 6}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.prefetch.hit_rate", "payload": {"hit": false, "hit_rate": 0.0, "depth": 3, "total": 7}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.prefetch.hit_rate", "payload": {"hit": false, "hit_rate": 0.0, "depth": 3, "total": 8}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.prefetch.hit_rate", "payload": {"hit": false, "hit_rate": 0.0, "depth": 3, "total": 9}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.prefetch.hit_rate", "payload": {"hit": false, "hit_rate": 0.0, "depth": 3, "total": 10}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.prefetch.hit_rate", "payload": {"hit": false, "hit_rate": 0.0, "depth": 3, "total": 11}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.prefetch.hit_rate", "payload": {"hit": false, "hit_rate": 0.0, "depth": 3, "total": 12}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.prefetch.hit_rate", "payload": {"hit": false, "hit_rate": 0.0, "depth": 3, "total": 13}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.prefetch.hit_rate", "payload": {"hit": false, "hit_rate": 0.0, "depth": 3, "total": 14}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.prefetch.hit_rate", "payload": {"hit": false, "hit_rate": 0.0, "depth": 3, "total": 15}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.prefetch.hit_rate", "payload": {"hit": false, "hit_rate": 0.0, "depth": 3, "total": 16}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.prefetch.hit_rate", "payload": {"hit": false, "hit_rate": 0.0, "depth": 3, "total": 17}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.prefetch.hit_rate", "payload": {"hit": false, "hit_rate": 0.0, "depth": 3, "total": 18}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.prefetch.hit_rate", "payload": {"hit": false, "hit_rate": 0.0, "depth": 3, "total": 19}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.prefetch.hit_rate", "payload": {"hit": false, "hit_rate": 0.0, "depth": 3, "total": 20}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.prefetch.hit_rate", "payload": {"hit": false, "hit_rate": 0.0, "depth": 3, "total": 21}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.prefetch.hit_rate", "payload": {"hit": false, "hit_rate": 0.0, "depth": 3, "total": 22}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.prefetch.hit_rate", "payload": {"hit": false, "hit_rate": 0.0, "depth": 3, "total": 23}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.prefetch.hit_rate", "payload": {"hit": false, "hit_rate": 0.0, "depth": 3, "total": 24}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.prefetch.hit_rate", "payload": {"hit": false, "hit_rate": 0.0, "depth": 3, "total": 25}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.prefetch.hit_rate", "payload": {"hit": false, "hit_rate": 0.0, "depth": 3, "total": 26}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.prefetch.hit_rate", "payload": {"hit": false, "hit_rate": 0.0, "depth": 3, "total": 27}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.prefetch.hit_rate", "payload": {"hit": false, "hit_rate": 0.0, "depth": 3, "total": 28}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.prefetch.hit_rate", "payload": {"hit": false, "hit_rate": 0.0, "depth": 3, "total": 29}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.prefetch.hit_rate", "payload": {"hit": false, "hit_rate": 0.0, "depth": 3, "total": 30}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.prefetch.hit_rate", "payload": {"hit": false, "hit_rate": 0.0, "depth": 3, "total": 31}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.prefetch.hit_rate", "payload": {"hit": false, "hit_rate": 0.0, "depth": 3, "total": 32}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.prefetch.hit_rate", "payload": {"hit": false, "hit_rate": 0.0, "depth": 3, "total": 33}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.prefetch.hit_rate", "payload": {"hit": false, "hit_rate": 0.0, "depth": 3, "total": 34}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.prefetch.hit_rate", "payload": {"hit": false, "hit_rate": 0.0, "depth": 3, "total": 35}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.prefetch.hit_rate", "payload": {"hit": false, "hit_rate": 0.0, "depth": 3, "total": 36}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.prefetch.hit_rate", "payload": {"hit": false, "hit_rate": 0.0, "depth": 3, "total": 37}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.prefetch.hit_rate", "payload": {"hit": false, "hit_rate": 0.0, "depth": 3, "total": 38}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.prefetch.hit_rate", "payload": {"hit": false, "hit_rate": 0.0, "depth": 3, "total": 39}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.prefetch.hit_rate", "payload": {"hit": false, "hit_rate": 0.0, "depth": 3, "total": 40}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.prefetch.hit_rate", "payload": {"hit": false, "hit_rate": 0.0, "depth": 3, "total": 41}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.prefetch.hit_rate", "payload": {"hit": false, "hit_rate": 0.0, "depth": 3, "total": 42}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.prefetch.hit_rate", "payload": {"hit": false, "hit_rate": 0.0, "depth": 3, "total": 43}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.prefetch.hit_rate", "payload": {"hit": false, "hit_rate": 0.0, "depth": 3, "total": 44}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.prefetch.hit_rate", "payload": {"hit": false, "hit_rate": 0.0, "depth": 3, "total": 45}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.prefetch.hit_rate", "payload": {"hit": false, "hit_rate": 0.0, "depth": 3, "total": 46}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.prefetch.hit_rate", "payload": {"hit": false, "hit_rate": 0.0, "depth": 3, "total": 47}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.prefetch.hit_rate", "payload": {"hit": false, "hit_rate": 0.0, "depth": 3, "total": 48}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.prefetch.hit_rate", "payload": {"hit": false, "hit_rate": 0.0, "depth": 3, "total": 49}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.prefetch.hit_rate", "payload": {"hit": false, "hit_rate": 0.0, "depth": 3, "total": 50}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.prefetch.hit_rate", "payload": {"hit": false, "hit_rate": 0.0, "depth": 3, "total": 51}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.prefetch.hit_rate", "payload": {"hit": false, "hit_rate": 0.0, "depth": 3, "total": 52}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.prefetch.hit_rate", "payload": {"hit": false, "hit_rate": 0.0, "depth": 3, "total": 53}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.prefetch.hit_rate", "payload": {"hit": false, "hit_rate": 0.0, "depth": 3, "total": 54}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.prefetch.hit_rate", "payload": {"hit": false, "hit_rate": 0.0, "depth": 3, "total": 55}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.prefetch.hit_rate", "payload": {"hit": false, "hit_rate": 0.0, "depth": 3, "total": 56}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.prefetch.hit_rate", "payload": {"hit": false, "hit_rate": 0.0, "depth": 3, "total": 57}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.prefetch.hit_rate", "payload": {"hit": false, "hit_rate": 0.0, "depth": 3, "total": 58}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.prefetch.hit_rate", "payload": {"hit": false, "hit_rate": 0.0, "depth": 3, "total": 59}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.prefetch.hit_rate", "payload": {"hit": false, "hit_rate": 0.0, "depth": 3, "total": 60}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.prefetch.hit_rate", "payload": {"hit": false, "hit_rate": 0.0, "depth": 3, "total": 61}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.prefetch.hit_rate", "payload": {"hit": false, "hit_rate": 0.0, "depth": 3, "total": 62}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.prefetch.hit_rate", "payload": {"hit": false, "hit_rate": 0.0, "depth": 3, "total": 63}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.prefetch.hit_rate", "payload": {"hit": false, "hit_rate": 0.0, "depth": 3, "total": 64}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.prefetch.hit_rate", "payload": {"hit": false, "hit_rate": 0.0, "depth": 3, "total": 65}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.prefetch.hit_rate", "payload": {"hit": false, "hit_rate": 0.0, "depth": 3, "total": 66}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.prefetch.hit_rate", "payload": {"hit": false, "hit_rate": 0.0, "depth": 3, "total": 67}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.prefetch.hit_rate", "payload": {"hit": false, "hit_rate": 0.0, "depth": 3, "total": 68}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.prefetch.hit_rate", "payload": {"hit": false, "hit_rate": 0.0, "depth": 3, "total": 69}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.prefetch.hit_rate", "payload": {"hit": false, "hit_rate": 0.0, "depth": 3, "total": 70}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.prefetch.hit_rate", "payload": {"hit": false, "hit_rate": 0.0, "depth": 3, "total": 71}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.prefetch.hit_rate", "payload": {"hit": false, "hit_rate": 0.0, "depth": 3, "total": 72}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.prefetch.hit_rate", "payload": {"hit": false, "hit_rate": 0.0, "depth": 3, "total": 73}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.prefetch.hit_rate", "payload": {"hit": false, "hit_rate": 0.0, "depth": 3, "total": 74}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.prefetch.hit_rate", "payload": {"hit": false, "hit_rate": 0.0, "depth": 3, "total": 75}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.prefetch.hit_rate", "payload": {"hit": false, "hit_rate": 0.0, "depth": 3, "total": 76}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.prefetch.hit_rate", "payload": {"hit": false, "hit_rate": 0.0, "depth": 3, "total": 77}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.prefetch.hit_rate", "payload": {"hit": false, "hit_rate": 0.0, "depth": 3, "total": 78}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.prefetch.hit_rate", "payload": {"hit": false, "hit_rate": 0.0, "depth": 3, "total": 79}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.prefetch.hit_rate", "payload": {"hit": false, "hit_rate": 0.0, "depth": 3, "total": 80}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.prefetch.hit_rate", "payload": {"hit": false, "hit_rate": 0.0, "depth": 3, "total": 81}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.prefetch.hit_rate", "payload": {"hit": false, "hit_rate": 0.0, "depth": 3, "total": 82}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.prefetch.hit_rate", "payload": {"hit": false, "hit_rate": 0.0, "depth": 3, "total": 83}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.prefetch.hit_rate", "payload": {"hit": false, "hit_rate": 0.0, "depth": 3, "total": 84}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.prefetch.hit_rate", "payload": {"hit": false, "hit_rate": 0.0, "depth": 3, "total": 85}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.prefetch.hit_rate", "payload": {"hit": false, "hit_rate": 0.0, "depth": 3, "total": 86}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.prefetch.hit_rate", "payload": {"hit": false, "hit_rate": 0.0, "depth": 3, "total": 87}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.prefetch.hit_rate", "payload": {"hit": false, "hit_rate": 0.0, "depth": 3, "total": 88}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.prefetch.hit_rate", "payload": {"hit": false, "hit_rate": 0.0, "depth": 3, "total": 89}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.prefetch.hit_rate", "payload": {"hit": false, "hit_rate": 0.0, "depth": 3, "total": 90}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.prefetch.hit_rate", "payload": {"hit": false, "hit_rate": 0.0, "depth": 3, "total": 91}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.prefetch.hit_rate", "payload": {"hit": false, "hit_rate": 0.0, "depth": 3, "total": 92}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.prefetch.hit_rate", "payload": {"hit": false, "hit_rate": 0.0, "depth": 3, "total": 93}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.prefetch.hit_rate", "payload": {"hit": false, "hit_rate": 0.0, "depth": 3, "total": 94}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.prefetch.hit_rate", "payload": {"hit": false, "hit_rate": 0.0, "depth": 3, "total": 95}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.prefetch.hit_rate", "payload": {"hit": false, "hit_rate": 0.0, "depth": 3, "total": 96}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.prefetch.hit_rate", "payload": {"hit": false, "hit_rate": 0.0, "depth": 3, "total": 97}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.prefetch.hit_rate", "payload": {"hit": false, "hit_rate": 0.0, "depth": 3, "total": 98}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.prefetch.hit_rate", "payload": {"hit": false, "hit_rate": 0.0, "depth": 3, "total": 99}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.prefetch.hit_rate", "payload": {"hit": false, "hit_rate": 0.0, "depth": 2, "total": 100}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.semantic_immune.accepted", "payload": {"content_hash": "279954510e04d72f", "score": 1.0, "threshold": 0.35, "reason": "accepted"}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.semantic_immune.accepted", "payload": {"content_hash": "e3e729ba420e6227", "score": 0.2, "threshold": 1.03, "reason": "accepted"}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.semantic_immune.accepted", "payload": {"content_hash": "2b6a7a80515d9902", "score": 0.156726, "threshold": 1.8, "reason": "accepted"}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.semantic_immune.accepted", "payload": {"content_hash": "d59d720b027970dc", "score": 0.140662, "threshold": 0.329822, "reason": "accepted"}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.semantic_immune.accepted", "payload": {"content_hash": "ae5ac19e5d66376c", "score": 0.132278, "threshold": 0.26737, "reason": "accepted"}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.semantic_immune.accepted", "payload": {"content_hash": "615de44c0b599795", "score": 0.127128, "threshold": 0.230069, "reason": "accepted"}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.semantic_immune.accepted", "payload": {"content_hash": "50c093de4cbfd353", "score": 0.123644, "threshold": 0.205666, "reason": "accepted"}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.semantic_immune.accepted", "payload": {"content_hash": "7201b37267185f98", "score": 0.121129, "threshold": 0.188854, "reason": "accepted"}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.semantic_immune.quarantined", "payload": {"content_hash": "8b23b16ff438efed", "score": 1.0, "threshold": 0.178721, "reason": "out_of_distribution"}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.semantic_immune.approved", "payload": {"content_hash": "8b23b16ff438efed"}, "schema": 1}
+{"ts": "2026-02-25T02:22:50Z", "type": "tacti_cr.semantic_immune.quarantined", "payload": {"content_hash": "8b23b16ff438efed", "score": 1.0, "threshold": 0.178721, "reason": "out_of_distribution"}, "schema": 1}
+{"ts": "2026-02-19T12:00:00Z", "type": "tacti_cr.stigmergy.mark_deposited", "payload": {"topic": "routing", "intensity": 1.0, "decay_rate": 0.01, "deposited_by": "planner", "timestamp": "2026-02-19T12:00:00Z"}, "schema": 1}
+{"ts": "2026-02-19T12:00:00Z", "type": "tacti_cr.stigmergy.mark_deposited", "payload": {"topic": "memory", "intensity": 0.9, "decay_rate": 0.2, "deposited_by": "coder", "timestamp": "2026-02-19T12:00:00Z"}, "schema": 1}
+{"ts": "2026-02-19T22:00:00Z", "type": "tacti_cr.stigmergy.query", "payload": {"top_n": 2, "returned": 2}, "schema": 1}
+{"ts": "2026-02-19T12:00:00Z", "type": "tacti_cr.stigmergy.query", "payload": {"top_n": 100, "returned": 2}, "schema": 1}
+{"ts": "2026-02-19T12:00:00Z", "type": "tacti_cr.stigmergy.avoid_topics", "payload": {"threshold": 0.5, "count": 2, "topics": ["routing", "memory"]}, "schema": 1}
+{"ts": "2026-02-19T00:00:00Z", "type": "tacti_cr.temporal_watchdog.beacon_updated", "payload": {"path": "/var/folders/n7/1czk3b2d0_jbr7ngjp_6fth80000gn/T/tmp47v2eyve/workspace/state/temporal/beacon.json", "epoch_ms": 1771459200000}, "schema": 1}
+{"ts": "2026-02-19T02:00:00Z", "type": "tacti_cr.temporal_watchdog.temporal_reset", "payload": {"content_hash": "ae8f4587eea4f5c8", "findings": [{"type": "stale_context_treated_fresh", "detail": "beacon_age_minutes>20", "score": 0.8}, {"type": "future_event_marked_done", "detail": "2026-02-19T03:30:00+00:00", "score": 0.95}]}, "schema": 1}
