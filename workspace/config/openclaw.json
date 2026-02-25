@@ -1,4 +1,7 @@
 {
+  "node": {
+    "id": "c_lawd"
+  },
   "plugins": {
     "allow": [
       "openclaw_secrets_plugin"
