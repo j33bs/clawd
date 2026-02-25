@@ -44,8 +44,8 @@ class TestPolicyRouterOauthGate(unittest.TestCase):
         )
 
         self.assertEqual(result.get("ok"), False)
-        self.assertEqual(result.get("reason_code"), "request_AssertionError")
-        self.assertTrue(_DummyRequests.called)
+        self.assertEqual(result.get("reason_code"), "oauth_jwt_unsupported_endpoint")
+        self.assertFalse(_DummyRequests.called)
 
 
 if __name__ == "__main__":
