@@ -2,8 +2,23 @@
   "name": "openclaw",
   "private": true,
   "version": "0.0.0",
+  "engines": {
+    "node": ">=20"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/j33bs/clawd.git"
+  },
+  "bugs": {
+    "url": "https://github.com/j33bs/clawd/issues"
+  },
+  "homepage": "https://github.com/j33bs/clawd#readme",
   "scripts": {
     "test": "node scripts/run_tests.js",
+    "test:hardening": "node --test workspace/runtime_hardening/tests/*.test.mjs",
+    "test:hardening:watch": "node --watch --test workspace/runtime_hardening/tests/*.test.mjs",
+    "typecheck:hardening": "node --check workspace/runtime_hardening/src/*.mjs && node --check workspace/runtime_hardening/src/security/*.mjs && node --check workspace/runtime_hardening/overlay/*.mjs",
+    "runtime:rebuild": "bash workspace/scripts/rebuild_runtime_openclaw.sh",
     "governance:heartbeat": "sh workspace/scripts/sync_heartbeat.sh",
     "gate:module-resolution": "node scripts/module_resolution_gate.js --json",
     "redact:audit-evidence": "node scripts/redact_audit_evidence.js",
