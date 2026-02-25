@@ -1,0 +1,46 @@
+#!/usr/bin/env python3
+"""
+Heartbeat Enhancer
+Enhanced heartbeat checks using TACTI modules.
+"""
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent / "memory"))
+from tacti_core import get_core
+
+def enhanced_heartbeat():
+    """Run enhanced heartbeat with TACTI awareness."""
+    core = get_core()
+    
+    checks = []
+    
+    # 1. Arousal state check
+    arousal = core.get_arousal_state()
+    checks.append(f"Arousal: {arousal['state']}")
+    if arousal['state'] in ['overload', 'recovering']:
+        checks.append("⚠️ Consider context compaction")
+    
+    # 2. Relationship health check
+    health = core.get_relationship_health()
+    if health['trust'] < 0.7:
+        checks.append(f"⚠️ Trust low: {health['trust']:.2f}")
+    
+    # 3. Pattern detection
+    patterns = core.find_patterns(min_freq=2)
+    if patterns:
+        checks.append(f"Found {len(patterns)} new patterns")
+    
+    # 4. Memory size check
+    memory_path = Path("MEMORY.md")
+    if memory_path.exists():
+        lines = len(memory_path.read_text().splitlines())
+        if lines > 180:
+            checks.append(f"⚠️ MEMORY large: {lines} lines")
+    
+    return checks
+
+
+if __name__ == "__main__":
+    print("Enhanced Heartbeat:")
+    for check in enhanced_heartbeat():
+        print(f"  {check}")
