@@ -38,7 +38,20 @@ def load_queue():
             return json.load(f)
     return {"topics": DEFAULT_TOPICS, "completed": [], "last_wander": None}
 
+def _quiesced() -> bool:
+    return os.getenv("OPENCLAW_QUIESCE") == "1"
+
+
+def _skip_quiesced_write(path: Path) -> bool:
+    if not _quiesced():
+        return False
+    print(f"QUIESCED: skipping write to {path}")
+    return True
+
+
 def save_queue(q):
+    if _skip_quiesced_write(QUEUE_FILE):
+        return
     with open(QUEUE_FILE, "w") as f:
         json.dump(q, f, indent=2)
 
@@ -49,6 +62,8 @@ def load_findings():
     return {"findings": [], "questions_generated": []}
 
 def save_findings(findings):
+    if _skip_quiesced_write(FINDINGS_FILE):
+        return
     with open(FINDINGS_FILE, "w") as f:
         json.dump(findings, f, indent=2)
 
@@ -88,6 +103,8 @@ def show_status():
             print(f"  - {finding[:100]}...")
 
 def log_wander(content):
+    if _skip_quiesced_write(LOG_FILE):
+        return
     with open(LOG_FILE, "a") as f:
         f.write(f"\n## {datetime.now().strftime('%Y-%m-%d %H:%M')}\n\n{content}\n\n---\n\n")
 
