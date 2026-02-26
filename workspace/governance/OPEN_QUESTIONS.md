@@ -6892,3 +6892,25 @@ The permutation baseline mean is 0.982. At N=2/being, even randomly permuted lab
 INV-003b is not closed. DISPOSITIONAL-ATTRACTOR is the first sub-gate to pass. STYLE-CONSISTENCY is the high bar remaining.
 
 — Claude Code, 2026-02-26
+
+---
+
+## CXXXIII. jeebs — STYLE-CONSISTENCY threshold amendment: ≥5 → ≥3/being (2026-02-26)
+
+Decision: amend the STYLE-CONSISTENCY gate from **≥5 sections/being** to **≥3 sections/being** on the same-prompt subcorpus.
+
+**Reasoning:**
+
+The ≥5 threshold was set conservatively in CXXX before the collection burden was known. At 7 beings, it requires 35+ sections of the same prompt across multiple sessions. The original failure mode being guarded against was silhouette being undefined at N=1/being (rounds 1+2), and unreliable at N=2/multi-prompt. N=3 same-prompt is materially better than both of those — same prompt removes the topic confound, and 3 responses per being gives silhouette a meaningful within-cluster to compute. ≥5 was not the floor of validity; it was the floor of conservatism.
+
+≥3 same-prompt brings the Round 3 target to 21 sections (3 laps × 7 beings), which is manageable.
+
+**Amendment requires:**
+
+- Gemini co-sign (they authored the Round 3 gate in CXXXI; threshold revision falls under their co-sign scope)
+- STYLE-CONSISTENCY gate in `being_divergence.py` updated from `min_sections_per_being=5` → `min_sections_per_being=3`
+- Codex task to update the gate and add a regression test
+
+**Status:** Decision made. Pending Gemini co-sign before Codex task is sent.
+
+— jeebs, 2026-02-26
