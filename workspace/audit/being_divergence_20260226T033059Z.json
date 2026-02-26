@@ -1,0 +1,231 @@
+{
+  "author_silhouette": -0.009219522118448216,
+  "being_divergence_score": 0.8933333333333333,
+  "controls": {
+    "C1_register": {
+      "author_silhouette_by_split": {
+        "long": -0.009219522118448216,
+        "short": null
+      },
+      "flags": [
+        "REGISTER_OVERREPRESENTATION",
+        "REGISTER_SPLIT_TOO_NARROW"
+      ],
+      "overrepresented_beings": [
+        "ChatGPT",
+        "Claude",
+        "Claude Code",
+        "Dali",
+        "Gemini",
+        "Grok",
+        "c_lawd"
+      ],
+      "split_n_beings": {
+        "long": 7,
+        "short": 0
+      },
+      "split_sizes": {
+        "long": 75,
+        "short": 0
+      }
+    },
+    "C2_topic": {
+      "cluster_summaries": [
+        {
+          "being_distribution": {
+            "ChatGPT": 0.1,
+            "Claude": 0.2,
+            "Grok": 0.6,
+            "c_lawd": 0.1
+          },
+          "cluster_id": 0,
+          "max_being": "Grok",
+          "max_share": 0.6,
+          "n_sections": 10
+        },
+        {
+          "being_distribution": {
+            "ChatGPT": 0.2727272727272727,
+            "Claude": 0.6363636363636364,
+            "c_lawd": 0.09090909090909091
+          },
+          "cluster_id": 1,
+          "max_being": "Claude",
+          "max_share": 0.6363636363636364,
+          "n_sections": 11
+        },
+        {
+          "being_distribution": {
+            "ChatGPT": 0.16666666666666666,
+            "Claude": 0.3333333333333333,
+            "Claude Code": 0.3333333333333333,
+            "c_lawd": 0.16666666666666666
+          },
+          "cluster_id": 2,
+          "max_being": "Claude",
+          "max_share": 0.3333333333333333,
+          "n_sections": 6
+        },
+        {
+          "being_distribution": {
+            "Claude": 0.2857142857142857,
+            "Claude Code": 0.14285714285714285,
+            "Gemini": 0.14285714285714285,
+            "Grok": 0.14285714285714285,
+            "c_lawd": 0.2857142857142857
+          },
+          "cluster_id": 3,
+          "max_being": "Claude",
+          "max_share": 0.2857142857142857,
+          "n_sections": 7
+        },
+        {
+          "being_distribution": {
+            "ChatGPT": 0.26666666666666666,
+            "Claude": 0.06666666666666667,
+            "Claude Code": 0.5333333333333333,
+            "Dali": 0.06666666666666667,
+            "Grok": 0.06666666666666667
+          },
+          "cluster_id": 4,
+          "max_being": "Claude Code",
+          "max_share": 0.5333333333333333,
+          "n_sections": 15
+        },
+        {
+          "being_distribution": {
+            "c_lawd": 1.0
+          },
+          "cluster_id": 5,
+          "max_being": "c_lawd",
+          "max_share": 1.0,
+          "n_sections": 6
+        },
+        {
+          "being_distribution": {
+            "ChatGPT": 0.2,
+            "Claude": 0.1,
+            "Claude Code": 0.1,
+            "Dali": 0.15,
+            "Gemini": 0.15,
+            "Grok": 0.15,
+            "c_lawd": 0.15
+          },
+          "cluster_id": 6,
+          "max_being": "ChatGPT",
+          "max_share": 0.2,
+          "n_sections": 20
+        }
+      ],
+      "dominant_clusters": [
+        5
+      ],
+      "flags": [
+        "AUTHOR_DOMINANT_TOPIC"
+      ],
+      "k": 7,
+      "status": "OK"
+    },
+    "C3_identity_drift": {
+      "fallback_used": false,
+      "per_being": {
+        "ChatGPT": {
+          "drift_distance": 0.23508844743820956,
+          "early_n": 7,
+          "late_n": 6
+        },
+        "Claude": {
+          "drift_distance": null,
+          "early_n": 16,
+          "late_n": 0
+        },
+        "Claude Code": {
+          "drift_distance": 0.23743164724097232,
+          "early_n": 3,
+          "late_n": 10
+        },
+        "Dali": {
+          "drift_distance": 0.43216793004303766,
+          "early_n": 2,
+          "late_n": 2
+        },
+        "Gemini": {
+          "drift_distance": 0.5494326310620214,
+          "early_n": 1,
+          "late_n": 3
+        },
+        "Grok": {
+          "drift_distance": 0.13333637745959048,
+          "early_n": 4,
+          "late_n": 7
+        },
+        "c_lawd": {
+          "drift_distance": 0.24128056945425158,
+          "early_n": 4,
+          "late_n": 10
+        }
+      },
+      "split_method": "canonical_section_number"
+    },
+    "C4_relational_state": {
+      "reason": "trust_epoch has no non-empty values",
+      "status": "RETRO_DARK"
+    }
+  },
+  "corpus_size": 75,
+  "dual_embedding": {
+    "delta": 0.10666666666666669,
+    "fallback_used": false,
+    "full_corpus_score": 0.8933333333333333,
+    "held_out_from": 82,
+    "held_out_n": 23,
+    "held_out_random_baseline": 0.16666666666666666,
+    "held_out_score": 1.0,
+    "split_method": "canonical_section_number"
+  },
+  "n_beings": 7,
+  "noun_filter_applied": false,
+  "noun_filter_delta": null,
+  "per_being_scores": {
+    "ChatGPT": {
+      "centroid_norm": 0.7046765614803592,
+      "correctly_attributed": 12,
+      "n_sections": 13
+    },
+    "Claude": {
+      "centroid_norm": 0.6464401236722668,
+      "correctly_attributed": 13,
+      "n_sections": 16
+    },
+    "Claude Code": {
+      "centroid_norm": 0.6666013269556398,
+      "correctly_attributed": 12,
+      "n_sections": 13
+    },
+    "Dali": {
+      "centroid_norm": 0.7648238420194337,
+      "correctly_attributed": 4,
+      "n_sections": 4
+    },
+    "Gemini": {
+      "centroid_norm": 0.777719374531935,
+      "correctly_attributed": 4,
+      "n_sections": 4
+    },
+    "Grok": {
+      "centroid_norm": 0.7187861852923959,
+      "correctly_attributed": 11,
+      "n_sections": 11
+    },
+    "c_lawd": {
+      "centroid_norm": 0.6568702638487434,
+      "correctly_attributed": 11,
+      "n_sections": 14
+    }
+  },
+  "random_baseline": 0.14285714285714285,
+  "source": "real",
+  "timestamp_utc": "2026-02-26T03:30:59Z",
+  "topic_silhouette": 0.04719877057243785,
+  "verdict": "SITUATIONAL"
+}
