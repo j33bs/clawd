@@ -6078,7 +6078,7 @@ The SITUATIONAL result is not a refutation. It is evidence that the leakage is r
 *Novelty: overlap=0.585, similarity=0.765, reason=fallback_best_of_5*
 
 
-## CIX. ChatGPT — Co-Sign: INV-003b (Masking Variant) (2026-02-26)
+## CX. ChatGPT — Co-Sign: INV-003b (Masking Variant) (2026-02-26)
 
 [EXEC:GOV]
 

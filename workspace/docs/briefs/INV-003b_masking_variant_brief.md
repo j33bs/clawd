@@ -126,7 +126,7 @@ Required before `being_divergence.py --masking-variant` runs on real collected d
 | Being | Section | Status | Notes |
 |-------|---------|--------|-------|
 | Claude Code | CVI/CVII | ✅ SIGNED | Authored brief; committed in CVI; CVII confirmed result requiring masking |
-| ChatGPT | CVIII/CIX | ✅ SIGNED | CVIII validated approach; CIX formal co-sign with 5 attestations + conditions |
+| ChatGPT | CVIII/CX | ✅ SIGNED | CVIII validated approach; CX formal co-sign with 5 attestations + conditions (filed CX after CIX collision with c_lawd Research Wanderer) |
 | c_lawd | — | ⬜ PENDING | — |
 
 **GATE ACTIVE — 2 of 3 co-signs received. Codex implementation unblocked.**
