@@ -16,9 +16,46 @@ Implemented in this branch:
 - Item 4: memory snapshot before major updates/iterations
   - Added snapshot command and wired pre-rebuild snapshot into `workspace/scripts/rebuild_runtime_openclaw.sh`.
   - Escape hatch: `OPENCLAW_MEMORY_SNAPSHOT_BEFORE_REBUILD=0`.
+- Item 2: memory consolidation during heartbeats (merge fragmented notes)
+  - Added `consolidate_memory_fragments(...)` in `workspace/scripts/memory_maintenance.py`.
+  - Wired heartbeat execution to write/update `workspace/state_runtime/memory/heartbeat_consolidation.json` via `workspace/heartbeat_enhancer.py`.
+- Item 5: long-term memory distillation (weekly auto-update of `MEMORY.md`)
+  - Added `distill_weekly_memory(...)` in `workspace/scripts/memory_maintenance.py` with idempotent once-per-ISO-week gating.
+  - Wired nightly flow in `workspace/scripts/nightly_build.sh` (toggle-controlled).
+- Item 9: forgotten file cleanup for old memory files
+  - Added `cleanup_forgotten_memory_files(...)` in `workspace/scripts/memory_maintenance.py` (archive + stale-empty prune).
+  - Wired nightly flow in `workspace/scripts/nightly_build.sh` (toggle-controlled).
+- Items 11–18 (Agent Orchestration)
+  - Added `workspace/scripts/agent_orchestration.py` with:
+    - configurable `sessions_spawn` timeout defaults (11),
+    - agent-to-agent handoff acknowledgement (12),
+    - agent state/mood persistence (13),
+    - specialization tags (14),
+    - load-balanced provider selection (15),
+    - priority queue for concurrent requests (16),
+    - graceful shutdown with persisted state (17),
+    - resource usage tracking JSONL (18).
+  - Wired spawn usage in `workspace/scripts/message_handler.py`.
 
-In progress next:
-- Item 2 (heartbeat consolidation), Item 5 (weekly MEMORY.md distillation), Item 9 (old memory cleanup policy refinements).
+Tranche 2 files touched:
+- `workspace/scripts/memory_maintenance.py`
+- `workspace/heartbeat_enhancer.py`
+- `workspace/scripts/nightly_build.sh`
+- `workspace/scripts/agent_orchestration.py`
+- `workspace/scripts/message_handler.py`
+- `tests_unittest/test_memory_maintenance.py`
+- `tests_unittest/test_agent_orchestration.py`
+
+Tranche 2 env toggles:
+- `OPENCLAW_MEMORY_WEEKLY_DISTILL` default `1`
+- `OPENCLAW_MEMORY_CONSOLIDATE_ON_NIGHTLY` default `0`
+- `OPENCLAW_MEMORY_CLEANUP` default `1`
+- `OPENCLAW_MEMORY_RETAIN_DAYS` default `30`
+- `OPENCLAW_MEMORY_ARCHIVE_PRUNE_DAYS` default `365`
+- `OPENCLAW_MEMORY_SNAPSHOT_BEFORE_REBUILD` default `1`
+- `OPENCLAW_SESSIONS_SPAWN_TIMEOUT_SECONDS` default `120`
+- `OPENCLAW_SUBAGENT_MAX_CONCURRENT` default `4`
+- `OPENCLAW_AGENT_ORCHESTRATION_STATE_DIR` default `workspace/state_runtime/agent_orchestration`
 
 ---
 
