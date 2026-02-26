@@ -9,6 +9,7 @@ CLAWD_DIR="${CLAWD_DIR:-$HOME/clawd}"
 RESEARCH_TOPICS_FILE="$CLAWD_DIR/workspace/research/TOPICS.md"
 RESEARCH_OUT_DIR="$CLAWD_DIR/reports/research"
 OPENCLAW_BIN="${OPENCLAW_BIN:-$(command -v openclaw 2>/dev/null || echo "$HOME/.npm-global/bin/openclaw")}"
+VLLM_HEALTH_GATE_SCRIPT="${CLAWD_DIR}/workspace/scripts/vllm_health_gate.sh"
 
 # Activate virtual environment if it exists
 if [ -f "$CLAWD_DIR/.venv/bin/activate" ]; then
@@ -119,6 +120,16 @@ run_health() {
         log "✅ Gateway: OK"
     else
         log "⚠️ Gateway: Issues detected"
+    fi
+
+    if [ -f "$VLLM_HEALTH_GATE_SCRIPT" ]; then
+        if bash "$VLLM_HEALTH_GATE_SCRIPT" --nightly >>"$LOG_FILE" 2>&1; then
+            log "✅ vLLM gate: nightly check complete"
+        else
+            log "⚠️ vLLM gate: nightly check failed to execute"
+        fi
+    else
+        log "⚠️ vLLM gate script missing: $VLLM_HEALTH_GATE_SCRIPT"
     fi
     
     # Check Ollama
