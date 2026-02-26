@@ -17,6 +17,15 @@ ASSISTANT_LOG_PATH="${OPENCLAW_VLLM_ASSISTANT_LOG_PATH:-$HOME/.local/state/openc
 
 mkdir -p "$(dirname "$ASSISTANT_LOG_PATH")"
 
+set +e
+"$ROOT_DIR/scripts/ensure_port_free.sh" "$VLLM_PORT"
+PORT_GUARD_EC=$?
+set -e
+if [[ $PORT_GUARD_EC -ne 0 ]]; then
+  echo "VLLM_ASSISTANT_PREFLIGHT_FAILED reason=port_guard_failed port=$VLLM_PORT exit_code=$PORT_GUARD_EC" >&2
+  exit "$PORT_GUARD_EC"
+fi
+
 if [[ ! -x "$VLLM_PYTHON" ]]; then
   echo "VLLM_ASSISTANT_PREFLIGHT_FAILED reason=python_missing path=$VLLM_PYTHON" >&2
   exit 42
@@ -29,12 +38,6 @@ fi
 
 if [[ ! -d "$MODEL_PATH" && ! -f "$MODEL_PATH" ]]; then
   echo "VLLM_ASSISTANT_PREFLIGHT_FAILED reason=model_missing model=$MODEL_PATH" >&2
-  exit 42
-fi
-
-PORT_LISTENER="$(ss -ltnp 2>/dev/null | awk -v port="$VLLM_PORT" 'NR>1 && $4 ~ ("[:.]" port "$") {print $0; exit}')"
-if [[ -n "$PORT_LISTENER" ]]; then
-  echo "VLLM_ASSISTANT_PREFLIGHT_FAILED reason=port_in_use port=$VLLM_PORT listener=\"$PORT_LISTENER\"" >&2
   exit 42
 fi
 
