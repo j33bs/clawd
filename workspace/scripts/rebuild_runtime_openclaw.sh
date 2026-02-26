@@ -4,6 +4,8 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 SOURCE_DIR="${OPENCLAW_SOURCE_DIR:-/usr/lib/node_modules/openclaw}"
 RUNTIME_DIR="${OPENCLAW_RUNTIME_DIR:-$ROOT/.runtime/openclaw}"
+ENTRY_FILE_JS="$RUNTIME_DIR/dist/entry.js"
+ENTRY_FILE_MJS="$RUNTIME_DIR/dist/entry.mjs"
 INDEX_FILE="$RUNTIME_DIR/dist/index.js"
 HARDENING_SRC_DIR="$ROOT/workspace/runtime_hardening/src"
 HARDENING_TARGET_DIR="$RUNTIME_DIR/dist/hardening"
@@ -53,24 +55,44 @@ cp "$OVERLAY_SRC_FILE" "$OVERLAY_TARGET_FILE"
 
 if [[ ! -f "$INDEX_FILE" ]]; then
   echo "runtime index missing after copy: $INDEX_FILE" >&2
-  exit 1
 fi
 
-if ! head -n 12 "$INDEX_FILE" | rg -q 'runtime_hardening_overlay\.mjs'; then
+inject_overlay_import() {
+  local target_file="$1"
+  if [[ ! -f "$target_file" ]]; then
+    return 0
+  fi
+  if head -n 16 "$target_file" | rg -q 'runtime_hardening_overlay\.mjs'; then
+    return 0
+  fi
+  local tmp
   tmp="$(mktemp)"
-  if head -n 1 "$INDEX_FILE" | rg -q '^#!'; then
+  if head -n 1 "$target_file" | rg -q '^#!'; then
     {
-      head -n 1 "$INDEX_FILE"
+      head -n 1 "$target_file"
       echo 'import "./runtime_hardening_overlay.mjs";'
-      tail -n +2 "$INDEX_FILE"
+      tail -n +2 "$target_file"
     } > "$tmp"
   else
     {
       echo 'import "./runtime_hardening_overlay.mjs";'
-      cat "$INDEX_FILE"
+      cat "$target_file"
     } > "$tmp"
   fi
-  mv "$tmp" "$INDEX_FILE"
+  mv "$tmp" "$target_file"
+}
+
+overlay_injected=0
+for candidate in "$ENTRY_FILE_JS" "$ENTRY_FILE_MJS" "$INDEX_FILE"; do
+  if [[ -f "$candidate" ]]; then
+    inject_overlay_import "$candidate"
+    overlay_injected=1
+  fi
+done
+
+if [[ "$overlay_injected" -eq 0 ]]; then
+  echo "runtime entry files missing after copy: expected one of $ENTRY_FILE_JS, $ENTRY_FILE_MJS, $INDEX_FILE" >&2
+  exit 1
 fi
 
 echo "marker_check_runtime_dist:"

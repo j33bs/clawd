@@ -2,6 +2,7 @@ import {
   getConfig,
   redactConfigForLogs,
   logger,
+  installNetworkInterfacesGuard,
   ensureWorkspaceDirectories,
   SessionManager,
   McpServerSingleflight,
@@ -254,26 +255,50 @@ function installOutboundFetchSanitizer(runtimeLogger, config) {
 }
 
 if (!globalThis[GLOBAL_KEY]) {
-  const config = getConfig();
-  ensureWorkspaceDirectories(config);
-
   const runtimeLogger = logger.child({ module: 'runtime-hardening-overlay' });
-  const sessionManager = new SessionManager({ config, logger: runtimeLogger });
-  installOutboundFetchSanitizer(runtimeLogger, config);
+  installNetworkInterfacesGuard({ logger: runtimeLogger, processLike: process });
+
+  const isStatusCommand = Array.isArray(process.argv) && process.argv.includes('status');
+  let config = null;
+  try {
+    config = getConfig();
+    ensureWorkspaceDirectories(config);
+  } catch (error) {
+    if (!isStatusCommand) throw error;
+    runtimeLogger.warn('runtime_hardening_config_degraded_for_status', { error });
+    try {
+      const details = error && typeof error.message === 'string' ? error.message : String(error);
+      process.stderr.write(`RUNTIME_HARDENING_CONFIG_DEGRADED: ${details}\n`);
+    } catch {
+      // ignore stderr write failures
+    }
+  }
+
+  const sessionManager = config ? new SessionManager({ config, logger: runtimeLogger }) : null;
+  if (config) {
+    installOutboundFetchSanitizer(runtimeLogger, config);
+  }
+
+  function requireConfig() {
+    if (config) return config;
+    throw new Error('runtime hardening config is unavailable in status degraded mode');
+  }
 
   globalThis[GLOBAL_KEY] = {
     config,
     sessionManager,
     createMcpSingleflight(startServer) {
+      const readyConfig = requireConfig();
       return new McpServerSingleflight({
-        config,
+        config: readyConfig,
         logger: runtimeLogger,
         startServer
       });
     },
     assertPathWithinWorkspace(targetPath) {
-      return assertPathWithinRoot(config.workspaceRoot, targetPath, {
-        allowOutsideWorkspace: config.fsAllowOutsideWorkspace
+      const readyConfig = requireConfig();
+      return assertPathWithinRoot(readyConfig.workspaceRoot, targetPath, {
+        allowOutsideWorkspace: readyConfig.fsAllowOutsideWorkspace
       });
     },
     sanitizeToolInvocation(payload) {
@@ -288,7 +313,7 @@ if (!globalThis[GLOBAL_KEY]) {
   };
 
   runtimeLogger.info('runtime_hardening_initialized', {
-    config: redactConfigForLogs(config)
+    config: config ? redactConfigForLogs(config) : { degraded_for_status: true }
   });
 }
 
