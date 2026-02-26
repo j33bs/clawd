@@ -182,6 +182,12 @@ run_memory() {
         fi
     fi
 
+    if python3 "$CLAWD_DIR/workspace/scripts/memory_maintenance.py" --repo-root "$CLAWD_DIR" maintain >>"$LOG_FILE" 2>&1; then
+        log "Memory rotate/index maintenance complete"
+    else
+        log "⚠️ Memory rotate/index maintenance failed"
+    fi
+
     if [ "${OPENCLAW_NARRATIVE_DISTILL:-0}" = "1" ]; then
         log "Running narrative distillation (OPENCLAW_NARRATIVE_DISTILL=1)"
         if python3 "$CLAWD_DIR/workspace/scripts/run_narrative_distill.py" >>"$LOG_FILE" 2>&1; then

@@ -9,6 +9,8 @@ HARDENING_SRC_DIR="$ROOT/workspace/runtime_hardening/src"
 HARDENING_TARGET_DIR="$RUNTIME_DIR/dist/hardening"
 OVERLAY_SRC_FILE="$ROOT/workspace/runtime_hardening/overlay/runtime_hardening_overlay.mjs"
 OVERLAY_TARGET_FILE="$RUNTIME_DIR/dist/runtime_hardening_overlay.mjs"
+MEMORY_MAINTENANCE_SCRIPT="$ROOT/workspace/scripts/memory_maintenance.py"
+MEMORY_SNAPSHOT_BEFORE_REBUILD="${OPENCLAW_MEMORY_SNAPSHOT_BEFORE_REBUILD:-1}"
 
 if [[ ! -d "$SOURCE_DIR" ]]; then
   echo "missing source runtime directory: $SOURCE_DIR" >&2
@@ -28,6 +30,18 @@ fi
 echo "repo_sha=$(git -C "$ROOT" rev-parse --short HEAD 2>/dev/null || echo unknown)"
 echo "source=$SOURCE_DIR"
 echo "target=$RUNTIME_DIR"
+
+if [[ "$MEMORY_SNAPSHOT_BEFORE_REBUILD" == "1" ]] && [[ -f "$MEMORY_MAINTENANCE_SCRIPT" ]]; then
+  set +e
+  snapshot_json="$(python3 "$MEMORY_MAINTENANCE_SCRIPT" --repo-root "$ROOT" snapshot --label runtime-rebuild --include-memory-md 2>&1)"
+  snapshot_ec=$?
+  set -e
+  if [[ $snapshot_ec -eq 0 ]]; then
+    echo "memory_snapshot=$snapshot_json"
+  else
+    echo "warning: memory snapshot failed before rebuild: $snapshot_json" >&2
+  fi
+fi
 
 mkdir -p "$RUNTIME_DIR"
 rsync -a --delete "$SOURCE_DIR/" "$RUNTIME_DIR/"
