@@ -143,6 +143,62 @@ python workspace/time_management/time_management.py self_care
 python scripts/daily_technique.py --format briefing
 ```
 
+## MCP Runtime Hardening Quickstart
+
+```bash
+export ANTHROPIC_API_KEY=\"<required>\"
+export NODE_ENV=production
+export WORKSPACE_ROOT=\"$PWD\"
+export AGENT_WORKSPACE_ROOT=\"$PWD/.agent_workspace\"
+export SKILLS_ROOT=\"$PWD/skills\"
+export SESSION_TTL_MS=21600000
+export SESSION_MAX=50
+export HISTORY_MAX_MESSAGES=200
+export MCP_SERVER_START_TIMEOUT_MS=30000
+export FS_ALLOW_OUTSIDE_WORKSPACE=false
+export LOG_LEVEL=info
+
+# deterministic checks
+npm run typecheck:hardening
+npm run test:hardening
+
+# rebuild runtime with hardening overlay
+npm run runtime:rebuild
+```
+
+## Multi-Session Example
+
+```js
+import { SessionManager } from './workspace/runtime_hardening/src/session.mjs';
+
+const sessions = new SessionManager({
+  config: {
+    anthropicApiKey: process.env.ANTHROPIC_API_KEY,
+    nodeEnv: process.env.NODE_ENV || 'development',
+    workspaceRoot: process.cwd(),
+    agentWorkspaceRoot: `${process.cwd()}/.agent_workspace`,
+    skillsRoot: `${process.cwd()}/skills`,
+    sessionTtlMs: 6 * 60 * 60 * 1000,
+    sessionMax: 50,
+    historyMaxMessages: 200,
+    mcpServerStartTimeoutMs: 30_000,
+    logLevel: process.env.LOG_LEVEL || 'info',
+    fsAllowOutsideWorkspace: false
+  }
+});
+
+sessions.appendHistory('session-a', { role: 'user', content: 'hello' });
+sessions.appendHistory('session-b', { role: 'user', content: 'start task' });
+```
+
+## Skill Creation Mini-Guide
+
+- Put skills under `workspace/skills/<skill-name>/`.
+- Include a `SKILL.md` with purpose, trigger conditions, and exact command interface.
+- Keep command payloads small and deterministic; validate args before execution.
+- Add at least one deterministic test that exercises the skill entrypoint.
+- Document required env vars and security boundaries in the skill README/SKILL file.
+
 ---
 
 ## Model Routing

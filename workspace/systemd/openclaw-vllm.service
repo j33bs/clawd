@@ -1,0 +1,21 @@
+[Unit]
+Description=OpenClaw local vLLM assistant lane (:8001)
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=60
+StartLimitBurst=3
+
+[Service]
+Type=simple
+WorkingDirectory=%h/src/clawd
+Environment=OPENCLAW_VLLM_ASSISTANT_PORT=8001
+Environment=OPENCLAW_VLLM_ASSISTANT_GPU_MEMORY_UTILIZATION=0.85
+ExecStartPre=/home/jeebs/src/clawd/scripts/ensure_port_free.sh 8001
+ExecStart=%h/src/clawd/scripts/vllm_launch_assistant.sh
+Restart=on-failure
+RestartSec=10
+StandardOutput=append:%h/.local/state/openclaw/vllm-assistant.log
+StandardError=append:%h/.local/state/openclaw/vllm-assistant.log
+
+[Install]
+WantedBy=default.target

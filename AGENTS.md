@@ -210,3 +210,22 @@ The goal: Be helpful without being annoying. Check in a few times a day, do usef
 ## Make It Yours
 
 This is a starting point. Add your own conventions, style, and rules as you figure out what works.
+
+## Runtime Hardening Knobs
+
+- `ANTHROPIC_API_KEY` is required for hardened runtime startup.
+- `SESSION_TTL_MS` default: `21600000` (6h).
+- `SESSION_MAX` default: `50`.
+- `HISTORY_MAX_MESSAGES` default: `200`.
+- `MCP_SERVER_START_TIMEOUT_MS` default: `30000`.
+- `WORKSPACE_ROOT` default: current working directory.
+- `AGENT_WORKSPACE_ROOT` default: `${WORKSPACE_ROOT}/.agent_workspace`.
+- `SKILLS_ROOT` default: `${WORKSPACE_ROOT}/skills`.
+- `FS_ALLOW_OUTSIDE_WORKSPACE` default: `false`.
+
+## Runtime Security Model
+
+- Filesystem paths are restricted to `WORKSPACE_ROOT` by default.
+- Path traversal and symlink escapes outside `WORKSPACE_ROOT` are rejected.
+- Tool payloads are validated for shape and bounded size before execution.
+- Runtime startup fails fast on missing/invalid critical config.
