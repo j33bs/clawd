@@ -163,3 +163,6 @@ workspace/memory/arousal_state.json
 workspace/memory/events.json
 workspace/memory/relationship.json
 workspace/research/insights.json
+
+# Telegram private exports (must remain local-only)
+workspace/state_runtime/ingest/telegram_exports/

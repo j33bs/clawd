@@ -1,0 +1,62 @@
+{
+  "name": "Telegram Chat Export",
+  "type": "personal_chat",
+  "id": 1234567890,
+  "chats": {
+    "list": [
+      {
+        "name": "c_lawd test chat",
+        "type": "private_chat",
+        "id": 111,
+        "messages": [
+          {
+            "id": 1,
+            "type": "message",
+            "date": "2026-02-20T10:00:00",
+            "from": "jeebs",
+            "from_id": "user111",
+            "text": "Remember the 100 enhancements list?",
+            "reply_to_message_id": null
+          },
+          {
+            "id": 2,
+            "type": "message",
+            "date": "2026-02-20T10:01:00",
+            "from": "c_lawd",
+            "from_id": "user222",
+            "text": [
+              "Yes, it is in ",
+              {
+                "type": "bold",
+                "text": "/workspace/docs/openclaw-100-enhancements.md"
+              }
+            ],
+            "reply_to_message_id": 1
+          },
+          {
+            "id": 3,
+            "type": "service",
+            "date": "2026-02-20T10:02:00",
+            "from": "system",
+            "text": "   "
+          },
+          {
+            "id": 2,
+            "type": "message",
+            "date": "2026-02-20T10:01:00",
+            "from": "c_lawd",
+            "from_id": "user222",
+            "text": [
+              "Yes, it is in ",
+              {
+                "type": "bold",
+                "text": "/workspace/docs/openclaw-100-enhancements.md"
+              }
+            ],
+            "reply_to_message_id": 1
+          }
+        ]
+      }
+    ]
+  }
+}
