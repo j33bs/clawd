@@ -528,6 +528,60 @@ def _compute_verdict(
     return "INCONCLUSIVE"
 
 
+def _permuted_label_scores(
+    df: pd.DataFrame,
+    *,
+    n_permutations: int = 1000,
+    seed: int = 42,
+) -> list[float]:
+    labels = df["primary_author"].to_list()
+    if not labels:
+        return []
+
+    rng = np.random.default_rng(seed)
+    scores: list[float] = []
+    for _ in range(n_permutations):
+        permuted = rng.permutation(labels).tolist()
+        perm_df = df.copy()
+        perm_df["primary_author"] = permuted
+        scores.append(float(_attribution_metrics(perm_df).score))
+    return scores
+
+
+def _attractor_threshold_stats(scores: list[float]) -> tuple[float, float]:
+    if not scores:
+        return 0.0, 0.0
+    arr = np.array(scores, dtype=float)
+    threshold = float(np.percentile(arr, 95))
+    baseline = float(np.mean(arr))
+    return threshold, baseline
+
+
+def _style_consistency_value(
+    per_being_scores: dict[str, dict[str, float | int]],
+    *,
+    author_silhouette: float | None,
+    topic_silhouette: float | None,
+    min_sections_per_being: int = 5,
+) -> bool | str:
+    if any(int(v["n_sections"]) < min_sections_per_being for v in per_being_scores.values()):
+        return "untested"
+    return bool(
+        author_silhouette is not None
+        and topic_silhouette is not None
+        and author_silhouette > topic_silhouette
+    )
+
+
+def _masking_variant_verdict(dispositional_attractor: bool, style_consistency: bool | str) -> str:
+    attractor_status = "PASS" if dispositional_attractor else "FAIL"
+    if style_consistency == "untested":
+        style_status = "UNTESTED"
+    else:
+        style_status = "PASS" if bool(style_consistency) else "FAIL"
+    return f"DISPOSITIONAL-ATTRACTOR: {attractor_status}\nSTYLE-CONSISTENCY: {style_status}"
+
+
 def _write_report(report: dict[str, Any], audit_dir: Path | None = None) -> Path:
     out_dir = audit_dir or (_workspace_dir() / "audit")
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -540,6 +594,7 @@ def run_being_divergence(
     *,
     dry_run_synthetic: str | None = None,
     masking_variant: bool = False,
+    attractor_permutations: int = 1000,
     noun_filter: bool = False,
     min_sections: int = 3,
     held_out_from: int = 82,
@@ -604,14 +659,31 @@ def run_being_divergence(
         if author_sil is not None and noun_author_sil is not None:
             noun_delta = float(noun_author_sil - author_sil)
 
-    verdict = _compute_verdict(
-        score=metrics.score,
-        baseline=metrics.random_baseline,
-        author_silhouette=author_sil,
-        topic_silhouette=topic_sil,
-        per_being_scores=metrics.per_being_scores,
-        min_sections_per_author=min_sections,
-    )
+    attractor_threshold: float | None = None
+    attractor_permutation_baseline: float | None = None
+    dispositional_attractor = False
+    style_consistency: bool | str = "untested"
+
+    if masking_variant:
+        permutation_scores = _permuted_label_scores(df, n_permutations=attractor_permutations, seed=42)
+        attractor_threshold, attractor_permutation_baseline = _attractor_threshold_stats(permutation_scores)
+        dispositional_attractor = bool(metrics.score >= attractor_threshold)
+        style_consistency = _style_consistency_value(
+            metrics.per_being_scores,
+            author_silhouette=author_sil,
+            topic_silhouette=topic_sil,
+            min_sections_per_being=5,
+        )
+        verdict = _masking_variant_verdict(dispositional_attractor, style_consistency)
+    else:
+        verdict = _compute_verdict(
+            score=metrics.score,
+            baseline=metrics.random_baseline,
+            author_silhouette=author_sil,
+            topic_silhouette=topic_sil,
+            per_being_scores=metrics.per_being_scores,
+            min_sections_per_author=min_sections,
+        )
 
     report: dict[str, Any] = {
         "timestamp_utc": _timestamp_utc(),
@@ -628,6 +700,10 @@ def run_being_divergence(
         "dual_embedding": dual,
         "noun_filter_applied": noun_filter_applied,
         "noun_filter_delta": noun_delta,
+        "dispositional_attractor": bool(dispositional_attractor),
+        "style_consistency": style_consistency,
+        "attractor_threshold": attractor_threshold,
+        "attractor_permutation_baseline": attractor_permutation_baseline,
         "masking_variant": {
             "enabled": masking_variant,
             "tag": MASKING_VARIANT_TAG if masking_variant else None,

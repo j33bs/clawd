@@ -106,6 +106,7 @@ def test_masking_variant_filters_synthetic_subcorpus(tmp_path: Path) -> None:
     masked = run_being_divergence(
         dry_run_synthetic="easy",
         masking_variant=True,
+        attractor_permutations=20,
         audit_dir=tmp_path,
     )
 
@@ -119,6 +120,7 @@ def test_masking_variant_reports_filtered_silhouettes_and_controls(tmp_path: Pat
     report = run_being_divergence(
         dry_run_synthetic="easy",
         masking_variant=True,
+        attractor_permutations=20,
         audit_dir=tmp_path,
     )
 
@@ -163,6 +165,7 @@ def test_masking_variant_gate_allows_signed_real_and_filters(tmp_path: Path, mon
     report = run_being_divergence(
         dry_run_synthetic=None,
         masking_variant=True,
+        attractor_permutations=20,
         brief_path=str(brief),
         audit_dir=tmp_path,
     )
@@ -181,6 +184,7 @@ def test_masking_variant_dry_run_synthetic_bypasses_gate(tmp_path: Path, monkeyp
     report = run_being_divergence(
         dry_run_synthetic="easy",
         masking_variant=True,
+        attractor_permutations=20,
         audit_dir=tmp_path,
     )
     assert report["source"].startswith("synthetic")
@@ -212,6 +216,7 @@ def test_masking_variant_raises_when_no_matching_tag(tmp_path: Path, monkeypatch
         run_being_divergence(
             dry_run_synthetic="easy",
             masking_variant=True,
+            attractor_permutations=20,
             audit_dir=tmp_path,
         )
 
@@ -220,3 +225,56 @@ def test_parser_accepts_masking_variant_flag() -> None:
     args = being_divergence.build_parser().parse_args(["--masking-variant", "--dry-run-synthetic"])
     assert args.masking_variant is True
     assert args.dry_run_synthetic == "easy"
+
+
+def test_attractor_permutation_baseline_computation() -> None:
+    scores = [0.1, 0.2, 0.3, 0.4, 0.5]
+    threshold, baseline = being_divergence._attractor_threshold_stats(scores)
+    assert baseline == pytest.approx(0.3)
+    assert threshold == pytest.approx(0.48)
+
+
+def test_theta_attractor_threshold_behavior() -> None:
+    threshold, _ = being_divergence._attractor_threshold_stats([0.20, 0.40, 0.60, 0.80, 0.90])
+    assert threshold == pytest.approx(0.88)
+    assert (0.87 >= threshold) is False
+    assert (0.88 >= threshold) is True
+
+
+def test_dispositional_attractor_fields_present_in_audit(tmp_path: Path) -> None:
+    report = run_being_divergence(
+        dry_run_synthetic="easy",
+        masking_variant=True,
+        attractor_permutations=20,
+        audit_dir=tmp_path,
+    )
+    assert isinstance(report["dispositional_attractor"], bool)
+    assert isinstance(report["attractor_threshold"], float)
+    assert isinstance(report["attractor_permutation_baseline"], float)
+
+    loaded = json.loads(Path(report["audit_path"]).read_text(encoding="utf-8"))
+    assert "dispositional_attractor" in loaded
+    assert "attractor_threshold" in loaded
+    assert "attractor_permutation_baseline" in loaded
+
+
+def test_style_consistency_untested_when_less_than_five_sections_per_being(tmp_path: Path) -> None:
+    report = run_being_divergence(
+        dry_run_synthetic="easy",
+        masking_variant=True,
+        attractor_permutations=20,
+        audit_dir=tmp_path,
+    )
+    assert report["style_consistency"] == "untested"
+
+
+def test_masking_variant_verdict_string_format(tmp_path: Path) -> None:
+    report = run_being_divergence(
+        dry_run_synthetic="easy",
+        masking_variant=True,
+        attractor_permutations=20,
+        audit_dir=tmp_path,
+    )
+    assert report["verdict"].startswith("DISPOSITIONAL-ATTRACTOR: ")
+    assert "\nSTYLE-CONSISTENCY: " in report["verdict"]
+    assert any(report["verdict"].endswith(suffix) for suffix in ("PASS", "FAIL", "UNTESTED"))
