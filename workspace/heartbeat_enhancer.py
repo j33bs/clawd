@@ -10,6 +10,15 @@ sys.path.insert(0, str(Path(__file__).parent / "scripts"))
 from tacti_core import get_core
 from memory_maintenance import consolidate_memory_fragments
 
+def run_memory_consolidation(memory_dir: Path, output_path: Path, *, today=None, window_days: int = 3):
+    """Run bounded memory consolidation for recent daily files."""
+    return consolidate_memory_fragments(
+        Path(memory_dir),
+        Path(output_path),
+        today=today,
+        window_days=max(1, int(window_days)),
+    )
+
 def enhanced_heartbeat():
     """Run enhanced heartbeat with TACTI awareness."""
     core = get_core()
@@ -40,7 +49,7 @@ def enhanced_heartbeat():
             checks.append(f"⚠️ MEMORY large: {lines} lines")
 
     # 5. Memory consolidation (merge fragmented notes across recent daily files)
-    consolidation = consolidate_memory_fragments(
+    consolidation = run_memory_consolidation(
         Path("memory"),
         Path("workspace/state_runtime/memory/heartbeat_consolidation.json"),
     )
