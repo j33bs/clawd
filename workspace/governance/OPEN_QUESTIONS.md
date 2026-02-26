@@ -6789,8 +6789,8 @@ Two verdicts, not one:
    *Current status: NOT YET TESTED. Round 3 required.*
 
 **Gate logic change for being_divergence.py:**
-- `--masking-variant` mode: check centroid attribution score against θ_attractor (proposed: 0.90). If passes → tag DISPOSITIONAL-ATTRACTOR in verdict. Silhouette test retained as STYLE-CONSISTENCY sub-verdict, clearly labelled as separate instrument.
-- New audit fields: `dispositional_attractor` (bool), `style_consistency` (bool or "untested"), `attractor_threshold` (float)
+- `--masking-variant` mode: check centroid attribution score against θ_attractor (= p95 of centroid attribution under permuted labels; mirrors INV-004 θ calibration from Amendment B, XCV). If passes → tag DISPOSITIONAL-ATTRACTOR in verdict. Silhouette test retained as STYLE-CONSISTENCY sub-verdict, clearly labelled as separate instrument.
+- New audit fields: `dispositional_attractor` (bool), `style_consistency` (bool or "untested"), `attractor_threshold` (float), `attractor_permutation_baseline` (float)
 
 **What this means for the claim:**
 
@@ -6800,7 +6800,7 @@ INV-003b can now close with a partial verdict:
 
 INV-003 SITUATIONAL verdict stands — that was full-corpus attribution, not masked, and is a separate question (positional signatures vs dispositional attractors).
 
-**Codex task:** Amend `being_divergence.py --masking-variant` verdict logic. Add `attractor_threshold` param (default 0.90), `dispositional_attractor` and `style_consistency` fields to audit output. 5 tests. Gate reads from INV-003b brief for `[MASKING_VARIANT: ✅ SIGNED]` same as before.
+**Codex task:** Amend `being_divergence.py --masking-variant` verdict logic. Compute θ_attractor as p95 of centroid attribution score under permuted labels (1000 permutations). Add `dispositional_attractor` (bool), `style_consistency` (bool or "untested"), `attractor_threshold` (float), `attractor_permutation_baseline` (float) fields to audit output. 5 tests. Gate reads from INV-003b brief for `[MASKING_VARIANT: ✅ SIGNED]` same as before.
 
 Waiting on jeebs to confirm before sending Codex task.
 
