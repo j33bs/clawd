@@ -186,6 +186,11 @@ run_memory() {
     if [ "${OPENCLAW_MEMORY_WEEKLY_DISTILL:-1}" = "1" ]; then
         memory_maintain_args+=(--with-weekly-distill)
     fi
+    if [ "${OPENCLAW_MEMORY_CLEANUP:-1}" = "1" ]; then
+        memory_maintain_args+=(--with-cleanup)
+        memory_maintain_args+=(--retain-days "${OPENCLAW_MEMORY_RETAIN_DAYS:-30}")
+        memory_maintain_args+=(--archive-prune-days "${OPENCLAW_MEMORY_ARCHIVE_PRUNE_DAYS:-365}")
+    fi
     if [ "${OPENCLAW_MEMORY_CONSOLIDATE_ON_NIGHTLY:-0}" = "1" ]; then
         memory_maintain_args+=(--with-consolidation)
     fi

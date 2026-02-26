@@ -5,6 +5,7 @@ from pathlib import Path
 import importlib.util
 import datetime as dt
 import sys
+import os
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -153,6 +154,37 @@ class MemoryMaintenanceTests(unittest.TestCase):
             )
             self.assertFalse(second["updated"])
             self.assertEqual(second["reason"], "already_distilled")
+
+    def test_cleanup_forgotten_memory_files_archives_old_daily_and_prunes_stale_empty_archive(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            memory_dir = root / "memory"
+            memory_dir.mkdir(parents=True, exist_ok=True)
+            recent = memory_dir / "2026-02-25.md"
+            old = memory_dir / "2025-12-01.md"
+            recent.write_text("recent\n", encoding="utf-8")
+            old.write_text("old\n", encoding="utf-8")
+
+            archive_root = memory_dir / "archive"
+            stale_empty = archive_root / "2025" / "forgotten-empty.md"
+            stale_empty.parent.mkdir(parents=True, exist_ok=True)
+            stale_empty.write_text("", encoding="utf-8")
+            old_epoch = dt.datetime(2024, 1, 1, tzinfo=dt.timezone.utc).timestamp()
+            os.utime(stale_empty, (old_epoch, old_epoch))
+
+            result = self.mod.cleanup_forgotten_memory_files(
+                memory_dir,
+                archive_root,
+                today=dt.date(2026, 2, 26),
+                retain_days=30,
+                archive_prune_days=365,
+            )
+
+            self.assertEqual(result["moved_count"], 1)
+            self.assertTrue((archive_root / "2025" / "2025-12-01.md").exists())
+            self.assertTrue(recent.exists())
+            self.assertEqual(result["pruned_count"], 1)
+            self.assertFalse(stale_empty.exists())
 
 
 if __name__ == "__main__":
