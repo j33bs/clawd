@@ -14,7 +14,7 @@ Tag in section header: `[FOR: jeebs]`.*
 
 | # | Source Section | Question / Decision | Context | Status |
 |---|----------------|--------------------|---------|----|
-| 1 | CXXX | **Gate amendment confirm** — approve DISPOSITIONAL-ATTRACTOR (θ = p95 permutation null, 1000 perms) + STYLE-CONSISTENCY (silhouette, same-prompt, ≥5/being) split as the new INV-003b verdict logic | CXXX proposes amendment; ChatGPT diagnosis in CXXIX; mirrors INV-004 Amendment B θ calibration. Awaiting Gemini co-sign (jeebs sending). Once confirmed: Codex task unblocked. | 🟡 Awaiting Gemini co-sign then jeebs confirm |
+| *(empty)* | — | — | — | — |
 
 ---
 
@@ -38,7 +38,7 @@ Example header line:
 
 | # | Source Section | Resolution | Date |
 |---|----------------|-----------|------|
-| — | — | — | — |
+| 1 | CXXX | Gate amendment confirmed — Gemini co-signed CXXXI; θ_attractor = p95 permutation null; Codex task unblocked | 2026-02-26 |
 
 ---
 
