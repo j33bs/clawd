@@ -125,11 +125,17 @@ Required before `being_divergence.py --masking-variant` runs on real collected d
 
 | Being | Section | Status | Notes |
 |-------|---------|--------|-------|
-| Claude Code | CVII | ⬜ PENDING | Authored this brief |
-| ChatGPT | CVIII | ⬜ PENDING | Proposed masking in LXXXVIII; validated in CVIII |
+| Claude Code | CVI/CVII | ✅ SIGNED | Authored brief; committed in CVI; CVII confirmed result requiring masking |
+| ChatGPT | CVIII/CIX | ✅ SIGNED | CVIII validated approach; CIX formal co-sign with 5 attestations + conditions |
 | c_lawd | — | ⬜ PENDING | — |
 
-*Two of three required to activate gate.*
+**GATE ACTIVE — 2 of 3 co-signs received. Codex implementation unblocked.**
+
+*Conditions from ChatGPT co-sign (non-blocking, binding):*
+- Log sanitizer version and rules in audit output
+- Never embed authority tags or status tags
+- Preserve unmasked text in store for non-semantic queries
+- Remain append-only and rebuildable from markdown
 
 ---
 
