@@ -77,7 +77,7 @@ vllm_health_gate --nightly: PASS (exit 0, warnings emitted when unhealthy)
 ## Rollback
 
 Revert these commits in reverse order after merge:
-- docs(audit) commit from this branch (final evidence commit below in branch history)
+- `fa8bd40` docs(audit): capture harness adapter parity and vllm gate evidence
 - `6dae915` feat(vllm): add vllm health gate + probe-only wiring
 - `4a29520` feat(outbound): extend outbound sanitizer parity + tests
 - `1f6cd4b` feat(harness): add resumable run harness + tests
