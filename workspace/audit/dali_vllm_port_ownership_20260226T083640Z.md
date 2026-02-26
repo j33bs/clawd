@@ -118,3 +118,25 @@ Feb 26 18:35:43 jeebs-Z490-AORUS-MASTER systemd[1669]: Started openclaw-vllm.ser
 1:Feb 26 18:35:43 jeebs-Z490-AORUS-MASTER openclaw-vllm-port-guard[424511]: VLLM_PORT_OK port=8001
 2:Feb 26 18:35:43 jeebs-Z490-AORUS-MASTER openclaw-vllm-port-guard[424526]: VLLM_PORT_OK port=8001
 ```
+
+## Follow-Up: Status Hint For Unknown Port Holder (2026-02-26)
+- Change: `openclaw status --verbose` now emits a targeted hint when vLLM health is down and `:8001` is held by an unknown process.
+- Hint text:
+  `HINT: vLLM blocked — port 8001 held by unknown process (pid=<pid>, cmd="<cmd>"). Stop it or free :8001, then restart openclaw-vllm.service.`
+- Scope:
+  - No change to status exit code policy.
+  - No hint for `vllm_like`, `free`, or `probe_failed` probe results.
+
+### Follow-Up Verification Commands
+```bash
+npm run typecheck:hardening
+npm run test:hardening
+npm run runtime:rebuild
+```
+
+### Follow-Up Verification Output (Summary)
+```text
+typecheck:hardening => PASS
+test:hardening => PASS (11/11, includes status_hint.test.mjs)
+runtime:rebuild => PASS
+```

@@ -3,6 +3,9 @@ import {
   redactConfigForLogs,
   logger,
   installNetworkInterfacesGuard,
+  checkVllmHealth,
+  probePortOwner,
+  buildUnknownPortHint,
   ensureWorkspaceDirectories,
   SessionManager,
   McpServerSingleflight,
@@ -259,6 +262,24 @@ if (!globalThis[GLOBAL_KEY]) {
   installNetworkInterfacesGuard({ logger: runtimeLogger, processLike: process });
 
   const isStatusCommand = Array.isArray(process.argv) && process.argv.includes('status');
+  if (isStatusCommand) {
+    try {
+      const vllmHealthy = await checkVllmHealth({ port: 8001, timeoutMs: 1200 });
+      const probe = probePortOwner(8001);
+      const hint = buildUnknownPortHint({ vllmHealthy, probe, port: 8001 });
+      if (hint) {
+        process.stderr.write(`${hint}\n`);
+        runtimeLogger.warn('status_hint_vllm_port_held_unknown', {
+          port: 8001,
+          pid: probe.pid ?? null,
+          cmd: probe.cmd ?? null
+        });
+      }
+    } catch (error) {
+      runtimeLogger.warn('status_hint_probe_failed', { error });
+    }
+  }
+
   let config = null;
   try {
     config = getConfig();

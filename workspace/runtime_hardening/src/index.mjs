@@ -17,6 +17,7 @@ export {
 export { ensureWorkspaceDirectories, resolveWorkspacePaths } from './paths.mjs';
 export { retryWithBackoff } from './retry_backoff.mjs';
 export { SessionManager } from './session.mjs';
+export { buildUnknownPortHint, checkVllmHealth, probePortOwner } from './status_hint.mjs';
 export {
   sanitizeOutboundText as sanitizeTelegramOutboundText,
   sanitizeTelegramOutboundPayload
