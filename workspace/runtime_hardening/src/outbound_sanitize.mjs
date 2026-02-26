@@ -10,6 +10,7 @@ const CHANNEL_TEXT_LIMITS = Object.freeze({
   slack: 40000,
   mattermost: 4000,
   msteams: 28000,
+  teamchat: 4000,
   generic: 4096
 });
 
@@ -19,6 +20,7 @@ const CHANNEL_TEXT_FIELDS = Object.freeze({
   slack: ['text'],
   mattermost: ['message', 'text'],
   msteams: ['text', 'summary'],
+  teamchat: ['message', 'text'],
   generic: ['text', 'caption', 'content', 'message']
 });
 
@@ -30,7 +32,8 @@ function normalizeChannel(channel) {
   return Object.hasOwn(CHANNEL_TEXT_LIMITS, normalized) ? normalized : 'generic';
 }
 
-function defaultFallbackText() {
+function defaultFallbackText(channel = 'generic') {
+  normalizeChannel(channel);
   return SAFE_EMPTY_FALLBACK;
 }
 
@@ -61,6 +64,8 @@ function sanitizeOutboundText(text, opts = {}) {
   if (!sourceTrimmed) {
     return {
       text: '',
+      stripped: false,
+      reason: null,
       meta: {
         channel,
         strippedInternal: false,
@@ -95,6 +100,8 @@ function sanitizeOutboundText(text, opts = {}) {
 
   return {
     text: textOut,
+    stripped: strippedInternal,
+    reason: strippedInternal ? 'STRIPPED_INTERNAL' : matchedLegacySentinel ? 'EMPTY_OR_STRIPPED' : null,
     meta: {
       channel,
       strippedInternal,

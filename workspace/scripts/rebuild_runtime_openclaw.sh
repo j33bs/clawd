@@ -13,6 +13,8 @@ OVERLAY_SRC_FILE="$ROOT/workspace/runtime_hardening/overlay/runtime_hardening_ov
 OVERLAY_TARGET_FILE="$RUNTIME_DIR/dist/runtime_hardening_overlay.mjs"
 MEMORY_MAINTENANCE_SCRIPT="$ROOT/workspace/scripts/memory_maintenance.py"
 MEMORY_SNAPSHOT_BEFORE_REBUILD="${OPENCLAW_MEMORY_SNAPSHOT_BEFORE_REBUILD:-1}"
+VLLM_HEALTH_GATE_SCRIPT="$ROOT/workspace/scripts/vllm_health_gate.sh"
+OPENCLAW_VLLM_PREFLIGHT="${OPENCLAW_VLLM_PREFLIGHT:-0}"
 
 if [[ ! -d "$SOURCE_DIR" ]]; then
   echo "missing source runtime directory: $SOURCE_DIR" >&2
@@ -32,6 +34,15 @@ fi
 echo "repo_sha=$(git -C "$ROOT" rev-parse --short HEAD 2>/dev/null || echo unknown)"
 echo "source=$SOURCE_DIR"
 echo "target=$RUNTIME_DIR"
+
+if [[ "$OPENCLAW_VLLM_PREFLIGHT" == "1" ]]; then
+  if [[ -f "$VLLM_HEALTH_GATE_SCRIPT" ]]; then
+    echo "vllm_preflight=enabled"
+    bash "$VLLM_HEALTH_GATE_SCRIPT" --preflight
+  else
+    echo "warning: vLLM health gate missing at $VLLM_HEALTH_GATE_SCRIPT" >&2
+  fi
+fi
 
 if [[ "$MEMORY_SNAPSHOT_BEFORE_REBUILD" == "1" ]] && [[ -f "$MEMORY_MAINTENANCE_SCRIPT" ]]; then
   set +e

@@ -19,8 +19,56 @@ import {
 const GLOBAL_KEY = '__openclaw_runtime_hardening';
 const OUTBOUND_FETCH_PATCH_KEY = '__openclaw_outbound_fetch_patch_installed';
 
-function classifyOutboundChannel(url) {
+function normalizeGatewayChannel(value) {
+  const raw = String(value || '')
+    .trim()
+    .toLowerCase();
+  if (!raw) return null;
+  if (raw === 'team_chat') return 'teamchat';
+  if (raw === 'teams' || raw === 'ms_teams' || raw === 'microsoft_teams') return 'msteams';
+  if (raw === 'matter-most') return 'mattermost';
+  if (raw === 'telegram' || raw === 'discord' || raw === 'slack' || raw === 'mattermost' || raw === 'msteams' || raw === 'teamchat') {
+    return raw;
+  }
+  return 'generic';
+}
+
+function isGatewayToolMessageUrl(url) {
+  return /\/api\/tool\/message\b/i.test(String(url || ''));
+}
+
+function extractGatewayChannelFromStringBody(bodyText) {
+  if (typeof bodyText !== 'string') return null;
+  const trimmed = bodyText.trim();
+  if (!trimmed) return null;
+  if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      return normalizeGatewayChannel(parsed?.channel);
+    } catch {
+      return null;
+    }
+  }
+  try {
+    const params = new URLSearchParams(bodyText);
+    return normalizeGatewayChannel(params.get('channel'));
+  } catch {
+    return null;
+  }
+}
+
+function extractGatewayChannelFromBody(body) {
+  if (typeof body === 'string') return extractGatewayChannelFromStringBody(body);
+  if (body instanceof URLSearchParams) return normalizeGatewayChannel(body.get('channel'));
+  if (typeof FormData !== 'undefined' && body instanceof FormData) return normalizeGatewayChannel(body.get('channel'));
+  return null;
+}
+
+function classifyOutboundChannel(url, payloadChannel = null) {
   const raw = String(url || '');
+  if (isGatewayToolMessageUrl(raw)) {
+    return payloadChannel || 'generic';
+  }
   if (
     /api\.telegram\.org/i.test(raw) &&
     /\/(sendMessage|editMessageText|sendPhoto|sendVideo|sendDocument|sendAnimation|sendAudio|sendVoice|sendMediaGroup|sendPoll)\b/i.test(
@@ -201,6 +249,25 @@ function cloneRequestWithBody(request, body) {
   });
 }
 
+async function extractGatewayChannelFromRequestInput(input) {
+  if (!input || typeof input !== 'object' || typeof input.clone !== 'function') return null;
+  try {
+    const clone = input.clone();
+    const contentType = String(clone.headers?.get?.('content-type') || '').toLowerCase();
+    if (contentType.includes('application/json') || contentType.includes('application/x-www-form-urlencoded')) {
+      const bodyText = await clone.text();
+      return extractGatewayChannelFromStringBody(bodyText);
+    }
+    if (contentType.includes('multipart/form-data') && typeof clone.formData === 'function') {
+      const form = await clone.formData();
+      return normalizeGatewayChannel(form.get('channel'));
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
 function installOutboundFetchSanitizer(runtimeLogger, config) {
   if (globalThis[OUTBOUND_FETCH_PATCH_KEY]) return;
   const originalFetch = globalThis.fetch;
@@ -208,7 +275,15 @@ function installOutboundFetchSanitizer(runtimeLogger, config) {
 
   globalThis.fetch = async function patchedFetch(input, init) {
     const requestUrl = typeof input === 'string' ? input : input?.url;
-    const channel = classifyOutboundChannel(requestUrl);
+    let gatewayChannel = null;
+    if (isGatewayToolMessageUrl(requestUrl)) {
+      if (init && Object.hasOwn(init, 'body')) {
+        gatewayChannel = extractGatewayChannelFromBody(init.body);
+      } else {
+        gatewayChannel = await extractGatewayChannelFromRequestInput(input);
+      }
+    }
+    const channel = classifyOutboundChannel(requestUrl, gatewayChannel);
     if (!channel) {
       return originalFetch.call(this, input, init);
     }

@@ -1,7 +1,21 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-PORT="${1:-8001}"
+PORT="8001"
+PROBE_ONLY=0
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --probe-only)
+      PROBE_ONLY=1
+      shift
+      ;;
+    *)
+      PORT="$1"
+      shift
+      ;;
+  esac
+done
 
 emit_info() {
   local line="$1"
@@ -20,7 +34,8 @@ emit_warn() {
 }
 
 find_listener_line() {
-  ss -ltnp 2>/dev/null | awk -v port="$PORT" '
+  local ss_cmd="${OPENCLAW_PORT_GUARD_SS_CMD:-ss -ltnp}"
+  bash -lc "$ss_cmd" 2>/dev/null | awk -v port="$PORT" '
     NR > 1 && $4 ~ ("[:.]" port "$") {
       print $0
       exit 0
@@ -66,6 +81,11 @@ cmd_lower="$(printf '%s' "$cmd" | tr '[:upper:]' '[:lower:]')"
 if ! is_reclaimable_cmd "$cmd_lower"; then
   emit_warn "VLLM_PORT_HELD_UNKNOWN port=$PORT pid=$pid cmd=\"$cmd\""
   exit 42
+fi
+
+if [[ "$PROBE_ONLY" == "1" ]]; then
+  emit_info "VLLM_PORT_HELD_VLLM port=$PORT pid=$pid cmd=\"$cmd\""
+  exit 0
 fi
 
 emit_warn "VLLM_PORT_RECLAIM port=$PORT pid=$pid cmd=\"$cmd\""
