@@ -17,6 +17,7 @@ import aiohttp
 from datetime import datetime
 from typing import Optional
 from agent_orchestration import build_default_orchestrator
+from telegram_recall import inject_telegram_recall_context
 
 # Configuration
 GATEWAY_URL = os.environ.get("GATEWAY_URL", "http://127.0.0.1:18789")
@@ -223,16 +224,24 @@ async def handle_incoming_message(message: dict, handler: MessageHandler) -> dic
     content = message.get("content", "")
     message_id = message.get("message_id")
     chat_id = message.get("chat_id")
+    session_start = bool(message.get("session_start", False))
+
+    # Optional semantic recall hook from Telegram vector store (disabled by default).
+    content_with_recall = inject_telegram_recall_context(
+        str(content),
+        env=os.environ,
+        session_start=session_start,
+    )
     
     # Apply prompt caching
-    cached_prompt = handler.cache_prompt(content)
+    cached_prompt = handler.cache_prompt(content_with_recall)
     
     # Get conversation context
     history = handler.message_history[-10:]  # Last 10 messages
     context = handler.summarize_context(history)
     
     # Build full prompt
-    full_prompt = context + f"\n\nUser: {content}" if context else content
+    full_prompt = context + f"\n\nUser: {content_with_recall}" if context else content_with_recall
     
     if route["route"] == "chatgpt":
         # Spawn ChatGPT subagent
