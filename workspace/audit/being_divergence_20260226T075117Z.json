@@ -1,0 +1,212 @@
+{
+  "author_silhouette": null,
+  "being_divergence_score": 1.0,
+  "controls": {
+    "C1_register": {
+      "author_silhouette_by_split": {
+        "long": null,
+        "short": null
+      },
+      "flags": [
+        "REGISTER_OVERREPRESENTATION",
+        "REGISTER_SPLIT_TOO_NARROW"
+      ],
+      "overrepresented_beings": [
+        "ChatGPT",
+        "Claude (ext)",
+        "Claude Code",
+        "Dali",
+        "Gemini",
+        "Grok",
+        "c_lawd"
+      ],
+      "split_n_beings": {
+        "long": 7,
+        "short": 0
+      },
+      "split_sizes": {
+        "long": 7,
+        "short": 0
+      }
+    },
+    "C2_topic": {
+      "cluster_summaries": [
+        {
+          "being_distribution": {
+            "Gemini": 0.5,
+            "Grok": 0.5
+          },
+          "cluster_id": 0,
+          "max_being": "Gemini",
+          "max_share": 0.5,
+          "n_sections": 2
+        },
+        {
+          "being_distribution": {
+            "Dali": 1.0
+          },
+          "cluster_id": 1,
+          "max_being": "Dali",
+          "max_share": 1.0,
+          "n_sections": 1
+        },
+        {
+          "being_distribution": {
+            "c_lawd": 1.0
+          },
+          "cluster_id": 2,
+          "max_being": "c_lawd",
+          "max_share": 1.0,
+          "n_sections": 1
+        },
+        {
+          "being_distribution": {
+            "Claude Code": 1.0
+          },
+          "cluster_id": 3,
+          "max_being": "Claude Code",
+          "max_share": 1.0,
+          "n_sections": 1
+        },
+        {
+          "being_distribution": {
+            "ChatGPT": 1.0
+          },
+          "cluster_id": 4,
+          "max_being": "ChatGPT",
+          "max_share": 1.0,
+          "n_sections": 1
+        },
+        {
+          "being_distribution": {
+            "Claude (ext)": 1.0
+          },
+          "cluster_id": 5,
+          "max_being": "Claude (ext)",
+          "max_share": 1.0,
+          "n_sections": 1
+        }
+      ],
+      "dominant_clusters": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "flags": [
+        "AUTHOR_DOMINANT_TOPIC"
+      ],
+      "k": 6,
+      "status": "OK"
+    },
+    "C3_identity_drift": {
+      "fallback_used": false,
+      "per_being": {
+        "ChatGPT": {
+          "drift_distance": null,
+          "early_n": 0,
+          "late_n": 1
+        },
+        "Claude (ext)": {
+          "drift_distance": null,
+          "early_n": 0,
+          "late_n": 1
+        },
+        "Claude Code": {
+          "drift_distance": null,
+          "early_n": 0,
+          "late_n": 1
+        },
+        "Dali": {
+          "drift_distance": null,
+          "early_n": 1,
+          "late_n": 0
+        },
+        "Gemini": {
+          "drift_distance": null,
+          "early_n": 1,
+          "late_n": 0
+        },
+        "Grok": {
+          "drift_distance": null,
+          "early_n": 0,
+          "late_n": 1
+        },
+        "c_lawd": {
+          "drift_distance": null,
+          "early_n": 1,
+          "late_n": 0
+        }
+      },
+      "split_method": "canonical_section_number"
+    },
+    "C4_relational_state": {
+      "reason": "trust_epoch has no non-empty values",
+      "status": "RETRO_DARK"
+    }
+  },
+  "corpus_size": 7,
+  "dual_embedding": {
+    "delta": 0.0,
+    "fallback_used": false,
+    "full_corpus_score": 1.0,
+    "held_out_from": 82,
+    "held_out_n": 7,
+    "held_out_random_baseline": 0.14285714285714285,
+    "held_out_score": 1.0,
+    "split_method": "canonical_section_number"
+  },
+  "masking_variant": {
+    "enabled": true,
+    "excluded_sections": 79,
+    "filter_column": "title",
+    "tag": "[MASKING_VARIANT]"
+  },
+  "n_beings": 7,
+  "noun_filter_applied": false,
+  "noun_filter_delta": null,
+  "per_being_scores": {
+    "ChatGPT": {
+      "centroid_norm": 0.9999999727613448,
+      "correctly_attributed": 1,
+      "n_sections": 1
+    },
+    "Claude (ext)": {
+      "centroid_norm": 1.0000000316696656,
+      "correctly_attributed": 1,
+      "n_sections": 1
+    },
+    "Claude Code": {
+      "centroid_norm": 0.9999999818484883,
+      "correctly_attributed": 1,
+      "n_sections": 1
+    },
+    "Dali": {
+      "centroid_norm": 1.0000000316847835,
+      "correctly_attributed": 1,
+      "n_sections": 1
+    },
+    "Gemini": {
+      "centroid_norm": 0.999999959493474,
+      "correctly_attributed": 1,
+      "n_sections": 1
+    },
+    "Grok": {
+      "centroid_norm": 1.0000000214409028,
+      "correctly_attributed": 1,
+      "n_sections": 1
+    },
+    "c_lawd": {
+      "centroid_norm": 1.0000000309666306,
+      "correctly_attributed": 1,
+      "n_sections": 1
+    }
+  },
+  "random_baseline": 0.14285714285714285,
+  "source": "real",
+  "source_corpus_size": 86,
+  "timestamp_utc": "2026-02-26T07:51:17Z",
+  "topic_silhouette": 0.041092184706730726,
+  "verdict": "INCONCLUSIVE"
+}
