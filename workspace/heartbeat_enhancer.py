@@ -6,7 +6,9 @@ Enhanced heartbeat checks using TACTI modules.
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent / "memory"))
+sys.path.insert(0, str(Path(__file__).parent / "scripts"))
 from tacti_core import get_core
+from memory_maintenance import consolidate_memory_fragments
 
 def enhanced_heartbeat():
     """Run enhanced heartbeat with TACTI awareness."""
@@ -36,6 +38,15 @@ def enhanced_heartbeat():
         lines = len(memory_path.read_text().splitlines())
         if lines > 180:
             checks.append(f"⚠️ MEMORY large: {lines} lines")
+
+    # 5. Memory consolidation (merge fragmented notes across recent daily files)
+    consolidation = consolidate_memory_fragments(
+        Path("memory"),
+        Path("workspace/state_runtime/memory/heartbeat_consolidation.json"),
+    )
+    checks.append(f"Memory consolidation: {consolidation['consolidated_count']} fragments")
+    if consolidation["changed"]:
+        checks.append("Memory consolidation updated")
     
     return checks
 

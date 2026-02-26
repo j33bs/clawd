@@ -82,6 +82,78 @@ class MemoryMaintenanceTests(unittest.TestCase):
             manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
             self.assertEqual(manifest["file_count"], 3)
 
+    def test_consolidate_memory_fragments_deduplicates_and_is_idempotent(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            memory_dir = root / "memory"
+            memory_dir.mkdir(parents=True, exist_ok=True)
+            (memory_dir / "2026-02-25.md").write_text(
+                "# Daily Memory - 2026-02-25\n\n## Actions\n- fix queue bug\n- fix queue bug\n",
+                encoding="utf-8",
+            )
+            (memory_dir / "2026-02-26.md").write_text(
+                "# Daily Memory - 2026-02-26\n\n## Follow-ups\n- add retry tests\n",
+                encoding="utf-8",
+            )
+            output = root / "workspace" / "state_runtime" / "memory" / "heartbeat_consolidation.json"
+
+            first = self.mod.consolidate_memory_fragments(
+                memory_dir,
+                output,
+                today=dt.date(2026, 2, 26),
+                window_days=2,
+            )
+            self.assertTrue(first["changed"])
+            self.assertEqual(first["consolidated_count"], 2)
+
+            second = self.mod.consolidate_memory_fragments(
+                memory_dir,
+                output,
+                today=dt.date(2026, 2, 26),
+                window_days=2,
+            )
+            self.assertFalse(second["changed"])
+            self.assertEqual(second["consolidated_count"], 2)
+
+    def test_distill_weekly_memory_updates_once_per_week_and_migrates_old_state(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            memory_dir = root / "memory"
+            memory_dir.mkdir(parents=True, exist_ok=True)
+            (memory_dir / "2026-02-20.md").write_text(
+                "# Daily Memory - 2026-02-20\n\n## Actions\n- stabilized runtime overlay\n",
+                encoding="utf-8",
+            )
+            (memory_dir / "2026-02-25.md").write_text(
+                "# Daily Memory - 2026-02-25\n\n## Follow-ups\n- verify telegram reply mode\n",
+                encoding="utf-8",
+            )
+            memory_md = root / "MEMORY.md"
+            memory_md.write_text("# MEMORY.md - Long-Term Context\n\n", encoding="utf-8")
+            state_path = root / "workspace" / "state_runtime" / "memory" / "weekly_distill_state.json"
+            state_path.parent.mkdir(parents=True, exist_ok=True)
+            state_path.write_text(json.dumps(["2026-W07"]), encoding="utf-8")
+
+            result = self.mod.distill_weekly_memory(
+                memory_dir,
+                memory_md,
+                state_path,
+                today=dt.date(2026, 2, 26),
+            )
+            self.assertTrue(result["updated"])
+            body = memory_md.read_text(encoding="utf-8")
+            self.assertIn("## Weekly Distillations", body)
+            self.assertIn("### 2026-W09 (2026-02-26)", body)
+
+            second = self.mod.distill_weekly_memory(
+                memory_dir,
+                memory_md,
+                state_path,
+                today=dt.date(2026, 2, 26),
+            )
+            self.assertFalse(second["updated"])
+            self.assertEqual(second["reason"], "already_distilled")
+
 
 if __name__ == "__main__":
     unittest.main()

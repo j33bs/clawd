@@ -182,7 +182,14 @@ run_memory() {
         fi
     fi
 
-    if python3 "$CLAWD_DIR/workspace/scripts/memory_maintenance.py" --repo-root "$CLAWD_DIR" maintain >>"$LOG_FILE" 2>&1; then
+    memory_maintain_args=(--repo-root "$CLAWD_DIR" maintain)
+    if [ "${OPENCLAW_MEMORY_WEEKLY_DISTILL:-1}" = "1" ]; then
+        memory_maintain_args+=(--with-weekly-distill)
+    fi
+    if [ "${OPENCLAW_MEMORY_CONSOLIDATE_ON_NIGHTLY:-0}" = "1" ]; then
+        memory_maintain_args+=(--with-consolidation)
+    fi
+    if python3 "$CLAWD_DIR/workspace/scripts/memory_maintenance.py" "${memory_maintain_args[@]}" >>"$LOG_FILE" 2>&1; then
         log "Memory rotate/index maintenance complete"
     else
         log "⚠️ Memory rotate/index maintenance failed"
