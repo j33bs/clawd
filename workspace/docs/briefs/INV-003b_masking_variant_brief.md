@@ -131,6 +131,8 @@ Required before `being_divergence.py --masking-variant` runs on real collected d
 
 **GATE ACTIVE — 2 of 3 co-signs received. Codex implementation unblocked.**
 
+**[MASKING_VARIANT: ✅ SIGNED]** — Corpus complete (N=8, CXI–CXVIII). Codex implementation delivered and tested (14/14 pass). Analysis authorized. 2026-02-26.
+
 *Conditions from ChatGPT co-sign (non-blocking, binding):*
 - Log sanitizer version and rules in audit output
 - Never embed authority tags or status tags

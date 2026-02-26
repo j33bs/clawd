@@ -22,6 +22,13 @@ GOVERNANCE_MESSAGE = (
     "   Co-Sign Block table in INV-003_being_divergence_design_brief.md and re-run."
 )
 
+MASKING_VARIANT_TAG = "[MASKING_VARIANT]"
+MASKING_VARIANT_GOVERNANCE_MESSAGE = (
+    "INV-003b masking co-sign PENDING. Cannot run --masking-variant on real corpus.\n"
+    "   Next step: add `[MASKING_VARIANT: ✅ SIGNED]` to INV-003b_masking_variant_brief.md\n"
+    "   after required co-sign, then re-run being_divergence.py --masking-variant."
+)
+
 
 class GovernanceError(Exception):
     pass
@@ -43,11 +50,22 @@ def _default_brief_path() -> Path:
     return _workspace_dir() / "docs" / "briefs" / "INV-003_being_divergence_design_brief.md"
 
 
+def _default_masking_variant_brief_path() -> Path:
+    return _workspace_dir() / "docs" / "briefs" / "INV-003b_masking_variant_brief.md"
+
+
 def check_cosign(brief_path: str | None = None) -> None:
     path = Path(brief_path) if brief_path is not None else _default_brief_path()
     text = path.read_text(encoding="utf-8")
     if "c_lawd | ✅ SIGNED" not in text:
         raise GovernanceError(GOVERNANCE_MESSAGE)
+
+
+def check_masking_variant_cosign(brief_path: str | None = None) -> None:
+    path = Path(brief_path) if brief_path is not None else _default_masking_variant_brief_path()
+    text = path.read_text(encoding="utf-8")
+    if "[MASKING_VARIANT: ✅ SIGNED]" not in text:
+        raise GovernanceError(MASKING_VARIANT_GOVERNANCE_MESSAGE)
 
 
 @dataclass
@@ -409,6 +427,20 @@ def _prepare_df(df: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
+def _filter_masking_variant(df: pd.DataFrame) -> tuple[pd.DataFrame, str]:
+    for candidate in ("title", "header", "section_header"):
+        if candidate in df.columns:
+            series = df[candidate].fillna("").astype(str)
+            mask = series.str.contains(re.escape(MASKING_VARIANT_TAG), regex=True)
+            filtered = df[mask].copy().reset_index(drop=True)
+            if filtered.empty:
+                raise ValueError(
+                    f"No sections matched {MASKING_VARIANT_TAG} in '{candidate}' for --masking-variant"
+                )
+            return filtered, candidate
+    raise ValueError("Corpus missing header/title column required for --masking-variant filtering")
+
+
 def _synthetic_rows(mode: str = "easy") -> list[dict[str, Any]]:
     being_vocab = {
         "being_a": ["compile", "deploy", "function", "pytest", "runtime", "refactor"],
@@ -444,6 +476,11 @@ def _synthetic_rows(mode: str = "easy") -> list[dict[str, Any]]:
             rows.append(
                 {
                     "authors": [author],
+                    "title": (
+                        f"{MASKING_VARIANT_TAG} Synthetic response {i}"
+                        if i % 2 == 0
+                        else f"Synthetic response {i}"
+                    ),
                     "body": body,
                     "embedding": emb.tolist(),
                     "canonical_section_number": section,
@@ -502,6 +539,7 @@ def _write_report(report: dict[str, Any], audit_dir: Path | None = None) -> Path
 def run_being_divergence(
     *,
     dry_run_synthetic: str | None = None,
+    masking_variant: bool = False,
     noun_filter: bool = False,
     min_sections: int = 3,
     held_out_from: int = 82,
@@ -511,7 +549,10 @@ def run_being_divergence(
     synthetic_mode = dry_run_synthetic
 
     if synthetic_mode is None:
-        check_cosign(brief_path=brief_path)
+        if masking_variant:
+            check_masking_variant_cosign(brief_path=brief_path)
+        else:
+            check_cosign(brief_path=brief_path)
         source_df = _load_real_corpus()
         source_kind = "real"
     else:
@@ -519,6 +560,10 @@ def run_being_divergence(
         source_kind = f"synthetic_{synthetic_mode}"
 
     df = _prepare_df(source_df)
+    source_corpus_size = int(len(df))
+    masking_filter_column: str | None = None
+    if masking_variant:
+        df, masking_filter_column = _filter_masking_variant(df)
 
     metrics = _attribution_metrics(df)
     X = np.stack(df["embedding_vec"].to_list())
@@ -571,6 +616,7 @@ def run_being_divergence(
     report: dict[str, Any] = {
         "timestamp_utc": _timestamp_utc(),
         "corpus_size": int(len(df)),
+        "source_corpus_size": source_corpus_size,
         "n_beings": int(metrics.n_beings),
         "random_baseline": metrics.random_baseline,
         "being_divergence_score": metrics.score,
@@ -582,6 +628,12 @@ def run_being_divergence(
         "dual_embedding": dual,
         "noun_filter_applied": noun_filter_applied,
         "noun_filter_delta": noun_delta,
+        "masking_variant": {
+            "enabled": masking_variant,
+            "tag": MASKING_VARIANT_TAG if masking_variant else None,
+            "filter_column": masking_filter_column,
+            "excluded_sections": int(source_corpus_size - len(df)) if masking_variant else 0,
+        },
         "source": source_kind,
     }
 
@@ -593,6 +645,11 @@ def run_being_divergence(
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="INV-003 being_divergence analysis")
     parser.add_argument(
+        "--masking-variant",
+        action="store_true",
+        help=f"Filter to header/title entries containing {MASKING_VARIANT_TAG}",
+    )
+    parser.add_argument(
         "--dry-run-synthetic",
         nargs="?",
         const="easy",
@@ -603,7 +660,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--noun-filter", action="store_true", help="Apply differential noun-filter check")
     parser.add_argument("--min-sections", type=int, default=3, help="Minimum sections per author for non-inconclusive verdict")
     parser.add_argument("--held-out-from", type=int, default=82, help="Held-out slice start section number")
-    parser.add_argument("--brief-path", type=str, default=None, help="Optional override for INV-003 brief path")
+    parser.add_argument(
+        "--brief-path",
+        type=str,
+        default=None,
+        help="Optional override for governing brief path (INV-003 or INV-003b with --masking-variant)",
+    )
     return parser
 
 
@@ -613,6 +675,7 @@ def main(argv: list[str] | None = None) -> int:
 
     report = run_being_divergence(
         dry_run_synthetic=args.dry_run_synthetic,
+        masking_variant=args.masking_variant,
         noun_filter=args.noun_filter,
         min_sections=args.min_sections,
         held_out_from=args.held_out_from,
