@@ -16,3 +16,6 @@ Updated after each audit completes. Compact record for quick comparison.
 | **secrets_in_tracked** | no live creds in tracked policy/config; synthetic test fixtures only |
 | **feature_flag_matrix** | partial/debt: legacy TACTI flags compatibility shim added; broader matrix verification still needed |
 | **open_handoffs** | unchanged in this run (not re-counted) |
+
+
+last_updated_utc: 20260227T053243Z
