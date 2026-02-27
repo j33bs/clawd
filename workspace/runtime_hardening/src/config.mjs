@@ -40,11 +40,38 @@ function resolveWorkspacePath(value, workspaceRoot) {
   return path.isAbsolute(value) ? path.resolve(value) : path.resolve(workspaceRoot, value);
 }
 
+function parseProviderList(rawValue) {
+  if (typeof rawValue !== 'string') return [];
+  return rawValue
+    .split(',')
+    .map((entry) => entry.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+function isAnthropicEnabled(env = process.env) {
+  const allowlist = parseProviderList(env.OPENCLAW_PROVIDER_ALLOWLIST);
+  if (allowlist.length > 0) {
+    return allowlist.includes('anthropic') || allowlist.includes('*') || allowlist.includes('all');
+  }
+
+  const defaultProvider =
+    typeof env.OPENCLAW_DEFAULT_PROVIDER === 'string' ? env.OPENCLAW_DEFAULT_PROVIDER.trim().toLowerCase() : '';
+  if (defaultProvider) return defaultProvider === 'anthropic';
+
+  const defaultModel =
+    typeof env.OPENCLAW_DEFAULT_MODEL === 'string' ? env.OPENCLAW_DEFAULT_MODEL.trim().toLowerCase() : '';
+  if (defaultModel) {
+    return defaultModel.startsWith('anthropic/') || defaultModel.startsWith('claude-');
+  }
+
+  return false;
+}
+
 function validateConfig(env = process.env) {
   const errors = [];
 
   const anthropicApiKey = typeof env.ANTHROPIC_API_KEY === 'string' ? env.ANTHROPIC_API_KEY.trim() : '';
-  if (!anthropicApiKey) {
+  if (isAnthropicEnabled(env) && !anthropicApiKey) {
     errors.push('ANTHROPIC_API_KEY: required non-empty value is missing');
   }
 

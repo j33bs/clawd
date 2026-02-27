@@ -28,9 +28,18 @@ function withEnv(patch, fn) {
   }
 }
 
-test('config validation fails when ANTHROPIC_API_KEY is missing', () => {
-  withEnv({ ANTHROPIC_API_KEY: undefined, NODE_ENV: 'test' }, () => {
-    assert.throws(() => validateConfig(process.env), /ANTHROPIC_API_KEY/);
+test('config validation passes without ANTHROPIC_API_KEY when anthropic is disabled', () => {
+  withEnv({ ANTHROPIC_API_KEY: undefined, OPENCLAW_PROVIDER_ALLOWLIST: 'local_vllm,minimax-portal', NODE_ENV: 'test' }, () => {
+    assert.doesNotThrow(() => validateConfig(process.env));
+  });
+});
+
+test('config validation fails when ANTHROPIC_API_KEY is missing and anthropic is enabled', () => {
+  withEnv({ ANTHROPIC_API_KEY: undefined, OPENCLAW_PROVIDER_ALLOWLIST: 'anthropic,local_vllm', NODE_ENV: 'test' }, () => {
+    assert.throws(
+      () => validateConfig(process.env),
+      /ANTHROPIC_API_KEY: required non-empty value is missing/
+    );
   });
 });
 
