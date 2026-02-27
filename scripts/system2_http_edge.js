@@ -842,7 +842,7 @@ function createEdgeServer(options = {}) {
     if (method === 'GET' && pathname === '/diag/routes') {
       return { decision: 'allow', action: 'diag_routes', pathname };
     }
-    if (pathname.startsWith('/api/')) {
+    if (pathname.startsWith('/api')) {
       return { decision: 'allow', action: 'api_not_found', pathname };
     }
     if (
@@ -856,7 +856,7 @@ function createEdgeServer(options = {}) {
         || pathname === '/diag/telegram'
         || pathname === '/diag/ui'
         || pathname === '/diag/routes'
-        || pathname.startsWith('/api/')
+        || pathname.startsWith('/api')
         || pathname.startsWith('/rpc/')
       )
     ) {
