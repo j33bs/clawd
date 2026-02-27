@@ -4,6 +4,11 @@
 /**
  * Secure HTTP edge for System-2 gateway.
  *
+ * MACHINE-SURFACE CONTRACT (regression-critical):
+ * - /health, /ready, /diag*, and /api* must never return HTML.
+ * - Any content-type regression to text/html on these routes is a hard failure.
+ * - Guarded by tests/no_html_on_machine_routes.test.js.
+ *
  * Requirements:
  * - Mandatory Bearer auth (multi-token identity map)
  * - Rate limiting per identity

@@ -53,6 +53,8 @@ jobs:
           fi
       - name: Run tests
         run: npm test
+      - name: Machine surface contract test
+        run: node --test tests/no_html_on_machine_routes.test.js
       - name: Module resolution gate
         run: npm run gate:module-resolution
       - name: Redaction fixtures check
