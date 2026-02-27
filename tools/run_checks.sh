@@ -18,6 +18,13 @@ if [[ "${OPENCLAW_LOCAL_GATES:-0}" == "1" ]]; then
     fi
     echo "[local-gates] PASS launchagent alignment"
 
+    echo "== local gate: secrets contract =="
+    if ! tools/check_openclaw_secrets_contract.sh; then
+      echo "[local-gates] FAIL secrets contract (see tools/check_openclaw_secrets_contract.sh)" >&2
+      exit 1
+    fi
+    echo "[local-gates] PASS secrets contract"
+
     echo "[local-gates] running machine-surface tripwire"
     if ! tools/reliability_tripwire.sh; then
       echo "[local-gates] FAIL machine-surface tripwire (see tools/reliability_tripwire.sh)" >&2
