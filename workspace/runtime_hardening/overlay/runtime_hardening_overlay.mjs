@@ -18,6 +18,14 @@ import {
 
 const GLOBAL_KEY = '__openclaw_runtime_hardening';
 const OUTBOUND_FETCH_PATCH_KEY = '__openclaw_outbound_fetch_patch_installed';
+let cachedConfig;
+
+export function getConfigOnce(env = process.env) {
+  if (!cachedConfig) {
+    cachedConfig = getConfig(env);
+  }
+  return cachedConfig;
+}
 
 function normalizeGatewayChannel(value) {
   const raw = String(value || '')
@@ -357,7 +365,7 @@ if (!globalThis[GLOBAL_KEY]) {
 
   let config = null;
   try {
-    config = getConfig();
+    config = getConfigOnce();
     ensureWorkspaceDirectories(config);
   } catch (error) {
     if (!isStatusCommand) throw error;

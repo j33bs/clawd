@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { clearConfigCache, validateConfig } from '../src/config.mjs';
+import { clearConfigCache, redactConfigForLogs, validateConfig } from '../src/config.mjs';
 
 function withEnv(patch, fn) {
   const previous = {};
@@ -43,6 +43,23 @@ test('config validation fails when ANTHROPIC_API_KEY is missing and anthropic is
   });
 });
 
+test('config validation ignores default model/provider for anthropic enablement when allowlist is unset', () => {
+  withEnv(
+    {
+      ANTHROPIC_API_KEY: undefined,
+      OPENCLAW_PROVIDER_ALLOWLIST: undefined,
+      OPENCLAW_DEFAULT_PROVIDER: 'anthropic',
+      OPENCLAW_DEFAULT_MODEL: 'anthropic/claude-sonnet',
+      NODE_ENV: 'test'
+    },
+    () => {
+      assert.doesNotThrow(() => validateConfig(process.env));
+      const cfg = validateConfig(process.env);
+      assert.equal(cfg.anthropicEnabled, false);
+    }
+  );
+});
+
 test('config validation rejects invalid NODE_ENV', () => {
   withEnv({ ANTHROPIC_API_KEY: 'abc123', NODE_ENV: 'staging' }, () => {
     assert.throws(() => validateConfig(process.env), /NODE_ENV/);
@@ -75,4 +92,13 @@ test('config validation returns normalized defaults', () => {
       assert.equal(cfg.telegramReplyMode, 'never');
     }
   );
+});
+
+test('redacted logs omit anthropicApiKey when anthropic is disabled', () => {
+  withEnv({ ANTHROPIC_API_KEY: 'abc123', OPENCLAW_PROVIDER_ALLOWLIST: 'local_vllm', NODE_ENV: 'test' }, () => {
+    const cfg = validateConfig(process.env);
+    const redacted = redactConfigForLogs(cfg);
+    assert.equal(redacted.anthropicEnabled, false);
+    assert.equal(Object.hasOwn(redacted, 'anthropicApiKey'), false);
+  });
 });

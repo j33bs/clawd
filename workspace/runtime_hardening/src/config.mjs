@@ -50,28 +50,15 @@ function parseProviderList(rawValue) {
 
 function isAnthropicEnabled(env = process.env) {
   const allowlist = parseProviderList(env.OPENCLAW_PROVIDER_ALLOWLIST);
-  if (allowlist.length > 0) {
-    return allowlist.includes('anthropic') || allowlist.includes('*') || allowlist.includes('all');
-  }
-
-  const defaultProvider =
-    typeof env.OPENCLAW_DEFAULT_PROVIDER === 'string' ? env.OPENCLAW_DEFAULT_PROVIDER.trim().toLowerCase() : '';
-  if (defaultProvider) return defaultProvider === 'anthropic';
-
-  const defaultModel =
-    typeof env.OPENCLAW_DEFAULT_MODEL === 'string' ? env.OPENCLAW_DEFAULT_MODEL.trim().toLowerCase() : '';
-  if (defaultModel) {
-    return defaultModel.startsWith('anthropic/') || defaultModel.startsWith('claude-');
-  }
-
-  return false;
+  return allowlist.includes('anthropic');
 }
 
 function validateConfig(env = process.env) {
   const errors = [];
+  const anthropicEnabled = isAnthropicEnabled(env);
 
   const anthropicApiKey = typeof env.ANTHROPIC_API_KEY === 'string' ? env.ANTHROPIC_API_KEY.trim() : '';
-  if (isAnthropicEnabled(env) && !anthropicApiKey) {
+  if (anthropicEnabled && !anthropicApiKey) {
     errors.push('ANTHROPIC_API_KEY: required non-empty value is missing');
   }
 
@@ -130,6 +117,7 @@ function validateConfig(env = process.env) {
   }
 
   return {
+    anthropicEnabled,
     anthropicApiKey,
     nodeEnv,
     workspaceRoot,
@@ -156,10 +144,13 @@ function clearConfigCache() {
 }
 
 function redactConfigForLogs(config) {
-  return {
-    ...config,
-    anthropicApiKey: config?.anthropicApiKey ? '<redacted>' : '<missing>'
-  };
+  const redacted = { ...config };
+  if (config?.anthropicEnabled) {
+    redacted.anthropicApiKey = config?.anthropicApiKey ? '<redacted>' : '<missing>';
+  } else {
+    delete redacted.anthropicApiKey;
+  }
+  return redacted;
 }
 
 export { DEFAULTS, clearConfigCache, getConfig, redactConfigForLogs, validateConfig };
