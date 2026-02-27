@@ -8,44 +8,12 @@ const path = require('node:path');
 const os = require('node:os');
 const { createHash, createHmac } = require('node:crypto');
 
-const { createEdgeServer } = require('../scripts/system2_http_edge');
+const { createEdgeServer, _test } = require('../scripts/system2_http_edge');
 
 async function listen(server, host = '127.0.0.1') {
-  await new Promise((resolve, reject) => {
-    const onError = (err) => {
-      server.off('listening', onListening);
-      reject(err);
-    };
-    const onListening = () => {
-      server.off('error', onError);
-      resolve();
-    };
-    server.once('error', onError);
-    server.once('listening', onListening);
-    server.listen(0, host);
-  });
+  await new Promise((resolve) => server.listen(0, host, resolve));
   const addr = server.address();
   return { host, port: addr.port };
-}
-
-async function loopbackBindingSupported() {
-  const probe = http.createServer((req, res) => {
-    res.statusCode = 204;
-    res.end();
-  });
-  try {
-    await listen(probe, '127.0.0.1');
-    return true;
-  } catch (error) {
-    if (error && (error.code === 'EPERM' || error.code === 'EACCES')) {
-      return false;
-    }
-    throw error;
-  } finally {
-    if (probe.listening) {
-      await new Promise((resolve) => probe.close(resolve));
-    }
-  }
 }
 
 function requestJson({ host, port, method, path, headers, body }) {
@@ -64,6 +32,7 @@ function requestJson({ host, port, method, path, headers, body }) {
         res.on('end', () => {
           resolve({
             statusCode: res.statusCode,
+            headers: res.headers || {},
             body: Buffer.concat(chunks).toString('utf8'),
           });
         });
@@ -212,6 +181,162 @@ async function testRateLimit() {
     await edge.close();
     await new Promise((resolve) => upstream.close(resolve));
   }
+}
+
+async function testMachineRoutesNeverReturnHtml() {
+  const upstream = http.createServer((req, res) => {
+    res.statusCode = 200;
+    res.end('ok\n');
+  });
+  const upstreamAddr = await listen(upstream);
+
+  const edge = createEdgeServer({
+    env: {
+      OPENCLAW_EDGE_TOKENS: 'userA:edge_token_a',
+      OPENCLAW_EDGE_RATE_PER_MIN: '1000',
+      OPENCLAW_EDGE_BURST: '1000',
+      OPENCLAW_EDGE_UPSTREAM_HOST: upstreamAddr.host,
+      OPENCLAW_EDGE_UPSTREAM_PORT: String(upstreamAddr.port),
+    },
+    bindHost: '127.0.0.1',
+    bindPort: 0,
+    upstreamHost: upstreamAddr.host,
+    upstreamPort: upstreamAddr.port,
+    logFn: () => {},
+    auditSink: { writeLine: () => {} },
+  });
+  const edgeAddr = await listen(edge.server);
+
+  try {
+    const headers = { Authorization: 'Bearer edge_token_a' };
+
+    const health = await requestJson({ host: edgeAddr.host, port: edgeAddr.port, method: 'GET', path: '/health', headers });
+    assert.equal(health.statusCode, 200);
+    assert.match(String(health.headers['content-type'] || ''), /application\/json/i);
+    assert.ok(!/<!doctype html>|<html/i.test(health.body));
+
+    const diagRuntime = await requestJson({
+      host: edgeAddr.host,
+      port: edgeAddr.port,
+      method: 'GET',
+      path: '/diag/runtime',
+      headers,
+    });
+    assert.equal(diagRuntime.statusCode, 200);
+    assert.match(String(diagRuntime.headers['content-type'] || ''), /application\/json/i);
+    assert.ok(!/<!doctype html>|<html/i.test(diagRuntime.body));
+
+    const apiMissing = await requestJson({
+      host: edgeAddr.host,
+      port: edgeAddr.port,
+      method: 'GET',
+      path: '/api/does-not-exist',
+      headers,
+    });
+    assert.equal(apiMissing.statusCode, 404);
+    assert.match(String(apiMissing.headers['content-type'] || ''), /application\/json/i);
+    assert.ok(!/<!doctype html>|<html/i.test(apiMissing.body));
+  } finally {
+    await edge.close();
+    await new Promise((resolve) => upstream.close(resolve));
+  }
+}
+
+async function testDiagRuntimeBuildIdentityFromEnv() {
+  const upstream = http.createServer((req, res) => {
+    if (req.url === '/health') {
+      res.statusCode = 200;
+      res.setHeader('content-type', 'application/json');
+      res.end(JSON.stringify({ ok: true }) + '\n');
+      return;
+    }
+    res.statusCode = 200;
+    res.end('ok\n');
+  });
+  const upstreamAddr = await listen(upstream);
+
+  const prevTokens = process.env.OPENCLAW_EDGE_TOKENS;
+  const prevSha = process.env.OPENCLAW_REPO_SHA;
+  const prevBranch = process.env.OPENCLAW_REPO_BRANCH;
+  const prevEntrypoint = process.env.OPENCLAW_ENTRYPOINT;
+  process.env.OPENCLAW_EDGE_TOKENS = 'userA:edge_token_a';
+  process.env.OPENCLAW_REPO_SHA = 'deadbee';
+  process.env.OPENCLAW_REPO_BRANCH = 'codex/test';
+  process.env.OPENCLAW_ENTRYPOINT = '/Users/heathyeager/clawd/scripts/system2_http_edge.js';
+
+  const edge = createEdgeServer({
+    bindHost: '127.0.0.1',
+    bindPort: 0,
+    upstreamHost: upstreamAddr.host,
+    upstreamPort: upstreamAddr.port,
+    logFn: () => {},
+    auditSink: { writeLine: () => {} },
+  });
+  const edgeAddr = await listen(edge.server);
+
+  try {
+    const headers = { Authorization: 'Bearer edge_token_a' };
+    const diagRuntime = await requestJson({
+      host: edgeAddr.host,
+      port: edgeAddr.port,
+      method: 'GET',
+      path: '/diag/runtime',
+      headers,
+    });
+    assert.equal(diagRuntime.statusCode, 200);
+    assert.match(String(diagRuntime.headers['content-type'] || ''), /application\/json/i);
+    const body = JSON.parse(diagRuntime.body);
+    assert.equal(body.build.repo_sha, 'deadbee');
+    assert.equal(body.build.repo_branch, 'codex/test');
+    assert.match(String(body.build.entrypoint || ''), /system2_http_edge\.js/);
+    assert.equal(body.diag.runtime.build.repo_sha, 'deadbee');
+    assert.equal(body.diag.runtime.build.repo_branch, 'codex/test');
+    assert.equal(body.diag.runtime.build.entrypoint, '/Users/heathyeager/clawd/scripts/system2_http_edge.js');
+  } finally {
+    if (prevTokens == null) delete process.env.OPENCLAW_EDGE_TOKENS;
+    else process.env.OPENCLAW_EDGE_TOKENS = prevTokens;
+    if (prevSha == null) delete process.env.OPENCLAW_REPO_SHA;
+    else process.env.OPENCLAW_REPO_SHA = prevSha;
+    if (prevBranch == null) delete process.env.OPENCLAW_REPO_BRANCH;
+    else process.env.OPENCLAW_REPO_BRANCH = prevBranch;
+    if (prevEntrypoint == null) delete process.env.OPENCLAW_ENTRYPOINT;
+    else process.env.OPENCLAW_ENTRYPOINT = prevEntrypoint;
+
+    await edge.close();
+    await new Promise((resolve) => upstream.close(resolve));
+  }
+}
+
+async function testSpaFallbackOnlyForHtmlAccept() {
+  assert.equal(
+    _test.shouldServeSpaFallback({ method: 'GET', pathname: '/workspace', accept: 'text/html,application/xhtml+xml' }),
+    true
+  );
+  assert.equal(
+    _test.shouldServeSpaFallback({ method: 'GET', pathname: '/workspace', accept: 'application/json' }),
+    false
+  );
+  assert.equal(
+    _test.shouldServeSpaFallback({ method: 'POST', pathname: '/workspace', accept: 'text/html' }),
+    false
+  );
+  assert.equal(
+    _test.shouldServeSpaFallback({ method: 'GET', pathname: '/diag/runtime', accept: 'text/html' }),
+    false
+  );
+  assert.equal(
+    _test.shouldServeSpaFallback({ method: 'GET', pathname: '/api/health', accept: 'text/html' }),
+    false
+  );
+}
+
+async function testMachineInvariantContentTypeClassifier() {
+  assert.equal(_test.isMachineRoutePath('/health'), true);
+  assert.equal(_test.isMachineRoutePath('/diag/runtime'), true);
+  assert.equal(_test.isMachineRoutePath('/api/v1'), true);
+  assert.equal(_test.isMachineRoutePath('/rpc/ws'), false);
+  assert.equal(_test.hasHtmlContentType('text/html; charset=utf-8'), true);
+  assert.equal(_test.hasHtmlContentType('application/json'), false);
 }
 
 async function testBodyLimit413() {
@@ -786,6 +911,7 @@ async function testInflightCapsAndTimeoutConfig() {
   const edge = createEdgeServer({
     env: {
       OPENCLAW_EDGE_TOKENS: 'userA:edge_token_a',
+      OPENCLAW_EDGE_APPROVE_TOKENS: 'ok:approve_token_ok',
       OPENCLAW_EDGE_RATE_PER_MIN: '1000',
       OPENCLAW_EDGE_BURST: '1000',
       OPENCLAW_EDGE_MAX_INFLIGHT_GLOBAL: '1',
@@ -808,9 +934,14 @@ async function testInflightCapsAndTimeoutConfig() {
     assert.equal(edge.server.headersTimeout, 1234);
     assert.equal(edge.server.requestTimeout, 2345);
 
-    const headers = { Authorization: 'Bearer edge_token_a' };
-    const p1 = requestJson({ host: edgeAddr.host, port: edgeAddr.port, method: 'GET', path: '/health', headers });
-    const p2 = requestJson({ host: edgeAddr.host, port: edgeAddr.port, method: 'GET', path: '/health', headers });
+    const headers = {
+      Authorization: 'Bearer edge_token_a',
+      'Content-Type': 'application/json',
+      'X-OpenClaw-Approve': 'approve_token_ok',
+    };
+    const body = Buffer.from('{}', 'utf8');
+    const p1 = requestJson({ host: edgeAddr.host, port: edgeAddr.port, method: 'POST', path: '/rpc/slow', headers, body });
+    const p2 = requestJson({ host: edgeAddr.host, port: edgeAddr.port, method: 'POST', path: '/rpc/slow', headers, body });
     const r2 = await p2;
     assert.equal(r2.statusCode, 429);
     const r1 = await p1;
@@ -827,16 +958,23 @@ async function testInflightCapsAndTimeoutConfig() {
 }
 
 async function main() {
-  if (!(await loopbackBindingSupported())) {
-    console.log('SKIP system2_http_edge: loopback bind not permitted in this environment');
-    return;
-  }
-
   await testAuthAndNoSecretLogs();
   console.log('PASS edge rejects missing/invalid auth and does not log secrets');
 
   await testRateLimit();
   console.log('PASS edge rate limits per identity');
+
+  await testMachineRoutesNeverReturnHtml();
+  console.log('PASS machine routes never return HTML fallbacks');
+
+  await testDiagRuntimeBuildIdentityFromEnv();
+  console.log('PASS /diag/runtime exposes build identity from environment');
+
+  await testSpaFallbackOnlyForHtmlAccept();
+  console.log('PASS SPA fallback guard only allows GET + Accept:text/html + non-machine paths');
+
+  await testMachineInvariantContentTypeClassifier();
+  console.log('PASS machine-route content-type classifier detects HTML violations');
 
   await testBodyLimit413();
   console.log('PASS edge enforces body size limit (413)');

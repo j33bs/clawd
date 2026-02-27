@@ -14,7 +14,7 @@ import {
   retryWithBackoff,
   sanitizeOutboundPayload,
   buildTelegramSendPayload
-} from './hardening/index.mjs';
+} from '../src/index.mjs';
 
 const GLOBAL_KEY = '__openclaw_runtime_hardening';
 const OUTBOUND_FETCH_PATCH_KEY = '__openclaw_outbound_fetch_patch_installed';
