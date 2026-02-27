@@ -1,0 +1,2 @@
+# Shell globs for CANON mode dirty-path exceptions.
+# One pattern per line.

@@ -1,8 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+if [ -n "$REPO_ROOT" ]; then
+  "$REPO_ROOT/tools/guard_worktree_boundary.sh"
+fi
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+if [[ -z "${REPO_ROOT}" ]]; then
+  REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+fi
 
 export OPENCLAW_QUIESCE=0
 
