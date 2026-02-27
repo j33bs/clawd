@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+: "${OPENCLAW_QUIESCE:=1}"
+export OPENCLAW_QUIESCE
+echo "INFO: OPENCLAW_QUIESCE=${OPENCLAW_QUIESCE}"
+
 # Local usage:
 #   OPENCLAW_LOCAL_GATES=1 tools/run_checks.sh
 # Local gates enforce launchagent alignment and machine-surface contract tripwire.
