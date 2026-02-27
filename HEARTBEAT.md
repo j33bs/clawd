@@ -7,8 +7,11 @@
 
 # Add tasks below when you want the agent to check something periodically.
 
+- Environment
+  - `OPENCLAW_HOME`: absolute path to the OpenClaw repo root.
+
 - [HB-PR-01] MEMORY size guard
-  - Check `wc -l /Users/heathyeager/clawd/MEMORY.md`; warn if `> 180`.
+  - Check `wc -l "${OPENCLAW_HOME}/MEMORY.md"`; warn if `> 180`.
 
 - [HB-PR-02] Nightly log health
   - Check `reports/nightly/$(date +%Y-%m-%d).log` exists and scan for `⚠️`.

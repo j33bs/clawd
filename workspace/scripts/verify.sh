@@ -24,7 +24,7 @@ echo ""
 echo "[Step 1] Running preflight checks..."
 echo ""
 
-if ./workspace/scripts/verify_preflight.sh; then
+if bash ./workspace/scripts/verify_preflight.sh; then
     echo ""
     echo -e "${GREEN}Preflight passed. Continuing verification...${NC}"
     echo ""
