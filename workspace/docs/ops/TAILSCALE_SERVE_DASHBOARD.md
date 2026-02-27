@@ -1,6 +1,6 @@
 # Tailscale Serve Dashboard
 
-Apply the dashboard tailnet mapping with one privileged step:
+Single manual step (requires sudo) to apply the dashboard tailnet mapping:
 
 ```bash
 sudo bash tools/apply_tailscale_serve_dashboard.sh
