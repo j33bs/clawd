@@ -8,5 +8,6 @@ fi
 
 python3 workspace/scripts/preflight_check.py
 ./tools/check_skip_worktree_allowlist.sh
+./tools/check_gateway_points_to_repo.sh
 
 echo "ok"
