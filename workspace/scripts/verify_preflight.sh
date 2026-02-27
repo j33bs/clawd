@@ -7,5 +7,6 @@ if ! command -v python3 >/dev/null 2>&1; then
 fi
 
 python3 workspace/scripts/preflight_check.py
+./tools/check_skip_worktree_allowlist.sh
 
 echo "ok"
