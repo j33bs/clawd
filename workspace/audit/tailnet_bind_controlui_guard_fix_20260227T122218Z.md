@@ -43,3 +43,20 @@ launchctl unsetenv OPENCLAW_TAILNET_CONTROL_UI
 launchctl unsetenv OPENCLAW_TAILNET_ALLOWED_ORIGINS
 launchctl kickstart -k gui/$(id -u)/ai.openclaw.gateway
 ```
+
+## Hardening Follow-up (PR56 Tighten)
+
+- Overlay file permissions are enforced to `0600`.
+- Overlay file lifecycle is ephemeral with cleanup trap:
+  - `trap 'rm -f "$OVERLAY_CONFIG_PATH"' EXIT INT TERM`
+  - cleanup applies to normal exit and interrupt/termination paths.
+- Dry-run mode (`OPENCLAW_WRAPPER_DRYRUN=1`) does not create an overlay file.
+- Tailnet allowlist parsing now rejects wildcard/broad origins:
+  - `*`
+  - `http://*`
+  - `https://*`
+- Allowlist entries must be explicit origins (`scheme://host[:port]`) and empty entries are rejected.
+
+## Secret Hygiene Reminder
+
+If any terminal/session log ever captured sensitive credentials, rotate provider and gateway credentials promptly and refresh runtime env from secure bootstrap sources.
