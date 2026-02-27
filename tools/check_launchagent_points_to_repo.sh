@@ -2,8 +2,10 @@
 set -euo pipefail
 
 PLIST="${1:-$HOME/Library/LaunchAgents/ai.openclaw.gateway.plist}"
-EXPECTED_REPO="${OPENCLAW_EXPECTED_REPO:-/Users/heathyeager/clawd}"
-EXPECTED_WRAPPER="${OPENCLAW_EXPECTED_WRAPPER:-/Users/heathyeager/clawd/scripts/run_openclaw_gateway_repo.sh}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DEFAULT_REPO="$(cd "${SCRIPT_DIR}/.." && pwd)"
+EXPECTED_REPO="${OPENCLAW_EXPECTED_REPO:-${OPENCLAW_HOME:-$DEFAULT_REPO}}"
+EXPECTED_WRAPPER="${OPENCLAW_EXPECTED_WRAPPER:-${EXPECTED_REPO}/scripts/run_openclaw_gateway_repo.sh}"
 
 if [[ ! -f "$PLIST" ]]; then
   echo "FAIL: plist not found: $PLIST" >&2

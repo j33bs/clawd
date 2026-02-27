@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO_ROOT="/Users/heathyeager/clawd"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="${OPENCLAW_HOME:-$(cd "${SCRIPT_DIR}/.." && pwd)}"
 if [[ ! -d "$REPO_ROOT" ]]; then
   echo "FATAL: repo root missing: $REPO_ROOT" >&2
   exit 1
