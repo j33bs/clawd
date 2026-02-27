@@ -12,6 +12,7 @@ from typing import Any, Iterable
 DEFAULT_PATH = Path("workspace/state/tacti_cr/events.jsonl")
 QUIESCE_ENV = "OPENCLAW_QUIESCE"
 PROTECTED_PATH = Path("workspace/state/tacti_cr/events.jsonl")
+_QUIESCE_SKIP_LOGGED: set[str] = set()
 
 
 def _utc_iso_z(now: datetime | None = None) -> str:
@@ -42,7 +43,7 @@ def _resolve(path: Path | str | None = None) -> Path:
 
 
 def _is_quiesced() -> bool:
-    return os.getenv(QUIESCE_ENV) == "1"
+    return str(os.getenv(QUIESCE_ENV, "")).strip() == "1"
 
 
 def _is_protected_target(path: Path) -> bool:
@@ -54,10 +55,18 @@ def _is_protected_target(path: Path) -> bool:
         return str(path) == str(protected)
 
 
+def _log_quiesce_skip_once(path: Path) -> None:
+    key = str(path)
+    if key in _QUIESCE_SKIP_LOGGED:
+        return
+    _QUIESCE_SKIP_LOGGED.add(key)
+    print(f'QUIESCE_SKIP_WRITE file="{path}"', file=sys.stderr)
+
+
 def emit(event_type: str, payload: dict, *, now: datetime | None = None, session_id: str | None = None) -> None:
     path = _resolve()
     if _is_quiesced() and _is_protected_target(path):
-        print(f"QUIESCED: skipping write to {path}", file=sys.stderr)
+        _log_quiesce_skip_once(path)
         return
     path.parent.mkdir(parents=True, exist_ok=True)
     if not isinstance(event_type, str) or not event_type.strip():

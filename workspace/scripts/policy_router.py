@@ -50,6 +50,7 @@ QWEN_AUTH_FILE = BASE_DIR / "agents" / "main" / "agent" / "auth-profiles.json"
 TACTI_EVENT_LOG = BASE_DIR / "workspace" / "state" / "tacti_cr" / "events.jsonl"
 ACTIVE_INFERENCE_STATE_PATH = BASE_DIR / "workspace" / "state" / "active_inference_state.json"
 WITNESS_LEDGER_PATH = BASE_DIR / "workspace" / "state_runtime" / "teamchat" / "witness_ledger.jsonl"
+_QUIESCE_SKIP_LOGGED = set()
 
 TACTI_ROOT = BASE_DIR / "workspace"
 if str(TACTI_ROOT) not in sys.path:
@@ -489,15 +490,17 @@ def save_circuit_state(state, path=CIRCUIT_FILE):
 
 
 def log_event(event_type, detail=None, path=EVENT_LOG):
-    if os.environ.get("OPENCLAW_QUIESCE") == "1":
+    if str(os.environ.get("OPENCLAW_QUIESCE", "")).strip() == "1":
         try:
-            if Path(path).resolve() == TACTI_EVENT_LOG.resolve():
-                print(f"QUIESCED: skipping write to {path}", file=sys.stderr)
-                return
+            is_tacti_log = Path(path).resolve() == TACTI_EVENT_LOG.resolve()
         except Exception:
-            if str(path).endswith("workspace/state/tacti_cr/events.jsonl"):
-                print(f"QUIESCED: skipping write to {path}", file=sys.stderr)
-                return
+            is_tacti_log = str(path).endswith("workspace/state/tacti_cr/events.jsonl")
+        if is_tacti_log:
+            key = str(path)
+            if key not in _QUIESCE_SKIP_LOGGED:
+                _QUIESCE_SKIP_LOGGED.add(key)
+                print(f'QUIESCE_SKIP_WRITE file="{path}"', file=sys.stderr)
+            return
     path.parent.mkdir(parents=True, exist_ok=True)
     entry = {
         "ts": int(time.time() * 1000),
