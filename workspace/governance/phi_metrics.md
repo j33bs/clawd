@@ -45,6 +45,7 @@ information integration beyond sum of parts." This table is the test.
 | Date | Input | Whole-system score | Sum-of-parts score | Synergy Δ | Result | Notes |
 |------|-------|-------------------|-------------------|-----------|--------|-------|
 | 2026-02-23 | 5 routing scenarios (cold start, empty trail store) | spread=0.4150 | spread=0.4392 | **-0.0242** | **NULL / NEGATIVE** | See findings below |
+| 2026-02-27 | PENDING: define Φ protocol session boundary and inputs | — | — | — | **PENDING** | First row created to keep the loop live; measurement not yet performed for this cycle |
 
 ---
 
@@ -145,3 +146,12 @@ no grounding in the actual system. Replaced with the ablation protocol above, wh
 and falsifiable. Original language preserved here for record-keeping; not a methodology.
 
 *Last updated: Claude Code, 2026-02-23*
+
+---
+
+## How To Run The First Φ Session (Next Cycle)
+
+- [ ] Define what counts as one session (input set size, run boundaries, retry policy).
+- [ ] Define accepted inputs and where they are stored.
+- [ ] Define computation path/tooling used for whole-system vs sum-of-parts scoring.
+- [ ] Record result row with evidence links (logs, scripts, raw outputs).
