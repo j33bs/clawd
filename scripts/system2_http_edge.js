@@ -842,9 +842,6 @@ function createEdgeServer(options = {}) {
     if (method === 'GET' && pathname === '/diag/routes') {
       return { decision: 'allow', action: 'diag_routes', pathname };
     }
-    if (method === 'GET' && pathname === '/api/procs') {
-      return { decision: 'allow', action: 'api_procs_compat', pathname };
-    }
     if (pathname.startsWith('/api/')) {
       return { decision: 'allow', action: 'api_not_found', pathname };
     }
@@ -1100,7 +1097,6 @@ function createEdgeServer(options = {}) {
         || policy.action === 'diag_telegram'
         || policy.action === 'diag_ui'
         || policy.action === 'diag_routes'
-        || policy.action === 'api_procs_compat'
         || policy.action === 'api_not_found'
       ) {
         const nowMs = Date.now();
@@ -1335,7 +1331,6 @@ function createEdgeServer(options = {}) {
       proxyUpstream();
 
       function proxyUpstream() {
-      const upstreamPath = policy.action === 'api_procs_compat' ? '/rpc/procs' : req.url;
       const upstreamHeaders = { ...req.headers };
       delete upstreamHeaders.host;
       // Do not forward edge client authorization header.
@@ -1354,7 +1349,7 @@ function createEdgeServer(options = {}) {
           host: upstreamHost,
           port: upstreamPort,
           method: req.method,
-          path: upstreamPath,
+          path: req.url,
           headers: upstreamHeaders,
           timeout: 60000
         },
@@ -1378,9 +1373,9 @@ function createEdgeServer(options = {}) {
           upstreamRes.on('data', (d) => res.write(d));
           upstreamRes.on('end', () => {
             res.end();
-            if (String(upstreamPath || '').startsWith('/rpc/')) {
+            if (String(req.url || '').startsWith('/rpc/')) {
               markUiEvent();
-              const path = String(upstreamPath || '').toLowerCase();
+              const path = String(req.url || '').toLowerCase();
               const bodyText = body ? body.toString('utf8').toLowerCase() : '';
               if (path.includes('telegram') || bodyText.includes('telegram')) {
                 telemetryLastTelegramSendTs = Date.now();
