@@ -6,6 +6,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 const { SecretsBridge } = require('../core/system2/inference/secrets_bridge');
+const { canSpawnSubprocess } = require('./helpers/capabilities');
 
 function run(name, fn) {
   try {
@@ -36,8 +37,8 @@ run('secrets cli status prints enablement header (no secrets)', () => {
     SECRETS_BACKEND: 'file',
     ENABLE_SECRETS_BRIDGE: '0',
   };
-  const probe = spawnSync(process.execPath, ['-e', 'process.exit(0)'], { encoding: 'utf8' });
-  if (probe.error) {
+  const capability = canSpawnSubprocess();
+  if (!capability.ok) {
     // Fallback for restricted environments where nested spawn is blocked (EPERM).
     const previous = {};
     for (const [key, value] of Object.entries(envPatch)) {

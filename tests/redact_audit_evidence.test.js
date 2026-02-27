@@ -7,6 +7,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 const { applyRules, buildRules, parseArgs, redactDirectory, validateJson } = require('../scripts/redact_audit_evidence');
+const { canSpawnSubprocess } = require('./helpers/capabilities');
 
 function test(name, fn) {
   try {
@@ -20,8 +21,8 @@ function test(name, fn) {
 
 function runCli(args) {
   const scriptPath = path.resolve(__dirname, '..', 'scripts', 'redact_audit_evidence.js');
-  const probe = spawnSync(process.execPath, ['-e', 'process.exit(0)'], { encoding: 'utf8' });
-  if (!probe.error) {
+  const capability = canSpawnSubprocess();
+  if (capability.ok) {
     return spawnSync(process.execPath, [scriptPath, ...args], { encoding: 'utf8' });
   }
 

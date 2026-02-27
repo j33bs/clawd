@@ -7,6 +7,7 @@ const os = require('node:os');
 const { spawnSync } = require('node:child_process');
 const path = require('node:path');
 const { SecretsBridge } = require('../core/system2/inference/secrets_bridge');
+const { canSpawnSubprocess } = require('./helpers/capabilities');
 
 function test(name, fn) {
   try {
@@ -38,8 +39,8 @@ test('secrets cli exec injects alias env keys without printing values', function
     OPENCLAW_QWEN_API_KEY: 'x',
     OPENCLAW_VLLM_API_KEY: 'x'
   };
-  const probe = spawnSync(process.execPath, ['-e', 'process.exit(0)'], { encoding: 'utf8' });
-  if (probe.error) {
+  const capability = canSpawnSubprocess();
+  if (!capability.ok) {
     // Fallback for restricted environments where nested spawn is blocked (EPERM).
     const previous = {};
     for (const [key, value] of Object.entries(envPatch)) {

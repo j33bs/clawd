@@ -5,6 +5,7 @@ const assert = require('node:assert');
 const path = require('node:path');
 const fs = require('node:fs');
 const { spawnSync } = require('node:child_process');
+const { canSpawnSubprocess } = require('./helpers/capabilities');
 
 const { computeDiff, DEFAULT_IGNORED_PATHS, parseArgs } = require('../scripts/system2_snapshot_diff');
 
@@ -20,8 +21,8 @@ function test(name, fn) {
 
 function runCli(args) {
   const scriptPath = path.resolve(__dirname, '..', 'scripts', 'system2_snapshot_diff.js');
-  const probe = spawnSync(process.execPath, ['-e', 'process.exit(0)'], { encoding: 'utf8' });
-  if (!probe.error) {
+  const capability = canSpawnSubprocess();
+  if (capability.ok) {
     return spawnSync(process.execPath, [scriptPath, ...args], { encoding: 'utf8' });
   }
 

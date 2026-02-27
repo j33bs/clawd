@@ -5,6 +5,7 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const { spawnSync } = require("node:child_process");
+const { requireSubprocessOrSkip } = require("../../../../tests/helpers/capabilities");
 
 function run(cmd, args, cwd) {
   const out = spawnSync(cmd, args, { cwd, encoding: "utf8" });
@@ -22,14 +23,8 @@ function initTempRepo() {
   return dir;
 }
 
-function canSpawnNode() {
-  const probe = spawnSync(process.execPath, ["-e", "process.exit(0)"], { encoding: "utf8" });
-  return !probe.error;
-}
-
 test("dry-run patch check passes on valid patch", (t) => {
-  if (!canSpawnNode()) {
-    t.skip("subprocess spawn unavailable in this environment");
+  if (!requireSubprocessOrSkip(t)) {
     return;
   }
 
@@ -64,8 +59,7 @@ test("dry-run patch check passes on valid patch", (t) => {
 });
 
 test("dry-run patch check reports failed step on invalid patch", (t) => {
-  if (!canSpawnNode()) {
-    t.skip("subprocess spawn unavailable in this environment");
+  if (!requireSubprocessOrSkip(t)) {
     return;
   }
 

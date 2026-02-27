@@ -8,6 +8,7 @@ const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 const { computeDiff, DEFAULT_IGNORED_PATHS } = require('../scripts/system2_snapshot_diff');
 const { decide } = require('../scripts/system2_experiment');
+const { canSpawnSubprocess } = require('./helpers/capabilities');
 
 const LEGACY_FAIL_ON = [
   'snapshot_summary.log_signature_counts.auth_error',
@@ -26,11 +27,6 @@ function test(name, fn) {
   }
 }
 
-function canSpawnNode() {
-  const probe = spawnSync(process.execPath, ['-e', 'process.exit(0)'], { encoding: 'utf8' });
-  return !probe.error;
-}
-
 function runCliWithFixtureDir(fixtureDir, failOn) {
   const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'clawd-exp-'));
   const failOnList = String(failOn || '')
@@ -38,7 +34,7 @@ function runCliWithFixtureDir(fixtureDir, failOn) {
     .map((value) => value.trim())
     .filter(Boolean);
 
-  if (!canSpawnNode()) {
+  if (!canSpawnSubprocess().ok) {
     // Fallback for restricted environments where nested spawn is blocked (EPERM).
     const runASummaryPath = path.join(fixtureDir, 'runA', 'snapshot_summary.json');
     const runBSummaryPath = path.join(fixtureDir, 'runB', 'snapshot_summary.json');
@@ -204,7 +200,7 @@ test('calibrated auth fail-on yields REVERT on regression fixture', function () 
 });
 
 test('failing subprocess writes UNAVAILABLE report and exits 3', function () {
-  if (!canSpawnNode()) {
+  if (!canSpawnSubprocess().ok) {
     const fixtureDir = path.resolve(__dirname, '..', 'fixtures', 'system2_experiment', 'diff_failure');
     const result = runCliWithFixtureDir(fixtureDir, LEGACY_FAIL_ON);
     assert.strictEqual(result.report.status, 'ERROR');
