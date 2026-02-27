@@ -1,0 +1,20 @@
+name: regression-gate
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    continue-on-error: true  # warn-only gate (non-blocking)
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Run regression (warn-only)
+        run: |
+          set -e
+          bash ./workspace/scripts/regression.sh
