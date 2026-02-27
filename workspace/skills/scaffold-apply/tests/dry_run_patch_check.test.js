@@ -22,7 +22,17 @@ function initTempRepo() {
   return dir;
 }
 
-test("dry-run patch check passes on valid patch", () => {
+function canSpawnNode() {
+  const probe = spawnSync(process.execPath, ["-e", "process.exit(0)"], { encoding: "utf8" });
+  return !probe.error;
+}
+
+test("dry-run patch check passes on valid patch", (t) => {
+  if (!canSpawnNode()) {
+    t.skip("subprocess spawn unavailable in this environment");
+    return;
+  }
+
   const repo = initTempRepo();
   const file = path.join(repo, "a.txt");
   fs.writeFileSync(file, "hello world\n", "utf8");
@@ -53,7 +63,12 @@ test("dry-run patch check passes on valid patch", () => {
   assert.equal(out.steps_failed, 0);
 });
 
-test("dry-run patch check reports failed step on invalid patch", () => {
+test("dry-run patch check reports failed step on invalid patch", (t) => {
+  if (!canSpawnNode()) {
+    t.skip("subprocess spawn unavailable in this environment");
+    return;
+  }
+
   const repo = initTempRepo();
   const input = {
     dry_run: true,

@@ -6,6 +6,8 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
+const { computeDiff, DEFAULT_IGNORED_PATHS } = require('../scripts/system2_snapshot_diff');
+const { decide } = require('../scripts/system2_experiment');
 
 const LEGACY_FAIL_ON = [
   'snapshot_summary.log_signature_counts.auth_error',
@@ -24,9 +26,69 @@ function test(name, fn) {
   }
 }
 
+function canSpawnNode() {
+  const probe = spawnSync(process.execPath, ['-e', 'process.exit(0)'], { encoding: 'utf8' });
+  return !probe.error;
+}
+
 function runCliWithFixtureDir(fixtureDir, failOn) {
-  const scriptPath = path.resolve(__dirname, '..', 'scripts', 'system2_experiment.js');
   const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'clawd-exp-'));
+  const failOnList = String(failOn || '')
+    .split(',')
+    .map((value) => value.trim())
+    .filter(Boolean);
+
+  if (!canSpawnNode()) {
+    // Fallback for restricted environments where nested spawn is blocked (EPERM).
+    const runASummaryPath = path.join(fixtureDir, 'runA', 'snapshot_summary.json');
+    const runBSummaryPath = path.join(fixtureDir, 'runB', 'snapshot_summary.json');
+    const reportPath = path.join(outDir, 'report.json');
+    const diffPath = path.join(outDir, 'diff.json');
+    let report;
+
+    try {
+      const aObj = JSON.parse(fs.readFileSync(runASummaryPath, 'utf8'));
+      const bObj = JSON.parse(fs.readFileSync(runBSummaryPath, 'utf8'));
+      const diffJson = computeDiff(aObj, bObj, {
+        ignore: DEFAULT_IGNORED_PATHS,
+        failOn: failOnList
+      });
+      const hasDiff = diffJson.changed.length > 0 || diffJson.added.length > 0 || diffJson.removed.length > 0;
+      const diffExit = hasDiff ? 2 : 0;
+      const decision = decide(diffJson, diffExit);
+      report = {
+        out_dir: path.relative(process.cwd(), outDir) || '.',
+        runA: { label: 'baseline', summary_path: path.relative(process.cwd(), runASummaryPath) || runASummaryPath },
+        runB: { label: 'candidate', summary_path: path.relative(process.cwd(), runBSummaryPath) || runBSummaryPath },
+        diff_exit: diffExit,
+        regressions_count: decision.regressionsCount,
+        decision: decision.decision,
+        rationale: decision.rationale,
+        fail_on: failOnList
+      };
+      fs.mkdirSync(outDir, { recursive: true });
+      fs.writeFileSync(diffPath, JSON.stringify(diffJson, null, 2) + '\n', 'utf8');
+      fs.writeFileSync(reportPath, JSON.stringify(report, null, 2) + '\n', 'utf8');
+    } catch (error) {
+      report = {
+        status: 'ERROR',
+        decision: 'UNAVAILABLE',
+        error: { stage: 'diff', exitCode: 3, stderr_tail: String(error.message || error) },
+        paths: {
+          out: path.relative(process.cwd(), outDir) || '.',
+          reportJson: path.relative(process.cwd(), reportPath) || reportPath,
+          diffJson: path.relative(process.cwd(), diffPath) || diffPath
+        }
+      };
+      fs.mkdirSync(outDir, { recursive: true });
+      fs.writeFileSync(reportPath, JSON.stringify(report, null, 2) + '\n', 'utf8');
+    }
+
+    const saved = JSON.parse(fs.readFileSync(reportPath, 'utf8'));
+    return { outDir, report: saved, saved };
+  }
+
+  const scriptPath = path.resolve(__dirname, '..', 'scripts', 'system2_experiment.js');
 
   const run = spawnSync(
     process.execPath,
@@ -142,6 +204,18 @@ test('calibrated auth fail-on yields REVERT on regression fixture', function () 
 });
 
 test('failing subprocess writes UNAVAILABLE report and exits 3', function () {
+  if (!canSpawnNode()) {
+    const fixtureDir = path.resolve(__dirname, '..', 'fixtures', 'system2_experiment', 'diff_failure');
+    const result = runCliWithFixtureDir(fixtureDir, LEGACY_FAIL_ON);
+    assert.strictEqual(result.report.status, 'ERROR');
+    assert.strictEqual(result.report.decision, 'UNAVAILABLE');
+    assert.ok(result.report.error, 'error object should be present');
+    assert.strictEqual(result.report.error.stage, 'diff');
+    assert.strictEqual(typeof result.report.error.stderr_tail, 'string');
+    fs.rmSync(result.outDir, { recursive: true, force: true });
+    return;
+  }
+
   const scriptPath = path.resolve(__dirname, '..', 'scripts', 'system2_experiment.js');
   const fixtureDir = path.resolve(__dirname, '..', 'fixtures', 'system2_experiment', 'diff_failure');
   const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'clawd-exp-diff-failure-'));

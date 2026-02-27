@@ -7,6 +7,12 @@ const { once } = require("node:events");
 
 const CLI_PATH = path.resolve(__dirname, "../dist/cli.js");
 
+function canSpawnNode() {
+  const { spawnSync } = require("node:child_process");
+  const probe = spawnSync(process.execPath, ["-e", "process.exit(0)"], { encoding: "utf8" });
+  return !probe.error;
+}
+
 async function runSnippet(snippet) {
   const child = spawn(process.execPath, ["-e", snippet], { stdio: ["ignore", "pipe", "pipe"] });
   let stdout = "";
@@ -21,7 +27,11 @@ async function runSnippet(snippet) {
   return { code, stdout: stdout.trim(), stderr: stderr.trim() };
 }
 
-test("preflight nonzero exit returns MLX_DEVICE_UNAVAILABLE", async () => {
+test("preflight nonzero exit returns MLX_DEVICE_UNAVAILABLE", async (t) => {
+  if (!canSpawnNode()) {
+    t.skip("subprocess spawn unavailable in this environment");
+    return;
+  }
   const snippet = `
     const cli = require(${JSON.stringify(CLI_PATH)});
     cli.run([], {
@@ -42,7 +52,11 @@ test("preflight nonzero exit returns MLX_DEVICE_UNAVAILABLE", async () => {
   assert.match(result.stderr, /"outcome":"fail"/);
 });
 
-test("preflight timeout returns MLX_DEVICE_UNAVAILABLE", async () => {
+test("preflight timeout returns MLX_DEVICE_UNAVAILABLE", async (t) => {
+  if (!canSpawnNode()) {
+    t.skip("subprocess spawn unavailable in this environment");
+    return;
+  }
   const snippet = `
     const cli = require(${JSON.stringify(CLI_PATH)});
     cli.run([], {
@@ -63,7 +77,11 @@ test("preflight timeout returns MLX_DEVICE_UNAVAILABLE", async () => {
   assert.match(result.stderr, /"outcome":"fail"/);
 });
 
-test("preflight ok proceeds to generation path", async () => {
+test("preflight ok proceeds to generation path", async (t) => {
+  if (!canSpawnNode()) {
+    t.skip("subprocess spawn unavailable in this environment");
+    return;
+  }
   const snippet = `
     const cli = require(${JSON.stringify(CLI_PATH)});
     cli.run(["--prompt", "hello", "--model", "demo"], {

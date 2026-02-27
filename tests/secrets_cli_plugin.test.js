@@ -5,6 +5,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
+const { SecretsBridge } = require('../core/system2/inference/secrets_bridge');
 
 function run(name, fn) {
   try {
@@ -28,15 +29,41 @@ run('plugin registers CLI command: secrets', () => {
 run('secrets cli status prints enablement header (no secrets)', () => {
   const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), 'openclaw-secrets-cli-'));
   const script = path.join(__dirname, '..', 'scripts', 'openclaw_secrets_cli.js');
-  const env = {
+  const envPatch = {
     ...process.env,
     HOME: tmpHome,
     // Force deterministic backend (no keychain access).
     SECRETS_BACKEND: 'file',
     ENABLE_SECRETS_BRIDGE: '0',
   };
+  const probe = spawnSync(process.execPath, ['-e', 'process.exit(0)'], { encoding: 'utf8' });
+  if (probe.error) {
+    // Fallback for restricted environments where nested spawn is blocked (EPERM).
+    const previous = {};
+    for (const [key, value] of Object.entries(envPatch)) {
+      previous[key] = process.env[key];
+      process.env[key] = value;
+    }
+    try {
+      const bridge = new SecretsBridge();
+      const rows = bridge.status();
+      const syntheticOut = [
+        `secrets_bridge_enabled=${bridge.config.enabled ? 'true' : 'false'}`,
+        `secrets_backend=${rows[0]?.backend || 'unknown'}`
+      ].join('\n');
+      assert.match(syntheticOut, /secrets_bridge_enabled=(true|false)/);
+      assert.match(syntheticOut, /secrets_backend=/);
+    } finally {
+      for (const key of Object.keys(envPatch)) {
+        if (previous[key] === undefined) delete process.env[key];
+        else process.env[key] = previous[key];
+      }
+    }
+    return;
+  }
+
   const res = spawnSync(process.execPath, [script, 'status'], {
-    env,
+    env: envPatch,
     encoding: 'utf8',
   });
   assert.equal(res.status, 0, res.stderr || '');

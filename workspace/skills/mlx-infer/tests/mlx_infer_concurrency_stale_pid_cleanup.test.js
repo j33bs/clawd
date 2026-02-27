@@ -17,6 +17,12 @@ function getRunDir(baseDir) {
   return path.join(baseDir, ".run", "mlx-infer");
 }
 
+function canSpawnNode() {
+  const { spawnSync } = require("node:child_process");
+  const probe = spawnSync(process.execPath, ["-e", "process.exit(0)"], { encoding: "utf8" });
+  return !probe.error;
+}
+
 test("removes stale pid files for dead processes before counting", async (t) => {
   const baseDir = makeBaseDir();
   t.after(() => fs.rmSync(baseDir, { recursive: true, force: true }));
@@ -58,6 +64,11 @@ test("removes pid file when ttl is exceeded", (t) => {
 });
 
 test("live pid file contributes to concurrency limit", async (t) => {
+  if (!canSpawnNode()) {
+    t.skip("subprocess spawn unavailable in this environment");
+    return;
+  }
+
   const baseDir = makeBaseDir();
   t.after(() => fs.rmSync(baseDir, { recursive: true, force: true }));
   const dir = getRunDir(baseDir);

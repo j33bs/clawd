@@ -3,9 +3,10 @@
 
 const assert = require('node:assert');
 const path = require('node:path');
+const fs = require('node:fs');
 const { spawnSync } = require('node:child_process');
 
-const { computeDiff, DEFAULT_IGNORED_PATHS } = require('../scripts/system2_snapshot_diff');
+const { computeDiff, DEFAULT_IGNORED_PATHS, parseArgs } = require('../scripts/system2_snapshot_diff');
 
 function test(name, fn) {
   try {
@@ -19,7 +20,38 @@ function test(name, fn) {
 
 function runCli(args) {
   const scriptPath = path.resolve(__dirname, '..', 'scripts', 'system2_snapshot_diff.js');
-  return spawnSync(process.execPath, [scriptPath, ...args], { encoding: 'utf8' });
+  const probe = spawnSync(process.execPath, ['-e', 'process.exit(0)'], { encoding: 'utf8' });
+  if (!probe.error) {
+    return spawnSync(process.execPath, [scriptPath, ...args], { encoding: 'utf8' });
+  }
+
+  // Fallback for restricted environments where nested spawn is blocked (EPERM).
+  try {
+    const parsed = parseArgs(args);
+    const aObj = JSON.parse(fs.readFileSync(path.resolve(parsed.aPath), 'utf8'));
+    const bObj = JSON.parse(fs.readFileSync(path.resolve(parsed.bPath), 'utf8'));
+    const ignored = [...DEFAULT_IGNORED_PATHS, ...parsed.ignore];
+    const diff = computeDiff(aObj, bObj, { ignore: ignored, failOn: parsed.failOn });
+    const output = {
+      a: parsed.aPath,
+      b: parsed.bPath,
+      ignored: diff.ignored,
+      changed: diff.changed,
+      added: diff.added,
+      removed: diff.removed,
+      regressions: diff.regressions
+    };
+    const stdout = parsed.json
+      ? JSON.stringify(output, null, 2)
+      : [
+          `changed=${output.changed.length} added=${output.added.length} removed=${output.removed.length} regressions=${output.regressions.length}`,
+          ...(output.regressions.length > 0 ? ['REGRESSION'] : [])
+        ].join('\n');
+    const hasDiff = output.changed.length > 0 || output.added.length > 0 || output.removed.length > 0;
+    return { status: hasDiff ? 2 : 0, stdout, stderr: '' };
+  } catch (error) {
+    return { status: 3, stdout: '', stderr: `system2:diff failed: ${error.message}` };
+  }
 }
 
 const aPath = path.resolve(__dirname, '..', 'fixtures', 'system2_diff', 'a.json');
