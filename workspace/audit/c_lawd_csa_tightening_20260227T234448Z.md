@@ -1,0 +1,99 @@
+# C_LAWD CSA Tightening (20260227T234448Z)
+
+## Phase 0 - Snapshot + Evidence Bootstrap
+
+### git rev-parse HEAD
+```
+9c90a31e2e753346a3444768deec491ec0290637
+```
+
+### git status --porcelain
+```
+ M MEMORY.md
+ M memory/literature/state.json
+ M workspace/governance/OPEN_QUESTIONS.md
+ M workspace/research/findings.json
+ M workspace/research/queue.json
+ M workspace/research/wander_log.md
+?? memory/2026-02-28.md
+?? scripts/tailscale_serve_openclaw.sh
+?? workspace/audit/_evidence/
+?? workspace/audit/c_lawd_tailscale_serve_hardening_20260227T204737Z.md
+?? workspace/governance/.open_questions.lock
+?? workspace/governance/open_questions_shards/
+?? workspace/state_runtime/memory/
+```
+
+### tailscale version
+```
+The Tailscale CLI failed to start: Failed to load preferences.
+```
+
+### tailscale status
+```
+The Tailscale CLI failed to start: Failed to load preferences.
+```
+
+### tailscale ip -4 || true
+```
+The Tailscale CLI failed to start: Failed to load preferences.
+```
+
+### tailscale serve status || true
+```
+The Tailscale CLI failed to start: Failed to load preferences.
+```
+
+### launchctl print gui/501/ai.openclaw.gateway | grep -A6 -E 'state|program|arguments|job state' || true
+```
+	state = running
+
+	program = /bin/zsh
+	arguments = {
+		/bin/zsh
+		/Users/heathyeager/clawd/scripts/run_openclaw_gateway_repo.sh
+	}
+
+	working directory = /Users/heathyeager/clawd
+
+--
+		state = active
+		active count = 1
+		name = ai.openclaw.gateway
+	}
+
+	jetsam coalition = {
+		ID = 17037
+--
+		state = active
+		active count = 1
+		name = ai.openclaw.gateway
+	}
+
+	spawn type = daemon (3)
+	jetsam priority = 40
+--
+	job state = running
+
+	properties = partial import | keepalive | runatload | inferred program
+}
+```
+
+### lsof -nP -iTCP:18789 -sTCP:LISTEN || true
+```
+COMMAND  PID        USER   FD   TYPE             DEVICE SIZE/OFF NODE NAME
+node    4764 heathyeager   16u  IPv4 0x86f82e099d4318cb      0t0  TCP 127.0.0.1:18789 (LISTEN)
+node    4764 heathyeager   17u  IPv6 0x60d2b1b3d69f528b      0t0  TCP [::1]:18789 (LISTEN)
+```
+
+### curl -sS -D- http://127.0.0.1:18789/health -o /dev/null || true
+```
+curl: (7) Failed to connect to 127.0.0.1 port 18789 after 0 ms: Couldn't connect to server
+```
+
+## Interpretation (Phase 0)
+
+- Gateway LaunchAgent reports running.
+- Local listener observed on `127.0.0.1:18789` and `[::1]:18789`.
+- Health endpoint probe failed at capture time.
+- Tailscale CLI probes are blocked in this execution environment (`Failed to load preferences`).
