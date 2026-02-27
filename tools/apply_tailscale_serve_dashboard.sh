@@ -11,5 +11,7 @@ if ! command -v tailscale >/dev/null 2>&1; then
   exit 1
 fi
 
-tailscale serve --http=18789 http://127.0.0.1:18789
+tailscale serve reset || true
+pkill -f "tailscale serve" || true
+tailscale serve --bg 18789
 tailscale serve status

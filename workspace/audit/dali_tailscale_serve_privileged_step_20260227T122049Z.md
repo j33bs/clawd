@@ -25,3 +25,21 @@ sudo bash tools/apply_tailscale_serve_dashboard.sh
 bash tools/check_tailscale_serve_dashboard.sh
 bash workspace/scripts/verify_preflight.sh
 ```
+
+---
+## Addendum — Persistent Background Serve (tailscale serve --bg)
+
+Reason:
+Serve was previously run in foreground mode (Ctrl+C). Tailnet Serve is now enabled; configuration updated to background mode for persistence.
+
+Change:
+`tools/apply_tailscale_serve_dashboard.sh` now uses:
+`tailscale serve --bg 18789`
+
+Verification:
+- `sudo tailscale serve status` shows dashboard proxy mapping (requires privileged run on host).
+- apply script returns immediately after background configuration.
+- checker passes on a host with Tailscale up and serve mapping configured.
+
+Recorded: 2026-02-27T12:41:52Z
+---
