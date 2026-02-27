@@ -13,12 +13,7 @@ cd "$REPO_ROOT"
 export NODE_ENV="${NODE_ENV:-production}"
 export OPENCLAW_QUIESCE="${OPENCLAW_QUIESCE:-0}"
 PORT="${OPENCLAW_GATEWAY_PORT:-18789}"
-BIND_INPUT="${OPENCLAW_GATEWAY_BIND:-loopback}"
-case "$BIND_INPUT" in
-  127.0.0.1|localhost) BIND_MODE="loopback" ;;
-  loopback|lan|tailnet|auto|custom) BIND_MODE="$BIND_INPUT" ;;
-  *) BIND_MODE="loopback" ;;
-esac
+BIND_ADDR="${OPENCLAW_GATEWAY_BIND:-loopback}"
 
 repo_sha="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
 repo_branch="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown)"
@@ -32,6 +27,16 @@ echo "OPENCLAW_REPO_SHA=${repo_sha}" >&2
 echo "OPENCLAW_REPO_BRANCH=${repo_branch}" >&2
 echo "OPENCLAW_ENTRYPOINT=${OPENCLAW_ENTRYPOINT}" >&2
 echo "OPENCLAW_BUILD repo_sha=${OPENCLAW_REPO_SHA} branch=${OPENCLAW_REPO_BRANCH} entrypoint=${OPENCLAW_ENTRYPOINT}" >&2
-echo "OPENCLAW_GATEWAY_BIND=${BIND_MODE} OPENCLAW_GATEWAY_PORT=${PORT}" >&2
+echo "OPENCLAW_GATEWAY_BIND=${BIND_ADDR} OPENCLAW_GATEWAY_PORT=${PORT}" >&2
 
-exec openclaw gateway run --bind "${BIND_MODE}" --port "${PORT}"
+# Tailscale optional transport binding (CBP safe-mode)
+if [ "$BIND_ADDR" = "tailscale" ]; then
+  TS_IP="$(tailscale ip -4 | head -n1)"
+  if [ -z "$TS_IP" ]; then
+    echo "FATAL: tailscale mode requested but tailscale IPv4 is unavailable" >&2
+    exit 1
+  fi
+  exec openclaw gateway run --bind tailnet --port "${PORT}"
+else
+  exec openclaw gateway run --bind loopback --port "${PORT}"
+fi
