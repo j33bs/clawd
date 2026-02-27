@@ -14,12 +14,20 @@ if ! tailscale version >/dev/null 2>&1; then
   fail "tailscale installed but version command failed"
 fi
 
-if ! command -v systemctl >/dev/null 2>&1; then
-  fail "systemctl missing; cannot verify tailscaled service state"
-fi
-
-if [[ "$(systemctl is-active tailscaled 2>/dev/null || true)" != "active" ]]; then
-  fail "tailscaled service is not active"
+systemd_checked=0
+if command -v systemctl >/dev/null 2>&1; then
+  systemd_checked=1
+  systemd_state="$(systemctl is-active tailscaled 2>&1 || true)"
+  case "${systemd_state}" in
+    active) ;;
+    *"Failed to connect to bus"*|*"System has not been booted with systemd"*|*"Operation not permitted"*)
+      # Fallback path: systemctl unavailable in this execution context.
+      systemd_checked=0
+      ;;
+    *)
+      fail "tailscaled service is not active (state: ${systemd_state})"
+      ;;
+  esac
 fi
 
 if ! tailscale status >/dev/null 2>&1; then
@@ -40,7 +48,7 @@ for port in "${watch_ports[@]}"; do
   while IFS= read -r listen_addr; do
     [[ -n "${listen_addr}" ]] || continue
     case "${listen_addr}" in
-      127.0.0.1:*|[::1]:*) ;;
+      127.0.0.1:*|\[::1\]:*) ;;
       *) fail "port ${port} exposed on non-loopback address (${listen_addr})" ;;
     esac
   done < <(ss -ltnH "( sport = :${port} )" | awk '{print $4}')
@@ -50,41 +58,76 @@ serve_status="$(tailscale serve status 2>&1 || true)"
 if [[ -z "${serve_status}" ]]; then
   fail "tailscale serve status returned no output"
 fi
-if grep -qiE 'no serve config|serve is not configured|not serving' <<<"${serve_status}"; then
+
+serve_status_json="$(tailscale serve status --json 2>/dev/null || true)"
+if [[ -z "${serve_status_json}" ]]; then
+  fail "tailscale serve status json unavailable"
+fi
+if [[ "${serve_status_json}" == "{}" ]]; then
   fail "tailscale serve is not configured"
 fi
 
-mapfile -t targets < <(sed -nE 's/.*proxy (https?:\/\/[^[:space:]]+).*/\1/p' <<<"${serve_status}")
-if ((${#targets[@]} == 0)); then
-  fail "tailscale serve has no proxy targets"
-fi
-
 allowed_local_targets=("127.0.0.1:18789")
-if [[ -n "${OPENCLAW_GATEWAY_PORT:-}" && "${OPENCLAW_GATEWAY_PORT}" != "18789" ]]; then
-  allowed_local_targets+=("127.0.0.1:${OPENCLAW_GATEWAY_PORT}")
+gateway_port="${OPENCLAW_TAILSCALE_GATEWAY_PORT:-${OPENCLAW_GATEWAY_PORT:-}}"
+if [[ -n "${gateway_port}" && "${gateway_port}" != "18789" ]]; then
+  allowed_local_targets+=("127.0.0.1:${gateway_port}")
 fi
 
-for target in "${targets[@]}"; do
-  target_no_scheme="${target#http://}"
-  target_no_scheme="${target_no_scheme#https://}"
-  hostport="${target_no_scheme%%/*}"
-  host="${hostport%:*}"
-  port="${hostport##*:}"
+validation_output="$(
+  ALLOWED_TARGETS="$(IFS=,; echo "${allowed_local_targets[*]}")" \
+  python3 - <<'PY' "${serve_status_json}"
+import json
+import os
+import re
+import sys
+from urllib.parse import urlparse
 
-  if [[ "${host}" != "127.0.0.1" ]]; then
-    fail "tailscale serve target must be loopback; got ${target}"
-  fi
+raw_json = sys.argv[1]
+allowed = set(filter(None, os.environ.get("ALLOWED_TARGETS", "").split(",")))
 
-  allowed=0
-  for allowed_target in "${allowed_local_targets[@]}"; do
-    if [[ "${host}:${port}" == "${allowed_target}" ]]; then
-      allowed=1
-      break
-    fi
-  done
-  if ((allowed == 0)); then
-    fail "tailscale serve target not allowlisted (${host}:${port})"
-  fi
-done
+try:
+    parsed = json.loads(raw_json)
+except json.JSONDecodeError as exc:
+    print(f"FAIL: invalid tailscale serve status json: {exc}")
+    raise SystemExit(1)
 
-echo "ok"
+urls = []
+
+def walk(value):
+    if isinstance(value, dict):
+        for v in value.values():
+            walk(v)
+        return
+    if isinstance(value, list):
+        for v in value:
+            walk(v)
+        return
+    if isinstance(value, str) and re.match(r"^https?://", value):
+        urls.append(value)
+
+walk(parsed)
+
+if not urls:
+    print("FAIL: tailscale serve has no proxy targets")
+    raise SystemExit(1)
+
+for url in urls:
+    parsed_url = urlparse(url)
+    host = parsed_url.hostname or ""
+    port = parsed_url.port
+    if not host or port is None:
+        print(f"FAIL: tailscale serve target missing host/port ({url})")
+        raise SystemExit(1)
+    if host != "127.0.0.1":
+        print(f"FAIL: tailscale serve target must be loopback; got {url}")
+        raise SystemExit(1)
+    hostport = f"{host}:{port}"
+    if hostport not in allowed:
+        print(f"FAIL: tailscale serve target not allowlisted ({hostport})")
+        raise SystemExit(1)
+PY
+)"
+
+if [[ -n "${validation_output}" ]]; then
+  fail "${validation_output#FAIL: }"
+fi
