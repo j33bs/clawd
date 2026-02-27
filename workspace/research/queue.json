@@ -1,6 +1,5 @@
 {
   "topics": [
-    "tailscale mesh VPN AI agent communication network",
     "private AI network infrastructure self-hosted",
     "RAG retrieval augmented generation apple core ml on-device",
     "on-device RAG local vector database apple silicon",
@@ -29,7 +28,8 @@
     "creativity multi-agent systems emergence",
     "LLM moral status responsibility",
     "cross-timescale processing predictive coding",
-    "memory trails decay forgetting artificial"
+    "memory trails decay forgetting artificial",
+    "tailscale mesh VPN AI agent communication network"
   ],
-  "last_wander": "2026-02-25T09:04:18.084453"
+  "last_wander": "2026-02-27T15:04:17.350213"
 }
