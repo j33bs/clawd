@@ -27,6 +27,8 @@ But here's what struck me — these aren't just "components." They're **layers o
 - Medium: Reasoning → Planning (seconds-minutes)
 - Slow: Learning → Adaptation (hours-days)
 
+**Constraints as Cross-Timescale Integrators (TACTI lens):** Constraints can act as the coupling mechanism between these layers. Fast-path decisions that violate constraints are redirected into medium/slow paths (review, memory update, governance adjustment) so the system learns without destructive resets.
+
 **Implementation thought:** In HiveMind, we could implement explicit timescale routing. Fast path = direct tool execution. Medium path = deliberation with memory. Slow path = consolidation to persistent storage.
 
 ---
