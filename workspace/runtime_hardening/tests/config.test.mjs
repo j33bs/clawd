@@ -102,3 +102,35 @@ test('redacted logs omit anthropicApiKey when anthropic is disabled', () => {
     assert.equal(Object.hasOwn(redacted, 'anthropicApiKey'), false);
   });
 });
+
+test('hardening debug logs allowlist and anthropic enablement without key material', () => {
+  withEnv(
+    {
+      OPENCLAW_HARDENING_DEBUG: '1',
+      OPENCLAW_PROVIDER_ALLOWLIST: 'local_vllm',
+      ANTHROPIC_API_KEY: undefined,
+      NODE_ENV: 'test'
+    },
+    () => {
+      const writes = [];
+      const originalWrite = process.stderr.write;
+      process.stderr.write = (chunk, ...args) => {
+        writes.push(String(chunk));
+        const maybeCb = args[args.length - 1];
+        if (typeof maybeCb === 'function') maybeCb();
+        return true;
+      };
+      try {
+        validateConfig(process.env);
+      } finally {
+        process.stderr.write = originalWrite;
+      }
+      const joined = writes.join('');
+      assert.match(joined, /hardening_debug allowlist_raw="local_vllm"/);
+      assert.match(joined, /providers=\["local_vllm"\]/);
+      assert.match(joined, /anthropicEnabled=false/);
+      assert.match(joined, /anthropicKeyPresent=false/);
+      assert.equal(joined.includes('abc123'), false);
+    }
+  );
+});

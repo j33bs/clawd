@@ -53,11 +53,25 @@ function isAnthropicEnabled(env = process.env) {
   return allowlist.includes('anthropic');
 }
 
+function emitHardeningDebug(env, details) {
+  if (String(env.OPENCLAW_HARDENING_DEBUG || '').trim() !== '1') return;
+  const line = `hardening_debug allowlist_raw=${JSON.stringify(details.allowlistRaw)} providers=${JSON.stringify(details.providers)} anthropicEnabled=${details.anthropicEnabled} anthropicKeyPresent=${details.anthropicKeyPresent}`;
+  try {
+    process.stderr.write(`${line}\n`);
+  } catch {
+    // ignore debug output failures
+  }
+}
+
 function validateConfig(env = process.env) {
   const errors = [];
-  const anthropicEnabled = isAnthropicEnabled(env);
+  const allowlistRaw = typeof env.OPENCLAW_PROVIDER_ALLOWLIST === 'string' ? env.OPENCLAW_PROVIDER_ALLOWLIST : '';
+  const providers = parseProviderList(allowlistRaw);
+  const anthropicEnabled = providers.includes('anthropic');
 
   const anthropicApiKey = typeof env.ANTHROPIC_API_KEY === 'string' ? env.ANTHROPIC_API_KEY.trim() : '';
+  const anthropicKeyPresent = Boolean(anthropicApiKey);
+  emitHardeningDebug(env, { allowlistRaw, providers, anthropicEnabled, anthropicKeyPresent });
   if (anthropicEnabled && !anthropicApiKey) {
     errors.push('ANTHROPIC_API_KEY: required non-empty value is missing');
   }

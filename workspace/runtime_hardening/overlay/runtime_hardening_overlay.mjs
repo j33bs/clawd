@@ -345,6 +345,12 @@ if (!globalThis[GLOBAL_KEY]) {
   installNetworkInterfacesGuard({ logger: runtimeLogger, processLike: process });
 
   const isStatusCommand = Array.isArray(process.argv) && process.argv.includes('status');
+  const isDashboardCommand = Array.isArray(process.argv) && process.argv.includes('dashboard');
+  const allowlistRaw = typeof process.env.OPENCLAW_PROVIDER_ALLOWLIST === 'string' ? process.env.OPENCLAW_PROVIDER_ALLOWLIST : '';
+  if (isDashboardCommand && !allowlistRaw.trim()) {
+    process.env.OPENCLAW_PROVIDER_ALLOWLIST = 'local_vllm';
+    runtimeLogger.info('dashboard_allowlist_defaulted', { openclawProviderAllowlist: 'local_vllm' });
+  }
   if (isStatusCommand) {
     try {
       const vllmHealthy = await checkVllmHealth({ port: 8001, timeoutMs: 1200 });
@@ -380,6 +386,10 @@ if (!globalThis[GLOBAL_KEY]) {
 
   const sessionManager = config ? new SessionManager({ config, logger: runtimeLogger }) : null;
   if (config) {
+    if (isDashboardCommand && !config.anthropicEnabled && Object.hasOwn(process.env, 'ANTHROPIC_API_KEY')) {
+      delete process.env.ANTHROPIC_API_KEY;
+      runtimeLogger.info('dashboard_env_sanitized', { removedEnv: 'ANTHROPIC_API_KEY' });
+    }
     installOutboundFetchSanitizer(runtimeLogger, config);
   }
 
