@@ -180,3 +180,16 @@ OPENCLAW_GATEWAY_BIND=loopback OPENCLAW_GATEWAY_PORT=18789
 - python3 workspace/research/research_wanderer.py append-test /tmp/open_questions_append_test_20260227T112140Z.md:
 APPEND_TEST_OK target=/tmp/open_questions_append_test_20260227T112140Z.md
 
+## PR55 Tighten Pass (20260227T113838Z)
+- rebase_origin_main: up_to_date (no conflicts)
+- lock_behavior: non-blocking lock with timeout 5s and explicit OPEN_QUESTIONS_LOCK_TIMEOUT stderr line
+- dedupe_behavior: hash includes normalized question + source topic; duplicate suppression is time-windowed
+- retention_bound: dedupe timestamps pruned by QUESTION_STATE_TTL_DAYS
+
+### Commands
+- python3 -m py_compile workspace/research/research_wanderer.py
+- python3 workspace/research/research_wanderer.py append-test /tmp/oq_append_test_20260227T113838Z.md
+APPEND_TEST_OK target=/tmp/oq_append_test_20260227T113838Z.md
+- python3 workspace/research/research_wanderer_selftest.py
+PASS research_wanderer self-test
+

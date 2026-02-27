@@ -16,6 +16,7 @@ import sys
 import fcntl
 import hashlib
 import re
+import time
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -47,6 +48,7 @@ MAX_QUESTIONS_PER_RUN = _env_int("RESEARCH_WANDERER_MAX_QUESTIONS_PER_RUN", 1, 1
 QUESTION_COOLDOWN_HOURS = _env_int("RESEARCH_WANDERER_APPEND_COOLDOWN_HOURS", 6, 0)
 QUESTION_DEDUPE_DAYS = _env_int("RESEARCH_WANDERER_DEDUPE_DAYS", 14, 1)
 QUESTION_STATE_TTL_DAYS = _env_int("RESEARCH_WANDERER_STATE_TTL_DAYS", 90, 7)
+OPEN_QUESTIONS_LOCK_TIMEOUT_SEC = _env_int("RESEARCH_WANDERER_LOCK_TIMEOUT_SEC", 5, 1)
 
 DEFAULT_TOPICS = [
     "predictive processing vs next token prediction",
@@ -156,9 +158,11 @@ def _normalize_question(question: str) -> str:
     return re.sub(r"\s+", " ", StringOrEmpty(question).strip().lower())
 
 
-def _question_hash(question: str) -> str:
+def _question_hash(question: str, source_topic: str = "") -> str:
     normalized = _normalize_question(question)
-    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+    source = _normalize_question(source_topic)
+    payload = f"{normalized}|source:{source}"
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
 def StringOrEmpty(value) -> str:
@@ -169,7 +173,21 @@ def StringOrEmpty(value) -> str:
 def _exclusive_lock(lock_path: Path):
     lock_path.parent.mkdir(parents=True, exist_ok=True)
     with open(lock_path, "a+", encoding="utf-8") as lock_file:
-        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+        deadline = time.monotonic() + OPEN_QUESTIONS_LOCK_TIMEOUT_SEC
+        while True:
+            try:
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except BlockingIOError:
+                if time.monotonic() >= deadline:
+                    print(
+                        "OPEN_QUESTIONS_LOCK_TIMEOUT "
+                        f"path={OPEN_QUESTIONS_FILE} lock={lock_path} "
+                        f"seconds={OPEN_QUESTIONS_LOCK_TIMEOUT_SEC}",
+                        file=sys.stderr,
+                    )
+                    raise TimeoutError("open_questions_lock_timeout")
+                time.sleep(0.1)
         try:
             yield
         finally:
@@ -233,7 +251,8 @@ def _prune_question_state(state: dict, now_utc: datetime):
         parsed = _parse_iso_utc(StringOrEmpty(ts))
         if parsed and parsed >= cutoff:
             keep[qhash] = parsed.isoformat()
-    state["dedupe"] = keep
+    dedupe.clear()
+    dedupe.update(keep)
 
 
 def maybe_append_open_question(findings: dict, question: str, source_topic: str, now_utc: datetime):
@@ -247,7 +266,11 @@ def maybe_append_open_question(findings: dict, question: str, source_topic: str,
         state["dedupe"] = dedupe
 
     _prune_question_state(state, now_utc)
-    qhash = _question_hash(question)
+    dedupe = state.get("dedupe", {})
+    if not isinstance(dedupe, dict):
+        dedupe = {}
+        state["dedupe"] = dedupe
+    qhash = _question_hash(question, source_topic)
     last_seen = _parse_iso_utc(StringOrEmpty(dedupe.get(qhash)))
     if last_seen and now_utc - last_seen < timedelta(days=QUESTION_DEDUPE_DAYS):
         return False, "duplicate_recent"
@@ -256,7 +279,10 @@ def maybe_append_open_question(findings: dict, question: str, source_topic: str,
     if last_append_ts and now_utc - last_append_ts < timedelta(hours=QUESTION_COOLDOWN_HOURS):
         return False, "cooldown_active"
 
-    appended = append_open_question_entry(question, source_topic, now_utc)
+    try:
+        appended = append_open_question_entry(question, source_topic, now_utc)
+    except TimeoutError:
+        return False, "lock_timeout"
     if not appended:
         return False, "quiesced"
 
