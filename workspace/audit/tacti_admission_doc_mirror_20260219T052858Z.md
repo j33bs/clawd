@@ -17,3 +17,26 @@
 
 ## Note
 - Docs-only; no runtime behavior change.
+
+---
+
+## Addendum — Dali Stabilization Outcome (Post-Canonicalization)
+
+Stabilization Commit:
+
+`49c881eef6c729ea14bc6317648c033a6cff1b49`
+
+Report:
+`workspace/audit/dali_stabilization_report_20260227T101431Z.md`
+
+Result:
+**PARTIAL**
+
+Notes:
+- Terminology canonicalization executed prior to stabilization loop.
+- Partial status indicates remaining environmental or runtime nondeterminism outside terminology scope.
+- No rollback required.
+
+Recorded: 2026-02-27T10:19:54Z
+
+---
