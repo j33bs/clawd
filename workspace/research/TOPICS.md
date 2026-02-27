@@ -3,6 +3,10 @@
 ## Core Framework
 **TACTI(C)-R**: Temporality, Arousal, Cross-Timescale, Collapse, Repairable
 
+Repository naming note: this doc keeps `TACTI(C)-R` as the canonical label; `TACTI` is shorthand when discussing a single lens.
+
+Constraints note: within the TACTI lens, constraints can function as cross-timescale integrators by coupling fast-path actions to slower memory/policy updates.
+
 ### Topic Categories
 
 | Topic | Description | Key Search Terms |
