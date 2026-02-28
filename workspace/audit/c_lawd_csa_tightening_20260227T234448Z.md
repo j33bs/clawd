@@ -97,3 +97,42 @@ curl: (7) Failed to connect to 127.0.0.1 port 18789 after 0 ms: Couldn't connect
 - Local listener observed on `127.0.0.1:18789` and `[::1]:18789`.
 - Health endpoint probe failed at capture time.
 - Tailscale CLI probes are blocked in this execution environment (`Failed to load preferences`).
+
+## Phase 1 - Enforce Localhost-Only Binding
+
+### Phase 1 Action
+```
+Gateway wrapper already defaults to loopback bind; no code change applied.
+```
+
+### OPENCLAW_WRAPPER_DRYRUN=1 scripts/run_openclaw_gateway_repo.sh 2>&1
+```
+OPENCLAW_REPO_RUNTIME=openclaw_gateway
+OPENCLAW_REPO_ROOT=/Users/heathyeager/clawd
+OPENCLAW_REPO_SHA=ab35490
+OPENCLAW_REPO_BRANCH=codex/harden/c_lawd-csa-tightening-20260227
+OPENCLAW_ENTRYPOINT=openclaw gateway run
+OPENCLAW_BUILD repo_sha=ab35490 branch=codex/harden/c_lawd-csa-tightening-20260227 entrypoint=openclaw gateway run
+OPENCLAW_GATEWAY_BIND=loopback OPENCLAW_GATEWAY_PORT=18789
+OPENCLAW_TAILNET_MODE bind=loopback control_ui=local allowed_origins_count=0 dryrun=1
+OPENCLAW_TAILNET_BIND_HOST=127.0.0.1
+OPENCLAW_WRAPPER_DRYRUN_COMMAND=openclaw gateway run --bind loopback --port 18789
+```
+
+### lsof -nP -iTCP:18789 -sTCP:LISTEN || true
+```
+COMMAND  PID        USER   FD   TYPE             DEVICE SIZE/OFF NODE NAME
+node    4764 heathyeager   16u  IPv4 0x86f82e099d4318cb      0t0  TCP 127.0.0.1:18789 (LISTEN)
+node    4764 heathyeager   17u  IPv6 0x60d2b1b3d69f528b      0t0  TCP [::1]:18789 (LISTEN)
+```
+
+### curl -sS --max-time 2 -D- http://127.0.0.1:18789/health -o /dev/null || true
+```
+curl: (7) Failed to connect to 127.0.0.1 port 18789 after 0 ms: Couldn't connect to server
+```
+
+## Interpretation (Phase 1)
+
+- Wrapper-reported bind host remains `127.0.0.1`.
+- Live listener remains loopback-only (`127.0.0.1` + `::1`).
+- No bind-hardening code delta required in this phase.
