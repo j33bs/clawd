@@ -176,3 +176,47 @@ The Tailscale CLI failed to start: Failed to load preferences.
 - Serve command syntax is now explicit and non-interactive (`--https=443 / http://127.0.0.1:18789`).
 - Script forbids non-loopback upstream host values.
 - Live tailscale execution remains blocked in this environment (`Failed to load preferences`).
+
+## Phase 3 - Persist Serve via launchd
+
+### Phase 3 Action
+```
+Added scripts/install_tailscale_serve_launchagent.sh to generate a 0600 LaunchAgent plist and optionally apply launchctl.
+```
+
+### HOME="<tmp>" OPENCLAW_TAILSCALE_SERVE_LAUNCHAGENT_DRYRUN=1 scripts/install_tailscale_serve_launchagent.sh | sed -n '1,40p'
+```
+PLIST_PATH=<tmp>/Library/LaunchAgents/ai.openclaw.tailscale-serve.plist
+<?xml version="1.0" encoding="UTF-8"?>
+...
+<string>/Users/heathyeager/clawd/scripts/tailscale_serve_openclaw.sh</string>
+...
+```
+
+### HOME="<tmp>" scripts/install_tailscale_serve_launchagent.sh
+```
+WROTE_PLIST=<tmp>/Library/LaunchAgents/ai.openclaw.tailscale-serve.plist
+LAUNCHCTL_APPLIED=0
+```
+
+### stat <tmp>/Library/LaunchAgents/ai.openclaw.tailscale-serve.plist
+```
+600 <tmp>/Library/LaunchAgents/ai.openclaw.tailscale-serve.plist
+```
+
+### node --test tests/install_tailscale_serve_launchagent.test.js tests/tailscale_serve_openclaw.test.js
+```
+✔ dryrun prints target plist path and launchagent payload
+✔ write mode creates 0600 plist without applying launchctl
+✔ dryrun emits explicit path-based tailscale serve command
+✔ non-loopback gateway host is rejected
+✔ script calls tailscale serve and tailscale serve status
+ℹ tests 5
+ℹ pass 5
+ℹ fail 0
+```
+
+## Interpretation (Phase 3)
+
+- LaunchAgent persistence is now generated from repo-controlled script with locked file mode (`0600`).
+- Launchctl apply remains opt-in (`OPENCLAW_TAILSCALE_SERVE_LAUNCHCTL_APPLY=1`) to keep execution reversible.
