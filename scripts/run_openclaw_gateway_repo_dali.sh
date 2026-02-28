@@ -36,4 +36,9 @@ cd "${REPO_ROOT}"
 HEAD_SHA="$(git -C "${REPO_ROOT}" rev-parse --short HEAD 2>/dev/null || echo unknown)"
 echo "gateway_repo_runner: repo=${REPO_ROOT} head=${HEAD_SHA} allowlist=${OPENCLAW_PROVIDER_ALLOWLIST}"
 
+PATCH_SCRIPT="${REPO_ROOT}/tools/apply_gateway_security_hardening.sh"
+if [[ -x "${PATCH_SCRIPT}" ]]; then
+  "${PATCH_SCRIPT}"
+fi
+
 exec "${OPENCLAW_BIN}" gateway --port "${GATEWAY_PORT}" "$@"
