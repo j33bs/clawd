@@ -153,19 +153,10 @@ if [[ "${all_allowlisted}" -eq 1 ]]; then
   exit 0
 fi
 
-git -C "${repo_root}" restore --staged . || true
-git -C "${repo_root}" restore . || true
-
-remaining_raw="$(git -C "${repo_root}" status --porcelain=v1)"
-remaining_status="$(printf '%s\n' "${remaining_raw}" | filter_status_lines)"
-if [[ -n "${remaining_status}" ]]; then
-  echo "CANON boundary auto-repair incomplete; remaining dirty paths:" >&2
-  while IFS= read -r rem; do
-    [[ -n "${rem}" ]] || continue
-    echo "- ${rem}" >&2
-  done < <(printf '%s\n' "${remaining_status}" | extract_paths)
-  echo "snapshot: ${snapshot_path}" >&2
-  exit 2
-fi
-
-exit 0
+echo "CANON boundary blocked; non-allowlisted workspace drift detected (no auto-restore performed)." >&2
+while IFS= read -r rem; do
+  [[ -n "${rem}" ]] || continue
+  echo "- ${rem}" >&2
+done < <(printf '%s\n' "${status_now}" | extract_paths)
+echo "snapshot: ${snapshot_path}" >&2
+exit 2
