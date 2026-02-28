@@ -312,3 +312,27 @@ tailscale serve reset
 ## Interpretation (Phase 6)
 
 - Rollback preserved as explicit operator runbook; intentionally not executed during tightening.
+
+## Phase 7 - Minimal Diffs + Git Hygiene
+
+### git status --porcelain
+```
+
+```
+
+### git log --oneline -n 8
+```
+226a6d3 docs(audit): add c_lawd CSA phase 6 rollback runbook
+049826c audit: record c_lawd CSA phase 5 hardening checks
+5e9f221 audit: record c_lawd CSA phase 4 cross-node verification
+05926ed feat(launchd): add reversible tailscale-serve persistence script
+4f1f4ca fix(tailscale): add hardened serve wrapper and phase 2 evidence
+d7244ff audit: record c_lawd CSA phase 1 localhost verification
+ab35490 audit: capture c_lawd CSA tightening phase 0 baseline
+9c90a31 fix(mesh): satisfy Control UI guard for tailnet bind (default UI off) (#56)
+```
+
+## Final Status
+
+- Phase chain complete through Phase 7.
+- Worktree clean at closeout.
