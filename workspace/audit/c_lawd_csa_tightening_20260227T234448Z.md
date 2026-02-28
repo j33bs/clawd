@@ -254,3 +254,49 @@ curl: (7) Failed to connect to 100.84.143.50 port 18789 after 0 ms: Couldn't con
 
 - Direct LAN and tailnet-IP access to port `18789` remains blocked (loopback-only invariant preserved).
 - Tailnet Serve state cannot be verified in this execution environment (`Failed to load preferences`).
+
+## Phase 5 - Hardening Checks
+
+### tailscale funnel status --json || true
+```
+{
+  "TCP": {
+    "443": {
+      "HTTPS": true
+    }
+  },
+  "Web": {
+    "heaths-macbook-pro.tail5e5706.ts.net:443": {
+      "Handlers": {
+        "/": {
+          "Proxy": "http://127.0.0.1:18789"
+        }
+      }
+    }
+  }
+}
+```
+
+### tailscale serve status || true
+```
+https://heaths-macbook-pro.tail5e5706.ts.net (tailnet only)
+|-- / proxy http://127.0.0.1:18789
+```
+
+### lsof -nP -iTCP:18789 -sTCP:LISTEN || true
+```
+COMMAND  PID        USER   FD   TYPE             DEVICE SIZE/OFF NODE NAME
+node    4764 heathyeager   16u  IPv4 0x86f82e099d4318cb      0t0  TCP 127.0.0.1:18789 (LISTEN)
+node    4764 heathyeager   17u  IPv6 0x60d2b1b3d69f528b      0t0  TCP [::1]:18789 (LISTEN)
+```
+
+### curl -sS --max-time 2 -D- http://127.0.0.1:18789/health -o /dev/null || true
+```
+curl: (7) Failed to connect to 127.0.0.1 port 18789 after 0 ms: Couldn't connect to server
+```
+
+## Interpretation (Phase 5)
+
+- Serve currently resolves to `tailnet only` with loopback proxy target.
+- Listener remains loopback-only on `127.0.0.1` and `::1`.
+- No funnel-reset mutation applied from this environment.
