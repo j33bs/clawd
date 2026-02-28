@@ -30,11 +30,18 @@ git -C "${repo_root}" worktree add -b "${livewire_branch}" "${livewire_path}" HE
 echo "# canon-boundary-test-$$" >> "${canon_path}/${test_file}"
 (
   cd "${canon_path}"
+  set +e
   MODE=CANON "${repo_root}/tools/guard_worktree_boundary.sh"
+  canon_rc=$?
+  set -e
+  if [[ "${canon_rc}" -eq 0 ]]; then
+    echo "FAIL: CANON mode should fail-closed on non-allowlisted drift" >&2
+    exit 1
+  fi
 )
 canon_non_snapshot_status="$(git -C "${canon_path}" status --porcelain=v1 | grep -v ' workspace/audit/worktree_dirty_snapshot_' || true)"
-if [[ -n "${canon_non_snapshot_status}" ]]; then
-  echo "FAIL: CANON mode should auto-restore tracked changes" >&2
+if [[ -z "${canon_non_snapshot_status}" ]]; then
+  echo "FAIL: CANON mode should preserve drift for explicit operator action" >&2
   exit 1
 fi
 
