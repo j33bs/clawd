@@ -300,3 +300,15 @@ curl: (7) Failed to connect to 127.0.0.1 port 18789 after 0 ms: Couldn't connect
 - Serve currently resolves to `tailnet only` with loopback proxy target.
 - Listener remains loopback-only on `127.0.0.1` and `::1`.
 - No funnel-reset mutation applied from this environment.
+
+## Phase 6 - Rollback (Do Not Run)
+
+```
+launchctl bootout gui/$(id -u) "$HOME/Library/LaunchAgents/ai.openclaw.tailscale-serve.plist" || true
+tailscale serve --https=443 off
+tailscale serve reset
+```
+
+## Interpretation (Phase 6)
+
+- Rollback preserved as explicit operator runbook; intentionally not executed during tightening.
