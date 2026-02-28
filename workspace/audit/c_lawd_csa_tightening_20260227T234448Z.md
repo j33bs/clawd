@@ -136,3 +136,43 @@ curl: (7) Failed to connect to 127.0.0.1 port 18789 after 0 ms: Couldn't connect
 - Wrapper-reported bind host remains `127.0.0.1`.
 - Live listener remains loopback-only (`127.0.0.1` + `::1`).
 - No bind-hardening code delta required in this phase.
+
+## Phase 2 - Configure Tailscale Serve (HTTPS Proxy)
+
+### Phase 2 Action
+```
+Added scripts/tailscale_serve_openclaw.sh with explicit serve path "/" and loopback-only proxy guard.
+```
+
+### OPENCLAW_TAILSCALE_SERVE_DRYRUN=1 scripts/tailscale_serve_openclaw.sh
+```
+OPENCLAW_TAILSCALE_SERVE_DRYRUN_COMMAND=tailscale serve --yes --bg --https=443 / http://127.0.0.1:18789
+```
+
+### scripts/tailscale_serve_openclaw.sh || true
+```
+The Tailscale CLI failed to start: Failed to load preferences.
+
+The Tailscale CLI failed to start: Failed to load preferences.
+```
+
+### tailscale serve status || true
+```
+The Tailscale CLI failed to start: Failed to load preferences.
+```
+
+### node --test tests/tailscale_serve_openclaw.test.js
+```
+✔ dryrun emits explicit path-based tailscale serve command
+✔ non-loopback gateway host is rejected
+✔ script calls tailscale serve and tailscale serve status
+ℹ tests 3
+ℹ pass 3
+ℹ fail 0
+```
+
+## Interpretation (Phase 2)
+
+- Serve command syntax is now explicit and non-interactive (`--https=443 / http://127.0.0.1:18789`).
+- Script forbids non-loopback upstream host values.
+- Live tailscale execution remains blocked in this environment (`Failed to load preferences`).
