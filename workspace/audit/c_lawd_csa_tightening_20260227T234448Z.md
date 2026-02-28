@@ -220,3 +220,37 @@ LAUNCHCTL_APPLIED=0
 
 - LaunchAgent persistence is now generated from repo-controlled script with locked file mode (`0600`).
 - Launchctl apply remains opt-in (`OPENCLAW_TAILSCALE_SERVE_LAUNCHCTL_APPLY=1`) to keep execution reversible.
+
+## Phase 4 - Cross-Node Verification
+
+### tailscale status || true
+```
+The Tailscale CLI failed to start: Failed to load preferences.
+```
+
+### tailscale serve status || true
+```
+The Tailscale CLI failed to start: Failed to load preferences.
+```
+
+### ifconfig | rg "inet "
+```
+inet 127.0.0.1
+inet 192.168.0.213
+inet 100.84.143.50
+```
+
+### curl -sS -D- "http://192.168.0.213:18789/health" -o /dev/null --max-time 5 || true
+```
+curl: (7) Failed to connect to 192.168.0.213 port 18789 after 1 ms: Couldn't connect to server
+```
+
+### curl -sS -D- "http://100.84.143.50:18789/health" -o /dev/null --max-time 5 || true
+```
+curl: (7) Failed to connect to 100.84.143.50 port 18789 after 0 ms: Couldn't connect to server
+```
+
+## Interpretation (Phase 4)
+
+- Direct LAN and tailnet-IP access to port `18789` remains blocked (loopback-only invariant preserved).
+- Tailnet Serve state cannot be verified in this execution environment (`Failed to load preferences`).
