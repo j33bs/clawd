@@ -201,6 +201,7 @@ export function createAuthAttemptLimiter(config = {}, nowFn = () => Date.now()) 
   const maxAttempts = Number.isInteger(config.maxAttempts) && config.maxAttempts > 0 ? config.maxAttempts : 10;
   const windowMs = Number.isInteger(config.windowMs) && config.windowMs > 0 ? config.windowMs : 60_000;
   const failures = new Map();
+  let _hitCount = 0;
 
   function prune(clientKey, nowMs) {
     const bucket = failures.get(clientKey);
@@ -216,8 +217,10 @@ export function createAuthAttemptLimiter(config = {}, nowFn = () => Date.now()) 
     check(clientKey) {
       const nowMs = nowFn();
       const bucket = prune(clientKey, nowMs);
+      const allowed = bucket.length < maxAttempts;
+      if (!allowed) _hitCount += 1;
       return {
-        allowed: bucket.length < maxAttempts,
+        allowed,
         remaining: Math.max(0, maxAttempts - bucket.length)
       };
     },
@@ -230,6 +233,19 @@ export function createAuthAttemptLimiter(config = {}, nowFn = () => Date.now()) 
     },
     reset(clientKey) {
       failures.delete(clientKey);
+    },
+    /**
+     * Return observability metrics for this limiter instance.
+     * CSA CCM v4 LOG-02, LOG-06.
+     *
+     * @returns {{ rate_limit_hits_total: number, rate_limit_active_windows: number, ts: number }}
+     */
+    getMetrics() {
+      return {
+        rate_limit_hits_total: _hitCount,
+        rate_limit_active_windows: failures.size,
+        ts: Date.now()
+      };
     }
   };
 }

@@ -12,7 +12,8 @@ const DEFAULTS = Object.freeze({
   mcpServerStartTimeoutMs: 30_000,
   logLevel: 'info',
   fsAllowOutsideWorkspace: false,
-  telegramReplyMode: 'never'
+  telegramReplyMode: 'never',
+  actionAuditLogPath: null // resolved at runtime relative to workspaceRoot
 });
 
 let configCache = null;
@@ -130,6 +131,10 @@ function validateConfig(env = process.env) {
     throw new Error(`Invalid runtime hardening configuration:\n- ${errors.join('\n- ')}`);
   }
 
+  const actionAuditLogPath = env.ACTION_AUDIT_LOG_PATH
+    ? resolveWorkspacePath(env.ACTION_AUDIT_LOG_PATH, workspaceRoot)
+    : path.join(workspaceRoot, 'workspace', 'audit', 'agent_actions.jsonl');
+
   return {
     anthropicEnabled,
     anthropicApiKey,
@@ -143,7 +148,8 @@ function validateConfig(env = process.env) {
     mcpServerStartTimeoutMs,
     logLevel: typeof env.LOG_LEVEL === 'string' && env.LOG_LEVEL.trim() ? env.LOG_LEVEL.trim() : DEFAULTS.logLevel,
     fsAllowOutsideWorkspace,
-    telegramReplyMode
+    telegramReplyMode,
+    actionAuditLogPath
   };
 }
 

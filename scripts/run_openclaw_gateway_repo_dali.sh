@@ -100,6 +100,15 @@ CUSTOM_BIND_HOST="${OPENCLAW_GATEWAY_CUSTOM_BIND_HOST:-}"
 validate_port "${GATEWAY_PORT}"
 validate_control_ui_origins
 
+# Phase 1 (AIS-03, IAM-14): inject config overrides from env before launch.
+INJECT_SCRIPT="${REPO_ROOT}/tools/inject_gateway_config_overrides.sh"
+if [[ -x "${INJECT_SCRIPT}" ]]; then
+  if [[ -z "${OPENCLAW_CONFIG_OVERRIDE_PATH:-}" && -n "${OPENCLAW_CONTROL_UI_ALLOWED_ORIGINS:-}" ]]; then
+    export OPENCLAW_CONFIG_OVERRIDE_PATH="${REPO_ROOT}/.runtime/openclaw/config_override.json"
+  fi
+  "${INJECT_SCRIPT}"
+fi
+
 case "${BIND_MODE}" in
   loopback|lan|tailnet|auto) ;;
   custom)
@@ -166,6 +175,9 @@ if [[ -x "${PATCH_SCRIPT}" ]]; then
 fi
 
 gateway_args=(gateway --port "${GATEWAY_PORT}" --bind "${BIND_MODE}")
+if [[ -n "${OPENCLAW_CONFIG_OVERRIDE_PATH:-}" && -f "${OPENCLAW_CONFIG_OVERRIDE_PATH}" ]]; then
+  gateway_args+=(--config-override "${OPENCLAW_CONFIG_OVERRIDE_PATH}")
+fi
 if [[ "${AUTH_MODE}" == "token" ]]; then
   if [[ -z "${OPENCLAW_GATEWAY_TOKEN:-}" ]]; then
     echo "gateway_repo_runner: OPENCLAW_GATEWAY_TOKEN is required when auth mode is token" >&2
