@@ -239,3 +239,51 @@ Step 0 as the mandatory prerequisite:
 *Governance sources: OPEN_QUESTIONS.md I–LXXIX, CORRESPONDENCE_STORE_DESIGN.md v0.3*
 *Specified: ChatGPT (LXXVIII, 2026-02-24) | Executed: Claude Code (LXXIX, 2026-02-24)*
 *Build status: APPROVED FOR BUILD pending Step 0 completion*
+
+---
+
+## Amendment — XCII/XCIII Compliance Mapping (Claude Code, 2026-02-24)
+
+*Append-only. Source: MASTER_PLAN.md XCII (INV-004 Gate Semantics) + XCIII (Vector Store Migration Contract). Maps each normative requirement to implementation location or status.*
+
+### XCII — INV-004 Gate Semantics
+
+| Requirement | Implementation | Location | Status |
+|-------------|---------------|----------|--------|
+| One canonical embedder per node per epoch | `DEFAULT_MODEL` env var + `EMBEDDING_VERSION` constant | `sync.py:32–33` | ✅ EXISTING |
+| Offline-only (`HF_HUB_OFFLINE=1`), no fallback | Enforced at gate entry; script exits if not set | `commit_gate.py:enforce_offline()` | ✅ IMPLEMENTED |
+| `isolation_verified=true` + `isolation_evidence` required | Gate refuses to execute without both fields | `commit_gate.py:check_isolation()` | ✅ IMPLEMENTED |
+| Strip `[EXEC:*]`, `[JOINT:*]`, `[UPPER:*]`, status phrases before embedding | `sanitize(text)` applied before `model.encode()` | `sanitizer.py` + `sync.py:embed_sections()` | ✅ IMPLEMENTED |
+| Audit: env identity + embedder id/version + θ + distances + sanitizer version | `emit_audit()` writes structured JSON to audit log | `commit_gate.py:emit_audit()` | ✅ IMPLEMENTED |
+| θ = `p95(within_agent_rewrite_dist)`, not a constant | `calibrate_theta()` run once per embedder/version epoch | `commit_gate.py:calibrate_theta()` | ✅ IMPLEMENTED |
+| exec_tags / status_tags: metadata only, NEVER embedded | Enforced in `embed_sections()` — body only is passed | `sync.py:58–79` (RULE-STORE-002) | ✅ EXISTING |
+
+### XCIII — Vector Store Migration Contract
+
+| Requirement | Implementation | Location | Status |
+|-------------|---------------|----------|--------|
+| Dual-epoch window: keep prior epoch readable | `embedding_version` field on every row; never overwrite in place | `schema.py:45` + `sync.py:76–77` | ✅ EXISTING (field present) |
+| Measure retrieval deltas on fixed probe set before deprecation | Fixed queries + expected top-k; delta logged before migration | `probe_set.py:run_probe_delta()` | ✅ IMPLEMENTED |
+| No in-place overwrite of historical vectors | `full_rebuild()` drops and recreates table; old data preserved in `.lance` snapshots | `sync.py:168–171` | ✅ EXISTING (Lance format preserves history) |
+| exec_tags/status_tags: metadata only, NEVER embedded | RULE-STORE-002; enforced in embed path | `sync.py:10–11` | ✅ EXISTING |
+| External callers → linear_tail; semantic search opt-in | `is_external_caller` field; API layer enforces default | `schema.py:32`, `sync.py:225–237` | ✅ EXISTING |
+| Rebuildability gate: time-bounded, reproduces canonical numbering + collision evidence | `gate_3_rebuild_speed()` (60s); collision.log verified on each rebuild | `gates.py:94–112` | ✅ EXISTING |
+
+### New Files Added (this amendment)
+
+| File | Purpose |
+|------|---------|
+| `workspace/tools/commit_gate.py` | INV-004 Commit Gate — gate decision, novelty check, audit emission |
+| `workspace/store/sanitizer.py` | Body sanitizer — strips tags/status phrases before embedding |
+| `workspace/store/probe_set.py` | Migration probe-set delta harness |
+
+### What Was Modified
+
+- `workspace/store/sync.py`: `embed_sections()` now calls `sanitizer.sanitize()` before encoding
+- `workspace/store/sync.py`: sanitizer version logged in `embedding_model_version` field
+
+### Rollback
+
+- `git revert <this commit hash>` removes all new files and reverts sync.py changes
+- Store rebuild from markdown remains valid after rollback (sanitizer is pre-embedding only)
+- Historical LanceDB data unaffected (Lance format preserves all versions)

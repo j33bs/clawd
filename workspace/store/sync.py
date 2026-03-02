@@ -18,6 +18,7 @@ import pyarrow as pa
 from datetime import datetime
 from sentence_transformers import SentenceTransformer
 from schema import CorrespondenceSection
+from sanitizer import sanitize, sanitizer_version
 
 # Paths
 WORKSPACE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -65,7 +66,8 @@ def embed_sections(
     Returns sections with embedding field populated.
     """
     print(f"  Embedding {len(sections)} sections (body only — no exec_tags in vectors)...")
-    bodies = [s.body[:2048] for s in sections]  # truncate for model context window
+    print(f"  Sanitizer: v{sanitizer_version()} (strips [EXEC:*], [JOINT:*], [UPPER:*], status phrases)")
+    bodies = [sanitize(s.body)[:2048] for s in sections]  # sanitize before truncation
     t0 = time.time()
     vectors = model.encode(bodies, show_progress_bar=True, batch_size=32)
     elapsed = time.time() - t0
@@ -73,7 +75,7 @@ def embed_sections(
 
     for section, vec in zip(sections, vectors):
         section.embedding = vec.tolist()
-        section.embedding_model_version = model_name
+        section.embedding_model_version = f"{model_name}+sanitizer-{sanitizer_version()}"
         section.embedding_version = EMBEDDING_VERSION
 
     return sections
@@ -109,6 +111,7 @@ def build_arrow_schema(embedding_dim: int) -> pa.Schema:
         pa.field("embedding_model_version", pa.string()),
         pa.field("embedding_version", pa.int32()),
         pa.field("retro_dark_fields", pa.list_(pa.string())),
+        pa.field("trust_epoch", pa.string()),          # XCVII: relational trust state
         pa.field("response_to", pa.list_(pa.string())),
         pa.field("knowledge_refs", pa.list_(pa.string())),
     ])
@@ -133,6 +136,7 @@ def sections_to_records(sections: list[CorrespondenceSection]) -> list[dict]:
             "embedding_model_version": s.embedding_model_version,
             "embedding_version": s.embedding_version,
             "retro_dark_fields": s.retro_dark_fields,
+            "trust_epoch": s.trust_epoch,
             "response_to": s.response_to or [],
             "knowledge_refs": s.knowledge_refs or [],
         })

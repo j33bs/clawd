@@ -19,6 +19,11 @@ EXEC_TAG_DARK_THRESHOLD = 65  # sections I–LXIV have no exec_tags
 DEFAULT_RETRO_DARK = ["response_to", "knowledge_refs"]
 EXEC_DARK_FIELDS = ["exec_tags", "exec_decisions"] + DEFAULT_RETRO_DARK
 
+# trust_epoch valid values — defined by GATE-INV004-PASS TASK_TRUST_EPOCH_001 (XCVII)
+# Joint output of c_lawd + Dali via Commit Gate 2026-02-24
+TRUST_EPOCH_VALUES = {"building", "stable", "degraded", "recovering"}
+TRUST_EPOCH_DEFAULT = ""  # empty = not yet tagged (retro sections)
+
 
 class CorrespondenceSection(BaseModel):
     # Identity
@@ -46,6 +51,12 @@ class CorrespondenceSection(BaseModel):
 
     # Dark matter — explicit sentinel (RULE: [] = fully captured, list = dark fields)
     retro_dark_fields: list[str] = Field(default_factory=list)
+
+    # Relational trust state — GATE-INV004-PASS TASK_TRUST_EPOCH_001 (XCVII)
+    # One of TRUST_EPOCH_VALUES; set explicitly by operator on trust transition.
+    # Empty string = not yet tagged (all retro sections prior to XCVII).
+    # NEVER embedded — governance metadata only (same rule as exec_tags).
+    trust_epoch: str = TRUST_EPOCH_DEFAULT
 
     # Provenance — forward-only; None = retro:dark for this section
     response_to: Optional[list[str]] = None

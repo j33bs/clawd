@@ -1,0 +1,1 @@
+Document a software decision by recording the context (what problem you're solving), the options considered, the choice made and why, and any trade-offs. Include the date and who made the decision. Keep it in a central, version-controlled file like DECISIONS.md so future developers understand the reasoning without asking around.

@@ -45,7 +45,6 @@ information integration beyond sum of parts." This table is the test.
 | Date | Input | Whole-system score | Sum-of-parts score | Synergy Δ | Result | Notes |
 |------|-------|-------------------|-------------------|-----------|--------|-------|
 | 2026-02-23 | 5 routing scenarios (cold start, empty trail store) | spread=0.4150 | spread=0.4392 | **-0.0242** | **NULL / NEGATIVE** | See findings below |
-| 2026-02-27 | PENDING: define Φ protocol session boundary and inputs | — | — | — | **PENDING** | First row created to keep the loop live; measurement not yet performed for this cycle |
 
 ---
 
@@ -147,11 +146,14 @@ and falsifiable. Original language preserved here for record-keeping; not a meth
 
 *Last updated: Claude Code, 2026-02-23*
 
----
+| INV-004 | TASK_DRY_001 | 20260224T1 | GATE-INV004-PASS (DRY RUN) | θ=0.1712 | dist_c_lawd=0.4113 | dist_dali=0.3850 | embed_model=all-MiniLM-L6-v2+sanitizer-1.0.0 | isolation_verified=True |
 
-## How To Run The First Φ Session (Next Cycle)
+| INV-004 | TASK_TRUST_EPOCH_001 | 20260224T1 | GATE-INV004-PASS | θ=0.1712 | dist_c_lawd=0.3413 | dist_dali=0.3404 | embed_model=all-MiniLM-L6-v2+sanitizer-1.0.0 | isolation_verified=True |
 
-- [ ] Define what counts as one session (input set size, run boundaries, retry policy).
-- [ ] Define accepted inputs and where they are stored.
-- [ ] Define computation path/tooling used for whole-system vs sum-of-parts scoring.
-- [ ] Record result row with evidence links (logs, scripts, raw outputs).
+| INV-003 | REAL_CORPUS_RUN_001 | 20260226T033059Z | SITUATIONAL | being_divergence_score=0.893 | random_baseline=0.143 | author_silhouette=-0.009 | topic_silhouette=0.047 | n_beings=7 | corpus_size=75 | held_out_score=1.0 | C2_flag=AUTHOR_DOMINANT_TOPIC | verdict=SITUATIONAL — positional not dispositional | next=masking_variant | audit=being_divergence_20260226T033059Z.json |
+
+| INV-003b | MASKING_VARIANT_RUN_001 | 20260226T075117Z | INCONCLUSIVE — SUGGESTIVE | being_divergence_score=1.000 | random_baseline=0.143 | author_silhouette=None (N=7, 1 per being) | topic_silhouette=0.041 | n_beings=7 | corpus_size=7 | held_out_score=1.0 | C1_flag=REGISTER_SPLIT_TOO_NARROW | C2_flag=AUTHOR_DOMINANT_TOPIC (persists under masking) | Lumen_excluded=True (insufficient source sections) | verdict=INCONCLUSIVE — 100% attribution with suppressed topic signal; silhouette undefined at N=1 per being | next=masking_variant_round_2 (min 2 per being) | audit=being_divergence_20260226T075117Z.json |
+
+| INV-003b | MASKING_VARIANT_RUN_002 | 20260226T084941Z | INCONCLUSIVE — SUGGESTIVE | being_divergence_score=1.000 | random_baseline=0.143 | author_silhouette=-0.021 | topic_silhouette=0.068 | n_beings=7 | corpus_size=14 (2 per being) | held_out_score=1.0 | C2_flag=AUTHOR_DOMINANT_TOPIC | verdict=INCONCLUSIVE — centroid attribution 100%; author_sil<topic_sil; silhouette unreliable at N=2 multi-prompt | diagnosis=silhouette wrong instrument at this N; need same-prompt 5+ per being or revise gate | audit=being_divergence_20260226T084941Z.json |
+
+| INV-003b | MASKING_VARIANT_RUN_003 | 20260226T120515Z | DISPOSITIONAL-ATTRACTOR: PASS / STYLE-CONSISTENCY: UNTESTED | being_divergence_score=1.000 | random_baseline=0.143 | author_silhouette=-0.021 | topic_silhouette=0.068 | n_beings=7 | corpus_size=14 | attractor_threshold_p95=1.000 | attractor_permutation_baseline_mean=0.982 | dispositional_attractor=True | style_consistency=untested | verdict=DISPOSITIONAL-ATTRACTOR: PASS (score=1.0 ≥ θ=1.0); STYLE-CONSISTENCY: UNTESTED (N=2/being < 5 required) | POWER_CAVEAT: permutation mean=0.982 at N=2/being — metric has low discrimination power; PASS is formal; Round 3 (≥5/being, same prompt) required to establish STYLE-CONSISTENCY | audit=being_divergence_20260226T120515Z.json |

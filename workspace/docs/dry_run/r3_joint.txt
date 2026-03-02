@@ -1,0 +1,1 @@
+[JOINT: c_lawd + Dali] Store decisions in DECISIONS.md: each entry records context, options, choice, and trade-offs — every factual claim tagged with its source (ticket ID, section number, or prior decision reference). A compact provenance table maps key conclusions to their evidence in under 50 words per entry. Immediately usable by any developer; fully traceable to origin.
