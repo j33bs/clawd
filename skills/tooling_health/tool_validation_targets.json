@@ -1,49 +1,52 @@
 {
   "checks": [
     {
+      "kind": "http",
       "name": "gateway_health",
-      "kind": "http",
+      "timeout_sec": 5,
       "tool_id": "gateway.health",
-      "url": "http://127.0.0.1:18789/health",
-      "timeout_sec": 5
+      "url": "http://127.0.0.1:18789/health"
     },
     {
+      "kind": "http",
       "name": "local_vllm_models",
-      "kind": "http",
+      "timeout_sec": 5,
       "tool_id": "local_vllm.models",
-      "url": "http://127.0.0.1:8001/v1/models",
-      "timeout_sec": 5
+      "url": "http://127.0.0.1:8001/v1/models"
     },
     {
+      "kind": "http",
       "name": "coder_vllm_models",
-      "kind": "http",
+      "systemd_user_unit": "openclaw-tool-coder-vllm-models.service",
+      "timeout_sec": 5,
       "tool_id": "coder_vllm.models",
-      "url": "http://127.0.0.1:8002/v1/models",
-      "timeout_sec": 5
+      "url": "http://127.0.0.1:8002/v1/models"
     },
     {
+      "kind": "http",
       "name": "qmd_mcp_http",
-      "kind": "http",
+      "systemd_user_unit": "openclaw-tool-mcp-qmd-http.service",
+      "timeout_sec": 5,
       "tool_id": "mcp.qmd.http",
-      "url": "http://127.0.0.1:8181/",
-      "timeout_sec": 5
+      "url": "http://127.0.0.1:8181/"
     },
     {
-      "name": "ain_phi",
       "kind": "http",
+      "name": "ain_phi",
+      "systemd_user_unit": "openclaw-tool-ain-phi.service",
+      "timeout_sec": 5,
       "tool_id": "ain.phi",
-      "url": "http://127.0.0.1:18990/api/ain/phi",
-      "timeout_sec": 5
+      "url": "http://127.0.0.1:18990/api/ain/phi"
     },
     {
-      "name": "openclaw_status",
-      "kind": "command",
-      "tool_id": "openclaw.status",
       "command": [
         "openclaw",
         "status"
       ],
-      "timeout_sec": 20
+      "kind": "command",
+      "name": "openclaw_status",
+      "timeout_sec": 20,
+      "tool_id": "openclaw.status"
     }
   ]
 }

@@ -1,4 +1,5 @@
 import json
+import os
 import subprocess
 import tempfile
 import unittest
@@ -69,6 +70,58 @@ class TestValidateToolsDaily(unittest.TestCase):
             ).read_text(encoding="utf-8")
             self.assertIn("tool_id=tool.fail", error_log)
             self.assertIn("traceback:", error_log)
+
+            normalized = json.loads(
+                (root / "workspace" / "state_runtime" / "tool_validation" / "probe_report_normalized.json").read_text(
+                    encoding="utf-8"
+                )
+            )
+            self.assertIn("tool.pass", normalized)
+            self.assertIn("tool.fail", normalized)
+
+    def test_openclaw_tool_inv_env_override_supports_legacy_targets_shape(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            (root / "workspace" / "state_runtime" / "tool_validation").mkdir(parents=True, exist_ok=True)
+
+            # Legacy shape: {"targets":[{"id": ...}]}
+            targets = {
+                "targets": [
+                    {
+                        "id": "legacy.pass",
+                        "name": "legacy_pass",
+                        "kind": "command",
+                        "command": ["python3", "-c", "print('ok')"],
+                    }
+                ]
+            }
+            targets_path = root / "targets_legacy.json"
+            targets_path.write_text(json.dumps(targets), encoding="utf-8")
+
+            env = dict(os.environ)
+            env["OPENCLAW_TOOL_INV"] = str(targets_path)
+            run = subprocess.run(
+                [
+                    "python3",
+                    str(SCRIPT),
+                    "--repo-root",
+                    str(root),
+                    "--offline-ttl-hours",
+                    "12",
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+                env=env,
+            )
+            self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
+
+            normalized = json.loads(
+                (root / "workspace" / "state_runtime" / "tool_validation" / "probe_report_normalized.json").read_text(
+                    encoding="utf-8"
+                )
+            )
+            self.assertIn("legacy.pass", normalized)
 
 
 if __name__ == "__main__":

@@ -14,7 +14,8 @@ import {
   retryWithBackoff,
   sanitizeOutboundPayload,
   buildTelegramSendPayload
-} from '../src/index.mjs';
+} from './hardening/index.mjs';
+import { installHttpIngressContractSignal } from './hardening/http_ingress_contract_signal.mjs';
 
 const GLOBAL_KEY = '__openclaw_runtime_hardening';
 const OUTBOUND_FETCH_PATCH_KEY = '__openclaw_outbound_fetch_patch_installed';
@@ -343,6 +344,7 @@ function installOutboundFetchSanitizer(runtimeLogger, config) {
 if (!globalThis[GLOBAL_KEY]) {
   const runtimeLogger = logger.child({ module: 'runtime-hardening-overlay' });
   installNetworkInterfacesGuard({ logger: runtimeLogger, processLike: process });
+  installHttpIngressContractSignal({ logger: runtimeLogger });
 
   const isStatusCommand = Array.isArray(process.argv) && process.argv.includes('status');
   const isDashboardCommand = Array.isArray(process.argv) && process.argv.includes('dashboard');

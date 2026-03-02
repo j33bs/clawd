@@ -1,0 +1,7 @@
+[Unit]
+Description=OpenClaw Idle Reaper (stop GPU tools when idle)
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/src/clawd
+ExecStart=%h/src/clawd/workspace/scripts/idle_reaper.py
