@@ -30,3 +30,7 @@
   - Check AIN agent status: `curl -fsS http://127.0.0.1:18990/api/ain/phi`
   - If running, log Φ value to track alignment over time
   - This measures system integration/coherence from AIN research
+
+- [HB-PR-07] Tool validation outage report
+  - Check `workspace/state_runtime/tool_validation/heartbeat_notice.md`.
+  - If present, summarize offline tools and carry into this heartbeat report.

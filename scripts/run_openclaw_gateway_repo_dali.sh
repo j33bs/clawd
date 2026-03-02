@@ -151,9 +151,11 @@ if [[ -z "${OPENCLAW_BIN}" || ! -x "${OPENCLAW_BIN}" ]]; then
   echo "gateway_repo_runner: missing openclaw binary at ${OPENCLAW_BIN}" >&2
   exit 1
 fi
-if [[ ! -f "${REPO_ROOT}/.runtime/openclaw/openclaw.mjs" ]]; then
-  echo "gateway_repo_runner: missing repo runtime at ${REPO_ROOT}/.runtime/openclaw/openclaw.mjs" >&2
-  exit 1
+if is_truthy "${OPENCLAW_GATEWAY_REQUIRE_REPO_RUNTIME:-1}"; then
+  if [[ ! -f "${REPO_ROOT}/.runtime/openclaw/openclaw.mjs" ]]; then
+    echo "gateway_repo_runner: missing repo runtime at ${REPO_ROOT}/.runtime/openclaw/openclaw.mjs" >&2
+    exit 1
+  fi
 fi
 
 cd "${REPO_ROOT}"
