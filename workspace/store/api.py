@@ -94,6 +94,7 @@ class StatusOut(BaseModel):
     status: str
     section_count: int
     store_rows: int
+    section_count_delta: int  # section_count - store_rows; non-zero signals drift
     model: str
     uptime_seconds: float
     timestamp: str
@@ -123,10 +124,13 @@ def get_status():
     except Exception:
         pass
 
+    delta = (count - rows) if (count >= 0 and rows >= 0) else 0
+
     return StatusOut(
         status="live",
         section_count=count,
         store_rows=rows,
+        section_count_delta=delta,
         model=os.environ.get("EMBED_MODEL", DEFAULT_MODEL),
         uptime_seconds=round(time.time() - _start_time, 1),
         timestamp=datetime.utcnow().isoformat() + "Z",
