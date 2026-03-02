@@ -5,6 +5,15 @@ from workspace.scripts import local_git_exclude as lge
 
 
 class TestLocalGitExclude(unittest.TestCase):
+    def test_recommended_excludes_contains_expected_roots(self):
+        expected = {
+            ".worktrees/",
+            "workspace/research/pdfs/",
+            "workspace/state_runtime/memory_ext/",
+            "workspace/audit/_scratch_local/",
+        }
+        self.assertEqual(set(lge.get_recommended_excludes()), expected)
+
     def test_format_exclude_block_contains_markers_and_patterns(self):
         patterns = lge.get_recommended_excludes()
         block = lge.format_exclude_block(patterns)

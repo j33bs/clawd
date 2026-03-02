@@ -22,6 +22,7 @@ def get_recommended_excludes() -> List[str]:
         ".worktrees/",
         "workspace/research/pdfs/",
         "workspace/state_runtime/memory_ext/",
+        "workspace/audit/_scratch_local/",
     ]
 
 
