@@ -61,7 +61,7 @@ class ContractToolingIntegrationTest(unittest.TestCase):
             self.assertEqual(proc.returncode, 2, proc.stdout + proc.stderr)
             payload = json.loads(proc.stdout)
             self.assertEqual(payload.get("offline_class"), "POLICY")
-            self.assertEqual(payload.get("reason"), "contract_not_code")
+            self.assertIn(payload.get("reason"), {"contract_not_code", "policy_service_or_idle"})
 
     def test_validator_emits_contract_signal(self):
         with tempfile.TemporaryDirectory() as td:

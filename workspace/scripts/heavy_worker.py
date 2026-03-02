@@ -77,6 +77,20 @@ def read_jsonl(path: Path) -> list[dict[str, Any]]:
     return out
 
 
+def append_queue_state(job_id: str, state: str, *, rc: int | None = None, reason: str | None = None) -> None:
+    row: dict[str, Any] = {
+        "schema": 1,
+        "id": job_id,
+        "state": state,
+        "ts": utc_stamp(),
+    }
+    if rc is not None:
+        row["rc"] = int(rc)
+    if reason:
+        row["reason"] = reason
+    append_jsonl(QUEUE_PATH, row)
+
+
 def seen_job_ids() -> set[str]:
     done: set[str] = set()
     for row in read_jsonl(RUNS_LOG):
@@ -89,11 +103,25 @@ def seen_job_ids() -> set[str]:
     return done
 
 
+def latest_queue_rows() -> dict[str, dict[str, Any]]:
+    latest: dict[str, dict[str, Any]] = {}
+    for row in read_jsonl(QUEUE_PATH):
+        job_id = str(row.get("id") or "").strip()
+        state = str(row.get("state") or "").strip()
+        if not job_id or not state:
+            continue
+        prev = latest.get(job_id, {})
+        merged = dict(prev)
+        merged.update(row)
+        latest[job_id] = merged
+    return latest
+
+
 def queued_jobs() -> list[dict[str, Any]]:
     now = utc_now()
     done = seen_job_ids()
     candidates: list[dict[str, Any]] = []
-    for index, row in enumerate(read_jsonl(QUEUE_PATH)):
+    for index, row in enumerate(latest_queue_rows().values()):
         state = str(row.get("state") or "")
         job_id = str(row.get("id") or "")
         cmd = str(row.get("cmd") or "")
@@ -269,6 +297,7 @@ def main() -> int:
             "tool_id": tool_id if requires_gpu else None,
         }
     )
+    append_queue_state(str(job.get("id")), "running")
     try:
         ensure_result: dict[str, Any] | None = None
         if requires_gpu:
@@ -298,6 +327,7 @@ def main() -> int:
                         "status": result.get("status"),
                     }
                 )
+                append_queue_state(str(job.get("id")), "ensure_failed", rc=100, reason="ensure_failed")
                 print(json.dumps({"ok": False, "action": "ensure_failed", "result": result}, indent=2))
                 return 2
 
@@ -316,6 +346,8 @@ def main() -> int:
             "status": result.get("status"),
         }
     )
+    end_state = "done" if int(result.get("rc", 1)) == 0 else "failed"
+    append_queue_state(str(job.get("id")), end_state, rc=int(result.get("rc", 1)))
     print(json.dumps({"ok": True, "action": "ran", "result": result}, indent=2))
     return 0
 

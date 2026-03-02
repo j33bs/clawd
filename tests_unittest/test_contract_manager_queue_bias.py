@@ -68,6 +68,26 @@ class TestContractManagerQueueBias(unittest.TestCase):
         tr3 = mod.should_transition(cur_high, policy, load, queue_depth_now=5, service_override_active=False)
         self.assertIsNone(tr3)
 
+    def test_queue_depth_uses_latest_state_from_append_only_queue(self):
+        mod = load_module()
+        with tempfile.TemporaryDirectory() as td:
+            base = Path(td)
+            queue = base / "heavy_jobs.jsonl"
+            runs = base / "heavy_runs.jsonl"
+            runs.write_text("", encoding="utf-8")
+            queue.write_text(
+                "\n".join(
+                    [
+                        json.dumps({"id": "x1", "state": "queued", "expires_at": "2999-01-01T00:00:00Z", "cmd": "echo x"}),
+                        json.dumps({"id": "x1", "state": "running", "ts": "2026-03-02T00:00:00Z"}),
+                        json.dumps({"id": "x1", "state": "done", "rc": 0, "ts": "2026-03-02T00:00:01Z"}),
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            self.assertEqual(mod.queue_depth(str(queue), str(runs)), 0)
+
 
 if __name__ == "__main__":
     unittest.main()

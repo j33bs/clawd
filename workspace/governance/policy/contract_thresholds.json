@@ -1,0 +1,7 @@
+{
+  "service_rate_high": 3.544,
+  "service_rate_low": 2.625,
+  "idle_window_seconds": 480,
+  "source": "calibration_real_20260302T025043Z",
+  "note": "Applied via policy file; adjust only via governed calibration."
+}

@@ -35,3 +35,8 @@ Recommendation snapshot:
 
 Policy:
 - Recommendation captured only; high/low defaults were not auto-applied in this run.
+
+## Post-merge Verification Script
+- Script: `workspace/scripts/post_merge_verify_ops.sh`
+- Usage: `bash workspace/scripts/post_merge_verify_ops.sh`
+- Output evidence: `workspace/audit/_evidence/post_merge_verify_<UTCSTAMP>/`

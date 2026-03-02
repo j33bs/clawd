@@ -30,6 +30,7 @@ QUEUE_PATH = os.path.abspath(
 RUNS_LOG = os.path.abspath(
     os.environ.get("OPENCLAW_HEAVY_RUNS_LOG") or os.path.join(ROOT, "workspace", "state_runtime", "queue", "heavy_runs.jsonl")
 )
+DEFAULT_POLICY_PATH = os.path.join(ROOT, "workspace", "governance", "policy", "contract_thresholds.json")
 
 
 def now_utc_dt() -> datetime.datetime:
@@ -61,6 +62,68 @@ def load_json(path: str, default: Any) -> Any:
     except Exception:
         return default
     return default
+
+
+def normalize_policy_values(payload: Any) -> Dict[str, Any]:
+    if not isinstance(payload, dict):
+        return {}
+    out: Dict[str, Any] = {}
+    mapping = {
+        "window_minutes": int,
+        "alpha": float,
+        "service_rate_high": float,
+        "service_rate_low": float,
+        "min_mode_minutes": int,
+        "interrupt_rate": float,
+        "idle_window_seconds": int,
+    }
+    for key, caster in mapping.items():
+        if key not in payload:
+            continue
+        try:
+            out[key] = caster(payload[key])
+        except Exception:
+            continue
+    return out
+
+
+def policy_from_env() -> Dict[str, Any]:
+    mapping = {
+        "OPENCLAW_CONTRACT_WINDOW_MINUTES": ("window_minutes", int),
+        "OPENCLAW_CONTRACT_ALPHA": ("alpha", float),
+        "OPENCLAW_CONTRACT_SERVICE_RATE_HIGH": ("service_rate_high", float),
+        "OPENCLAW_CONTRACT_SERVICE_RATE_LOW": ("service_rate_low", float),
+        "OPENCLAW_CONTRACT_MIN_MODE_MINUTES": ("min_mode_minutes", int),
+        "OPENCLAW_CONTRACT_INTERRUPT_RATE": ("interrupt_rate", float),
+        "OPENCLAW_CONTRACT_IDLE_WINDOW_SECONDS": ("idle_window_seconds", int),
+    }
+    out: Dict[str, Any] = {}
+    for env_key, (policy_key, caster) in mapping.items():
+        raw = os.environ.get(env_key)
+        if raw is None or str(raw).strip() == "":
+            continue
+        try:
+            out[policy_key] = caster(raw)
+        except Exception:
+            continue
+    return out
+
+
+def resolve_policy(cur_policy: Any) -> tuple[Dict[str, Any], str]:
+    policy = default_policy()
+    policy.update(normalize_policy_values(cur_policy))
+
+    policy_path = os.path.abspath(os.environ.get("OPENCLAW_CONTRACT_POLICY_PATH") or DEFAULT_POLICY_PATH)
+    policy_source = "none"
+    loaded = normalize_policy_values(load_json(policy_path, {}))
+    if loaded:
+        policy.update(loaded)
+        policy_source = policy_path
+
+    env_overrides = policy_from_env()
+    if env_overrides:
+        policy.update(env_overrides)
+    return policy, policy_source
 
 
 def save_json(path: str, payload: Any) -> None:
@@ -128,6 +191,17 @@ def read_jsonl(path: str) -> List[Dict[str, Any]]:
 
 
 def queue_depth(queue_path: str = QUEUE_PATH, runs_log: str = RUNS_LOG) -> int:
+    latest_queue: Dict[str, Dict[str, Any]] = {}
+    for row in read_jsonl(queue_path):
+        job_id = str(row.get("id", "")).strip()
+        state = str(row.get("state", "")).strip()
+        if not job_id or not state:
+            continue
+        prev = latest_queue.get(job_id, {})
+        merged = dict(prev)
+        merged.update(row)
+        latest_queue[job_id] = merged
+
     done_ids = set()
     for row in read_jsonl(runs_log):
         job_id = str(row.get("job_id", "")).strip()
@@ -137,13 +211,17 @@ def queue_depth(queue_path: str = QUEUE_PATH, runs_log: str = RUNS_LOG) -> int:
         if status in {"ok", "failed", "expired", "invalid", "ensure_failed"}:
             done_ids.add(job_id)
 
+    for job_id in done_ids:
+        if job_id in latest_queue:
+            latest_queue[job_id]["state"] = "done"
+
     now = now_utc_dt()
     count = 0
-    for row in read_jsonl(queue_path):
+    for row in latest_queue.values():
         if str(row.get("state", "")).strip() != "queued":
             continue
         job_id = str(row.get("id", "")).strip()
-        if not job_id or job_id in done_ids:
+        if not job_id:
             continue
         expiry = parse_iso_z(str(row.get("expires_at", "")))
         if expiry and expiry <= now:
@@ -220,6 +298,7 @@ def init_current() -> Dict[str, Any]:
             "last_ts": None,
         },
         "queue_depth": 0,
+        "policy_source": "none",
     }
 
 
@@ -277,7 +356,9 @@ def should_transition(
 def apply_tick() -> Dict[str, Any]:
     ensure_state_dir()
     cur = load_json(CURRENT, None) or init_current()
-    policy = cur.get("policy") or default_policy()
+    policy, policy_source = resolve_policy(cur.get("policy"))
+    cur["policy"] = policy
+    cur["policy_source"] = policy_source
 
     now = utc_now()
     load = compute_load(policy)
@@ -364,6 +445,7 @@ if __name__ == "__main__":
                 "ewma_rate": state["service_load"]["ewma_rate"],
                 "idle": state["service_load"]["idle"],
                 "queue_depth": state.get("queue_depth", 0),
+                "policy_source": state.get("policy_source", "none"),
             },
             sort_keys=True,
         )
