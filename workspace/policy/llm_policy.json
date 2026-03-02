@@ -31,22 +31,26 @@
       "itc_classify": {
         "dailyTokenBudget": 25000,
         "dailyCallBudget": 200,
-        "maxCallsPerRun": 80
+        "maxCallsPerRun": 80,
+        "actionClassCaps": { "D": 3, "C": 5 }
       },
       "coding": {
         "dailyTokenBudget": 50000,
         "dailyCallBudget": 200,
-        "maxCallsPerRun": 50
+        "maxCallsPerRun": 50,
+        "actionClassCaps": { "D": 3, "C": 5 }
       },
       "governance": {
         "dailyTokenBudget": 20000,
         "dailyCallBudget": 100,
-        "maxCallsPerRun": 30
+        "maxCallsPerRun": 30,
+        "actionClassCaps": { "D": 3, "C": 5 }
       },
       "security": {
         "dailyTokenBudget": 20000,
         "dailyCallBudget": 100,
-        "maxCallsPerRun": 30
+        "maxCallsPerRun": 30,
+        "actionClassCaps": { "D": 3, "C": 5 }
       }
     },
     "tiers": {

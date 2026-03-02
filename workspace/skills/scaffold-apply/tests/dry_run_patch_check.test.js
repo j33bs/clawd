@@ -5,6 +5,7 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const { spawnSync } = require("node:child_process");
+const { requireSubprocessOrSkip } = require("../../../../tests/helpers/capabilities");
 
 function run(cmd, args, cwd) {
   const out = spawnSync(cmd, args, { cwd, encoding: "utf8" });
@@ -22,7 +23,11 @@ function initTempRepo() {
   return dir;
 }
 
-test("dry-run patch check passes on valid patch", () => {
+test("dry-run patch check passes on valid patch", (t) => {
+  if (!requireSubprocessOrSkip(t)) {
+    return;
+  }
+
   const repo = initTempRepo();
   const file = path.join(repo, "a.txt");
   fs.writeFileSync(file, "hello world\n", "utf8");
@@ -53,7 +58,11 @@ test("dry-run patch check passes on valid patch", () => {
   assert.equal(out.steps_failed, 0);
 });
 
-test("dry-run patch check reports failed step on invalid patch", () => {
+test("dry-run patch check reports failed step on invalid patch", (t) => {
+  if (!requireSubprocessOrSkip(t)) {
+    return;
+  }
+
   const repo = initTempRepo();
   const input = {
     dry_run: true,

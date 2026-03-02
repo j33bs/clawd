@@ -23,10 +23,27 @@ const http = require('node:http');
 const net = require('node:net');
 const { randomUUID, createHash, createHmac, timingSafeEqual } = require('node:crypto');
 const fs = require('node:fs');
+const path = require('node:path');
+const { pathToFileURL } = require('node:url');
 
 const { classifyRequest } = require('../core/system2/security/trust_boundary');
 const { requireApproval } = require('../core/system2/security/ask_first');
 const { createAuditSink } = require('../core/system2/security/audit_sink');
+
+let appendContractSignal = () => ({ ok: false, skipped: true, reason: 'unavailable' });
+let getResolvedSignalPath = () => 'unavailable';
+let contractSignalLogOnce = false;
+const contractSignalModule = path.resolve(__dirname, '../workspace/runtime_hardening/src/contract_signal.mjs');
+import(pathToFileURL(contractSignalModule).href)
+  .then((mod) => {
+    if (mod && typeof mod.appendContractSignal === 'function') {
+      appendContractSignal = mod.appendContractSignal;
+    }
+    if (mod && typeof mod.getResolvedSignalPath === 'function') {
+      getResolvedSignalPath = mod.getResolvedSignalPath;
+    }
+  })
+  .catch(() => {});
 
 function nowUtcIso() {
   return new Date().toISOString();
@@ -48,6 +65,17 @@ function parseTokenMap(raw) {
     out.set(token, label);
   }
   return out;
+}
+
+function isInteractiveServicePath(pathname) {
+  const p = String(pathname || '');
+  return (
+    p === '/'
+    || p.startsWith('/api')
+    || p.startsWith('/rpc/')
+    || p.startsWith('/control')
+    || p.startsWith('/dashboard')
+  );
 }
 
 function parseKeyMap(raw) {
@@ -903,6 +931,30 @@ function createEdgeServer(options = {}) {
     const started = Date.now();
 
     const policy = routePolicy(req);
+    try {
+      const method = String(req.method || 'GET').toUpperCase();
+      const uaRaw = req.headers && req.headers['user-agent'];
+      const ua = Array.isArray(uaRaw) ? uaRaw[0] : uaRaw;
+      if (method !== 'OPTIONS' && isInteractiveServicePath(policy.pathname)) {
+        const result = appendContractSignal('service_request', {
+          method,
+          path: String(policy.pathname || '/'),
+          ua_present: Boolean(ua),
+          source: 'http_edge',
+        });
+        if (!contractSignalLogOnce) {
+          contractSignalLogOnce = true;
+          try {
+            console.error('[contract_signal] resolved_path=%s result=%s', getResolvedSignalPath(), JSON.stringify(result));
+          } catch (_) {}
+        }
+        if (result && result.ok === false) {
+          try {
+            console.error('[contract_signal] append_failed %s', JSON.stringify(result));
+          } catch (_) {}
+        }
+      }
+    } catch (_) {}
     const machineRoute = isMachineRoutePath(policy.pathname || '/');
     if (policy.decision === 'deny') {
       audit({

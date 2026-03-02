@@ -7,5 +7,8 @@ if ! command -v python3 >/dev/null 2>&1; then
 fi
 
 python3 workspace/scripts/preflight_check.py
+./tools/check_skip_worktree_allowlist.sh
+./tools/check_gateway_points_to_repo.sh
+bash tools/check_tailscale_serve_dashboard.sh
 
 echo "ok"

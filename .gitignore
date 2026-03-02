@@ -166,3 +166,20 @@ workspace/research/insights.json
 
 # Telegram private exports (must remain local-only)
 workspace/state_runtime/ingest/telegram_exports/
+
+# --- runtime exhaust (never version) ---
+workspace/state_runtime/
+workspace/state_runtime/**
+
+# --- generated ULTRA evidence + markers (keep audit md trackable) ---
+workspace/audit/evidence/
+workspace/audit/evidence/**
+workspace/audit/.dali_ultra_*
+
+# --- python caches ---
+**/__pycache__/
+*.pyc
+
+# --- runtime vectorstore/db exhaust ---
+workspace/state_runtime/vectorstores/
+workspace/state_runtime/vectorstores/**

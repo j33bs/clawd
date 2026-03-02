@@ -4,6 +4,7 @@ const assert = require("node:assert/strict");
 const path = require("node:path");
 const { spawn } = require("node:child_process");
 const { once } = require("node:events");
+const { requireSubprocessOrSkip } = require("../../../../tests/helpers/capabilities");
 
 const CLI_PATH = path.resolve(__dirname, "../dist/cli.js");
 
@@ -21,7 +22,10 @@ async function runSnippet(snippet) {
   return { code, stdout: stdout.trim(), stderr: stderr.trim() };
 }
 
-test("preflight nonzero exit returns MLX_DEVICE_UNAVAILABLE", async () => {
+test("preflight nonzero exit returns MLX_DEVICE_UNAVAILABLE", async (t) => {
+  if (!requireSubprocessOrSkip(t)) {
+    return;
+  }
   const snippet = `
     const cli = require(${JSON.stringify(CLI_PATH)});
     cli.run([], {
@@ -42,7 +46,10 @@ test("preflight nonzero exit returns MLX_DEVICE_UNAVAILABLE", async () => {
   assert.match(result.stderr, /"outcome":"fail"/);
 });
 
-test("preflight timeout returns MLX_DEVICE_UNAVAILABLE", async () => {
+test("preflight timeout returns MLX_DEVICE_UNAVAILABLE", async (t) => {
+  if (!requireSubprocessOrSkip(t)) {
+    return;
+  }
   const snippet = `
     const cli = require(${JSON.stringify(CLI_PATH)});
     cli.run([], {
@@ -63,7 +70,10 @@ test("preflight timeout returns MLX_DEVICE_UNAVAILABLE", async () => {
   assert.match(result.stderr, /"outcome":"fail"/);
 });
 
-test("preflight ok proceeds to generation path", async () => {
+test("preflight ok proceeds to generation path", async (t) => {
+  if (!requireSubprocessOrSkip(t)) {
+    return;
+  }
   const snippet = `
     const cli = require(${JSON.stringify(CLI_PATH)});
     cli.run(["--prompt", "hello", "--model", "demo"], {

@@ -24,12 +24,52 @@ function serializeError(error) {
   };
 }
 
+// Sensitive key patterns for object-key redaction (Phase 5, DSP-07).
+const SENSITIVE_KEY_RE = /key|secret|password|token|credential|auth/i;
+
 function redactString(value) {
   let out = String(value);
+  // Bearer / Authorization header values.
   out = out.replace(/(authorization\s*:\s*bearer\s+)[^\s,;]+/gi, '$1<redacted>');
   out = out.replace(/\bBearer\s+[A-Za-z0-9._~+\-/=]{8,}/g, 'Bearer <redacted>');
-  out = out.replace(/\b(sk|gsk|xoxb|xoxp)-[A-Za-z0-9_-]{8,}\b/gi, '<redacted-token>');
+  // Basic auth header values (base64 after "Basic ").
+  out = out.replace(/(authorization\s*:\s*basic\s+)[A-Za-z0-9+/=]{10,}/gi, '$1<redacted>');
+  // Any OPENCLAW_ env var assignment (OPENCLAW_FOO=value) — run before generic patterns.
+  out = out.replace(/\bOPENCLAW_[A-Z_]+=\S+/g, (m) => {
+    const eqIdx = m.indexOf('=');
+    return m.slice(0, eqIdx + 1) + '<redacted>';
+  });
+  // Generic key=value / key: value patterns for known sensitive field names.
+  // Run BEFORE specific token-prefix patterns so the generic pass doesn't
+  // clobber the more specific <redacted-token> markers on a second pass.
   out = out.replace(/((?:api[_-]?key|token|secret|password)\s*[:=]\s*)([^\s,;]+)/gi, '$1<redacted>');
+  // Specific token prefixes — catch standalone tokens not in key=value context.
+  // sk-, gsk-, xoxb-, xoxp-.
+  out = out.replace(/\b(sk|gsk|xoxb|xoxp)-[A-Za-z0-9_-]{8,}\b/gi, '<redacted-token>');
+  // xAI / Grok API keys (xai-).
+  out = out.replace(/\bxai-[A-Za-z0-9_-]{20,}\b/g, '<redacted-token>');
+  // Google OAuth access tokens (ya29.).
+  out = out.replace(/\bya29\.[A-Za-z0-9_-]{20,}\b/g, '<redacted-token>');
+  // GitHub personal access tokens (ghp_) and refresh tokens (ghr_).
+  out = out.replace(/\bghp_[A-Za-z0-9]{36}\b/g, '<redacted-token>');
+  out = out.replace(/\bghr_[A-Za-z0-9]{36}\b/g, '<redacted-token>');
+  return out;
+}
+
+/**
+ * Redact values of any object key matching SENSITIVE_KEY_RE (Phase 5, DSP-07).
+ * Operates non-recursively on the top-level keys of the provided object and
+ * returns a new object with sensitive values replaced by '<redacted>'.
+ *
+ * @param {object} obj
+ * @returns {object}
+ */
+function redactObjectKeys(obj) {
+  if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return obj;
+  const out = {};
+  for (const [key, value] of Object.entries(obj)) {
+    out[key] = SENSITIVE_KEY_RE.test(key) ? '<redacted>' : value;
+  }
   return out;
 }
 
@@ -43,7 +83,7 @@ function sanitizeField(value, depth = 0) {
   if (typeof value === 'object') {
     const out = {};
     for (const [key, entry] of Object.entries(value)) {
-      if (/authorization|token|secret|password|api[_-]?key|cookie/i.test(key)) {
+      if (SENSITIVE_KEY_RE.test(key) || /authorization|cookie/i.test(key)) {
         out[key] = '<redacted>';
       } else {
         out[key] = sanitizeField(entry, depth + 1);
@@ -117,4 +157,4 @@ function createLogger(options = {}) {
 
 const logger = createLogger();
 
-export { createLogger, logger, normalizeLogLevel, redactString, sanitizeField };
+export { createLogger, logger, normalizeLogLevel, redactObjectKeys, redactString, sanitizeField };

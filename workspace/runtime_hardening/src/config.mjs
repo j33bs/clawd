@@ -12,7 +12,8 @@ const DEFAULTS = Object.freeze({
   mcpServerStartTimeoutMs: 30_000,
   logLevel: 'info',
   fsAllowOutsideWorkspace: false,
-  telegramReplyMode: 'never'
+  telegramReplyMode: 'never',
+  actionAuditLogPath: null // resolved at runtime relative to workspaceRoot
 });
 
 let configCache = null;
@@ -40,11 +41,39 @@ function resolveWorkspacePath(value, workspaceRoot) {
   return path.isAbsolute(value) ? path.resolve(value) : path.resolve(workspaceRoot, value);
 }
 
+function parseProviderList(rawValue) {
+  if (typeof rawValue !== 'string') return [];
+  return rawValue
+    .split(',')
+    .map((entry) => entry.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+function isAnthropicEnabled(env = process.env) {
+  const allowlist = parseProviderList(env.OPENCLAW_PROVIDER_ALLOWLIST);
+  return allowlist.includes('anthropic');
+}
+
+function emitHardeningDebug(env, details) {
+  if (String(env.OPENCLAW_HARDENING_DEBUG || '').trim() !== '1') return;
+  const line = `hardening_debug allowlist_raw=${JSON.stringify(details.allowlistRaw)} providers=${JSON.stringify(details.providers)} anthropicEnabled=${details.anthropicEnabled} anthropicKeyPresent=${details.anthropicKeyPresent}`;
+  try {
+    process.stderr.write(`${line}\n`);
+  } catch {
+    // ignore debug output failures
+  }
+}
+
 function validateConfig(env = process.env) {
   const errors = [];
+  const allowlistRaw = typeof env.OPENCLAW_PROVIDER_ALLOWLIST === 'string' ? env.OPENCLAW_PROVIDER_ALLOWLIST : '';
+  const providers = parseProviderList(allowlistRaw);
+  const anthropicEnabled = providers.includes('anthropic');
 
   const anthropicApiKey = typeof env.ANTHROPIC_API_KEY === 'string' ? env.ANTHROPIC_API_KEY.trim() : '';
-  if (!anthropicApiKey) {
+  const anthropicKeyPresent = Boolean(anthropicApiKey);
+  emitHardeningDebug(env, { allowlistRaw, providers, anthropicEnabled, anthropicKeyPresent });
+  if (anthropicEnabled && !anthropicApiKey) {
     errors.push('ANTHROPIC_API_KEY: required non-empty value is missing');
   }
 
@@ -102,7 +131,12 @@ function validateConfig(env = process.env) {
     throw new Error(`Invalid runtime hardening configuration:\n- ${errors.join('\n- ')}`);
   }
 
+  const actionAuditLogPath = env.ACTION_AUDIT_LOG_PATH
+    ? resolveWorkspacePath(env.ACTION_AUDIT_LOG_PATH, workspaceRoot)
+    : path.join(workspaceRoot, 'workspace', 'audit', 'agent_actions.jsonl');
+
   return {
+    anthropicEnabled,
     anthropicApiKey,
     nodeEnv,
     workspaceRoot,
@@ -114,7 +148,8 @@ function validateConfig(env = process.env) {
     mcpServerStartTimeoutMs,
     logLevel: typeof env.LOG_LEVEL === 'string' && env.LOG_LEVEL.trim() ? env.LOG_LEVEL.trim() : DEFAULTS.logLevel,
     fsAllowOutsideWorkspace,
-    telegramReplyMode
+    telegramReplyMode,
+    actionAuditLogPath
   };
 }
 
@@ -129,10 +164,13 @@ function clearConfigCache() {
 }
 
 function redactConfigForLogs(config) {
-  return {
-    ...config,
-    anthropicApiKey: config?.anthropicApiKey ? '<redacted>' : '<missing>'
-  };
+  const redacted = { ...config };
+  if (config?.anthropicEnabled) {
+    redacted.anthropicApiKey = config?.anthropicApiKey ? '<redacted>' : '<missing>';
+  } else {
+    delete redacted.anthropicApiKey;
+  }
+  return redacted;
 }
 
 export { DEFAULTS, clearConfigCache, getConfig, redactConfigForLogs, validateConfig };

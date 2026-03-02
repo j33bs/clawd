@@ -15,9 +15,18 @@ import {
   sanitizeOutboundPayload,
   buildTelegramSendPayload
 } from '../src/index.mjs';
+import { installHttpIngressContractSignal } from '../src/http_ingress_contract_signal.mjs';
 
 const GLOBAL_KEY = '__openclaw_runtime_hardening';
 const OUTBOUND_FETCH_PATCH_KEY = '__openclaw_outbound_fetch_patch_installed';
+let cachedConfig;
+
+export function getConfigOnce(env = process.env) {
+  if (!cachedConfig) {
+    cachedConfig = getConfig(env);
+  }
+  return cachedConfig;
+}
 
 function normalizeGatewayChannel(value) {
   const raw = String(value || '')
@@ -335,8 +344,15 @@ function installOutboundFetchSanitizer(runtimeLogger, config) {
 if (!globalThis[GLOBAL_KEY]) {
   const runtimeLogger = logger.child({ module: 'runtime-hardening-overlay' });
   installNetworkInterfacesGuard({ logger: runtimeLogger, processLike: process });
+  installHttpIngressContractSignal({ logger: runtimeLogger });
 
   const isStatusCommand = Array.isArray(process.argv) && process.argv.includes('status');
+  const isDashboardCommand = Array.isArray(process.argv) && process.argv.includes('dashboard');
+  const allowlistRaw = typeof process.env.OPENCLAW_PROVIDER_ALLOWLIST === 'string' ? process.env.OPENCLAW_PROVIDER_ALLOWLIST : '';
+  if (isDashboardCommand && !allowlistRaw.trim()) {
+    process.env.OPENCLAW_PROVIDER_ALLOWLIST = 'local_vllm';
+    runtimeLogger.info('dashboard_allowlist_defaulted', { openclawProviderAllowlist: 'local_vllm' });
+  }
   if (isStatusCommand) {
     try {
       const vllmHealthy = await checkVllmHealth({ port: 8001, timeoutMs: 1200 });
@@ -357,7 +373,7 @@ if (!globalThis[GLOBAL_KEY]) {
 
   let config = null;
   try {
-    config = getConfig();
+    config = getConfigOnce();
     ensureWorkspaceDirectories(config);
   } catch (error) {
     if (!isStatusCommand) throw error;
@@ -372,6 +388,10 @@ if (!globalThis[GLOBAL_KEY]) {
 
   const sessionManager = config ? new SessionManager({ config, logger: runtimeLogger }) : null;
   if (config) {
+    if (isDashboardCommand && !config.anthropicEnabled && Object.hasOwn(process.env, 'ANTHROPIC_API_KEY')) {
+      delete process.env.ANTHROPIC_API_KEY;
+      runtimeLogger.info('dashboard_env_sanitized', { removedEnv: 'ANTHROPIC_API_KEY' });
+    }
     installOutboundFetchSanitizer(runtimeLogger, config);
   }
 

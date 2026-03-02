@@ -6,6 +6,7 @@ const os = require("node:os");
 const path = require("node:path");
 const { spawn } = require("node:child_process");
 const { once } = require("node:events");
+const { requireSubprocessOrSkip } = require("../../../../tests/helpers/capabilities");
 
 const { acquireSlot } = require("../dist/cli.js");
 
@@ -58,6 +59,10 @@ test("removes pid file when ttl is exceeded", (t) => {
 });
 
 test("live pid file contributes to concurrency limit", async (t) => {
+  if (!requireSubprocessOrSkip(t)) {
+    return;
+  }
+
   const baseDir = makeBaseDir();
   t.after(() => fs.rmSync(baseDir, { recursive: true, force: true }));
   const dir = getRunDir(baseDir);

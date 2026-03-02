@@ -1,0 +1,19 @@
+[Unit]
+Description=OpenClaw Tool - coder_vllm.models (127.0.0.1:8002)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/src/clawd
+ExecStart=%h/src/clawd/workspace/scripts/run_tool_coder_vllm_models.sh
+Restart=always
+RestartSec=3
+StartLimitIntervalSec=120
+StartLimitBurst=10
+EnvironmentFile=-%h/.config/openclaw/tools.env
+StandardOutput=append:%h/.local/state/openclaw/tools/coder_vllm.models.out.log
+StandardError=append:%h/.local/state/openclaw/tools/coder_vllm.models.err.log
+
+[Install]
+WantedBy=default.target

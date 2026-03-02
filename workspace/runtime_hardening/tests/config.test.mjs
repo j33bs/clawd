@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { clearConfigCache, validateConfig } from '../src/config.mjs';
+import { clearConfigCache, redactConfigForLogs, validateConfig } from '../src/config.mjs';
 
 function withEnv(patch, fn) {
   const previous = {};
@@ -28,10 +28,36 @@ function withEnv(patch, fn) {
   }
 }
 
-test('config validation fails when ANTHROPIC_API_KEY is missing', () => {
-  withEnv({ ANTHROPIC_API_KEY: undefined, NODE_ENV: 'test' }, () => {
-    assert.throws(() => validateConfig(process.env), /ANTHROPIC_API_KEY/);
+test('config validation passes without ANTHROPIC_API_KEY when anthropic is disabled', () => {
+  withEnv({ ANTHROPIC_API_KEY: undefined, OPENCLAW_PROVIDER_ALLOWLIST: 'local_vllm,minimax-portal', NODE_ENV: 'test' }, () => {
+    assert.doesNotThrow(() => validateConfig(process.env));
   });
+});
+
+test('config validation fails when ANTHROPIC_API_KEY is missing and anthropic is enabled', () => {
+  withEnv({ ANTHROPIC_API_KEY: undefined, OPENCLAW_PROVIDER_ALLOWLIST: 'anthropic,local_vllm', NODE_ENV: 'test' }, () => {
+    assert.throws(
+      () => validateConfig(process.env),
+      /ANTHROPIC_API_KEY: required non-empty value is missing/
+    );
+  });
+});
+
+test('config validation ignores default model/provider for anthropic enablement when allowlist is unset', () => {
+  withEnv(
+    {
+      ANTHROPIC_API_KEY: undefined,
+      OPENCLAW_PROVIDER_ALLOWLIST: undefined,
+      OPENCLAW_DEFAULT_PROVIDER: 'anthropic',
+      OPENCLAW_DEFAULT_MODEL: 'anthropic/claude-sonnet',
+      NODE_ENV: 'test'
+    },
+    () => {
+      assert.doesNotThrow(() => validateConfig(process.env));
+      const cfg = validateConfig(process.env);
+      assert.equal(cfg.anthropicEnabled, false);
+    }
+  );
 });
 
 test('config validation rejects invalid NODE_ENV', () => {
@@ -64,6 +90,47 @@ test('config validation returns normalized defaults', () => {
       assert.equal(cfg.agentWorkspaceRoot.endsWith('.agent_workspace'), true);
       assert.equal(cfg.skillsRoot.endsWith('skills'), true);
       assert.equal(cfg.telegramReplyMode, 'never');
+    }
+  );
+});
+
+test('redacted logs omit anthropicApiKey when anthropic is disabled', () => {
+  withEnv({ ANTHROPIC_API_KEY: 'abc123', OPENCLAW_PROVIDER_ALLOWLIST: 'local_vllm', NODE_ENV: 'test' }, () => {
+    const cfg = validateConfig(process.env);
+    const redacted = redactConfigForLogs(cfg);
+    assert.equal(redacted.anthropicEnabled, false);
+    assert.equal(Object.hasOwn(redacted, 'anthropicApiKey'), false);
+  });
+});
+
+test('hardening debug logs allowlist and anthropic enablement without key material', () => {
+  withEnv(
+    {
+      OPENCLAW_HARDENING_DEBUG: '1',
+      OPENCLAW_PROVIDER_ALLOWLIST: 'local_vllm',
+      ANTHROPIC_API_KEY: undefined,
+      NODE_ENV: 'test'
+    },
+    () => {
+      const writes = [];
+      const originalWrite = process.stderr.write;
+      process.stderr.write = (chunk, ...args) => {
+        writes.push(String(chunk));
+        const maybeCb = args[args.length - 1];
+        if (typeof maybeCb === 'function') maybeCb();
+        return true;
+      };
+      try {
+        validateConfig(process.env);
+      } finally {
+        process.stderr.write = originalWrite;
+      }
+      const joined = writes.join('');
+      assert.match(joined, /hardening_debug allowlist_raw="local_vllm"/);
+      assert.match(joined, /providers=\["local_vllm"\]/);
+      assert.match(joined, /anthropicEnabled=false/);
+      assert.match(joined, /anthropicKeyPresent=false/);
+      assert.equal(joined.includes('abc123'), false);
     }
   );
 });

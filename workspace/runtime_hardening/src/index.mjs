@@ -1,5 +1,6 @@
+export { actionAuditLog, createActionAuditLog } from './action_audit_log.mjs';
 export { DEFAULTS, clearConfigCache, getConfig, redactConfigForLogs, validateConfig } from './config.mjs';
-export { createLogger, logger, normalizeLogLevel } from './log.mjs';
+export { createLogger, logger, normalizeLogLevel, redactObjectKeys, redactString } from './log.mjs';
 export { McpServerSingleflight } from './mcp_singleflight.mjs';
 export { installNetworkInterfacesGuard } from './network_enum.mjs';
 export {

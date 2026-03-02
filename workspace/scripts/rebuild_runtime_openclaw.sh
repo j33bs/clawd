@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+if [ -n "$REPO_ROOT" ]; then
+  "$REPO_ROOT/tools/guard_worktree_boundary.sh"
+fi
+
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 SOURCE_DIR="${OPENCLAW_SOURCE_DIR:-/usr/lib/node_modules/openclaw}"
 RUNTIME_DIR="${OPENCLAW_RUNTIME_DIR:-$ROOT/.runtime/openclaw}"
