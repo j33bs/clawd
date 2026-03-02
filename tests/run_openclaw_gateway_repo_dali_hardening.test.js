@@ -28,6 +28,7 @@ function runRunner(extraEnv = {}, args = []) {
     ...process.env,
     OPENCLAW_BIN: harness.fakeBin,
     OPENCLAW_GATEWAY_SKIP_WORKTREE_GUARD: '1',
+    OPENCLAW_WRAPPER_TESTING: '1',
     OPENCLAW_GATEWAY_HARDEN_PATCH_MODE: 'skip',
     OPENCLAW_GATEWAY_BIND_MODE: 'loopback',
     OPENCLAW_GATEWAY_AUTH_MODE: '',
@@ -41,6 +42,37 @@ function runRunner(extraEnv = {}, args = []) {
   };
   const result = spawnSync('bash', [runner, ...args], {
     cwd: repoRoot,
+    env,
+    encoding: 'utf8'
+  });
+  let argv = [];
+  if (fs.existsSync(harness.capture)) {
+    argv = fs.readFileSync(harness.capture, 'utf8').trim().split('\n').filter(Boolean);
+  }
+  fs.rmSync(harness.dir, { recursive: true, force: true });
+  return { result, argv };
+}
+
+function runRunnerFromCwd(cwd, extraEnv = {}, args = []) {
+  const harness = mkTempHarness();
+  const env = {
+    ...process.env,
+    OPENCLAW_BIN: harness.fakeBin,
+    OPENCLAW_GATEWAY_SKIP_WORKTREE_GUARD: '1',
+    OPENCLAW_WRAPPER_TESTING: '1',
+    OPENCLAW_GATEWAY_HARDEN_PATCH_MODE: 'skip',
+    OPENCLAW_GATEWAY_BIND_MODE: 'loopback',
+    OPENCLAW_GATEWAY_AUTH_MODE: '',
+    OPENCLAW_GATEWAY_TOKEN: '',
+    OPENCLAW_GATEWAY_PASSWORD: '',
+    OPENCLAW_GATEWAY_PORT: '18789',
+    OPENCLAW_CONTROL_UI_ALLOWED_ORIGINS: '',
+    OPENCLAW_GATEWAY_ALLOW_NONLOOPBACK: '0',
+    OPENCLAW_GATEWAY_REQUIRE_REPO_RUNTIME: '0',
+    ...extraEnv
+  };
+  const result = spawnSync('bash', [runner, ...args], {
+    cwd,
     env,
     encoding: 'utf8'
   });
@@ -131,6 +163,33 @@ function main() {
     assertFailed(result, 'config injection: wildcard origin must be rejected');
     assert.match(result.stderr, /wildcard/i);
     fs.rmSync(overridePath, { force: true });
+  }
+
+  {
+    const fakeRepo = fs.mkdtempSync(path.join(os.tmpdir(), 'gateway-guard-refuse-'));
+    const marker = path.join(fakeRepo, 'guard_called.txt');
+    fs.mkdirSync(path.join(fakeRepo, 'tools'), { recursive: true });
+    fs.writeFileSync(
+      path.join(fakeRepo, 'tools', 'guard_worktree_boundary.sh'),
+      `#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' guard-called > "${marker}"
+`,
+      { mode: 0o755 }
+    );
+    spawnSync('git', ['init'], { cwd: fakeRepo, encoding: 'utf8' });
+    const { result } = runRunnerFromCwd(
+      fakeRepo,
+      {
+        OPENCLAW_WRAPPER_TESTING: '0',
+        NODE_ENV: ''
+      },
+      ['--verbose']
+    );
+    assert.strictEqual(result.status, 0, `expected success, stderr=${result.stderr}`);
+    assert.match(result.stderr, /SKIP_WORKTREE_GUARD_REFUSED \(outside test\)/);
+    assert.ok(fs.existsSync(marker), 'worktree guard should still run when skip is requested outside test');
+    fs.rmSync(fakeRepo, { recursive: true, force: true });
   }
 
   console.log('PASS run_openclaw_gateway_repo_dali hardening guards');

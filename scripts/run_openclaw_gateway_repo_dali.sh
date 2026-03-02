@@ -67,7 +67,16 @@ require_nonloopback_ack() {
 }
 
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || true)"
-if [ -n "$REPO_ROOT" ] && ! is_truthy "${OPENCLAW_GATEWAY_SKIP_WORKTREE_GUARD:-0}"; then
+SKIP_WORKTREE_GUARD_ALLOWED=0
+if is_truthy "${OPENCLAW_GATEWAY_SKIP_WORKTREE_GUARD:-0}"; then
+  if [[ "${NODE_ENV:-}" == "test" ]] || is_truthy "${OPENCLAW_WRAPPER_TESTING:-0}"; then
+    SKIP_WORKTREE_GUARD_ALLOWED=1
+  else
+    echo "SKIP_WORKTREE_GUARD_REFUSED (outside test)" >&2
+  fi
+fi
+
+if [ -n "$REPO_ROOT" ] && [ "$SKIP_WORKTREE_GUARD_ALLOWED" -ne 1 ]; then
   "$REPO_ROOT/tools/guard_worktree_boundary.sh"
 fi
 
