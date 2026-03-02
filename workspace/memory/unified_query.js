@@ -221,3 +221,28 @@ module.exports = {
   makeVectorStoreAdapter
 };
 
+// ---------------------------------------------------------------------------
+// CLI entry point  (node workspace/memory/unified_query.js --q "search term")
+// ---------------------------------------------------------------------------
+if (require.main === module) {
+  const args = process.argv.slice(2);
+  const qIdx = args.indexOf('--q');
+  const query = qIdx !== -1 ? args[qIdx + 1] : null;
+  const limitIdx = args.indexOf('--limit');
+  const limit = limitIdx !== -1 ? parseInt(args[limitIdx + 1], 10) : 10;
+  const baseUrl = process.env.CORRESPONDENCE_STORE_BASE_URL || 'http://127.0.0.1:8765';
+
+  if (!query) {
+    process.stderr.write('Usage: node workspace/memory/unified_query.js --q <query> [--limit N]\n');
+    process.exit(1);
+  }
+
+  const umq = new UnifiedMemoryQuery({ adapters: createDefaultAdapters({ baseUrl }) });
+  umq.query({ q: query, limit }).then((results) => {
+    process.stdout.write(JSON.stringify(results, null, 2) + '\n');
+  }).catch((err) => {
+    process.stderr.write(String(err) + '\n');
+    process.exit(1);
+  });
+}
+
