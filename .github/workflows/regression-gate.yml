@@ -8,13 +8,13 @@ on:
 jobs:
   regression:
     runs-on: ubuntu-latest
-    continue-on-error: true  # warn-only gate (non-blocking)
+    continue-on-error: false  # blocking gate
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
-      - name: Run regression (warn-only)
+      - name: Run regression
         run: |
           set -e
           bash ./workspace/scripts/regression.sh
