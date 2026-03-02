@@ -7,8 +7,11 @@
 
 # Add tasks below when you want the agent to check something periodically.
 
+- Environment
+  - `OPENCLAW_HOME`: absolute path to the OpenClaw repo root.
+
 - [HB-PR-01] MEMORY size guard
-  - Check `wc -l /Users/heathyeager/clawd/MEMORY.md`; warn if `> 180`.
+  - Check `wc -l "${OPENCLAW_HOME}/MEMORY.md"`; warn if `> 180`.
 
 - [HB-PR-02] Nightly log health
   - Check `reports/nightly/$(date +%Y-%m-%d).log` exists and scan for `⚠️`.
@@ -27,3 +30,7 @@
   - Check AIN agent status: `curl -fsS http://127.0.0.1:18990/api/ain/phi`
   - If running, log Φ value to track alignment over time
   - This measures system integration/coherence from AIN research
+
+- [HB-PR-07] Tool validation outage report
+  - Check `workspace/state_runtime/tool_validation/heartbeat_notice.md`.
+  - If present, summarize offline tools and carry into this heartbeat report.

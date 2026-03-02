@@ -1,0 +1,8 @@
+[Unit]
+Description=OpenClaw Heavy Worker (CODE-mode queue drain)
+After=default.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/src/clawd
+ExecStart=%h/src/clawd/workspace/scripts/heavy_worker.py
