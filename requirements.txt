@@ -1,0 +1,24 @@
+# OpenClaw Python runtime dependencies
+# Install: pip install -r requirements.txt
+#
+# NOTE: fastapi + uvicorn are required for workspace/store/api.py (CorrespondenceStore server)
+# but are NOT currently installed in the system python3 environment.
+# Install them before starting the store API:
+#   pip install fastapi uvicorn
+
+# CorrespondenceStore API server
+fastapi>=0.110.0
+uvicorn>=0.29.0
+
+# Vector store + embeddings (core pipeline)
+lancedb>=0.29.2
+sentence-transformers>=5.2.3
+pyarrow>=23.0.1
+
+# Data / schema
+pandas>=3.0.1
+pydantic>=2.12.5
+numpy>=2.4.2
+
+# Embeddings acceleration (optional; used by sync.py when available)
+torch>=2.10.0
