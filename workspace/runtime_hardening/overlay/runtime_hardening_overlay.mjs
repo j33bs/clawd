@@ -14,8 +14,8 @@ import {
   retryWithBackoff,
   sanitizeOutboundPayload,
   buildTelegramSendPayload
-} from './hardening/index.mjs';
-import { installHttpIngressContractSignal } from './hardening/http_ingress_contract_signal.mjs';
+} from '../src/index.mjs';
+import { installHttpIngressContractSignal } from '../src/http_ingress_contract_signal.mjs';
 
 const GLOBAL_KEY = '__openclaw_runtime_hardening';
 const OUTBOUND_FETCH_PATCH_KEY = '__openclaw_outbound_fetch_patch_installed';
