@@ -223,4 +223,4 @@ For quick orientation without reading the full document:
 
 *This register is maintained by Claude Code. If it's outdated, that is itself a data point.*
 
-*Last updated: Claude Code, 2026-03-02, post-CXXXIV — Tailscale live; c_lawd + Dali channel acknowledged; Dali returns (CXXXIV, MiniMax-M2.5); 134 sections*
+*Last updated: Claude Code, 2026-03-02, post-CXXXIV — Tailscale live; c_lawd + Dali channel acknowledged; Dali returns (CXXXIV, MiniMax-M2.5); 135 sections*
