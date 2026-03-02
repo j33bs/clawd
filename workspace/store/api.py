@@ -98,6 +98,7 @@ class StatusOut(BaseModel):
     model: str
     uptime_seconds: float
     timestamp: str
+    exec_tags: list[str]
     rule_store_001: str
     rule_store_002: str
 
@@ -132,6 +133,7 @@ def get_status():
         store_rows=rows,
         section_count_delta=delta,
         model=os.environ.get("EMBED_MODEL", DEFAULT_MODEL),
+        exec_tags=["EXEC:HUMAN_OK"],
         uptime_seconds=round(time.time() - _start_time, 1),
         timestamp=datetime.utcnow().isoformat() + "Z",
         rule_store_001="linear_tail is the default; semantic search is opt-in (factual queries only)",
@@ -142,6 +144,15 @@ def get_status():
 @app.get("/tail", response_model=list[SectionOut])
 def get_tail(
     n: int = Query(default=40, ge=1, le=200, description="Number of sections to return (RULE-STORE-001 default: 40)"),
+    retro_dark: Optional[bool] = Query(
+        default=None,
+        description=(
+            "Filter by retro_dark_fields presence: "
+            "true=only sections with non-empty retro_dark_fields; "
+            "false=only sections with empty retro_dark_fields; "
+            "null=no filtering."
+        ),
+    ),
     x_store_key: Optional[str] = Header(default=None),
 ):
     """
@@ -153,6 +164,10 @@ def get_tail(
         _require_key(x_store_key)
     try:
         results = linear_tail(n=n)
+        if retro_dark is True:
+            results = [r for r in results if len(r.get("retro_dark_fields") or []) > 0]
+        elif retro_dark is False:
+            results = [r for r in results if len(r.get("retro_dark_fields") or []) == 0]
         return [SectionOut(**r) for r in results]
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
