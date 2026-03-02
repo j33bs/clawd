@@ -36,6 +36,7 @@ function runRunner(extraEnv = {}, args = []) {
     OPENCLAW_GATEWAY_PORT: '18789',
     OPENCLAW_CONTROL_UI_ALLOWED_ORIGINS: '',
     OPENCLAW_GATEWAY_ALLOW_NONLOOPBACK: '0',
+    OPENCLAW_GATEWAY_REQUIRE_REPO_RUNTIME: '0',
     ...extraEnv
   };
   const result = spawnSync('bash', [runner, ...args], {
