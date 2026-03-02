@@ -2,7 +2,10 @@
 
 *Last updated: 2026-02-24*
 
-## User Preferences
+## User Preferences (Updated March 2026)
+- **Briefing:** No reminders shown (pending cleanup)
+- **Research:** Use Grokipedia over Wikipedia
+- **Daily Close:** Ask whether TACTI tactics were used that day
 - **Name:** Heath
 - **Call them:** Heath (or Jeebs is their @j33bs handle)
 - **Pronouns:** -
