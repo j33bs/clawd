@@ -24,6 +24,12 @@ STATE_DIR = os.path.abspath(os.environ.get("OPENCLAW_CONTRACT_STATE_DIR", DEFAUL
 CURRENT = os.path.join(STATE_DIR, "current.json")
 EVENTS = os.path.join(STATE_DIR, "events.jsonl")
 SIGNALS = os.path.join(STATE_DIR, "signals", "activity.jsonl")
+QUEUE_PATH = os.path.abspath(
+    os.environ.get("OPENCLAW_HEAVY_QUEUE_PATH") or os.path.join(ROOT, "workspace", "state_runtime", "queue", "heavy_jobs.jsonl")
+)
+RUNS_LOG = os.path.abspath(
+    os.environ.get("OPENCLAW_HEAVY_RUNS_LOG") or os.path.join(ROOT, "workspace", "state_runtime", "queue", "heavy_runs.jsonl")
+)
 
 
 def now_utc_dt() -> datetime.datetime:
@@ -100,6 +106,52 @@ def read_recent_signals(minutes: int) -> List[Dict[str, Any]]:
     return out
 
 
+def read_jsonl(path: str) -> List[Dict[str, Any]]:
+    if not os.path.exists(path):
+        return []
+    out: List[Dict[str, Any]] = []
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            for line in fh:
+                raw = line.strip()
+                if not raw:
+                    continue
+                try:
+                    row = json.loads(raw)
+                except Exception:
+                    continue
+                if isinstance(row, dict):
+                    out.append(row)
+    except Exception:
+        return []
+    return out
+
+
+def queue_depth(queue_path: str = QUEUE_PATH, runs_log: str = RUNS_LOG) -> int:
+    done_ids = set()
+    for row in read_jsonl(runs_log):
+        job_id = str(row.get("job_id", "")).strip()
+        if not job_id:
+            continue
+        status = str(row.get("status", "")).strip()
+        if status in {"ok", "failed", "expired", "invalid", "ensure_failed"}:
+            done_ids.add(job_id)
+
+    now = now_utc_dt()
+    count = 0
+    for row in read_jsonl(queue_path):
+        if str(row.get("state", "")).strip() != "queued":
+            continue
+        job_id = str(row.get("id", "")).strip()
+        if not job_id or job_id in done_ids:
+            continue
+        expiry = parse_iso_z(str(row.get("expires_at", "")))
+        if expiry and expiry <= now:
+            continue
+        count += 1
+    return count
+
+
 def ewma(prev: Optional[float], value: float, alpha: float) -> float:
     if prev is None:
         return value
@@ -167,10 +219,30 @@ def init_current() -> Dict[str, Any]:
             "count": 0,
             "last_ts": None,
         },
+        "queue_depth": 0,
     }
 
 
-def should_transition(cur: Dict[str, Any], policy: Dict[str, Any], load: Dict[str, Any]) -> Optional[Dict[str, str]]:
+def override_is_active(override: Any) -> bool:
+    if not isinstance(override, dict):
+        return False
+    ttl_raw = override.get("ttl_until")
+    if ttl_raw is None:
+        return True
+    ttl_dt = parse_iso_z(str(ttl_raw))
+    if not ttl_dt:
+        return False
+    return now_utc_dt() < ttl_dt
+
+
+def should_transition(
+    cur: Dict[str, Any],
+    policy: Dict[str, Any],
+    load: Dict[str, Any],
+    *,
+    queue_depth_now: int,
+    service_override_active: bool,
+) -> Optional[Dict[str, str]]:
     now = now_utc_dt()
     last_ts = parse_iso_z(str(cur.get("last_transition", {}).get("ts", ""))) or now
     if now - last_ts < datetime.timedelta(minutes=int(policy["min_mode_minutes"])):
@@ -182,6 +254,13 @@ def should_transition(cur: Dict[str, Any], policy: Dict[str, Any], load: Dict[st
 
     if cur.get("mode") == "SERVICE":
         if ewma_rate <= lo and bool(load.get("idle")):
+            if service_override_active:
+                return None
+            if queue_depth_now > 0:
+                return {
+                    "to": "CODE",
+                    "reason": f"dynamic_backlog: low_rate={ewma_rate:.3f} idle={load['idle']} queue_depth={queue_depth_now}",
+                }
             return {
                 "to": "CODE",
                 "reason": f"dynamic: low_rate={ewma_rate:.3f} idle={load['idle']}",
@@ -202,16 +281,17 @@ def apply_tick() -> Dict[str, Any]:
 
     now = utc_now()
     load = compute_load(policy)
+    q_depth = queue_depth()
     prev = cur.get("service_load", {}).get("ewma_rate")
     prev_float = float(prev) if isinstance(prev, (int, float)) else None
     ewma_rate = ewma(prev_float, float(load["rate_per_min"]), float(policy["alpha"]))
     cur["service_load"] = {**load, "ewma_rate": ewma_rate}
+    cur["queue_depth"] = q_depth
     cur["ts"] = now
 
     override = cur.get("override")
-    if override and override.get("ttl_until"):
-        ttl_dt = parse_iso_z(str(override.get("ttl_until")))
-        if ttl_dt and now_utc_dt() < ttl_dt:
+    if override:
+        if override_is_active(override):
             if override.get("mode") == "CODE" and ewma_rate >= float(policy["interrupt_rate"]):
                 interrupts = cur.setdefault("interrupts", {})
                 interrupts["count"] = int(interrupts.get("count", 0)) + 1
@@ -238,7 +318,14 @@ def apply_tick() -> Dict[str, Any]:
         # Manual override is no longer active; restore dynamic source labeling.
         cur["source"] = "DYNAMIC"
 
-    transition = should_transition(cur, policy, load)
+    service_override_active = override_is_active(cur.get("override")) and str((cur.get("override") or {}).get("mode", "")).upper() == "SERVICE"
+    transition = should_transition(
+        cur,
+        policy,
+        load,
+        queue_depth_now=q_depth,
+        service_override_active=service_override_active,
+    )
     if transition:
         old_mode = cur.get("mode")
         cur["mode"] = transition["to"]
@@ -258,6 +345,7 @@ def apply_tick() -> Dict[str, Any]:
                 "reason": transition["reason"],
                 "rate": ewma_rate,
                 "idle": load["idle"],
+                "queue_depth": q_depth,
             }
         )
 
@@ -275,6 +363,7 @@ if __name__ == "__main__":
                 "source": state["source"],
                 "ewma_rate": state["service_load"]["ewma_rate"],
                 "idle": state["service_load"]["idle"],
+                "queue_depth": state.get("queue_depth", 0),
             },
             sort_keys=True,
         )

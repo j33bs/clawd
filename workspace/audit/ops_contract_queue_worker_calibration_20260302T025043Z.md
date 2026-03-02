@@ -20,3 +20,18 @@ Rollback (host):
 
 ## Evidence
 - workspace/audit/_evidence/commit_calibrate_worker_20260302T025043Z
+
+## Calibration (REAL) — 20260302T025043Z
+- Evidence bundle: workspace/audit/_evidence/commit_calibrate_worker_20260302T025043Z
+- Outputs:
+  - workspace/audit/_evidence/commit_calibrate_worker_20260302T025043Z/calibration_report_real.json
+  - workspace/audit/_evidence/commit_calibrate_worker_20260302T025043Z/recommended_thresholds_real.json
+  - workspace/audit/_evidence/commit_calibrate_worker_20260302T025043Z/calibration_summary_real.txt
+
+Recommendation snapshot:
+- service_rate_high: 3.544
+- service_rate_low: 2.625
+- idle_window_seconds: 480
+
+Policy:
+- Recommendation captured only; high/low defaults were not auto-applied in this run.

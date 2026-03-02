@@ -28,8 +28,18 @@ def append_jsonl(path: Path, payload: dict[str, Any]) -> None:
         fh.write(json.dumps(payload, sort_keys=True) + "\n")
 
 
-def enqueue(*, cmd: str, kind: str, priority: int, ttl_minutes: int, meta: dict[str, Any] | None = None) -> dict[str, Any]:
+def enqueue(
+    *,
+    cmd: str,
+    kind: str,
+    priority: int,
+    ttl_minutes: int,
+    requires_gpu: bool = False,
+    tool_id: str | None = None,
+    meta: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     now = utc_now()
+    req_gpu = bool(requires_gpu)
     payload = {
         "schema": 1,
         "id": str(uuid.uuid4()),
@@ -38,6 +48,8 @@ def enqueue(*, cmd: str, kind: str, priority: int, ttl_minutes: int, meta: dict[
         "priority": int(priority),
         "expires_at": utc_stamp(now + dt.timedelta(minutes=max(1, int(ttl_minutes)))),
         "cmd": cmd,
+        "requires_gpu": req_gpu,
+        "tool_id": (tool_id or "coder_vllm.models") if req_gpu else tool_id,
         "meta": meta or {},
         "state": "queued",
     }
@@ -72,6 +84,8 @@ def main() -> int:
     p_enqueue.add_argument("--kind", default="HEAVY_CODE")
     p_enqueue.add_argument("--priority", type=int, default=50)
     p_enqueue.add_argument("--ttl-minutes", type=int, default=720)
+    p_enqueue.add_argument("--requires-gpu", action="store_true")
+    p_enqueue.add_argument("--tool-id", default="")
 
     p_tail = sub.add_parser("tail")
     p_tail.add_argument("-n", type=int, default=50)
@@ -84,6 +98,8 @@ def main() -> int:
             kind=args.kind,
             priority=args.priority,
             ttl_minutes=args.ttl_minutes,
+            requires_gpu=args.requires_gpu,
+            tool_id=(args.tool_id or None),
         )
         print(json.dumps(item, indent=2, sort_keys=True))
         return 0
