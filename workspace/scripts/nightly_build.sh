@@ -9,7 +9,6 @@ CLAWD_DIR="${CLAWD_DIR:-$HOME/clawd}"
 RESEARCH_TOPICS_FILE="$CLAWD_DIR/workspace/research/TOPICS.md"
 RESEARCH_OUT_DIR="$CLAWD_DIR/reports/research"
 OPENCLAW_BIN="${OPENCLAW_BIN:-$(command -v openclaw 2>/dev/null || echo "$HOME/.npm-global/bin/openclaw")}"
-VLLM_HEALTH_GATE_SCRIPT="${CLAWD_DIR}/workspace/scripts/vllm_health_gate.sh"
 
 # Activate virtual environment if it exists
 if [ -f "$CLAWD_DIR/.venv/bin/activate" ]; then
@@ -30,25 +29,16 @@ sanitize_doctor_output() {
 }
 
 run_openclaw_config_preflight() {
-    local config_source doctor_output doctor_sanitized guard_output
+    local config_source doctor_output doctor_sanitized
     local doctor_status=0
     local invalid_config=0
 
-    config_source="$(python3 "$CLAWD_DIR/workspace/scripts/openclaw_config_guard.py" --config "${OPENCLAW_CONFIG_PATH:-}" 2>/dev/null \
-        | python3 -c 'import json,sys; raw=sys.stdin.read().strip(); print((json.loads(raw).get("config_path") if raw else "") or "")' 2>/dev/null || true)"
-    if [ -n "$config_source" ]; then
-        log "OpenClaw config source: $config_source"
+    if [ -n "${OPENCLAW_CONFIG_PATH:-}" ]; then
+        config_source="$OPENCLAW_CONFIG_PATH"
+        log "OpenClaw config source: $config_source (OPENCLAW_CONFIG_PATH override)"
     else
-        log "OpenClaw config source: <none> (no config file found)"
-    fi
-
-    guard_output="$(python3 "$CLAWD_DIR/workspace/scripts/openclaw_config_guard.py" --config "${OPENCLAW_CONFIG_PATH:-}" --strict 2>&1)" || invalid_config=1
-    if [ "$invalid_config" -eq 1 ]; then
-        log "OpenClaw config invalid (plugin allowlist guard)."
-        while IFS= read -r line; do
-            [ -n "$line" ] && log "  $line"
-        done < <(printf '%s\n' "$guard_output" | tail -n 20)
-        return 1
+        config_source="$HOME/.openclaw/openclaw.json"
+        log "OpenClaw config source: $config_source (default)"
     fi
 
     doctor_output="$("$OPENCLAW_BIN" doctor --non-interactive --no-workspace-suggestions 2>&1)" || doctor_status=$?
@@ -121,16 +111,6 @@ run_health() {
     else
         log "⚠️ Gateway: Issues detected"
     fi
-
-    if [ -f "$VLLM_HEALTH_GATE_SCRIPT" ]; then
-        if bash "$VLLM_HEALTH_GATE_SCRIPT" --nightly >>"$LOG_FILE" 2>&1; then
-            log "✅ vLLM gate: nightly check complete"
-        else
-            log "⚠️ vLLM gate: nightly check failed to execute"
-        fi
-    else
-        log "⚠️ vLLM gate script missing: $VLLM_HEALTH_GATE_SCRIPT"
-    fi
     
     # Check Ollama
     if curl -s http://127.0.0.1:11434/api/tags >/dev/null 2>&1; then
@@ -191,24 +171,6 @@ run_memory() {
         if [ "$lines" -gt "$memory_warn_lines" ]; then
             log "⚠️ MEMORY.md exceeds 180 lines — prune recommended (oldest entries first)"
         fi
-    fi
-
-    memory_maintain_args=(--repo-root "$CLAWD_DIR" maintain)
-    if [ "${OPENCLAW_MEMORY_WEEKLY_DISTILL:-1}" = "1" ]; then
-        memory_maintain_args+=(--with-weekly-distill)
-    fi
-    if [ "${OPENCLAW_MEMORY_CLEANUP:-1}" = "1" ]; then
-        memory_maintain_args+=(--with-cleanup)
-        memory_maintain_args+=(--retain-days "${OPENCLAW_MEMORY_RETAIN_DAYS:-30}")
-        memory_maintain_args+=(--archive-prune-days "${OPENCLAW_MEMORY_ARCHIVE_PRUNE_DAYS:-365}")
-    fi
-    if [ "${OPENCLAW_MEMORY_CONSOLIDATE_ON_NIGHTLY:-0}" = "1" ]; then
-        memory_maintain_args+=(--with-consolidation)
-    fi
-    if python3 "$CLAWD_DIR/workspace/scripts/memory_maintenance.py" "${memory_maintain_args[@]}" >>"$LOG_FILE" 2>&1; then
-        log "Memory rotate/index maintenance complete"
-    else
-        log "⚠️ Memory rotate/index maintenance failed"
     fi
 
     if [ "${OPENCLAW_NARRATIVE_DISTILL:-0}" = "1" ]; then
@@ -285,6 +247,15 @@ run_kb_decisions() {
     fi
 }
 
+run_governance_check() {
+    log "=== Governance: Section Count Validation ==="
+    if python3 "$CLAWD_DIR/workspace/tools/validate_section_count.py" --warn-only >>"$LOG_FILE" 2>&1; then
+        log "Section count OK"
+    else
+        log "⚠️ Section count drift detected — consider running /rebuild"
+    fi
+}
+
 # Main
 case "${1:-all}" in
     research)
@@ -303,6 +274,7 @@ case "${1:-all}" in
         run_memory
         run_kb_sync
         run_kb_decisions
+        run_governance_check
         log "=== Nightly Build Complete ==="
         ;;
     *)

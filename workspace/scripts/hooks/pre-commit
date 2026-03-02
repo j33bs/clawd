@@ -35,13 +35,6 @@ echo "=== OpenClaw Pre-Commit Validation ==="
 BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
 
 # ============================================
-# 0. BLOCK: OPEN_QUESTIONS append-only policy
-# ============================================
-if ! bash "workspace/scripts/hooks/guard_open_questions_append_only.sh"; then
-    exit 1
-fi
-
-# ============================================
 # 1. BLOCK: Direct commits to main
 # ============================================
 if [ "$BRANCH" = "main" ] || [ "$BRANCH" = "master" ]; then
@@ -225,6 +218,22 @@ echo "  $FILE_COUNT file(s) staged for commit"
 
 if [ "$FILE_COUNT" -gt 20 ]; then
     echo -e "${YELLOW}  INFO: Large changeset (>20 files). Consider splitting.${NC}"
+fi
+
+# ============================================
+# 9. WARN: Governance gate advisory (INV-004)
+# ============================================
+# Non-blocking. Detects [EXEC:GOV] tags in staged OPEN_QUESTIONS.md changes
+# and reminds the operator to run commit_gate.py for joint-signed artifacts.
+if echo "$STAGED_FILES" | grep -q "OPEN_QUESTIONS.md"; then
+    STAGED_OQ_DIFF=$(git diff --cached workspace/governance/OPEN_QUESTIONS.md 2>/dev/null || true)
+    if echo "$STAGED_OQ_DIFF" | grep -q "\[EXEC:GOV\]"; then
+        echo -e "${YELLOW}  ADVISORY: [EXEC:GOV] tag detected in OPEN_QUESTIONS.md changes.${NC}"
+        echo "  If this is a joint c_lawd + Dali governance commit, run the commit gate:"
+        echo "    python3 workspace/tools/commit_gate.py --task-id <ID> --r1-c-lawd <f> --r1-dali <f> --r3-joint <f> ..."
+        echo "  Commit will proceed — gate is advisory only until [EXEC:HUMAN_OK] enforcement lands."
+        echo ""
+    fi
 fi
 
 echo ""

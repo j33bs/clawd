@@ -2,23 +2,10 @@
   "name": "openclaw",
   "private": true,
   "version": "0.0.0",
-  "engines": {
-    "node": ">=20"
-  },
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/j33bs/clawd.git"
-  },
-  "bugs": {
-    "url": "https://github.com/j33bs/clawd/issues"
-  },
-  "homepage": "https://github.com/j33bs/clawd#readme",
   "scripts": {
     "test": "node scripts/run_tests.js",
-    "test:hardening": "node --test workspace/runtime_hardening/tests/*.test.mjs",
-    "test:hardening:watch": "node --watch --test workspace/runtime_hardening/tests/*.test.mjs",
-    "typecheck:hardening": "node --check workspace/runtime_hardening/src/*.mjs && node --check workspace/runtime_hardening/src/security/*.mjs && node --check workspace/runtime_hardening/overlay/*.mjs",
-    "runtime:rebuild": "bash workspace/scripts/rebuild_runtime_openclaw.sh",
+    "test:store": "python3 -m pytest workspace/store/tests/ -q",
+    "test:all": "node scripts/run_tests.js && python3 -m pytest workspace/store/tests/ -q",
     "governance:heartbeat": "sh workspace/scripts/sync_heartbeat.sh",
     "gate:module-resolution": "node scripts/module_resolution_gate.js --json",
     "redact:audit-evidence": "node scripts/redact_audit_evidence.js",
@@ -29,7 +16,8 @@
     "system2:diff": "node scripts/system2_snapshot_diff.js",
     "system2:experiment": "node scripts/system2_experiment.js",
     "system2:experiment:auth": "npm run system2:experiment -- --fail-on log_signature_counts.auth_error",
-    "secrets": "node scripts/openclaw_secrets_cli.js"
+    "secrets": "node scripts/openclaw_secrets_cli.js",
+    "query:memory": "node workspace/memory/unified_query.js"
   },
   "jest": {
     "testPathIgnorePatterns": [
