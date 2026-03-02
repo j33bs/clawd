@@ -4,6 +4,8 @@
   "version": "0.0.0",
   "scripts": {
     "test": "node scripts/run_tests.js",
+    "test:store": "python3 -m pytest workspace/store/tests/ -q",
+    "test:all": "node scripts/run_tests.js && python3 -m pytest workspace/store/tests/ -q",
     "governance:heartbeat": "sh workspace/scripts/sync_heartbeat.sh",
     "gate:module-resolution": "node scripts/module_resolution_gate.js --json",
     "redact:audit-evidence": "node scripts/redact_audit_evidence.js",
