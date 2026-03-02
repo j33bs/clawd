@@ -247,6 +247,15 @@ run_kb_decisions() {
     fi
 }
 
+run_governance_check() {
+    log "=== Governance: Section Count Validation ==="
+    if python3 "$CLAWD_DIR/workspace/tools/validate_section_count.py" --warn-only >>"$LOG_FILE" 2>&1; then
+        log "Section count OK"
+    else
+        log "⚠️ Section count drift detected — consider running /rebuild"
+    fi
+}
+
 # Main
 case "${1:-all}" in
     research)
@@ -265,6 +274,7 @@ case "${1:-all}" in
         run_memory
         run_kb_sync
         run_kb_decisions
+        run_governance_check
         log "=== Nightly Build Complete ==="
         ;;
     *)
