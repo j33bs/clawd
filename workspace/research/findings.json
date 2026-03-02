@@ -69,6 +69,21 @@
       "topic": "cross-timescale processing predictive coding",
       "finding": "Explored: cross-timescale processing predictive coding",
       "timestamp": "2026-02-24T21:04:41.433558"
+    },
+    {
+      "topic": "memory trails decay forgetting artificial",
+      "finding": "Explored: memory trails decay forgetting artificial",
+      "timestamp": "2026-03-02T14:04:15Z"
+    },
+    {
+      "topic": "tailscale mesh VPN AI agent communication network",
+      "finding": "Explored: tailscale mesh VPN AI agent communication network",
+      "timestamp": "2026-03-02T17:04:14Z"
+    },
+    {
+      "topic": "private AI network infrastructure self-hosted",
+      "finding": "Explored: private AI network infrastructure self-hosted",
+      "timestamp": "2026-03-02T20:04:15Z"
     }
   ],
   "questions_generated": [
@@ -141,6 +156,33 @@
       "question": "What would cross-timescale processing predictive coding mean for TACTI(C)-R?",
       "from_topic": "cross-timescale processing predictive coding",
       "timestamp": "2026-02-24T21:04:41.433562"
+    },
+    {
+      "question": "How might memory trails decay forgetting artificial intersect with active inference, given open loop: Context:** Parallel research experiment \u2014 both AIs independently researched \"What is the relationship between consciousness and information?\" and compared findings. Convergence discovered.? What would a null result look like and how would we log it?",
+      "from_topic": "memory trails decay forgetting artificial",
+      "timestamp": "2026-03-02T14:04:15Z",
+      "overlap_max": 0.455,
+      "similarity_max": 0.674,
+      "seed_topic": "active inference",
+      "novelty_reason": "accepted"
+    },
+    {
+      "question": "How might tailscale mesh VPN AI agent communication network intersect with neuromodulation and gain control, given open loop: How might memory trails decay forgetting artificial intersect with active inference, given open loop:** Context: Parallel research experiment \u2014 both AIs independently researched \"What is the relationship between consciousness and information?\" and compared findings. Convergence discovered.? What would a null result look like and how would we log it?? Where does this break under adversarial conditions?",
+      "from_topic": "tailscale mesh VPN AI agent communication network",
+      "timestamp": "2026-03-02T17:04:14Z",
+      "overlap_max": 0.733,
+      "similarity_max": 0.856,
+      "seed_topic": "neuromodulation and gain control",
+      "novelty_reason": "fallback_best_of_5"
+    },
+    {
+      "question": "How might private AI network infrastructure self-hosted intersect with allostasis and predictive regulation, given open loop: How might memory trails decay forgetting artificial intersect with active inference, given open loop:** Context: Parallel research experiment \u2014 both AIs independently researched \"What is the relationship between consciousness and information?\" and compared findings. Convergence discovered.? What would a null result look like and how would we log it?? Where does this break under adversarial conditions?",
+      "from_topic": "private AI network infrastructure self-hosted",
+      "timestamp": "2026-03-02T20:04:15Z",
+      "overlap_max": 0.75,
+      "similarity_max": 0.866,
+      "seed_topic": "allostasis and predictive regulation",
+      "novelty_reason": "fallback_best_of_5"
     }
   ]
 }
