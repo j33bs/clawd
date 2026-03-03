@@ -30,7 +30,13 @@ _cwd_root = _resolve_repo_root(Path.cwd())
 BASE_DIR = Path(_env_root) if _env_root else (_file_root or _cwd_root or Path("C:/Users/heath/.openclaw"))
 POLICY_FILE = BASE_DIR / "workspace" / "policy" / "llm_policy.json"
 SYSTEM_MAP_FILE = BASE_DIR / "workspace" / "policy" / "system_map.json"
-OPENCLAW_FILE = BASE_DIR / "openclaw.json"
+OPENCLAW_WORKSPACE_FILE = BASE_DIR / "workspace" / "config" / "openclaw.json"
+OPENCLAW_LEGACY_FILE = BASE_DIR / "openclaw.json"
+OPENCLAW_FILE = (
+    Path(os.environ["OPENCLAW_CONFIG_PATH"]).expanduser()
+    if os.environ.get("OPENCLAW_CONFIG_PATH")
+    else (OPENCLAW_WORKSPACE_FILE if OPENCLAW_WORKSPACE_FILE.exists() else OPENCLAW_LEGACY_FILE)
+)
 PAIRING = BASE_DIR / "credentials" / "telegram-pairing.json"
 
 sys.path.insert(0, str((BASE_DIR / "workspace" / "scripts").resolve()))
@@ -94,6 +100,23 @@ _KNOWN_SYSTEM2_STRAYS = (
     ".openclaw/workspace-state.json",
 )
 
+_ALLOWED_UNTRACKED_PREFIXES = (
+    "workspace/state_runtime/",
+    "workspace/research/pdfs/",
+    "memory/literature/",
+    ".claude/",
+    ".worktrees/",
+    "workspace/audit/",
+)
+_ALLOWED_UNTRACKED_PATTERNS = (
+    re.compile(r"^memory/\d{4}-\d{2}-\d{2}\.md$"),
+    re.compile(r"^docs/AUDIT_.*\.md$"),
+)
+_LOCAL_EXCLUDE_INSTALL_CMD = (
+    "OPENCLAW_ALLOW_LOCAL_GIT_EXCLUDE_WRITE=1 "
+    "python3 -m workspace.scripts.local_git_exclude --install"
+)
+
 
 def fail(msg, fixes, failures):
     failures.append({"msg": msg, "fixes": fixes})
@@ -101,6 +124,10 @@ def fail(msg, fixes, failures):
 
 def warn(msg, warns):
     warns.append(msg)
+
+
+def _network_preflight_enabled() -> bool:
+    return os.getenv("OPENCLAW_PREFLIGHT_NETWORK", "0") == "1"
 
 
 def load_json(path):
@@ -144,20 +171,17 @@ def _run_git_status_porcelain_z(repo_root: Path) -> bytes:
 
 
 def _untracked_paths(repo_root: Path) -> List[str]:
-    data = _run_git_status_porcelain_z(repo_root)
-    entries = data.split(b"\x00")
+    proc = subprocess.run(
+        ["git", "-C", str(repo_root), "ls-files", "--others", "--exclude-standard"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if proc.returncode != 0:
+        return []
     out: List[str] = []
-    for entry in entries:
-        if not entry:
-            continue
-        try:
-            status = entry[:2].decode("utf-8", errors="ignore")
-            path = entry[3:].decode("utf-8", errors="ignore")
-        except Exception:
-            continue
-        if status != "??":
-            continue
-        norm = path.replace("\\", "/").strip("/")
+    for path in (proc.stdout or "").splitlines():
+        norm = path.replace("\\", "/").strip().strip("/")
         if not norm:
             continue
         out.append(norm)
@@ -165,25 +189,26 @@ def _untracked_paths(repo_root: Path) -> List[str]:
 
 
 def _untracked_repo_root_files(repo_root: Path) -> List[str]:
-    data = _run_git_status_porcelain_z(repo_root)
-    entries = data.split(b"\x00")
     out: List[str] = []
-    for entry in entries:
-        if not entry:
-            continue
-        try:
-            status = entry[:2].decode("utf-8", errors="ignore")
-            path = entry[3:].decode("utf-8", errors="ignore")
-        except Exception:
-            continue
-        if status != "??":
-            continue
-        norm = path.replace("\\", "/").strip("/")
+    for norm in _untracked_paths(repo_root):
         # Only repo-root files (no slashes).
-        if not norm or "/" in norm:
+        if "/" in norm:
             continue
         out.append(norm)
     return sorted(set(out))
+
+
+def _is_allowed_untracked_path(rel: str) -> bool:
+    p = rel.replace("\\", "/").strip("/")
+    if not p:
+        return False
+    for prefix in _ALLOWED_UNTRACKED_PREFIXES:
+        if p.startswith(prefix):
+            return True
+    for pattern in _ALLOWED_UNTRACKED_PATTERNS:
+        if pattern.match(p):
+            return True
+    return False
 
 
 def _is_ignorable_root_untracked(rel: str) -> bool:
@@ -198,6 +223,38 @@ def _is_ignorable_root_untracked(rel: str) -> bool:
     if p.startswith(".openclaw/") and ".openclaw" in normalized_allow:
         return True
     return False
+
+
+def _matches_prefix_path(path: str, prefix: str) -> bool:
+    rel = path.replace("\\", "/").strip().strip("/")
+    root = prefix.replace("\\", "/").strip().strip("/")
+    if not rel or not root:
+        return False
+    return rel == root or rel.startswith(root + "/")
+
+
+def _print_local_exclude_hint(disallowed_paths: List[str]) -> None:
+    try:
+        from local_git_exclude import get_recommended_excludes
+    except Exception:
+        return
+
+    roots = get_recommended_excludes()
+    matched = sorted(
+        {
+            root
+            for root in roots
+            if any(_matches_prefix_path(path, root) for path in disallowed_paths)
+        }
+    )
+    if not matched:
+        return
+
+    print("hint_local_only_artifacts:")
+    for root in matched:
+        print(f"- {root}")
+    print("These look like local-only artifact roots; consider installing local excludes via:")
+    print(_LOCAL_EXCLUDE_INSTALL_CMD)
 
 
 def _ts_suffix() -> str:
@@ -313,12 +370,17 @@ def _auto_ingest_allowlisted_teammate_untracked(repo_root: Path) -> Optional[Dic
         return None
 
     allowlisted = [p for p in untracked if _is_allowlisted_teammate_path(p)]
-    disallowed = [p for p in untracked if p not in allowlisted]
+    disallowed = [
+        p
+        for p in untracked
+        if p not in allowlisted and not _is_allowed_untracked_path(p)
+    ]
     if disallowed:
         print("STOP (unrelated workspace drift detected)")
         print("untracked_disallowed_paths:")
         for p in disallowed:
             print(f"- {p}")
+        _print_local_exclude_hint(disallowed)
         return {"stopped": True, "error": "untracked_disallowed", "disallowed": disallowed}
 
     if not allowlisted:
@@ -730,13 +792,49 @@ def check_router(policy, failures):
             )
 
 
-def check_requests(failures):
+def check_requests(failures, warnings):
     if not REQUESTS_OK:
-        fail(
-            "Python requests library missing",
-            ["Install requests: `python3 -m pip install requests`"],
-            failures,
-        )
+        if _network_preflight_enabled():
+            fail(
+                "Python requests library missing",
+                ["Install requests: `python3 -m pip install requests`"],
+                failures,
+            )
+        else:
+            warn(
+                "Python requests library missing (network preflight disabled). "
+                "Install requests: `python3 -m pip install requests`",
+                warnings,
+            )
+
+
+def check_plugins_allowlist(failures, warnings):
+    guard_script = BASE_DIR / "workspace" / "scripts" / "openclaw_config_guard.py"
+    if not guard_script.exists():
+        warn("plugin allowlist guard missing; skipping plugin allow checks", warnings)
+        return
+    cmd = [sys.executable, str(guard_script), "--strict"]
+    if os.environ.get("OPENCLAW_CONFIG_PATH"):
+        cmd.extend(["--config", os.environ["OPENCLAW_CONFIG_PATH"]])
+    proc = subprocess.run(cmd, capture_output=True, text=True, check=False)
+    payload_raw = (proc.stdout or "").strip()
+    if proc.returncode == 0:
+        return
+    issues = []
+    try:
+        payload = json.loads(payload_raw) if payload_raw else {}
+        issues = payload.get("issues") or []
+    except Exception:
+        issues = [payload_raw or "unknown_plugin_allowlist_error"]
+    issue_text = ", ".join(str(i) for i in issues) if issues else "plugin allowlist validation failed"
+    fail(
+        f"plugins_not_allowlisted: {issue_text}",
+        [
+            "Set plugins.allow in workspace/config/openclaw.json (or OPENCLAW_CONFIG_PATH target)",
+            "Allow only explicitly trusted plugin ids",
+        ],
+        failures,
+    )
 
 
 def check_telegram(failures, warnings):
@@ -808,12 +906,13 @@ def check_node_identity(failures, warnings):
     cfg = load_json(OPENCLAW_FILE) or {}
     system_map = load_json(SYSTEM_MAP_FILE) or {}
     default_node_id = str(system_map.get("default_node_id") or "dali")
+    config_exists = OPENCLAW_FILE.exists()
 
     node = cfg.get("node") if isinstance(cfg.get("node"), dict) else {}
     raw_node_id = node.get("id")
     normalized = normalize_node_id(raw_node_id, system_map)
 
-    if not raw_node_id:
+    if config_exists and not raw_node_id:
         warn(
             f"openclaw.json node.id missing; defaulting to '{default_node_id}' for compatibility",
             warnings,
@@ -841,7 +940,8 @@ def main():
     if teammate and teammate.get("stopped"):
         sys.exit(2)
 
-    check_requests(failures)
+    check_requests(failures, warnings)
+    check_plugins_allowlist(failures, warnings)
     policy = check_policy(failures)
     if policy:
         check_router(policy, failures)

@@ -1,41 +1,21 @@
-"""Deterministic low-frequency maintenance scheduler."""
+"""
+DEPRECATED: compatibility forwarder.
+Canonical source is workspace/tacti/oscillatory_gating.py.
+"""
 
-from __future__ import annotations
+from importlib.util import spec_from_file_location
+from pathlib import Path
 
-import os
-from dataclasses import dataclass
-from typing import Dict, List
-
-
-GROUPS = [
-    ["memory_maintenance"],
-    ["routing_maintenance"],
-    ["audit_maintenance"],
-    ["immune_maintenance"],
-]
-
-
-def oscillatory_gating_enabled() -> bool:
-    value = str(os.environ.get("OPENCLAW_OSCILLATORY_GATING", "0")).strip().lower()
-    return value in {"1", "true", "yes", "on"}
-
-
-@dataclass
-class OscillatoryGate:
-    phase: int = 0
-
-    def tick(self) -> Dict[str, object]:
-        if not oscillatory_gating_enabled():
-            return {"enabled": False, "phase": self.phase, "active_groups": []}
-        idx = self.phase % len(GROUPS)
-        active = list(GROUPS[idx])
-        self.phase += 1
-        return {"enabled": True, "phase": idx, "active_groups": active}
-
-
-def select_maintenance_groups(phase: int) -> List[str]:
-    idx = int(phase) % len(GROUPS)
-    return list(GROUPS[idx])
-
-
-__all__ = ["OscillatoryGate", "select_maintenance_groups", "oscillatory_gating_enabled"]
+_shim_file = Path(__file__).resolve()
+_src = _shim_file.parents[1] / "tacti" / "oscillatory_gating.py"
+__file__ = str(_src)
+if not globals().get("__package__"):
+    __package__ = __name__.rpartition(".")[0]
+if globals().get("__spec__") is None:
+    __spec__ = spec_from_file_location(__name__, str(_src))
+if not globals().get("_TACTI_SHIM_EXECUTED", False):
+    _code = _src.read_text(encoding="utf-8")
+    exec(compile(_code, str(_src), "exec"), globals(), globals())
+    globals()["_TACTI_SHIM_EXECUTED"] = True
+if "__all__" in globals():
+    __all__ = list(__all__)

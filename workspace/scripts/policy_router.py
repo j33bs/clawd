@@ -9,6 +9,7 @@ import os
 import re
 import sys
 import time
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -23,9 +24,10 @@ except Exception:  # pragma: no cover - optional integration
     ProprioceptiveSampler = None
 
 try:
-    from witness_ledger import commit as witness_commit
+    from event_envelope import append_envelope, make_envelope
 except Exception:  # pragma: no cover - optional integration
-    witness_commit = None
+    append_envelope = None
+    make_envelope = None
 
 def _resolve_repo_root(start: Path):
     current = start
@@ -45,242 +47,31 @@ BUDGET_FILE = BASE_DIR / "itc" / "llm_budget.json"
 CIRCUIT_FILE = BASE_DIR / "itc" / "llm_circuit.json"
 EVENT_LOG = BASE_DIR / "itc" / "llm_router_events.jsonl"
 QWEN_AUTH_FILE = BASE_DIR / "agents" / "main" / "agent" / "auth-profiles.json"
-TACTI_EVENT_LOG = BASE_DIR / "workspace" / "state_runtime" / "tacti_cr" / "events.jsonl"
-ACTIVE_INFERENCE_STATE_PATH = BASE_DIR / "workspace" / "hivemind" / "data" / "active_inference_state.json"
-WITNESS_LEDGER_PATH = BASE_DIR / "workspace" / "audit" / "witness_ledger.jsonl"
+TACTI_EVENT_LOG = BASE_DIR / "workspace" / "state" / "tacti_cr" / "events.jsonl"
+ACTIVE_INFERENCE_STATE_PATH = BASE_DIR / "workspace" / "state" / "active_inference_state.json"
+WITNESS_LEDGER_PATH = BASE_DIR / "workspace" / "state_runtime" / "teamchat" / "witness_ledger.jsonl"
+_QUIESCE_SKIP_LOGGED = set()
 
 TACTI_ROOT = BASE_DIR / "workspace"
 if str(TACTI_ROOT) not in sys.path:
     sys.path.insert(0, str(TACTI_ROOT))
-HIVEMIND_ROOT = BASE_DIR / "workspace" / "hivemind"
-if str(HIVEMIND_ROOT) not in sys.path:
-    sys.path.insert(0, str(HIVEMIND_ROOT))
 
 try:
     from tacti_cr.arousal_oscillator import ArousalOscillator
-    from tacti_cr.events_paths import ensure_parent as tacti_ensure_parent
-    from tacti_cr.events_paths import resolve_events_path as tacti_resolve_events_path
+    from tacti_cr.active_inference_agent import ActiveInferenceAgent
     from tacti_cr.config import is_enabled as tacti_enabled
     from tacti_cr.expression import compute_expression
     from tacti_cr.collapse import emit_recommendation as collapse_emit_recommendation
     from tacti_cr.valence import routing_bias as tacti_routing_bias
+    from tacti_cr.events import emit as tacti_emit
 except Exception:  # pragma: no cover - optional integration
     ArousalOscillator = None
-    tacti_ensure_parent = None
-    tacti_resolve_events_path = None
+    ActiveInferenceAgent = None
     tacti_enabled = None
     compute_expression = None
     collapse_emit_recommendation = None
     tacti_routing_bias = None
-
-try:
-    from hivemind.active_inference import PreferenceModel
-except Exception:  # pragma: no cover - optional integration
-    PreferenceModel = None
-
-try:
-    from hivemind.integrations.main_flow_hook import (
-        dynamics_flags_enabled as _hivemind_dynamics_flags_enabled,
-    )
-    from hivemind.integrations.main_flow_hook import (
-        tacti_enhance_plan as _hivemind_tacti_enhance_plan,
-    )
-except Exception:  # pragma: no cover - optional integration
-    _hivemind_dynamics_flags_enabled = None
-    _hivemind_tacti_enhance_plan = None
-
-
-class PolicyValidationError(Exception):
-    """Raised when policy schema validation fails in strict mode."""
-
-
-def _resolve_openai_oauth_token() -> str | None:
-    """
-    Resolve OpenAI OAuth token from OpenClaw auth.json.
-    Returns access token if valid, None otherwise.
-    """
-    auth_path = Path.home() / ".openclaw" / "agents" / "main" / "agent" / "auth.json"
-    if not auth_path.exists():
-        return None
-    try:
-        auth_data = json.loads(auth_path.read_text())
-        # Check both "openai-codex" and "openai" keys
-        for key in ["openai-codex", "openai"]:
-            entry = auth_data.get(key)
-            if not entry:
-                continue
-            # Check for "access" or "access_token"
-            access_token = entry.get("access_token") or entry.get("access")
-            if access_token:
-                expires = entry.get("expires_at") or entry.get("expires")
-                # Check if token is expired (expires is in milliseconds)
-                if expires:
-                    try:
-                        current_ms = int(time.time() * 1000)
-                        if expires < current_ms:
-                            continue  # Token expired
-                    except (TypeError, ValueError):
-                        pass
-                return access_token
-        return None
-    except Exception:
-        return None
-
-
-def _env_truthy(value):
-    return str(value).strip().lower() in {"1", "true", "yes", "on"}
-
-
-def _policy_strict_enabled():
-    return not str(os.environ.get("OPENCLAW_POLICY_STRICT", "1")).strip().lower() in {
-        "0",
-        "false",
-        "no",
-        "off",
-    }
-
-
-def _validate_policy_or_raise(policy):
-    errors = []
-    allowed_budget_keys = {"dailyTokenBudget", "dailyCallBudget", "maxCallsPerRun"}
-    allowed_provider_keys = {
-        "enabled",
-        "paid",
-        "tier",
-        "type",
-        "baseUrl",
-        "apiKeyEnv",
-        "models",
-        "auth",
-        "readyEnv",
-        "provider_id",
-        "model",
-        "capabilities",
-    }
-
-    intents = ((policy or {}).get("budgets") or {}).get("intents") or {}
-    if isinstance(intents, dict):
-        for intent_name, cfg in intents.items():
-            if not isinstance(cfg, dict):
-                continue
-            for key in cfg.keys():
-                if key not in allowed_budget_keys:
-                    errors.append(f"budgets.intents.{intent_name}.{key}")
-
-    providers = (policy or {}).get("providers") or {}
-    if isinstance(providers, dict):
-        for provider_name, cfg in providers.items():
-            if not isinstance(cfg, dict):
-                continue
-            for key in cfg.keys():
-                if key not in allowed_provider_keys:
-                    errors.append(f"providers.{provider_name}.{key}")
-
-    if not errors:
-        return
-
-    message = "policy validation failed for keys: " + ", ".join(errors[:12])
-    if _policy_strict_enabled():
-        raise PolicyValidationError(message)
-    log_event("policy_validation_warn", {"errors": errors[:12], "count": len(errors)})
-
-
-def _active_inference_enabled():
-    return _env_truthy(os.environ.get("ENABLE_ACTIVE_INFERENCE", "0"))
-
-
-def _router_proprioception_enabled():
-    return _env_truthy(os.environ.get("OPENCLAW_ROUTER_PROPRIOCEPTION", "0"))
-
-
-def _witness_ledger_enabled():
-    return _env_truthy(os.environ.get("OPENCLAW_WITNESS_LEDGER", "0"))
-
-
-def tacti_features_from_proprioception(snapshot):
-    snap = dict(snapshot or {})
-    return {
-        "router_latency_band": "high" if float(snap.get("latency_ms_p95", 0.0) or 0.0) >= 800.0 else "normal",
-        "router_error_rate": float(snap.get("error_rate", 0.0) or 0.0),
-        "router_decision_volume": int(snap.get("decisions_last_n", 0) or 0),
-    }
-
-
-def _maybe_active_inference_metadata(context_metadata):
-    if not _active_inference_enabled() or PreferenceModel is None:
-        return None
-    try:
-        state_path = Path(ACTIVE_INFERENCE_STATE_PATH)
-        model = PreferenceModel.load_path(state_path)
-        params, confidence = model.predict(context_metadata or {})
-        model.update((context_metadata or {}).get("feedback"), {})
-        model.save_path(state_path)
-        return {
-            "preference_params": params,
-            "confidence": confidence,
-            "state_path": str(state_path),
-        }
-    except Exception as exc:
-        log_event("active_inference_error", {"reason_code": f"{type(exc).__name__}"})
-        return None
-
-
-def _dynamics_flags_enabled():
-    if callable(_hivemind_dynamics_flags_enabled):
-        try:
-            return bool(_hivemind_dynamics_flags_enabled(os.environ))
-        except Exception:
-            pass
-    return any(
-        _env_truthy(os.environ.get(name))
-        for name in ("ENABLE_MURMURATION", "ENABLE_RESERVOIR", "ENABLE_PHYSARUM_ROUTER", "ENABLE_TRAIL_MEMORY")
-    )
-
-
-def tacti_enhance_plan(context, candidates, policy=None):
-    ordered_candidates = []
-    seen = set()
-    for item in candidates or []:
-        name = str(item).strip()
-        if not name or name in seen:
-            continue
-        seen.add(name)
-        ordered_candidates.append(name)
-
-    if not _dynamics_flags_enabled():
-        return ordered_candidates, {
-            "ok": True,
-            "enabled": False,
-            "reason": "flags_off",
-            "agent_ids": ordered_candidates,
-        }
-
-    if callable(_hivemind_tacti_enhance_plan):
-        try:
-            reordered, annotations = _hivemind_tacti_enhance_plan(
-                context,
-                ordered_candidates,
-                policy=policy,
-            )
-            notes = dict(annotations or {})
-            notes["ok"] = True
-            notes.setdefault("agent_ids", ordered_candidates)
-            return list(reordered or ordered_candidates), notes
-        except Exception as exc:
-            return ordered_candidates, {
-                "ok": False,
-                "enabled": False,
-                "reason": "tacti_hook_error",
-                "error": type(exc).__name__,
-                "agent_ids": ordered_candidates,
-            }
-
-    return ordered_candidates, {
-        "ok": True,
-        "enabled": False,
-        "reason": "tacti_hook_unavailable",
-        "agent_ids": ordered_candidates,
-    }
+    tacti_emit = None
 
 DEFAULT_POLICY = {
     "version": 2,
@@ -288,6 +79,16 @@ DEFAULT_POLICY = {
         "allowPaid": False,
         "preferLocal": True,
         "maxTokensPerRequest": 1024,
+        "local_context_max_tokens_assistant": 32768,
+        "local_context_max_tokens_coder": 32768,
+        "local_context_soft_limit_tokens": 24576,
+        "local_context_overflow_policy": "compress",
+        "remoteRoutingEnabled": False,
+        "remoteAllowlistTaskClasses": [
+            "planning_synthesis",
+            "research_browse",
+            "code_generation_large",
+        ],
         "circuitBreaker": {
             "failureThreshold": 3,
             "cooldownSec": 900,
@@ -430,8 +231,85 @@ DEFAULT_POLICY = {
                 "allowPaid": True,
             },
         },
+        "capability_router": {
+            "enabled": True,
+            "subagentProvider": "local_vllm_assistant",
+            "mechanicalProvider": "local_vllm_assistant",
+            "planningProvider": "claude_auth",
+            "reasoningProvider": "claude_auth",
+            "codeProvider": "local_vllm_assistant",
+            "smallCodeProvider": "local_vllm_assistant",
+            "explicitTriggers": {},
+        },
     },
 }
+
+# Alias normalization to reconcile invariant/policy strings with registry IDs.
+PROVIDER_ID_ALIASES = {
+    "google-gemini-cli": "google-gemini-cli",
+    "qwen-portal": "qwen_alibaba",
+    "minimax-portal": "minimax-portal",
+    "gemini": "gemini",
+    "qwen_alibaba": "qwen_alibaba",
+    "groq": "groq",
+    "ollama": "ollama",
+}
+
+# Back-compat bridge from normalized registry IDs to policy provider keys.
+PROVIDER_ID_TO_POLICY_PROVIDER = {
+    "qwen_alibaba": "qwen",
+}
+
+
+class PolicyValidationError(Exception):
+    pass
+
+
+def normalize_provider_id(value):
+    if not isinstance(value, str):
+        return value
+    key = value.strip()
+    if not key:
+        return key
+    return PROVIDER_ID_ALIASES.get(key, key)
+
+
+def denormalize_provider_ids(value):
+    out = []
+    for raw, norm in PROVIDER_ID_ALIASES.items():
+        if norm == value:
+            out.append(raw)
+    return out
+
+
+def canonical_intent(intent):
+    raw = str(intent or "")
+    if raw.startswith("teamchat:"):
+        return "coding"
+    return raw
+
+
+def _normalize_provider_order(items):
+    if not isinstance(items, list):
+        return []
+    return [normalize_provider_id(item) for item in items if isinstance(item, str)]
+
+
+def _normalize_policy_routing(policy):
+    routing = policy.get("routing", {})
+    if not isinstance(routing, dict):
+        return
+    routing["free_order"] = _normalize_provider_order(routing.get("free_order", []))
+    intents = routing.get("intents", {})
+    if isinstance(intents, dict):
+        for cfg in intents.values():
+            if isinstance(cfg, dict):
+                cfg["order"] = _normalize_provider_order(cfg.get("order", []))
+    rules = routing.get("rules", [])
+    if isinstance(rules, list):
+        for rule in rules:
+            if isinstance(rule, dict) and isinstance(rule.get("provider"), str):
+                rule["provider"] = normalize_provider_id(rule.get("provider"))
 
 
 def _deep_merge(defaults, incoming):
@@ -449,15 +327,126 @@ def _deep_merge(defaults, incoming):
     return merged
 
 
+def _policy_strict_enabled():
+    value = str(os.environ.get("OPENCLAW_POLICY_STRICT", "1")).strip().lower()
+    return value not in {"0", "false", "no", "off"}
+
+
+_SECRET_VALUE_PATTERNS = [
+    re.compile(r"(authorization\s*:\s*bearer\s+)[^\s,;]+", re.IGNORECASE),
+    re.compile(r"\bBearer\s+[A-Za-z0-9._~+\-/=]{8,}\b"),
+    re.compile(r"\b(sk|gsk|xoxb|xoxp)-[A-Za-z0-9_-]{8,}\b", re.IGNORECASE),
+    re.compile(r"((?:api[_-]?key|token|secret|password)\s*[:=]\s*)([^\s,;]+)", re.IGNORECASE),
+]
+
+
+def _redact_text(value):
+    text = str(value or "")
+    for pattern in _SECRET_VALUE_PATTERNS:
+        if pattern.pattern.startswith("((?:api"):
+            text = pattern.sub(r"\1<redacted>", text)
+        elif "authorization" in pattern.pattern.lower():
+            text = pattern.sub(r"\1<redacted>", text)
+        else:
+            text = pattern.sub("<redacted-token>", text)
+    text = re.sub(r"(cookie\s*:\s*)([^\r\n]+)", r"\1<redacted>", text, flags=re.IGNORECASE)
+    text = re.sub(r"(set-cookie\s*:\s*)([^\r\n]+)", r"\1<redacted>", text, flags=re.IGNORECASE)
+    return text
+
+
+def _redact_detail(value):
+    if isinstance(value, str):
+        return _redact_text(value)
+    if value is None:
+        return None
+    if isinstance(value, list):
+        return [_redact_detail(item) for item in value]
+    if isinstance(value, dict):
+        out = {}
+        for key, item in value.items():
+            if re.search(r"authorization|cookie|token|secret|password|api[_-]?key", str(key), re.IGNORECASE):
+                out[str(key)] = "<redacted>"
+            else:
+                out[str(key)] = _redact_detail(item)
+        return out
+    return value
+
+
+def _new_request_id(prefix="req"):
+    pfx = re.sub(r"[^a-z0-9_-]", "", str(prefix or "req").lower()) or "req"
+    return f"{pfx}-{int(time.time() * 1000):x}-{uuid.uuid4().hex[:8]}"
+
+
+def _outcome_class_from_reason(reason_code):
+    code = str(reason_code or "").lower()
+    if code in {"success", "ok"}:
+        return "success"
+    if "timeout" in code:
+        return "timeout"
+    if "429" in code or "rate" in code:
+        return "rate_limit"
+    if "auth" in code or "missing_api_key" in code:
+        return "auth_error"
+    if "circuit" in code:
+        return "circuit_open"
+    return "failure"
+
+
+def _budget_intent_key(intent):
+    if isinstance(intent, str) and intent.startswith("teamchat:"):
+        return "coding"
+    return intent
+
+
+def _validate_policy_schema(raw):
+    errors = []
+    budget_intent_keys = {"dailyTokenBudget", "dailyCallBudget", "maxCallsPerRun"}
+    provider_keys = {
+        "enabled",
+        "paid",
+        "tier",
+        "type",
+        "baseUrl",
+        "apiKeyEnv",
+        "models",
+        "auth",
+        "readyEnv",
+        "provider_id",
+        "capabilities",
+        "model",
+    }
+
+    for intent, cfg in (raw.get("budgets", {}).get("intents", {}) or {}).items():
+        if not isinstance(cfg, dict):
+            continue
+        unknown = sorted(set(cfg.keys()) - budget_intent_keys)
+        if unknown:
+            errors.append(f"budgets.intents.{intent} unknown keys: {', '.join(unknown)}")
+
+    for provider, cfg in (raw.get("providers", {}) or {}).items():
+        if not isinstance(cfg, dict):
+            continue
+        unknown = sorted(set(cfg.keys()) - provider_keys)
+        if unknown:
+            errors.append(f"providers.{provider} unknown keys: {', '.join(unknown)}")
+
+    if errors:
+        raise PolicyValidationError("; ".join(errors))
+
+
 def load_policy(path=POLICY_FILE):
     policy = DEFAULT_POLICY
     if path.exists():
         try:
             raw = json.loads(path.read_text(encoding="utf-8"))
+            if _policy_strict_enabled():
+                _validate_policy_schema(raw)
             policy = _deep_merge(DEFAULT_POLICY, raw)
+        except PolicyValidationError:
+            raise
         except Exception:
             log_event("policy_load_fail", {"path": str(path)})
-    _validate_policy_or_raise(policy)
+    _normalize_policy_routing(policy)
     return policy
 
 
@@ -501,13 +490,24 @@ def save_circuit_state(state, path=CIRCUIT_FILE):
 
 
 def log_event(event_type, detail=None, path=EVENT_LOG):
+    if str(os.environ.get("OPENCLAW_QUIESCE", "")).strip() == "1":
+        try:
+            is_tacti_log = Path(path).resolve() == TACTI_EVENT_LOG.resolve()
+        except Exception:
+            is_tacti_log = str(path).endswith("workspace/state/tacti_cr/events.jsonl")
+        if is_tacti_log:
+            key = str(path)
+            if key not in _QUIESCE_SKIP_LOGGED:
+                _QUIESCE_SKIP_LOGGED.add(key)
+                print(f'QUIESCE_SKIP_WRITE file="{path}"', file=sys.stderr)
+            return
     path.parent.mkdir(parents=True, exist_ok=True)
     entry = {
         "ts": int(time.time() * 1000),
         "event": event_type,
     }
     if detail:
-        entry["detail"] = detail
+        entry["detail"] = _redact_detail(detail)
     try:
         with open(path, "a", encoding="utf-8") as f:
             f.write(json.dumps(entry, ensure_ascii=False) + "\n")
@@ -515,22 +515,155 @@ def log_event(event_type, detail=None, path=EVENT_LOG):
         pass
 
 
-def _resolve_tacti_event_log_path():
-    if callable(tacti_resolve_events_path):
+def _tacti_event(event_type, detail):
+    if callable(tacti_emit):
         try:
-            path = Path(tacti_resolve_events_path(BASE_DIR))
-            if callable(tacti_ensure_parent):
-                tacti_ensure_parent(path)
-            else:
-                path.parent.mkdir(parents=True, exist_ok=True)
-            return path
+            tacti_emit(str(event_type), detail if isinstance(detail, dict) else {"detail": detail})
+            return
         except Exception:
             pass
-    return TACTI_EVENT_LOG
+    log_event(event_type, detail=detail, path=TACTI_EVENT_LOG)
 
 
-def _tacti_event(event_type, detail):
-    log_event(event_type, detail=detail, path=_resolve_tacti_event_log_path())
+def _flag_enabled(name):
+    return str(os.environ.get(name, "")).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _active_inference_enabled():
+    return _flag_enabled("OPENCLAW_ACTIVE_INFERENCE") or _flag_enabled("ENABLE_ACTIVE_INFERENCE")
+
+
+def tacti_features_from_proprioception(snapshot):
+    snap = dict(snapshot or {})
+    arousal = 0.05
+    if snap.get("error_rate", 0.0) and float(snap.get("error_rate", 0.0)) > 0.2:
+        arousal = 0.2
+    return {"arousal": float(arousal)}
+
+
+def _legacy_tacti_flags_enabled():
+    return any(
+        _flag_enabled(name)
+        for name in (
+            "ENABLE_MURMURATION",
+            "ENABLE_RESERVOIR",
+            "ENABLE_PHYSARUM_ROUTER",
+            "ENABLE_TRAIL_MEMORY",
+        )
+    )
+
+
+def tacti_enhance_plan(plan, *, context_metadata=None, intent=None):
+    plan_dict = dict(plan or {})
+    plan_dict["enabled"] = bool(plan_dict.get("enabled", True))
+    agent_ids = list(plan_dict.get("agent_ids") or [])
+    if not agent_ids:
+        maybe_agent = (context_metadata or {}).get("agent_id")
+        if maybe_agent:
+            agent_ids = [str(maybe_agent)]
+    plan_dict["agent_ids"] = [str(a) for a in agent_ids if str(a).strip()]
+    if intent and "intent" not in plan_dict:
+        plan_dict["intent"] = intent
+    return plan_dict
+
+
+def _load_active_inference_state(path):
+    state_path = Path(path)
+    if state_path.exists():
+        try:
+            loaded = json.loads(state_path.read_text(encoding="utf-8"))
+            if isinstance(loaded, dict):
+                return loaded
+        except Exception:
+            pass
+    return {"version": 1, "runs": 0}
+
+
+def _save_active_inference_state(state, path):
+    state_path = Path(path)
+    state_path.parent.mkdir(parents=True, exist_ok=True)
+    state_path.write_text(json.dumps(state, indent=2) + "\n", encoding="utf-8")
+
+
+def _active_inference_payload(context_metadata):
+    state = _load_active_inference_state(ACTIVE_INFERENCE_STATE_PATH)
+    text = str((context_metadata or {}).get("input_text", "")).lower()
+    concise_hint = "concise" in text or "brief" in text
+    runs = int(state.get("runs", 0))
+    confidence = min(0.95, 0.5 + (runs * 0.05))
+    preference_params = {"style": "concise" if concise_hint else "balanced", "conciseness": 0.8 if concise_hint else 0.5}
+    preferred_provider = None
+    if ActiveInferenceAgent is not None:
+        try:
+            arousal = float((context_metadata or {}).get("arousal", 0.35 if concise_hint else 0.6))
+            collapse_mode = bool((context_metadata or {}).get("collapse_mode", False))
+            local_utility = 0.9 if concise_hint else 0.58
+            balanced_utility = 0.55 if concise_hint else 0.72
+            exploratory_utility = 0.35 if concise_hint else 0.8
+            candidate_policies = [
+                {
+                    "id": "local_conservative",
+                    "style": "concise",
+                    "conciseness": 0.9 if concise_hint else 0.55,
+                    "expected_utility": local_utility,
+                    "epistemic_value": 0.35,
+                    "complexity": 0.25,
+                    "preferred_provider": "local_vllm_assistant",
+                },
+                {
+                    "id": "balanced",
+                    "style": "balanced",
+                    "conciseness": 0.5,
+                    "expected_utility": balanced_utility,
+                    "epistemic_value": 0.55,
+                    "complexity": 0.5,
+                    "preferred_provider": "groq",
+                },
+                {
+                    "id": "exploratory",
+                    "style": "deep",
+                    "conciseness": 0.3,
+                    "expected_utility": exploratory_utility,
+                    "epistemic_value": 0.8,
+                    "complexity": 0.9,
+                    "preferred_provider": "openai_gpt52_chat",
+                },
+            ]
+            agent = ActiveInferenceAgent(
+                beliefs=dict(state.get("beliefs", {})),
+                model={
+                    "utility_weight": 1.0,
+                    "epistemic_weight": 0.65,
+                    "arousal_weight": 0.8,
+                    "collapse_penalty_weight": 1.2,
+                    "target_arousal": 0.45,
+                },
+            )
+            agent.beliefs.update({"arousal": arousal, "collapse_mode": collapse_mode})
+            decision = agent.step({"candidate_policies": candidate_policies, "input_text": text})
+            policy = decision.get("policy", {}) if isinstance(decision, dict) else {}
+            if isinstance(policy, dict):
+                preference_params = {
+                    "style": str(policy.get("style", preference_params["style"])),
+                    "conciseness": float(policy.get("conciseness", preference_params["conciseness"])),
+                }
+                preferred_provider = str(policy.get("preferred_provider") or "").strip() or None
+            state["beliefs"] = dict(agent.beliefs)
+            state["lastDecision"] = {
+                "policy_id": str(policy.get("id", "")),
+                "score": float((decision or {}).get("score", 0.0) or 0.0),
+                "preferred_provider": preferred_provider,
+            }
+        except Exception:
+            preferred_provider = None
+    state["runs"] = runs + 1
+    state["lastPreference"] = preference_params
+    _save_active_inference_state(state, ACTIVE_INFERENCE_STATE_PATH)
+    return {
+        "preference_params": preference_params,
+        "confidence": round(confidence, 3),
+        "preferred_provider": preferred_provider,
+    }
 
 
 def read_env_or_secrets(key_name):
@@ -599,6 +732,155 @@ def _truncate_text(text, max_chars):
     return text
 
 
+def _event_envelope_path():
+    return Path(
+        os.environ.get("OPENCLAW_EVENT_ENVELOPE_LOG_PATH")
+        or (Path.home() / ".local" / "share" / "openclaw" / "events" / "gate_health.jsonl")
+    ).expanduser()
+
+
+def _emit_envelope_event(event: str, severity: str, corr_id: str, details: dict):
+    if not callable(make_envelope) or not callable(append_envelope):
+        return {"ok": False, "reason": "event_envelope_unavailable"}
+    try:
+        envelope = make_envelope(
+            event=event,
+            severity=severity,
+            component="policy_router",
+            corr_id=str(corr_id or ""),
+            details=dict(details or {}),
+        )
+        return append_envelope(_event_envelope_path(), envelope)
+    except Exception as exc:  # pragma: no cover - defensive
+        return {"ok": False, "reason": f"{type(exc).__name__}:{exc}"}
+
+
+_CONTEXT_CONSTRAINT_LINE = re.compile(
+    r"\b(must|non-negotiable|constraint|fail-closed|do not|never|governance|policy|budget|circuit|local-first|subagent-only|remediation)\b",
+    re.IGNORECASE,
+)
+
+
+def _looks_like_constraint_line(line: str) -> bool:
+    s = str(line or "").strip()
+    if not s:
+        return False
+    if _CONTEXT_CONSTRAINT_LINE.search(s):
+        return True
+    if s.startswith(("System:", "Policy:", "Constraints:", "Guardrails:")):
+        return True
+    return False
+
+
+def _compress_text_preserving_structure(text: str, target_tokens: int):
+    src = str(text or "")
+    if not src.strip():
+        return src, {"before_chars": len(src), "after_chars": len(src), "before_tokens": 0, "after_tokens": 0}
+
+    before_chars = len(src)
+    before_tokens = estimate_tokens(src)
+    target_chars = max(512, int(target_tokens) * 4)
+    if before_chars <= target_chars:
+        return src, {
+            "before_chars": before_chars,
+            "after_chars": before_chars,
+            "before_tokens": before_tokens,
+            "after_tokens": before_tokens,
+            "compressed": False,
+        }
+
+    lines = src.splitlines()
+    constraints = []
+    headings_and_bullets = []
+    code_blocks = []
+
+    in_code = False
+    current_code = []
+    for raw in lines:
+        line = str(raw)
+        stripped = line.strip()
+        if stripped.startswith("```"):
+            if in_code:
+                current_code.append(line)
+                code_blocks.append("\n".join(current_code))
+                current_code = []
+                in_code = False
+            else:
+                if current_code:
+                    current_code = []
+                in_code = True
+                current_code.append(line)
+            continue
+        if in_code:
+            current_code.append(line)
+            continue
+
+        if _looks_like_constraint_line(line):
+            constraints.append(stripped)
+        if stripped.startswith("#") or re.match(r"^[-*+]\s+", stripped) or re.match(r"^\d+\.\s+", stripped):
+            headings_and_bullets.append(stripped)
+
+    if current_code:
+        if not current_code[-1].strip().startswith("```"):
+            current_code.append("```")
+        code_blocks.append("\n".join(current_code))
+
+    constraints = list(dict.fromkeys([c for c in constraints if c]))
+    headings_and_bullets = list(dict.fromkeys([h for h in headings_and_bullets if h]))
+
+    sections = []
+    if constraints:
+        sections.append("## Preserved Constraints")
+        sections.extend(f"- {c}" for c in constraints[:40])
+    if headings_and_bullets:
+        sections.append("## Structure Snapshot")
+        sections.extend(headings_and_bullets[:200])
+    if code_blocks:
+        sections.append("## Code Excerpts (truncated)")
+        for block in code_blocks[:12]:
+            trimmed = block
+            if len(trimmed) > 1200:
+                trimmed = f"{trimmed[:1100]}\n# ... [code truncated]\n```"
+            sections.append(trimmed)
+    sections.append("## Compression Notes")
+    sections.append("- Content reduced to fit local context budget.")
+    sections.append("- Constraints and structure were preserved first.")
+
+    compressed = "\n".join(sections).strip()
+    if len(compressed) > target_chars:
+        marker = "\n\n[TRUNCATED_AFTER_COMPRESSION]"
+        keep = max(0, target_chars - len(marker))
+        compressed = compressed[:keep].rstrip() + marker
+
+    after_chars = len(compressed)
+    after_tokens = estimate_tokens(compressed)
+    info = {
+        "before_chars": before_chars,
+        "after_chars": after_chars,
+        "before_tokens": before_tokens,
+        "after_tokens": after_tokens,
+        "compressed": True,
+        "constraints_preserved": len(constraints),
+        "outline_entries_preserved": len(headings_and_bullets),
+        "code_blocks_preserved": len(code_blocks),
+    }
+    return compressed, info
+
+
+def _rewrite_payload_text(payload, text):
+    if not isinstance(payload, dict):
+        return payload
+    if "prompt" in payload:
+        out = dict(payload)
+        out["prompt"] = text
+        return out
+    if "messages" in payload:
+        out = dict(payload)
+        out["messages"] = [{"role": "user", "content": text}]
+        return out
+    return payload
+
+
 def _coerce_positive_int(value, fallback):
     try:
         parsed = int(value)
@@ -649,6 +931,105 @@ def _count_file_paths(text):
     return len(set(re.findall(pattern, text)))
 
 
+_INTENT_ACTION_WORD = re.compile(
+    r"\b(write|apply|run|execute|edit|modify|update|add|remove|refactor|rewrite|fix|debug|test|lint|format|implement)\b",
+    re.IGNORECASE,
+)
+_INTENT_MECHANICAL_STRONG = [
+    re.compile(r"\b(write\s+code|apply\s+(this\s+)?patch)\b", re.IGNORECASE),
+    re.compile(r"\b(run|execute)\s+(the\s+)?(tests?|test suite|ci|pipeline)\b", re.IGNORECASE),
+    re.compile(r"\b(implement)\s+(this\s+)?(feature|function|method|module|class|api|endpoint)\b", re.IGNORECASE),
+    re.compile(r"\b(refactor|rename|fix|debug)\b.*\b(function|class|method|module|file|repo|tests?)\b", re.IGNORECASE),
+    re.compile(r"\b(pytest|npm\s+test|pnpm\s+test|go\s+test|cargo\s+test|python\s+-m\s+unittest|git\s+diff|git\s+status|rg\s+-n|sed\s+-n)\b", re.IGNORECASE),
+]
+_INTENT_WORK_NOUN = (
+    r"(code|function|method|class|module|file|repo(?:sitory)?|feature|bug|issue|tests?|pipeline|ci|script|diff|patch|log(?:\s+file)?)"
+)
+_INTENT_CONTEXTUAL_MECHANICAL = [
+    re.compile(
+        rf"\b(write|apply|run|execute|edit|modify|update|add|remove|refactor|rewrite|fix|debug|test|lint|format|implement)\b(?:\W+\w+){{0,6}}\W+\b{_INTENT_WORK_NOUN}\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        rf"\b{_INTENT_WORK_NOUN}\b(?:\W+\w+){{0,6}}\W+\b(write|apply|run|execute|edit|modify|update|add|remove|refactor|rewrite|fix|debug|test|lint|format|implement)\b",
+        re.IGNORECASE,
+    ),
+]
+_INTENT_NEGATIVE_GUARDS = [
+    re.compile(r"\bcode of ethics\b", re.IGNORECASE),
+    re.compile(r"\berror code\b", re.IGNORECASE),
+    re.compile(r"\bzip code\b", re.IGNORECASE),
+    re.compile(r"\bpostal code\b", re.IGNORECASE),
+    re.compile(r"\bpatch schedule\b", re.IGNORECASE),
+    re.compile(r"\bpatch notes\b", re.IGNORECASE),
+    re.compile(r"\b(what is|what's|explain|discuss|describe|define)\b.*\b(code|patch|implementation)\b", re.IGNORECASE),
+]
+_INTENT_PLANNING_CUES = [
+    re.compile(r"\b(plan|planning|design|architecture|roadmap|strategy|proposal|brainstorm|trade[- ]?offs?|synthesis)\b", re.IGNORECASE),
+    re.compile(r"\b(explain|discuss|describe|summari[sz]e|compare|evaluate|reason|why|what is|how does)\b", re.IGNORECASE),
+]
+_TASK_RESEARCH_CUES = re.compile(r"\b(research|browse|web|search|news|sources?|citations?|link|url|fetch)\b", re.IGNORECASE)
+_TASK_CODE_CUES = re.compile(r"\b(code|diff|patch|refactor|module|function|class|repo|file|tests?)\b", re.IGNORECASE)
+
+
+def classify_intent(text: str) -> str:
+    """Ordered classifier: negative guards, strong mechanical, contextual mechanical, planning cues, then planning."""
+    normalized = re.sub(r"\s+", " ", str(text or "")).strip()
+    if not normalized:
+        return "planning_synthesis"
+
+    has_action_word = _INTENT_ACTION_WORD.search(normalized) is not None
+
+    if any(rx.search(normalized) for rx in _INTENT_NEGATIVE_GUARDS) and not has_action_word:
+        return "planning_synthesis"
+
+    if any(rx.search(normalized) for rx in _INTENT_MECHANICAL_STRONG):
+        return "mechanical_execution"
+
+    if any(rx.search(normalized) for rx in _INTENT_CONTEXTUAL_MECHANICAL):
+        return "mechanical_execution"
+
+    if any(rx.search(normalized) for rx in _INTENT_PLANNING_CUES):
+        return "planning_synthesis"
+
+    return "planning_synthesis"
+
+
+def classify_task_class(text: str, context_metadata: dict | None = None) -> str:
+    context_metadata = context_metadata or {}
+    normalized = re.sub(r"\s+", " ", str(text or "")).strip()
+    declared = str(context_metadata.get("task_class", "")).strip().lower()
+    if declared in {"mechanical_execution", "planning_synthesis", "research_browse", "code_generation_large"}:
+        return declared
+
+    intent = classify_intent(normalized)
+    expected_loc = _coerce_positive_int(context_metadata.get("expected_loc"), 0)
+    expected_change_size = str(context_metadata.get("expected_change_size", "")).strip().lower()
+
+    if _TASK_RESEARCH_CUES.search(normalized):
+        return "research_browse"
+
+    if _TASK_CODE_CUES.search(normalized):
+        if expected_change_size in {"large", "xl", "huge"} or expected_loc >= 250 or estimate_tokens(normalized) > 18000:
+            return "code_generation_large"
+
+    if intent == "mechanical_execution":
+        return "mechanical_execution"
+    return "planning_synthesis"
+
+
+def _has_strong_planning_signal(text: str) -> bool:
+    normalized = re.sub(r"\s+", " ", str(text or "")).strip()
+    if not normalized:
+        return False
+    if any(rx.search(normalized) for rx in _INTENT_PLANNING_CUES):
+        return True
+    has_action_word = _INTENT_ACTION_WORD.search(normalized) is not None
+    if any(rx.search(normalized) for rx in _INTENT_NEGATIVE_GUARDS) and not has_action_word:
+        return True
+    return False
+
+
 def build_chat_payload(prompt, temperature=0.0, max_tokens=256):
     return {
         "messages": [{"role": "user", "content": prompt}],
@@ -665,64 +1046,38 @@ def _provider_auth_type(provider):
 
 
 def _provider_api_key_env(provider):
-    # First: Check env var (backwards compatible)
     if provider.get("apiKeyEnv"):
         return provider.get("apiKeyEnv")
     auth = provider.get("auth")
     if isinstance(auth, dict):
-        env_val = auth.get("apiKeyEnv") or auth.get("env")
-        if env_val:
-            return env_val
-    
-    # Second: Check OAuth token for OpenAI providers
-    provider_name = provider.get("provider_id", "")
-    if "openai" in provider_name.lower() or provider.get("type") == "openai":
-        oauth_token = _resolve_openai_oauth_token()
-        if oauth_token:
-            return "OAUTH_TOKEN"  # Special marker, see _resolve_provider_api_key
-    
+        return auth.get("apiKeyEnv") or auth.get("env")
     return ""
 
 
-def _resolve_provider_api_key(provider):
-    """Get API key for provider, checking OAuth as fallback."""
-    # First: Check env var (backwards compatible)
-    api_key_env = _provider_api_key_env(provider)
-    
-    # Check for OAuth token marker
-    if api_key_env == "OAUTH_TOKEN":
-        return _resolve_openai_oauth_token()
-    
-    if api_key_env:
-        api_key = os.environ.get(api_key_env)
-        if api_key:
-            return api_key
-    
-    # Second: Check OAuth token for OpenAI providers (fallback when env var not set)
-    provider_name = provider.get("provider_id", "")
-    provider_type = provider.get("type", "")
-    if "openai" in provider_name.lower() or "openai" in provider_type.lower():
-        oauth_token = _resolve_openai_oauth_token()
-        if oauth_token:
-            return oauth_token
-    
-    return None
+def _looks_like_jwt(token):
+    value = str(token or "").strip()
+    if value.count(".") != 2:
+        return False
+    parts = value.split(".")
+    if any(not part for part in parts):
+        return False
+    return all(re.match(r"^[A-Za-z0-9_-]+$", part) for part in parts)
 
 
-def _looks_like_oauth_jwt(token):
-    token_str = str(token or "").strip()
-    return bool(re.fullmatch(r"[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+", token_str))
+def _oauth_endpoint_supported(base_url):
+    lowered = str(base_url or "").strip().lower()
+    return "chatgpt.com/backend-api" in lowered
 
 
 def _call_openai_compatible(base_url, api_key, model_id, payload, timeout=15):
     if requests is None:
         return {"ok": False, "reason_code": "no_requests_lib"}
-    if _looks_like_oauth_jwt(api_key) and "api.openai.com" in str(base_url or "").lower():
+    if _looks_like_jwt(api_key) and not _oauth_endpoint_supported(base_url):
         log_event(
             "oauth_endpoint_blocked",
             {
                 "base_url": str(base_url or ""),
-                "reason_code": "oauth_jwt_unsupported_endpoint",
+                "provider_type": "openai_compatible",
             },
         )
         return {"ok": False, "reason_code": "oauth_jwt_unsupported_endpoint"}
@@ -839,7 +1194,7 @@ def _resolve_order(intent_cfg, policy):
         if entry == "free":
             order.extend(policy.get("routing", {}).get("free_order", []))
         else:
-            order.append(entry)
+            order.append(normalize_provider_id(entry))
     # de-dup preserving order
     seen = set()
     final = []
@@ -882,20 +1237,34 @@ class PolicyRouter:
         self.circuit_state = load_circuit_state(circuit_path)
         self.handlers = handlers or {}
         self.run_counts = {}
-        self._proprio_sampler = (
-            ProprioceptiveSampler()
-            if _router_proprioception_enabled() and ProprioceptiveSampler is not None
-            else None
-        )
+        self._proprio_sampler = ProprioceptiveSampler() if _flag_enabled("OPENCLAW_ROUTER_PROPRIOCEPTION") and ProprioceptiveSampler else None
 
     def _intent_cfg(self, intent):
+        intent = canonical_intent(intent)
         intents = self.policy.get("routing", {}).get("intents", {})
+        if isinstance(intent, str) and intent.startswith("teamchat:") and "coding" in intents:
+            return intents.get("coding", {})
         if intent in intents:
             return intents.get(intent, {})
         return intents.get("conversation", {})
 
     def _provider_cfg(self, name):
-        return self.policy.get("providers", {}).get(name, {})
+        providers = self.policy.get("providers", {})
+        if name in providers:
+            return providers.get(name, {})
+        normalized = normalize_provider_id(name)
+        if normalized in providers:
+            return providers.get(normalized, {})
+        mapped = PROVIDER_ID_TO_POLICY_PROVIDER.get(normalized)
+        if mapped and mapped in providers:
+            return providers.get(mapped, {})
+        for provider_name, cfg in providers.items():
+            if not isinstance(cfg, dict):
+                continue
+            pid = cfg.get("provider_id")
+            if isinstance(pid, str) and normalize_provider_id(pid) == normalized:
+                return providers.get(provider_name, {})
+        return {}
 
     def _provider_model(self, name, intent_cfg, context):
         provider = self._provider_cfg(name)
@@ -939,15 +1308,208 @@ class PolicyRouter:
                 return env_value
         return manual
 
+    def _context_defaults(self):
+        defaults = self.policy.get("defaults", {}) if isinstance(self.policy, dict) else {}
+        overflow = str(defaults.get("local_context_overflow_policy", "compress")).strip().lower()
+        if overflow not in {"compress", "spill_remote", "reject"}:
+            overflow = "compress"
+        return {
+            "assistant_max_tokens": _coerce_positive_int(defaults.get("local_context_max_tokens_assistant"), 32768),
+            "coder_max_tokens": _coerce_positive_int(defaults.get("local_context_max_tokens_coder"), 32768),
+            "soft_limit_tokens": _coerce_positive_int(defaults.get("local_context_soft_limit_tokens"), 24576),
+            "overflow_policy": overflow,
+        }
+
+    def _is_local_provider_name(self, name):
+        provider = self._provider_cfg(name)
+        ptype = str(provider.get("type", "")).strip().lower()
+        pid = str(provider.get("provider_id", "")).strip().lower()
+        if ptype == "ollama":
+            return True
+        if pid == "local_vllm":
+            return True
+        return str(name).startswith("local_")
+
+    def _local_context_limits_for_provider(self, name):
+        cfg = self._context_defaults()
+        key = str(name or "").lower()
+        hard = cfg["assistant_max_tokens"]
+        if "coder" in key:
+            hard = cfg["coder_max_tokens"]
+        return {
+            "hard_limit_tokens": hard,
+            "soft_limit_tokens": min(cfg["soft_limit_tokens"], hard),
+            "overflow_policy": cfg["overflow_policy"],
+        }
+
+    def _remote_routing_enabled(self):
+        env_val = os.environ.get("OPENCLAW_REMOTE_ROUTING_ENABLED")
+        if env_val is not None:
+            return str(env_val).strip().lower() in {"1", "true", "yes", "on"}
+        defaults = self.policy.get("defaults", {}) if isinstance(self.policy, dict) else {}
+        return bool(defaults.get("remoteRoutingEnabled", False))
+
+    def _remote_allowlist_task_classes(self):
+        defaults = self.policy.get("defaults", {}) if isinstance(self.policy, dict) else {}
+        raw = defaults.get("remoteAllowlistTaskClasses", [])
+        if isinstance(raw, str):
+            raw = [item.strip() for item in raw.split(",")]
+        if not isinstance(raw, list):
+            raw = []
+        out = []
+        for item in raw:
+            value = str(item).strip().lower()
+            if value:
+                out.append(value)
+        return list(dict.fromkeys(out))
+
+    def _remote_allowed_for_task_class(self, task_class):
+        if not self._remote_routing_enabled():
+            return False, "remote_disabled"
+        allowlist = self._remote_allowlist_task_classes()
+        if not allowlist:
+            return True, "remote_enabled_no_allowlist"
+        if str(task_class or "").strip().lower() in allowlist:
+            return True, "remote_allowed_task_class"
+        return False, "remote_task_class_disallowed"
+
+    def _apply_local_context_guard(self, *, payload, text, provider_name, request_id):
+        limits = self._local_context_limits_for_provider(provider_name)
+        hard = limits["hard_limit_tokens"]
+        soft = limits["soft_limit_tokens"]
+        overflow_policy = limits["overflow_policy"]
+        original_tokens = estimate_tokens(text)
+        original_chars = len(text)
+        compression_margin_tokens = int(round(hard * 1.2))
+        if original_tokens <= soft:
+            return {
+                "ok": True,
+                "payload": payload,
+                "text": text,
+                "tokens": original_tokens,
+                "context": {
+                    "context_guard_triggered": False,
+                    "compressed": False,
+                    "hard_limit_tokens": hard,
+                    "soft_limit_tokens": soft,
+                    "overflow_policy": overflow_policy,
+                },
+            }
+
+        if original_tokens > compression_margin_tokens:
+            requires_remote = overflow_policy == "spill_remote"
+            return {
+                "ok": False,
+                "reason_code": "context_too_large_for_local",
+                "error_type": "CONTEXT_TOO_LARGE",
+                "requires_remote": requires_remote,
+                "context": {
+                    "context_guard_triggered": True,
+                    "compressed": False,
+                    "before_tokens": original_tokens,
+                    "hard_limit_tokens": hard,
+                    "soft_limit_tokens": soft,
+                    "compression_margin_tokens": compression_margin_tokens,
+                    "overflow_policy": overflow_policy,
+                },
+            }
+
+        if overflow_policy == "reject":
+            return {
+                "ok": False,
+                "reason_code": "context_too_large",
+                "error_type": "CONTEXT_TOO_LARGE",
+                "requires_remote": False,
+                "context": {
+                    "context_guard_triggered": True,
+                    "compressed": False,
+                    "before_tokens": original_tokens,
+                    "hard_limit_tokens": hard,
+                    "soft_limit_tokens": soft,
+                    "overflow_policy": overflow_policy,
+                },
+            }
+
+        compressed_text, info = _compress_text_preserving_structure(text, soft)
+        compressed_payload = _rewrite_payload_text(payload, compressed_text)
+        _emit_envelope_event(
+            "context.compressed",
+            "WARN",
+            request_id,
+            {
+                "provider": provider_name,
+                "before_tokens": int(info.get("before_tokens", original_tokens)),
+                "after_tokens": int(info.get("after_tokens", estimate_tokens(compressed_text))),
+                "before_chars": int(info.get("before_chars", original_chars)),
+                "after_chars": int(info.get("after_chars", len(compressed_text))),
+                "soft_limit_tokens": soft,
+                "hard_limit_tokens": hard,
+                "overflow_policy": overflow_policy,
+            },
+        )
+
+        compressed_tokens = estimate_tokens(compressed_text)
+        if compressed_tokens <= hard:
+            return {
+                "ok": True,
+                "payload": compressed_payload,
+                "text": compressed_text,
+                "tokens": compressed_tokens,
+                "context": {
+                    "context_guard_triggered": True,
+                    "compressed": True,
+                    "before_tokens": original_tokens,
+                    "after_tokens": compressed_tokens,
+                    "hard_limit_tokens": hard,
+                    "soft_limit_tokens": soft,
+                    "overflow_policy": overflow_policy,
+                },
+            }
+
+        requires_remote = overflow_policy == "spill_remote"
+        return {
+            "ok": False,
+            "reason_code": "context_too_large_after_compression",
+            "error_type": "CONTEXT_TOO_LARGE",
+            "requires_remote": requires_remote,
+            "context": {
+                "context_guard_triggered": True,
+                "compressed": True,
+                "before_tokens": original_tokens,
+                "after_tokens": compressed_tokens,
+                "hard_limit_tokens": hard,
+                "soft_limit_tokens": soft,
+                "overflow_policy": overflow_policy,
+            },
+        }
+
     def _capability_cfg(self):
         return self.policy.get("routing", {}).get("capability_router", {})
 
+    def _capability_class(self, context_metadata, payload_text=""):
+        context_metadata = context_metadata or {}
+        text = "\n".join(
+            t for t in [str(context_metadata.get("input_text", "")), str(payload_text or "")] if t
+        )
+        return classify_task_class(text, context_metadata)
+
     def _capability_decision(self, context_metadata, payload_text=""):
+        context_metadata = context_metadata or {}
+        ai_payload = context_metadata.get("active_inference")
+        if isinstance(ai_payload, dict):
+            ai_provider = normalize_provider_id(ai_payload.get("preferred_provider"))
+            if ai_provider:
+                return {
+                    "trigger": "active_inference",
+                    "matched": "preferred_provider",
+                    "provider": ai_provider,
+                    "reason": "active inference preferred provider",
+                }
+
         cfg = self._capability_cfg()
         if cfg.get("enabled") is False:
             return None
 
-        context_metadata = context_metadata or {}
         text = "\n".join(
             t for t in [str(context_metadata.get("input_text", "")), str(payload_text or "")] if t
         )
@@ -974,84 +1536,87 @@ class PolicyRouter:
                     "matched": "subagent=true",
                     "provider": provider,
                     "reason": "subagent primary uses local provider",
+                    "capability_class": "mechanical_execution",
                 }
 
-        lower = text.lower()
-        reasoning_keywords = [
-            "plan",
-            "design",
-            "architecture",
-            "evaluate options",
-            "trade-offs",
-            "step-by-step",
-            "derive",
-            "prove",
-            "formalize",
-        ]
-        code_keywords = [
-            "write code",
-            "implement",
-            "patch",
-            "diff",
-            "tests",
-            "refactor",
-            "typescript",
-            "javascript",
-            "python",
-            "ci",
-            "github actions",
-            "```",
-        ]
-        tool_keywords = [
-            "run commands",
-            "audit",
-            "regression",
-            "fix failing tests",
-        ]
-
-        has_reasoning = any(keyword in lower for keyword in reasoning_keywords)
-        has_code = any(keyword in lower for keyword in code_keywords)
-        has_tool_ops = any(keyword in lower for keyword in tool_keywords)
-
-        min_bullets = _coerce_positive_int(cfg.get("structureComplexityMinBullets"), 3)
-        min_paths = _coerce_positive_int(cfg.get("structureComplexityMinPaths"), 2)
-        bullets = _count_bullets(text)
-        file_paths = _count_file_paths(text)
-        structure_complex = bullets >= min_bullets or file_paths >= min_paths
-        complex_task = has_reasoning or has_code or has_tool_ops or structure_complex
-
-        if has_code:
-            small_by_ctx = context_metadata.get("expected_change_size") in {"small", "tiny"}
+        capability_class = self._capability_class(context_metadata, payload_text)
+        if capability_class == "mechanical_execution":
+            default_cap = DEFAULT_POLICY.get("routing", {}).get("capability_router", {})
+            code_provider = cfg.get("codeProvider")
+            mechanical_provider = cfg.get("mechanicalProvider")
+            small_provider = cfg.get("smallCodeProvider")
+            small_by_ctx = str(context_metadata.get("expected_change_size", "")).strip().lower() in {"small", "tiny"}
             loc_hint = _coerce_positive_int(context_metadata.get("expected_loc"), 0)
             small_by_loc = 0 < loc_hint <= 50
-            tests_requested = "tests" in lower or "test " in lower
-            small_by_shape = file_paths <= 1 and bullets < min_bullets and not tests_requested
-            if small_by_ctx or small_by_loc or small_by_shape:
-                provider = cfg.get("smallCodeProvider")
-                if provider:
-                    return {
-                        "trigger": "complexity_small_code",
-                        "matched": "code+small_change",
-                        "provider": provider,
-                        "reason": "small self-contained coding task",
-                    }
-            provider = cfg.get("codeProvider")
+            if small_provider and (small_by_ctx or small_by_loc):
+                provider = small_provider
+            elif code_provider and code_provider != default_cap.get("codeProvider"):
+                provider = code_provider
+            elif mechanical_provider and mechanical_provider != default_cap.get("mechanicalProvider"):
+                provider = mechanical_provider
+            else:
+                provider = mechanical_provider or code_provider or cfg.get("subagentProvider")
             if provider:
                 return {
-                    "trigger": "complexity_code",
-                    "matched": "code_generation_markers",
+                    "trigger": "capability_class",
+                    "matched": capability_class,
                     "provider": provider,
-                    "reason": "code generation task",
+                    "reason": "mechanical/execution class prefers local vLLM subagent",
+                    "capability_class": capability_class,
                 }
 
-        if has_reasoning or (complex_task and not has_code):
-            provider = cfg.get("reasoningProvider")
-            if provider:
+        if capability_class == "code_generation_large":
+            code_provider = cfg.get("codeProvider") or cfg.get("mechanicalProvider") or cfg.get("subagentProvider")
+            if code_provider:
                 return {
-                    "trigger": "complexity_reasoning",
-                    "matched": "reasoning_or_structure_markers",
-                    "provider": provider,
-                    "reason": "complex reasoning/planning task",
+                    "trigger": "capability_class",
+                    "matched": capability_class,
+                    "provider": code_provider,
+                    "reason": "large code generation prefers local coder lane first",
+                    "capability_class": capability_class,
+                }
+
+        if capability_class == "research_browse":
+            planning_provider = cfg.get("planningProvider") or cfg.get("reasoningProvider")
+            if planning_provider:
+                return {
+                    "trigger": "capability_class",
+                    "matched": capability_class,
+                    "provider": planning_provider,
+                    "reason": "research browse may require remote reasoning/browse resources",
+                    "capability_class": capability_class,
+                }
+
+        if capability_class == "planning_synthesis":
+            local_provider = cfg.get("mechanicalProvider") or cfg.get("subagentProvider") or "local_vllm_assistant"
+            if not _has_strong_planning_signal(text):
+                if local_provider:
+                    return {
+                        "trigger": "capability_class",
+                        "matched": capability_class,
+                        "provider": local_provider,
+                        "reason": "planning class without strong remote cues keeps local-first routing",
+                        "capability_class": capability_class,
+                    }
+                return None
+            est_tokens = estimate_tokens(text)
+            local_soft = self._context_defaults().get("soft_limit_tokens", 24576)
+            if est_tokens <= local_soft and local_provider:
+                return {
+                    "trigger": "capability_class",
+                    "matched": capability_class,
+                    "provider": local_provider,
+                    "reason": "planning synthesis remains local-first while inside local context budget",
+                    "capability_class": capability_class,
+                }
+            planning_provider = cfg.get("planningProvider") or cfg.get("reasoningProvider")
+            if planning_provider:
+                return {
+                    "trigger": "capability_class",
+                    "matched": capability_class,
+                    "provider": planning_provider,
+                    "reason": "planning synthesis exceeds local soft limit; prefer remote planning lane",
+                    "capability_class": capability_class,
                 }
 
         return None
@@ -1061,7 +1626,7 @@ class PolicyRouter:
         decision = self._capability_decision(context_metadata, payload_text)
         if not decision:
             return base_order, None
-        preferred = decision.get("provider")
+        preferred = normalize_provider_id(decision.get("provider"))
         if preferred:
             order = [preferred] + [name for name in base_order if name != preferred]
         else:
@@ -1091,10 +1656,12 @@ class PolicyRouter:
                     return False, err or "missing_token"
             else:
                 auth_type = _provider_auth_type(provider)
-                api_key = _resolve_provider_api_key(provider)
-                requires_key = bool(api_key) or auth_type == "bearer"
-                if requires_key and not api_key:
-                    return False, "missing_api_key"
+                api_key_env = _provider_api_key_env(provider)
+                requires_key = bool(api_key_env) or auth_type == "bearer"
+                if requires_key:
+                    api_key = read_env_or_secrets(api_key_env)
+                    if not api_key:
+                        return False, "missing_api_key"
 
         if ptype == "anthropic":
             api_key = read_env_or_secrets(provider.get("apiKeyEnv", ""))
@@ -1174,6 +1741,10 @@ class PolicyRouter:
         controls["enabled"] = True
         now_ts = int(time.time())
         now_local = time.localtime(now_ts)
+        proprio_snapshot = (context_metadata or {}).get("proprioception", {})
+        tacti_features = {}
+        if _flag_enabled("OPENCLAW_ROUTER_PROPRIOCEPTION"):
+            tacti_features = tacti_features_from_proprioception(proprio_snapshot)
 
         if callable(compute_expression):
             expression = compute_expression(
@@ -1183,7 +1754,7 @@ class PolicyRouter:
                     "local_available": True,
                     "hour": int(now_local.tm_hour),
                     "valence": float((context_metadata or {}).get("valence", 0.0)),
-                    "arousal": 1.0,
+                    "arousal": float((context_metadata or {}).get("arousal", tacti_features.get("arousal", 1.0))),
                 },
             )
             controls["expression"] = expression
@@ -1230,62 +1801,6 @@ class PolicyRouter:
         tier_state["calls"] += 1
         tier_state["tokens"] += est_tokens
         save_budget_state(self.budget_state, self.budget_path)
-
-    def _breaker_open_providers(self, now_ts):
-        out = set()
-        providers = self.circuit_state.get("providers", {})
-        for key, row in providers.items():
-            if not isinstance(row, dict):
-                continue
-            if int(row.get("openUntil", 0) or 0) <= int(now_ts):
-                continue
-            name = str(key).split(":", 1)[0]
-            if name:
-                out.add(name)
-        return sorted(out)
-
-    def _finalize_router_meta(
-        self,
-        *,
-        started_at,
-        intent,
-        provider,
-        ok,
-        reason_code,
-        attempts,
-        tokens_in,
-        tacti_plan,
-    ):
-        meta = {}
-        now_ts = int(time.time())
-        if self._proprio_sampler is not None:
-            self._proprio_sampler.set_breaker_open_providers(self._breaker_open_providers(now_ts))
-            duration_ms = max(0.0, (time.monotonic() - float(started_at)) * 1000.0)
-            self._proprio_sampler.record_decision(
-                duration_ms=duration_ms,
-                tokens_in=tokens_in,
-                provider=provider,
-                ok=bool(ok),
-                err=reason_code if not ok else None,
-            )
-            if _router_proprioception_enabled():
-                meta.setdefault("proprioception", self._proprio_sampler.snapshot())
-
-        if _witness_ledger_enabled() and callable(witness_commit):
-            record = {
-                "event": "router_decision",
-                "intent": intent,
-                "ok": bool(ok),
-                "provider": provider,
-                "reason_code": reason_code,
-                "attempts": int(attempts),
-                "tacti_reason": (tacti_plan or {}).get("reason") if isinstance(tacti_plan, dict) else None,
-                "tacti_enabled": bool((tacti_plan or {}).get("enabled")) if isinstance(tacti_plan, dict) else False,
-            }
-            committed = witness_commit(record=record, ledger_path=str(WITNESS_LEDGER_PATH))
-            meta["witness_hash"] = committed.get("hash")
-            meta["witness_seq"] = committed.get("seq")
-        return meta
 
     def select_model(self, intent, context_metadata=None):
         intent_cfg = self._intent_cfg(intent)
@@ -1338,59 +1853,57 @@ class PolicyRouter:
             unavailable[name] = reason
 
         local_context_tokens = self._provider_context_window_tokens("local_vllm_assistant")
+        ctx_defaults = self._context_defaults()
         return {
             "intent": intent,
             "matched_trigger": (decision or {}).get("trigger") or "default",
             "matched_detail": (decision or {}).get("matched") or "none",
             "reason": (decision or {}).get("reason") or "default intent routing order",
+            "capability_class": (decision or {}).get("capability_class")
+            or self._capability_class(context_metadata, payload_text),
             "base_order": base_order,
             "evaluated_order": order,
             "chosen": chosen,
             "unavailable": unavailable,
             "fallback_candidates": [name for name in order if not chosen or name != chosen.get("provider")],
             "local_context_window_tokens": local_context_tokens,
+            "local_context_soft_limit_tokens": ctx_defaults.get("soft_limit_tokens"),
+            "local_context_max_tokens_assistant": ctx_defaults.get("assistant_max_tokens"),
+            "local_context_max_tokens_coder": ctx_defaults.get("coder_max_tokens"),
+            "local_context_overflow_policy": ctx_defaults.get("overflow_policy"),
+            "remote_routing_enabled": self._remote_routing_enabled(),
+            "remote_allowlist_task_classes": self._remote_allowlist_task_classes(),
         }
 
     def execute_with_escalation(self, intent, payload, context_metadata=None, validate_fn=None):
         intent_cfg = self._intent_cfg(intent)
         attempts = 0
         last_reason = None
-        decision_started_at = time.monotonic()
-        context_metadata = dict(context_metadata or {})
+        context_metadata = context_metadata or {}
+        runtime_context = dict(context_metadata)
+        request_id = str(runtime_context.get("request_id") or _new_request_id("rt"))
+        runtime_context["request_id"] = request_id
         payload_text = _extract_text_from_payload(payload)
-        tokens_in = estimate_tokens(payload_text) if payload_text else 0
-        if self._proprio_sampler is not None and _router_proprioception_enabled():
-            prior_snapshot = self._proprio_sampler.snapshot()
-            context_metadata.setdefault("proprioception", prior_snapshot)
-            context_metadata.setdefault(
-                "tacti_proprioception",
-                tacti_features_from_proprioception(prior_snapshot),
-            )
-        active_inference = _maybe_active_inference_metadata(context_metadata)
-        if active_inference:
-            context_metadata["active_inference"] = active_inference
-        tacti_controls = self._tacti_runtime_controls(intent, intent_cfg, context_metadata)
-        order, decision = self._ordered_providers(intent_cfg, context_metadata, payload_text)
-        tacti_plan = None
-        if _dynamics_flags_enabled():
-            tacti_context = dict(context_metadata)
-            tacti_context.setdefault("intent", intent)
-            tacti_context.setdefault("source_agent", str(context_metadata.get("agent_id", "router") or "router"))
-            order, tacti_plan = tacti_enhance_plan(tacti_context, order, policy=self.policy)
-            log_event(
-                "tacti_routing_plan",
-                {
-                    "intent": intent,
-                    "enabled": bool((tacti_plan or {}).get("enabled")),
-                    "reason": (tacti_plan or {}).get("reason"),
-                    "agent_ids": (tacti_plan or {}).get("agent_ids", []),
-                    "consult_order": (tacti_plan or {}).get("consult_order", []),
-                },
-                self.event_log,
-            )
-        route_explain = self.explain_route(intent, context_metadata=context_metadata, payload=payload)
+        capability_class = self._capability_class(runtime_context, payload_text)
+        runtime_context.setdefault("capability_class", capability_class)
+        budget_intent = _budget_intent_key(intent)
+
+        def _emit(event_type, detail=None):
+            event_detail = dict(detail or {})
+            event_detail.setdefault("request_id", request_id)
+            event_detail.setdefault("capability_class", capability_class)
+            log_event(event_type, event_detail, self.event_log)
+
+        if self._proprio_sampler is not None:
+            snap = self._proprio_sampler.snapshot()
+            runtime_context.setdefault("proprioception", snap)
+        if _active_inference_enabled():
+            runtime_context["active_inference"] = _active_inference_payload(runtime_context)
+        tacti_controls = self._tacti_runtime_controls(intent, intent_cfg, runtime_context)
+        order, decision = self._ordered_providers(intent_cfg, runtime_context, payload_text)
+        route_explain = self.explain_route(intent, context_metadata=runtime_context, payload=payload)
         if decision:
-            log_event(
+            _emit(
                 "router_route_selected",
                 {
                     "intent": intent,
@@ -1398,12 +1911,12 @@ class PolicyRouter:
                     "matched": decision.get("matched"),
                     "preferred_provider": decision.get("provider"),
                     "reason": decision.get("reason"),
+                    "capability_class": decision.get("capability_class") or capability_class,
                     "fallback_candidates": route_explain.get("fallback_candidates", []),
                 },
-                self.event_log,
             )
         else:
-            log_event(
+            _emit(
                 "router_route_selected",
                 {
                     "intent": intent,
@@ -1411,65 +1924,87 @@ class PolicyRouter:
                     "preferred_provider": None,
                     "fallback_candidates": route_explain.get("fallback_candidates", []),
                 },
-                self.event_log,
             )
 
-        max_per_run = int(self.policy.get("budgets", {}).get("intents", {}).get(intent, {}).get("maxCallsPerRun", 0))
-        self.run_counts.setdefault(intent, 0)
+        max_per_run = int(self.policy.get("budgets", {}).get("intents", {}).get(budget_intent, {}).get("maxCallsPerRun", 0))
+        self.run_counts.setdefault(budget_intent, 0)
         now = int(time.time())
+        context_needs_remote = False
+        context_guard_snapshot = None
 
         for name in order:
-            if max_per_run and self.run_counts[intent] >= max_per_run:
+            provider_start = time.perf_counter()
+            if max_per_run and self.run_counts[budget_intent] >= max_per_run:
                 last_reason = "max_calls_per_run_exhausted"
-                log_event("router_skip", {"intent": intent, "provider": name, "reason_code": last_reason}, self.event_log)
+                _emit("router_skip", {"intent": intent, "provider": name, "reason_code": last_reason})
                 break
+
+            is_local_provider = self._is_local_provider_name(name)
+            if not is_local_provider and context_needs_remote:
+                remote_allowed, remote_reason = self._remote_allowed_for_task_class(capability_class)
+                if not remote_allowed:
+                    last_reason = remote_reason
+                    _emit("router_skip", {"intent": intent, "provider": name, "reason_code": remote_reason})
+                    continue
 
             ok, reason = self._provider_available(name, intent_cfg)
             if not ok:
                 last_reason = reason
-                log_event("router_skip", {"intent": intent, "provider": name, "reason_code": reason}, self.event_log)
+                _emit("router_skip", {"intent": intent, "provider": name, "reason_code": reason})
                 continue
 
             provider = self._provider_cfg(name)
             tier = provider.get("tier", "free")
-            model_id = self._provider_model(name, intent_cfg, context_metadata)
+            model_id = self._provider_model(name, intent_cfg, runtime_context)
             circuit_key = _circuit_key(name, model_id)
 
             if tacti_controls.get("suppress_heavy"):
                 is_heavy = tier in {"paid", "auth"} or str(name).startswith(("openai_", "claude_", "grok_"))
                 if is_heavy:
                     last_reason = "tacti_cr_arousal_suppress_heavy"
-                    log_event(
+                    _emit(
                         "router_skip",
                         {"intent": intent, "provider": name, "reason_code": last_reason},
-                        self.event_log,
                     )
                     continue
             if tacti_controls.get("prefer_local"):
                 if str(name).startswith(("openai_", "claude_", "grok_")):
                     last_reason = "tacti_cr_valence_prefer_local"
-                    log_event(
+                    _emit(
                         "router_skip",
                         {"intent": intent, "provider": name, "reason_code": last_reason},
-                        self.event_log,
                     )
                     continue
 
             if self._circuit_open(circuit_key, now):
                 last_reason = "circuit_open"
-                log_event("router_skip", {"intent": intent, "provider": name, "reason_code": "circuit_open"}, self.event_log)
+                _emit("router_skip", {"intent": intent, "provider": name, "reason_code": "circuit_open"})
                 continue
             max_chars = self._provider_max_chars(name, model_id)
 
-            # enforce per-request cap and per-provider max chars
-            text = _extract_text_from_payload(payload)
-            text = _truncate_text(text, max_chars or 0)
-            if "prompt" in payload:
-                payload = dict(payload)
-                payload["prompt"] = text
-            elif "messages" in payload:
-                payload = dict(payload)
-                payload["messages"] = [{"role": "user", "content": text}]
+            candidate_payload = dict(payload or {})
+            text = _extract_text_from_payload(candidate_payload)
+            if max_chars and len(text) > max_chars and not is_local_provider:
+                last_reason = "provider_input_limit_exceeded"
+                _emit("router_skip", {"intent": intent, "provider": name, "reason_code": last_reason})
+                continue
+
+            if is_local_provider:
+                guard = self._apply_local_context_guard(
+                    payload=candidate_payload,
+                    text=text,
+                    provider_name=name,
+                    request_id=request_id,
+                )
+                if not guard.get("ok"):
+                    context_needs_remote = bool(guard.get("requires_remote"))
+                    context_guard_snapshot = guard.get("context", {})
+                    last_reason = guard.get("reason_code", "context_too_large")
+                    _emit("router_skip", {"intent": intent, "provider": name, "reason_code": last_reason})
+                    continue
+                candidate_payload = guard.get("payload", candidate_payload)
+                text = guard.get("text", text)
+                context_guard_snapshot = guard.get("context", {})
 
             est_tokens = estimate_tokens(text)
             max_tokens_req = int(
@@ -1480,10 +2015,9 @@ class PolicyRouter:
             )
             if max_tokens_req and est_tokens > max_tokens_req:
                 last_reason = "request_token_cap_exceeded"
-                log_event(
+                _emit(
                     "router_skip",
                     {"intent": intent, "provider": name, "reason_code": last_reason},
-                    self.event_log,
                 )
                 continue
             effective_tokens = est_tokens
@@ -1492,41 +2026,73 @@ class PolicyRouter:
                 effective_tokens = max(1, int(round(est_tokens / max(multiplier, 0.05))))
                 if tacti_controls.get("tighten_budget"):
                     effective_tokens = max(1, int(round(effective_tokens * 1.25)))
-            allowed, reason = self._budget_allows(intent, tier, effective_tokens)
+            allowed, reason = self._budget_allows(budget_intent, tier, effective_tokens)
             if not allowed:
                 last_reason = reason
-                log_event("router_skip", {"intent": intent, "provider": name, "reason_code": reason}, self.event_log)
+                _emit("router_skip", {"intent": intent, "provider": name, "reason_code": reason})
                 continue
 
+            _emit_envelope_event(
+                "route.decision",
+                "INFO",
+                request_id,
+                {
+                    "task_class": capability_class,
+                    "chosen_provider": name,
+                    "chosen_model": model_id,
+                    "reason": (decision or {}).get("reason") or "provider_passed_gates",
+                    "budget_state": {
+                        "intent": dict(self.budget_state.get("intents", {}).get(budget_intent, {})),
+                        "tier": dict(self.budget_state.get("tiers", {}).get(tier, {})),
+                    },
+                    "remote_routing_enabled": self._remote_routing_enabled(),
+                    "context_guard": context_guard_snapshot or {},
+                },
+            )
+
             attempts += 1
-            self.run_counts[intent] += 1
-            self._budget_consume(intent, tier, effective_tokens)
+            self.run_counts[budget_intent] += 1
+            self._budget_consume(budget_intent, tier, effective_tokens)
+
+            started_at = time.perf_counter()
 
             # handler dispatch
-            handler = self.handlers.get(name)
-            if handler:
-                result = handler(payload, model_id, context_metadata)
-            else:
-                ptype = provider.get("type")
-                if ptype == "openai_compatible":
-                    api_key = None
-                    if provider.get("auth") == "qwen_oauth":
-                        api_key, _ = get_qwen_token()
-                    else:
-                        api_key = _resolve_provider_api_key(provider)
-                        print(f"DEBUG: Resolving key for {name}: {bool(api_key)}")
-                    result = _call_openai_compatible(provider.get("baseUrl", ""), api_key, model_id, payload)
-                    print(f"DEBUG: Call result for {name}: {result.get('reason_code')}")
-                elif ptype == "anthropic":
-                    api_key = read_env_or_secrets(provider.get("apiKeyEnv", ""))
-                    result = _call_anthropic(provider.get("baseUrl", ""), api_key, model_id, payload)
-                elif ptype == "ollama":
-                    base = provider.get("baseUrl", "http://localhost:11434")
-                    result = _call_ollama(base, model_id, payload)
-                elif ptype == "openai_auth" or ptype == "anthropic_auth":
-                    result = {"ok": False, "reason_code": "auth_login_required"}
+            try:
+                handler = self.handlers.get(name)
+                if handler:
+                    result = handler(candidate_payload, model_id, runtime_context)
                 else:
-                    result = {"ok": False, "reason_code": "provider_unhandled"}
+                    ptype = provider.get("type")
+                    if ptype == "openai_compatible":
+                        api_key = None
+                        if provider.get("auth") == "qwen_oauth":
+                            api_key, _ = get_qwen_token()
+                        else:
+                            api_key_env = _provider_api_key_env(provider)
+                            if api_key_env:
+                                api_key = read_env_or_secrets(api_key_env)
+                        provider_caps = resolve_tool_call_capability(provider, model_id)
+                        result = _call_openai_compatible(
+                            provider.get("baseUrl", ""),
+                            api_key,
+                            model_id,
+                            candidate_payload,
+                            provider_caps=provider_caps,
+                        )
+                    elif ptype == "anthropic":
+                        api_key = read_env_or_secrets(provider.get("apiKeyEnv", ""))
+                        result = _call_anthropic(provider.get("baseUrl", ""), api_key, model_id, candidate_payload)
+                    elif ptype == "ollama":
+                        base = provider.get("baseUrl", "http://localhost:11434")
+                        result = _call_ollama(base, model_id, candidate_payload)
+                    elif ptype == "openai_auth" or ptype == "anthropic_auth":
+                        result = {"ok": False, "reason_code": "auth_login_required"}
+                    else:
+                        result = {"ok": False, "reason_code": "provider_unhandled"}
+            except Exception as exc:
+                result = {"ok": False, "reason_code": f"provider_exception_{type(exc).__name__}", "error": str(exc)}
+
+            latency_ms = int((time.perf_counter() - started_at) * 1000)
 
             if not result.get("ok"):
                 reason_code = result.get("reason_code", "provider_error")
@@ -1534,7 +2100,7 @@ class PolicyRouter:
                 cfg = self.policy.get("defaults", {}).get("circuitBreaker", {})
                 if reason_code in cfg.get("failOn", []):
                     self._record_failure(circuit_key, reason_code)
-                log_event(
+                _emit(
                     "router_attempt",
                     {
                         "intent": intent,
@@ -1542,20 +2108,40 @@ class PolicyRouter:
                         "model": model_id,
                         "tier": tier,
                         "reason_code": reason_code,
+                        "outcome_class": _outcome_class_from_reason(reason_code),
+                        "latency_ms": latency_ms,
                         "attempt": attempts,
+                        "selected_tool": runtime_context.get("selected_tool"),
                     },
-                    self.event_log,
                 )
-                log_event(
+                _emit(
                     "router_escalate",
                     {
                         "intent": intent,
                         "from_provider": name,
                         "reason_code": reason_code,
+                        "outcome_class": _outcome_class_from_reason(reason_code),
+                        "latency_ms": latency_ms,
                         "attempt": attempts,
                     },
-                    self.event_log,
                 )
+                if self._proprio_sampler is not None:
+                    breaker_open = []
+                    for prov_name, entry in (self.circuit_state.get("providers", {}) or {}).items():
+                        try:
+                            if int(entry.get("openUntil", 0)) > int(time.time()):
+                                breaker_open.append(str(prov_name))
+                        except Exception:
+                            continue
+                    self._proprio_sampler.set_breaker_open_providers(breaker_open)
+                    self._proprio_sampler.record_decision(
+                        duration_ms=(time.perf_counter() - provider_start) * 1000.0,
+                        tokens_in=est_tokens,
+                        tokens_out=0,
+                        provider=name,
+                        ok=False,
+                        err=reason_code,
+                    )
                 continue
 
             text_out = result.get("text", "")
@@ -1567,7 +2153,7 @@ class PolicyRouter:
                     parsed = None
                 if not parsed:
                     last_reason = "response_invalid"
-                    log_event(
+                    _emit(
                         "router_attempt",
                         {
                             "intent": intent,
@@ -1575,46 +2161,67 @@ class PolicyRouter:
                             "model": model_id,
                             "tier": tier,
                             "reason_code": "response_invalid",
+                            "outcome_class": _outcome_class_from_reason("response_invalid"),
+                            "latency_ms": latency_ms,
                             "attempt": attempts,
                         },
-                        self.event_log,
                     )
-                    log_event(
+                    _emit(
                         "router_escalate",
                         {
                             "intent": intent,
                             "from_provider": name,
                             "reason_code": "response_invalid",
+                            "outcome_class": _outcome_class_from_reason("response_invalid"),
+                            "latency_ms": latency_ms,
                             "attempt": attempts,
                         },
-                        self.event_log,
                     )
                     continue
 
             self._record_success(circuit_key)
-            meta = self._finalize_router_meta(
-                started_at=decision_started_at,
-                intent=intent,
-                provider=name,
-                ok=True,
-                reason_code="success",
-                attempts=attempts,
-                tokens_in=tokens_in,
-                tacti_plan=tacti_plan,
-            )
-            log_event(
+            _emit(
                 "router_success",
                 {
                     "intent": intent,
                     "provider": name,
                     "model": model_id,
                     "tier": tier,
+                    "outcome_class": "success",
+                    "latency_ms": latency_ms,
+                    "selected_tool": runtime_context.get("selected_tool"),
                     "attempt": attempts,
-                    "witness_hash": meta.get("witness_hash"),
                 },
-                self.event_log,
             )
-            out = {
+            tacti_plan = None
+            if _legacy_tacti_flags_enabled():
+                tacti_plan = tacti_enhance_plan(
+                    {"enabled": True, "agent_ids": [name], "provider": name},
+                    context_metadata=runtime_context,
+                    intent=intent,
+                )
+                log_event("tacti_routing_plan", tacti_plan, self.event_log)
+            meta = None
+            if self._proprio_sampler is not None:
+                breaker_open = []
+                for prov_name, entry in (self.circuit_state.get("providers", {}) or {}).items():
+                    try:
+                        if int(entry.get("openUntil", 0)) > int(time.time()):
+                            breaker_open.append(str(prov_name))
+                    except Exception:
+                        continue
+                self._proprio_sampler.set_breaker_open_providers(breaker_open)
+                self._proprio_sampler.record_decision(
+                    duration_ms=(time.perf_counter() - provider_start) * 1000.0,
+                    tokens_in=est_tokens,
+                    tokens_out=estimate_tokens(text_out),
+                    provider=name,
+                    ok=True,
+                )
+                snap = self._proprio_sampler.snapshot()
+                runtime_context.setdefault("proprioception", snap)
+                meta = {"proprioception": snap}
+            result_payload = {
                 "ok": True,
                 "provider": name,
                 "model": model_id,
@@ -1622,38 +2229,54 @@ class PolicyRouter:
                 "parsed": parsed,
                 "attempts": attempts,
                 "reason_code": "success",
+                "request_id": request_id,
+                "capability_class": capability_class,
                 "tacti": tacti_plan,
             }
-            if meta:
-                out["meta"] = meta
-            return out
+            if meta is not None:
+                result_payload["meta"] = meta
+            return result_payload
 
-        meta = self._finalize_router_meta(
-            started_at=decision_started_at,
-            intent=intent,
-            provider=None,
-            ok=False,
-            reason_code=last_reason or "no_provider_available",
-            attempts=attempts,
-            tokens_in=tokens_in,
-            tacti_plan=tacti_plan,
-        )
-        log_event(
+        _emit(
             "router_fail",
             {
                 "intent": intent,
                 "reason_code": last_reason or "no_provider_available",
+                "outcome_class": _outcome_class_from_reason(last_reason or "no_provider_available"),
                 "attempts": attempts,
-                "witness_hash": meta.get("witness_hash"),
             },
-            self.event_log,
         )
-        out = {
+        if context_needs_remote:
+            reason = str(last_reason or "remote_unavailable_after_context_overflow")
+            remediation = [
+                "reduce input size or split request into smaller steps",
+                "confirm policy defaults.local_context_overflow_policy is `compress` or `spill_remote`",
+            ]
+            if not self._remote_routing_enabled():
+                remediation.append("enable remote routing only if allowed: set `OPENCLAW_REMOTE_ROUTING_ENABLED=true`")
+            if "budget" in reason:
+                remediation.append("increase remote budget caps in `workspace/policy/llm_policy.json` budgets section")
+            if "circuit" in reason:
+                remediation.append("wait for circuit cooldown or clear provider faults before retrying")
+            return {
+                "ok": False,
+                "reason_code": "context_too_large",
+                "attempts": attempts,
+                "request_id": request_id,
+                "capability_class": capability_class,
+                "error": {
+                    "type": "CONTEXT_TOO_LARGE",
+                    "tier": "LOCAL",
+                    "confidence": 0.92,
+                    "reason": reason,
+                    "remediation": remediation,
+                    "context": context_guard_snapshot or {},
+                },
+            }
+        return {
             "ok": False,
             "reason_code": last_reason or "no_provider_available",
             "attempts": attempts,
-            "tacti": tacti_plan,
+            "request_id": request_id,
+            "capability_class": capability_class,
         }
-        if meta:
-            out["meta"] = meta
-        return out

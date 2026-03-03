@@ -1,0 +1,19 @@
+[Unit]
+Description=OpenClaw Tool - mcp.qmd.http (127.0.0.1:8181)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/src/clawd
+ExecStart=%h/src/clawd/workspace/scripts/run_tool_mcp_qmd_http.sh
+Restart=always
+RestartSec=3
+StartLimitIntervalSec=120
+StartLimitBurst=10
+EnvironmentFile=-%h/.config/openclaw/tools.env
+StandardOutput=append:%h/.local/state/openclaw/tools/mcp.qmd.http.out.log
+StandardError=append:%h/.local/state/openclaw/tools/mcp.qmd.http.err.log
+
+[Install]
+WantedBy=default.target

@@ -21,6 +21,29 @@ echo ""
 FAILURES=0
 WARNINGS=0
 REGRESSION_PROFILE="${REGRESSION_PROFILE:-core}"
+REGRESSION_TMP_DIR=""
+
+# --- Regression bootstrap: ephemeral OPENCLAW config ---
+if [ -z "${OPENCLAW_CONFIG_PATH:-}" ] && [ ! -f "openclaw.json" ]; then
+    REGRESSION_TMP_DIR="$(mktemp -d)"
+    export OPENCLAW_CONFIG_PATH="${REGRESSION_TMP_DIR}/openclaw.json"
+    cat > "${OPENCLAW_CONFIG_PATH}" <<'EOF'
+{
+  "node": { "id": "dali" },
+  "models": { "providers": {} },
+  "routing": { "allowlist": [], "preferLocal": true }
+}
+EOF
+    echo "[regression] Using ephemeral OPENCLAW_CONFIG_PATH=${OPENCLAW_CONFIG_PATH}"
+fi
+
+cleanup_regression_tmp() {
+    if [ -n "${REGRESSION_TMP_DIR}" ] && [ -d "${REGRESSION_TMP_DIR}" ]; then
+        rm -rf "${REGRESSION_TMP_DIR}"
+    fi
+}
+trap cleanup_regression_tmp EXIT
+# --- end bootstrap ---
 
 # Helper function
 check_pass() {
@@ -183,9 +206,10 @@ fi
 # ============================================
 echo "[7/9] Checking provider env gating (profile=${REGRESSION_PROFILE})..."
 
-if [ -f "openclaw.json" ]; then
+CONFIG_PATH="${OPENCLAW_CONFIG_PATH:-openclaw.json}"
+if [ -f "${CONFIG_PATH}" ]; then
     set +e
-    REGRESSION_PROFILE="${REGRESSION_PROFILE}" python3 - <<'PY'
+    REGRESSION_PROFILE="${REGRESSION_PROFILE}" OPENCLAW_CONFIG_PATH="${CONFIG_PATH}" python3 - <<'PY'
 import json
 import os
 import sys
@@ -199,7 +223,8 @@ def has_env(value):
         return any(has_env(v) for v in value)
     return False
 
-with open("openclaw.json", "r", encoding="utf-8") as handle:
+config_path = os.environ.get("OPENCLAW_CONFIG_PATH", "openclaw.json")
+with open(config_path, "r", encoding="utf-8") as handle:
     data = json.load(handle)
 
 profile = os.environ.get("REGRESSION_PROFILE", "core").strip().lower()
@@ -235,7 +260,7 @@ PY
         check_fail "Provider env gating check failed (profile=${REGRESSION_PROFILE})"
     fi
 else
-    check_fail "openclaw.json not found for provider gating check"
+    check_fail "openclaw config not found for provider gating check"
 fi
 
 echo "    Checking system_map aliases..."
@@ -315,7 +340,7 @@ PY
             elif [ -n "${HEARTBEAT_CADENCE}" ]; then
                 check_pass
             else
-                check_warn "Could not read heartbeat cadence from openclaw config"
+                check_warn "Heartbeat cadence unavailable from openclaw config; heartbeat invariant skipped (non-fatal)"
             fi
         else
             check_warn "openclaw CLI missing; heartbeat invariant not evaluated"

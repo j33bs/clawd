@@ -1,71 +1,21 @@
-"""TACTI(C)-R technical modules."""
+"""
+DEPRECATED: compatibility forwarder.
+Canonical source is workspace/tacti/__init__.py.
+"""
 
-from .arousal import ArousalLevel, ArousalState, ComputePlan, detect_arousal, get_compute_allocation, recommend_tier
-from .collapse import CollapseDetector, HealthState
-from .cross_timescale import (
-    CrossTimescaleController,
-    CrossTimescaleResult,
-    DeliberativeDecision,
-    MetaDecision,
-    ReflexDecision,
-)
-from .hivemind_bridge import MemoryEntry, hivemind_query, hivemind_store
-from .external_memory import append_event, read_events, healthcheck
-from .efe_calculator import evaluate
-from .curiosity import epistemic_value
-from .active_inference_agent import ActiveInferenceAgent
-from .repair import RepairAction, RepairEngine
-from .temporal import TemporalEntry, TemporalMemory
-from .arousal_oscillator import ArousalOscillator
-from .expression import compute_expression
-from .dream_consolidation import run_consolidation
-from .semantic_immune import assess_content, approve_quarantine
-from .mirror import update_from_event, behavioral_fingerprint
-from .valence import current_valence, update_valence, routing_bias
-from .prefetch import PrefetchCache, predict_topics, prefetch_context
-from .temporal_watchdog import update_beacon, detect_temporal_drift, temporal_reset_event
+from importlib.util import spec_from_file_location
+from pathlib import Path
 
-__all__ = [
-    "ArousalLevel",
-    "ArousalState",
-    "ComputePlan",
-    "detect_arousal",
-    "get_compute_allocation",
-    "recommend_tier",
-    "CollapseDetector",
-    "HealthState",
-    "CrossTimescaleController",
-    "CrossTimescaleResult",
-    "DeliberativeDecision",
-    "MetaDecision",
-    "ReflexDecision",
-    "MemoryEntry",
-    "hivemind_query",
-    "hivemind_store",
-    "append_event",
-    "read_events",
-    "healthcheck",
-    "evaluate",
-    "epistemic_value",
-    "ActiveInferenceAgent",
-    "RepairAction",
-    "RepairEngine",
-    "TemporalEntry",
-    "TemporalMemory",
-    "ArousalOscillator",
-    "compute_expression",
-    "run_consolidation",
-    "assess_content",
-    "approve_quarantine",
-    "update_from_event",
-    "behavioral_fingerprint",
-    "current_valence",
-    "update_valence",
-    "routing_bias",
-    "PrefetchCache",
-    "predict_topics",
-    "prefetch_context",
-    "update_beacon",
-    "detect_temporal_drift",
-    "temporal_reset_event",
-]
+_shim_file = Path(__file__).resolve()
+_src = _shim_file.parents[1] / "tacti" / "__init__.py"
+__file__ = str(_src)
+if not globals().get("__package__"):
+    __package__ = __name__
+if globals().get("__spec__") is None:
+    __spec__ = spec_from_file_location(__name__, str(_src), submodule_search_locations=[str(_shim_file.parent)])
+if not globals().get("_TACTI_SHIM_EXECUTED", False):
+    _code = _src.read_text(encoding="utf-8")
+    exec(compile(_code, str(_src), "exec"), globals(), globals())
+    globals()["_TACTI_SHIM_EXECUTED"] = True
+if "__all__" in globals():
+    __all__ = list(__all__)

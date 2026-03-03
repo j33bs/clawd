@@ -1,0 +1,5 @@
+{
+  "routing": ["Capability router selects providers by explicit trigger and complexity."],
+  "whales": ["Whales use low-frequency songs that travel long distances."],
+  "policy": ["Policy scripts verify llm policy, router behavior, and coding ladder gates."]
+}

@@ -31,23 +31,42 @@ if (files.length === 0) {
   process.exit(1);
 }
 
-// Pick a file (randomly or round-robin)
-const file = files[Math.floor(Math.random() * files.length)];
-const text = fs.readFileSync(path.join(LITERATURE_DIR, file), 'utf8');
-
-// Pick a random chunk
+// Build list of available chunks (file + offset), exclude delivered
 const chunkSize = 2000;
-const maxOffset = Math.max(0, text.length - chunkSize);
-const offset = Math.floor(Math.random() * maxOffset);
-const chunk = text.substring(offset, offset + chunkSize);
+const available = [];
+for (const file of files) {
+  const text = fs.readFileSync(path.join(LITERATURE_DIR, file), 'utf8');
+  const maxOffset = Math.max(0, text.length - chunkSize);
+  // Sample offsets (every 2000 chars = ~100 chunks per file)
+  for (let offset = 0; offset < maxOffset; offset += 2000) {
+    const id = `${file}:${offset}`;
+    if (!state.deliveredQuotes.includes(id)) {
+      available.push({ file, offset });
+    }
+  }
+}
+
+if (available.length === 0) {
+  // Reset if all delivered
+  state.deliveredQuotes = [];
+  fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2));
+  console.log("All quotes delivered. Starting over.");
+  process.exit(0);
+}
+
+// Pick random available chunk
+const pick = available[Math.floor(Math.random() * available.length)];
+const text = fs.readFileSync(path.join(LITERATURE_DIR, pick.file), 'utf8');
+const chunk = text.substring(pick.offset, pick.offset + chunkSize);
 
 // Output for the agent to refine
-console.log(`SOURCE: ${file}`);
-console.log(`OFFSET: ${offset}`);
+console.log(`SOURCE: ${pick.file}`);
+console.log(`OFFSET: ${pick.offset}`);
 console.log("--- CHUNK ---");
 console.log(chunk);
 console.log("--- END CHUNK ---");
 
-// Update state
+// Update state - track delivered quote
 state.lastQuoteDate = today;
+state.deliveredQuotes.push(`${pick.file}:${pick.offset}`);
 fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2));

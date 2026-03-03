@@ -68,6 +68,7 @@ class PeerGraph:
         self._base_weight = float(base_weight)
         self._decay_rate = float(decay_rate)
         self._churn_rate = float(churn_rate)
+        self.session_step = 0
         self._edges: Dict[str, Dict[str, _EdgeState]] = {agent: {} for agent in self._agents}
         self._peer_load: Dict[str, float] = {agent: 0.0 for agent in self._agents}
         self._init_topology()
@@ -82,16 +83,28 @@ class PeerGraph:
         return min(self._k, len(self._agents) - 1)
 
     def _anneal_enabled(self) -> bool:
-        value = str(os.environ.get("OPENCLAW_PEER_ANNEAL", "0")).strip().lower()
+        value = str(
+            os.environ.get(
+                "OPENCLAW_PEERGRAPH_ANNEAL",
+                os.environ.get("OPENCLAW_PEER_ANNEAL", "0"),
+            )
+        ).strip().lower()
         return value in {"1", "true", "yes", "on"}
 
-    def anneal_temperature(self) -> float:
+    def anneal_temperature(self, arousal: float | None = None) -> float:
         if not self._anneal_enabled():
             return 1.0
-        return max(0.1, math.exp(-0.08 * max(0.0, self._t)))
+        t0 = 1.0
+        t_min = 0.1
+        k = 0.08
+        base = max(t_min, t0 * math.exp(-k * max(0, int(self.session_step))))
+        if arousal is None:
+            return base
+        arousal_factor = max(0.6, min(1.4, 0.8 + (0.4 * float(arousal))))
+        return max(t_min, min(1.5, base * arousal_factor))
 
-    def current_churn_probability(self) -> float:
-        return self._churn_rate * self.anneal_temperature()
+    def current_churn_probability(self, arousal: float | None = None) -> float:
+        return self._churn_rate * self.anneal_temperature(arousal=arousal)
 
     def _init_topology(self) -> None:
         target = self._target_k()
@@ -144,9 +157,10 @@ class PeerGraph:
 
         self._ensure_k_for_agent(source)
 
-    def tick(self, dt: float) -> None:
+    def tick(self, dt: float, arousal: float | None = None) -> None:
         delta_t = max(0.0, float(dt))
         self._t += delta_t
+        self.session_step += 1
         if delta_t <= 0:
             return
 
@@ -159,10 +173,10 @@ class PeerGraph:
                 if age > 1.0:
                     edge.weight = _clamp(edge.weight * stale_decay, 0.01, 20.0)
 
-        churn_probability = self.current_churn_probability()
+        churn_probability = self.current_churn_probability(arousal=arousal)
         for agent in self._agents:
             if self._rng.random() < churn_probability:
-                self._churn_one_peer(agent)
+                self._churn_one_peer(agent, temperature=self.anneal_temperature(arousal=arousal))
             self._ensure_k_for_agent(agent)
 
     def _candidate_new_peer(self, src: str) -> str | None:
@@ -174,7 +188,7 @@ class PeerGraph:
         options.sort(key=lambda aid: (self._peer_load.get(aid, 0.0), aid))
         return options[0]
 
-    def _churn_one_peer(self, src: str) -> None:
+    def _churn_one_peer(self, src: str, temperature: float = 1.0) -> None:
         peers = self.peers(src)
         if not peers:
             return
@@ -185,7 +199,10 @@ class PeerGraph:
         weakest_weight = self._edges[src][weakest].weight
         candidate_bias = 1.0 / (1.0 + self._peer_load.get(candidate, 0.0))
         candidate_weight = max(0.01, self._base_weight * candidate_bias)
-        if candidate_weight >= weakest_weight * 0.6:
+        delta = candidate_weight - (weakest_weight * 0.6)
+        temp = max(0.05, float(temperature))
+        accept_prob = 1.0 / (1.0 + math.exp(-(delta / temp)))
+        if self._rng.random() <= accept_prob:
             self._edges[src].pop(weakest, None)
             self._edges[src][candidate] = _EdgeState(weight=candidate_weight)
 
@@ -214,6 +231,7 @@ class PeerGraph:
             "k": self._k,
             "seed": self._seed,
             "time": self._t,
+            "session_step": self.session_step,
             "base_weight": self._base_weight,
             "decay_rate": self._decay_rate,
             "churn_rate": self._churn_rate,
@@ -235,6 +253,7 @@ class PeerGraph:
             churn_rate=float(payload.get("churn_rate", 0.08)),
         )
         graph._t = float(payload.get("time", 0.0))
+        graph.session_step = int(payload.get("session_step", 0))
         loads = payload.get("peer_load", {})
         if isinstance(loads, dict):
             for agent, value in loads.items():

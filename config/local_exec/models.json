@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "models": [
+    {
+      "logical_name": "coordinator",
+      "served_name": "coordinator-qwen25-7b",
+      "hf_id": "Qwen/Qwen2.5-7B-Instruct",
+      "tool_parser": "hermes",
+      "chat_template": null,
+      "max_model_len": 8192,
+      "notes": "Primary decomposition/routing model for local exec plane"
+    },
+    {
+      "logical_name": "coder",
+      "served_name": "coder-qwen25-7b",
+      "hf_id": "Qwen/Qwen2.5-Coder-7B-Instruct",
+      "tool_parser": "hermes",
+      "chat_template": null,
+      "max_model_len": 8192,
+      "notes": "Patch generation and bounded refactor tasks"
+    },
+    {
+      "logical_name": "verifier",
+      "served_name": "verifier-qwen25-14b-awq",
+      "hf_id": "Qwen/Qwen2.5-14B-Instruct-AWQ",
+      "tool_parser": "hermes",
+      "chat_template": null,
+      "max_model_len": 4096,
+      "notes": "Optional heavier verifier; tune context for VRAM"
+    },
+    {
+      "logical_name": "doc_compactor",
+      "served_name": "doc-llama31-8b",
+      "hf_id": "meta-llama/Llama-3.1-8B-Instruct",
+      "tool_parser": "llama3_json",
+      "chat_template": null,
+      "max_model_len": 8192,
+      "notes": "Evidence summarization and compact reporting"
+    }
+  ]
+}

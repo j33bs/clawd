@@ -1,0 +1,17 @@
+# Minimal Python deps used by repo (external packages only)
+# Keep this list small; add packages only when imported by repo code paths.
+PyYAML
+aiohttp
+fastapi
+jsonschema
+lancedb
+mlx-lm
+numpy
+pyarrow
+pydantic
+pypdf
+requests
+sentence-transformers
+telethon
+torch
+uvicorn

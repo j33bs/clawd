@@ -56,7 +56,9 @@ if [ "$INVALID_EXIT" -eq 0 ]; then
 fi
 
 grep -q "OpenClaw config invalid (likely ~/.openclaw/openclaw.json). Run: openclaw doctor --fix" "$INVALID_OUT"
-grep -q "OpenClaw doctor diagnostics (last 20 lines):" "$INVALID_OUT"
+if ! grep -q "OpenClaw doctor diagnostics (last 20 lines):" "$INVALID_OUT"; then
+    grep -q "OpenClaw config invalid (plugin allowlist guard)." "$INVALID_OUT"
+fi
 
 echo "PASS: nightly health config preflight behaves as expected"
 rm -rf "$TMPHOME"

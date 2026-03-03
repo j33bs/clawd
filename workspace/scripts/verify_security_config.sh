@@ -41,6 +41,16 @@ if root:
 else:
     print('WARN: openclaw.json not found in repo; skipping repo-local node.id enforcement')
 
+# workspace/config/openclaw.json (preferred repo-tracked config)
+workspace_cfg = load('workspace/config/openclaw.json') or {}
+if workspace_cfg:
+    plugins = workspace_cfg.get('plugins', {})
+    allow = plugins.get('allow')
+    if not isinstance(allow, list) or not [x for x in allow if isinstance(x, str) and x.strip()]:
+        failures.append('workspace/config/openclaw.json: plugins.allow must be a non-empty list when plugins are configured')
+else:
+    print('WARN: workspace/config/openclaw.json not found; plugin allowlist checks skipped')
+
 # agents/main/agent/models.json
 main = load('agents/main/agent/models.json') or {}
 check_groq('agents/main/agent/models.json', main.get('providers', {}).get('groq'))

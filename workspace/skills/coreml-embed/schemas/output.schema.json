@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "workspace/skills/coreml-embed/schemas/output.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "model_path": { "type": "string" },
+    "dims": { "type": "integer", "minimum": 0 },
+    "embeddings": {
+      "type": "array",
+      "items": {
+        "type": "array",
+        "items": { "type": "number" }
+      }
+    },
+    "latency_ms": { "type": "integer", "minimum": 0 }
+  },
+  "required": ["model_path", "dims", "embeddings", "latency_ms"]
+}
