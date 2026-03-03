@@ -33,6 +33,14 @@ except Exception:  # pragma: no cover
     write_prepared_prompt_file = None
     spawn_codex_session = None
 
+SCRIPTS_DIR = REPO_ROOT / "workspace" / "scripts"
+if str(SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPTS_DIR))
+try:
+    from model_intent_router import maybe_apply_model_intent
+except Exception:  # pragma: no cover
+    maybe_apply_model_intent = None
+
 # Configuration
 GATEWAY_URL = os.environ.get("GATEWAY_URL", "http://127.0.0.1:18789")
 GATEWAY_TOKEN = os.environ.get("GATEWAY_TOKEN", "")  # Set your token
@@ -291,12 +299,17 @@ async def spawn_chatgpt_subagent(task: str, context: dict, gateway_url: str, tok
 
 async def handle_incoming_message(message: dict, handler: MessageHandler) -> dict:
     """Process an incoming message with load balancing."""
-    
+    content = message.get("content", "")
+    try:
+        if callable(maybe_apply_model_intent):
+            maybe_apply_model_intent(str(content))
+    except Exception:
+        pass
+
     # Route message
     route = await handler.route_message(message)
     
     # Get message content
-    content = message.get("content", "")
     message_id = message.get("message_id")
     chat_id = message.get("chat_id")
     session_start = bool(message.get("session_start", False))
