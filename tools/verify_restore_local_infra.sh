@@ -53,3 +53,28 @@ fi
 
 echo "PASS: RESTORE_DRY_RUN=1 $TARGET (exit_code=$rc)"
 rm -f "$TMP_OUT"
+
+TMP_OUT_FORCE="$(mktemp)"
+set +e
+RESTORE_DRY_RUN=1 \
+RESTORE_FORCE_RESTORE_PATHS="tools/qmd_mcp_start_ipv4.sh,tools/install_launchagent_ain.sh,workspace/launchd/ai.openclaw.ain.plist" \
+"$TARGET" >"$TMP_OUT_FORCE" 2>&1
+rc_force=$?
+set -e
+
+if [ "$rc_force" -ne 0 ] && [ "$rc_force" -ne 1 ] && [ "$rc_force" -ne 2 ]; then
+  echo "FAIL: forced self-heal dry-run returned unexpected exit code: $rc_force" >&2
+  sed -n '1,160p' "$TMP_OUT_FORCE" >&2
+  rm -f "$TMP_OUT_FORCE"
+  exit 1
+fi
+
+if ! grep -q "\\[DRY_RUN\\] would restore tools/qmd_mcp_start_ipv4.sh from 511a4db716dfe12da62036bbf149a481a95fc76d" "$TMP_OUT_FORCE"; then
+  echo "FAIL: forced self-heal dry-run did not print expected restore line for qmd helper" >&2
+  sed -n '1,200p' "$TMP_OUT_FORCE" >&2
+  rm -f "$TMP_OUT_FORCE"
+  exit 1
+fi
+
+echo "PASS: forced self-heal dry-run emits pinned-commit restore attempts (exit_code=$rc_force)"
+rm -f "$TMP_OUT_FORCE"
