@@ -5,7 +5,13 @@ from pathlib import Path
 from typing import Any
 
 from embeddings.driver_mlx import ACCEL_MODEL_ID, CANONICAL_MODEL_ID, MlxEmbedder
-from vector_store_lancedb import MINILM_TABLE, MODERNBERT_TABLE, LanceVectorStore
+from vector_store_lancedb import (
+    MINILM_DIM,
+    MINILM_TABLE,
+    MODERNBERT_DIM,
+    MODERNBERT_TABLE,
+    LanceVectorStore,
+)
 
 
 def _repo_root() -> Path:
@@ -49,11 +55,19 @@ def _rows_to_contexts(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def _ensure_modernbert_available(store: LanceVectorStore):
+    store.assert_table_dim(MODERNBERT_TABLE, expected_dim=MODERNBERT_DIM, require_exists=False)
     stats = store.stats(MODERNBERT_TABLE)
     if not stats.get("exists"):
         raise RuntimeError("ModernBERT index unavailable: rag_modernbert table is missing")
     if int(stats.get("rows", 0)) <= 0:
-        raise RuntimeError("ModernBERT index unavailable: rag_modernbert table is empty")
+        raise RuntimeError(
+            "ModernBERT index unavailable: rag_modernbert exists but is empty; run `kb.py index`"
+        )
+
+
+def _assert_known_dims(store: LanceVectorStore):
+    store.assert_table_dim(MODERNBERT_TABLE, expected_dim=MODERNBERT_DIM, require_exists=False)
+    store.assert_table_dim(MINILM_TABLE, expected_dim=MINILM_DIM, require_exists=False)
 
 
 def retrieve(query: str, mode: str = "HYBRID", k: int = 12) -> dict:
@@ -62,6 +76,7 @@ def retrieve(query: str, mode: str = "HYBRID", k: int = 12) -> dict:
         raise ValueError(f"Unsupported retrieval mode: {mode}")
 
     store = LanceVectorStore(str(_default_db_dir()))
+    _assert_known_dims(store)
     k = max(1, int(k))
 
     if selected_mode == "FAST":

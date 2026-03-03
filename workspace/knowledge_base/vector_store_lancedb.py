@@ -9,6 +9,8 @@ import pyarrow as pa
 
 MODERNBERT_TABLE = "rag_modernbert"
 MINILM_TABLE = "rag_minilm"
+MODERNBERT_DIM = 768
+MINILM_DIM = 384
 
 
 def make_row_id(doc_id: str, chunk_id: str, model_id: str) -> str:
@@ -58,8 +60,37 @@ class LanceVectorStore:
                 normalized.append(str(item))
         return name in set(normalized)
 
+    @staticmethod
+    def _table_embedding_dim(table) -> int | None:
+        try:
+            field = table.schema.field("embedding")
+        except Exception:
+            return None
+
+        dtype = field.type
+        list_size = getattr(dtype, "list_size", None)
+        if list_size is None:
+            return None
+        return int(list_size)
+
+    def assert_table_dim(self, name: str, expected_dim: int, require_exists: bool = False) -> int | None:
+        if not self.table_exists(name):
+            if require_exists:
+                raise RuntimeError(f"LanceDB table missing: {name}")
+            return None
+
+        table = self.db.open_table(name)
+        actual_dim = self._table_embedding_dim(table)
+        if actual_dim != int(expected_dim):
+            got = "unknown" if actual_dim is None else str(actual_dim)
+            raise RuntimeError(
+                f"Embedding dimension mismatch for {name}: expected {int(expected_dim)}, got {got}"
+            )
+        return actual_dim
+
     def ensure_table(self, name: str, dim: int):
         if self.table_exists(name):
+            self.assert_table_dim(name, expected_dim=dim, require_exists=True)
             return self.db.open_table(name)
         return self.db.create_table(name, data=[], schema=_schema(dim))
 
@@ -85,9 +116,8 @@ class LanceVectorStore:
         k: int,
         where: str | None = None,
     ) -> list[dict]:
-        if not self.table_exists(name):
-            raise RuntimeError(f"LanceDB table missing: {name}")
-
+        expected_dim = len(vector)
+        self.assert_table_dim(name, expected_dim=expected_dim, require_exists=True)
         table = self.db.open_table(name)
         search = table.search(vector, vector_column_name="embedding")
         if where:
@@ -124,9 +154,6 @@ class LanceVectorStore:
 
         table = self.db.open_table(name)
         rows = int(table.count_rows())
-        dim = None
-        field = table.schema.field("embedding")
-        if hasattr(field.type, "list_size"):
-            dim = int(field.type.list_size)
+        dim = self._table_embedding_dim(table)
 
         return {"name": name, "exists": True, "rows": rows, "dim": dim}

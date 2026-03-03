@@ -87,6 +87,44 @@ class TestEmbeddingsContract(unittest.TestCase):
                 with self.assertRaises(RuntimeError):
                     retrieve("fail closed", mode="PRECISE", k=3)
 
+    def test_precise_fails_closed_when_modernbert_empty(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            db_dir = root / "workspace" / "knowledge_base" / "data" / "vectors.lance"
+            env = {
+                "OPENCLAW_KB_REPO_ROOT": str(root),
+                "OPENCLAW_KB_VECTOR_DB_DIR": str(db_dir),
+                "OPENCLAW_KB_EMBED_META_PATH": str(root / "workspace" / "knowledge_base" / "data" / "embeddings.meta.json"),
+                "OPENCLAW_KB_EMBEDDINGS_BACKEND": "mock",
+            }
+            with patch.dict(os.environ, env, clear=False):
+                store = LanceVectorStore(str(db_dir))
+                store.ensure_table(MODERNBERT_TABLE, dim=768)
+                with self.assertRaisesRegex(
+                    RuntimeError,
+                    "rag_modernbert exists but is empty; run `kb.py index`",
+                ):
+                    retrieve("fail closed", mode="PRECISE", k=3)
+
+    def test_dim_mismatch_fails_closed(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            db_dir = root / "workspace" / "knowledge_base" / "data" / "vectors.lance"
+            env = {
+                "OPENCLAW_KB_REPO_ROOT": str(root),
+                "OPENCLAW_KB_VECTOR_DB_DIR": str(db_dir),
+                "OPENCLAW_KB_EMBED_META_PATH": str(root / "workspace" / "knowledge_base" / "data" / "embeddings.meta.json"),
+                "OPENCLAW_KB_EMBEDDINGS_BACKEND": "mock",
+            }
+            with patch.dict(os.environ, env, clear=False):
+                store = LanceVectorStore(str(db_dir))
+                store.ensure_table(MODERNBERT_TABLE, dim=384)
+                with self.assertRaisesRegex(
+                    RuntimeError,
+                    "Embedding dimension mismatch for rag_modernbert: expected 768, got 384",
+                ):
+                    retrieve("fail closed", mode="PRECISE", k=3)
+
     def test_fast_is_non_authoritative(self):
         with patch.dict(os.environ, self.env, clear=False):
             payload = retrieve("candidate generation", mode="FAST", k=4)
