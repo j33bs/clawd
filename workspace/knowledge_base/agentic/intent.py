@@ -59,6 +59,32 @@ def classify_intent(query: str) -> Dict:
         }
     """
     query_lower = query.lower()
+
+    # Force high-assurance strategy for governance/research/code-critical queries.
+    if re.search(r"\b(governance|policy|compliance|audit)\b", query_lower):
+        return {
+            "strategy": "governance",
+            "confidence": 0.9,
+            "intents": ["governance"],
+            "filters": ["governance"],
+            "steps": ["qmd_search", "hivemind_query", "graph_search"],
+        }
+    if re.search(r"\b(research|paper|study|arxiv)\b", query_lower):
+        return {
+            "strategy": "research",
+            "confidence": 0.9,
+            "intents": ["research"],
+            "filters": ["research"],
+            "steps": ["qmd_search", "hivemind_query", "graph_search"],
+        }
+    if re.search(r"\b(code[- ]?critical|security|vulnerability|incident)\b", query_lower):
+        return {
+            "strategy": "code_critical",
+            "confidence": 0.9,
+            "intents": ["code_critical"],
+            "filters": ["code_critical"],
+            "steps": ["qmd_search", "hivemind_query", "graph_search"],
+        }
     
     # Check each intent pattern
     matched_intents = []

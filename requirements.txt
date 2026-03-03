@@ -12,6 +12,7 @@ uvicorn>=0.29.0
 
 # Vector store + embeddings (core pipeline)
 lancedb>=0.29.2
+mlx-embeddings>=0.0.12
 sentence-transformers>=5.2.3
 pyarrow>=23.0.1
 

@@ -1,0 +1,49 @@
+{
+  "version": 1,
+  "runs": 22,
+  "lastPreference": {
+    "style": "concise",
+    "conciseness": 0.9
+  },
+  "beliefs": {
+    "arousal": 0.35,
+    "collapse_mode": false,
+    "last_observation": {
+      "candidate_policies": [
+        {
+          "id": "local_conservative",
+          "style": "concise",
+          "conciseness": 0.9,
+          "expected_utility": 0.9,
+          "epistemic_value": 0.35,
+          "complexity": 0.25,
+          "preferred_provider": "local_vllm_assistant"
+        },
+        {
+          "id": "balanced",
+          "style": "balanced",
+          "conciseness": 0.5,
+          "expected_utility": 0.55,
+          "epistemic_value": 0.55,
+          "complexity": 0.5,
+          "preferred_provider": "groq"
+        },
+        {
+          "id": "exploratory",
+          "style": "deep",
+          "conciseness": 0.3,
+          "expected_utility": 0.35,
+          "epistemic_value": 0.8,
+          "complexity": 0.9,
+          "preferred_provider": "openai_gpt52_chat"
+        }
+      ],
+      "input_text": "be concise and brief"
+    }
+  },
+  "lastDecision": {
+    "policy_id": "local_conservative",
+    "score": 1.1275,
+    "preferred_provider": "local_vllm_assistant"
+  }
+}
