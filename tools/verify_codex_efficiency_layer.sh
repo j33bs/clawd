@@ -109,4 +109,8 @@ fi
 
 OPENCLAW_WRAPPER_DRYRUN=1 bash scripts/run_openclaw_gateway_repo.sh > "$VERIFY_DIR/gateway_boot.out.txt" 2>&1
 
+if [[ "${CEL_SMOKE:-0}" == "1" ]]; then
+  bash tools/cel_smoke_test.sh | tee "$VERIFY_DIR/smoke.out.txt"
+fi
+
 echo "verify_codex_efficiency_layer: PASS"

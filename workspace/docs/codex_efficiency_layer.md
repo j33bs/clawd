@@ -58,6 +58,12 @@ bash tools/verify_codex_efficiency_layer.sh
 
 ## Rollback Procedure
 1. Revert CEL files and integration commit:
+   - Refresh upstream refs and restore tracked integration file from upstream:
+   - `git fetch origin`
+   - `git restore --source=origin/main -- workspace/scripts/message_handler.py`
+   - Offline-safe fallback if `origin` is unavailable:
+   - `BASE=$(git merge-base HEAD main 2>/dev/null || git merge-base HEAD origin/main)`
+   - `git restore --source="$BASE" -- workspace/scripts/message_handler.py`
    - `tools/codex_prepare_prompt.py`
    - `tools/codex_spawn_session.py`
    - `tools/codex_token_watchdog.py`
@@ -65,7 +71,6 @@ bash tools/verify_codex_efficiency_layer.sh
    - `tools/verify_codex_efficiency_layer.sh`
    - `workspace/runtime/codex_cache_hooks.py`
    - `workspace/docs/codex_efficiency_layer.md`
-   - `workspace/scripts/message_handler.py`
 2. Remove runtime artifacts if desired:
    - `workspace/runtime/codex_prepared_prompt.json`
    - `workspace/runtime/codex_sessions.log`
