@@ -41,6 +41,9 @@
 - `workspace/audit/_evidence/c_lawd_embeddings_modernbert_lancedb_20260303T030718Z/11_index_embeddings_mlx.txt`
 - `workspace/audit/_evidence/c_lawd_embeddings_modernbert_lancedb_20260303T030718Z/12_verify_embeddings_stack.txt`
 - `workspace/audit/_evidence/c_lawd_embeddings_modernbert_lancedb_20260303T030718Z/13_git_status_post_verify.txt`
+- `workspace/audit/_evidence/c_lawd_embeddings_modernbert_lancedb_20260303T030718Z/14_kb_index_with_evidence_dir.txt`
+- `workspace/audit/_evidence/c_lawd_embeddings_modernbert_lancedb_20260303T030718Z/15_index_reports_list.txt`
+- `workspace/audit/_evidence/c_lawd_embeddings_modernbert_lancedb_20260303T030718Z/index_report_20260303T082516Z.json`
 
 ## Key Verification Results
 - Unit contract test: `Ran 4 tests ... OK`.
