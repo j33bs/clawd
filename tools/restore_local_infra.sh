@@ -10,8 +10,10 @@ cd "$REPO_ROOT"
 
 DRY_RUN="${RESTORE_DRY_RUN:-0}"
 UID_NUM="$(id -u)"
-PINNED_COMMIT="511a4db716dfe12da62036bbf149a481a95fc76d"
+DEFAULT_PIN="511a4db716dfe12da62036bbf149a481a95fc76d"
+INFRA_PINNED_COMMIT="${INFRA_PINNED_COMMIT:-$DEFAULT_PIN}"
 FORCE_RESTORE_PATHS="${RESTORE_FORCE_RESTORE_PATHS:-}"
+SELF_HEAL_RESTORED=0
 
 qmd_ok=0
 ain_ok=0
@@ -64,6 +66,7 @@ restore_from_commit() {
   fi
   if git restore --source="$commit" -- "$path" >/dev/null 2>&1; then
     echo "OK: restored $path from $commit"
+    SELF_HEAL_RESTORED=$((SELF_HEAL_RESTORED + 1))
   else
     echo "WARN: failed to restore $path from $commit"
   fi
@@ -79,7 +82,7 @@ ensure_asset_from_pinned_commit() {
   else
     echo "INFO: missing asset $path"
   fi
-  restore_from_commit "$PINNED_COMMIT" "$path"
+  restore_from_commit "$INFRA_PINNED_COMMIT" "$path"
 }
 
 http_reachable() {
@@ -178,6 +181,9 @@ step "Phase 4: Final Status"
 printf "%-10s %-8s %-5s\n" "SERVICE" "STATUS" "PORT"
 printf "%-10s %-8s %-5s\n" "QMD MCP" "$([ "$qmd_ok" -eq 1 ] && echo OK || echo FAIL)" "8181"
 printf "%-10s %-8s %-5s\n" "AIN" "$([ "$ain_ok" -eq 1 ] && echo OK || echo FAIL)" "18990"
+if [ "$SELF_HEAL_RESTORED" -gt 0 ]; then
+  echo "SELF_HEAL: restored=$SELF_HEAL_RESTORED (from $INFRA_PINNED_COMMIT)"
+fi
 
 if [ "$qmd_ok" -eq 1 ] && [ "$ain_ok" -eq 1 ]; then
   exit 0

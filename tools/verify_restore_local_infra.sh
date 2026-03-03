@@ -78,3 +78,30 @@ fi
 
 echo "PASS: forced self-heal dry-run emits pinned-commit restore attempts (exit_code=$rc_force)"
 rm -f "$TMP_OUT_FORCE"
+
+TMP_OUT_PIN="$(mktemp)"
+PIN_OVERRIDE="511a4db716dfe12da62036bbf149a481a95fc76d"
+set +e
+INFRA_PINNED_COMMIT="$PIN_OVERRIDE" \
+RESTORE_DRY_RUN=1 \
+RESTORE_FORCE_RESTORE_PATHS="tools/qmd_mcp_start_ipv4.sh" \
+"$TARGET" >"$TMP_OUT_PIN" 2>&1
+rc_pin=$?
+set -e
+
+if [ "$rc_pin" -ne 0 ] && [ "$rc_pin" -ne 1 ] && [ "$rc_pin" -ne 2 ]; then
+  echo "FAIL: pinned-override dry-run returned unexpected exit code: $rc_pin" >&2
+  sed -n '1,160p' "$TMP_OUT_PIN" >&2
+  rm -f "$TMP_OUT_PIN"
+  exit 1
+fi
+
+if ! grep -q "\\[DRY_RUN\\] would restore tools/qmd_mcp_start_ipv4.sh from $PIN_OVERRIDE" "$TMP_OUT_PIN"; then
+  echo "FAIL: INFRA_PINNED_COMMIT override not reflected in restore output" >&2
+  sed -n '1,200p' "$TMP_OUT_PIN" >&2
+  rm -f "$TMP_OUT_PIN"
+  exit 1
+fi
+
+echo "PASS: INFRA_PINNED_COMMIT override respected in dry-run (exit_code=$rc_pin)"
+rm -f "$TMP_OUT_PIN"
