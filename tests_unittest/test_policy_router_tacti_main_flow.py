@@ -17,18 +17,52 @@ import policy_router  # noqa: E402
 
 
 class TestPolicyRouterTactiMainFlow(unittest.TestCase):
+    def _policy_path(self, root: Path) -> Path:
+        payload = {
+            "version": 2,
+            "defaults": {
+                "allowPaid": False,
+                "maxTokensPerRequest": 2048,
+                "circuitBreaker": {"failureThreshold": 3, "cooldownSec": 60, "windowSec": 60, "failOn": []},
+            },
+            "budgets": {
+                "intents": {"itc_classify": {"dailyTokenBudget": 100000, "dailyCallBudget": 1000, "maxCallsPerRun": 20}},
+                "tiers": {"free": {"dailyTokenBudget": 100000, "dailyCallBudget": 1000}},
+            },
+            "providers": {
+                "local_gemini": {
+                    "enabled": True,
+                    "paid": False,
+                    "tier": "free",
+                    "type": "mock",
+                    "provider_id": "local_vllm",
+                    "models": [{"id": "mock-model", "maxInputChars": 8000}],
+                }
+            },
+            "routing": {
+                "free_order": ["local_gemini"],
+                "intents": {"itc_classify": {"order": ["free"], "allowPaid": False}},
+            },
+        }
+        path = root / "policy.json"
+        path.write_text(json.dumps(payload), encoding="utf-8")
+        return path
+
     def test_flags_off_preserves_flow_without_tacti_hook_invocation(self):
         with tempfile.TemporaryDirectory() as td:
             tmp = Path(td)
             budget = tmp / "budget.json"
             circuit = tmp / "circuit.json"
             events = tmp / "events.jsonl"
+            runtime_events = tmp / "state_runtime" / "tacti_cr" / "events.jsonl"
 
             env = {
                 "ENABLE_MURMURATION": "0",
                 "ENABLE_RESERVOIR": "0",
                 "ENABLE_PHYSARUM_ROUTER": "0",
                 "ENABLE_TRAIL_MEMORY": "0",
+                "TACTI_CR_ENABLE": "0",
+                "TACTI_CR_EVENTS_PATH": str(runtime_events),
                 "GEMINI_API_KEY": "dummy-key",
             }
             with patch.dict(os.environ, env, clear=False):
@@ -38,10 +72,11 @@ class TestPolicyRouterTactiMainFlow(unittest.TestCase):
                     side_effect=AssertionError("tacti_enhance_plan should not be called when flags are off"),
                 ):
                     router = policy_router.PolicyRouter(
+                        policy_path=self._policy_path(tmp),
                         budget_path=budget,
                         circuit_path=circuit,
                         event_log=events,
-                        handlers={"google-gemini-cli": lambda payload, model_id, context: {"ok": True, "text": "ok"}},
+                        handlers={"local_gemini": lambda payload, model_id, context: {"ok": True, "text": "ok"}},
                     )
                     result = router.execute_with_escalation(
                         "itc_classify",
@@ -64,14 +99,16 @@ class TestPolicyRouterTactiMainFlow(unittest.TestCase):
                 "ENABLE_RESERVOIR": "0",
                 "ENABLE_PHYSARUM_ROUTER": "0",
                 "ENABLE_TRAIL_MEMORY": "0",
+                "TACTI_CR_ENABLE": "0",
                 "GEMINI_API_KEY": "dummy-key",
             }
             with patch.dict(os.environ, env, clear=False):
                 router = policy_router.PolicyRouter(
+                    policy_path=self._policy_path(tmp),
                     budget_path=budget,
                     circuit_path=circuit,
                     event_log=events,
-                    handlers={"google-gemini-cli": lambda payload, model_id, context: {"ok": True, "text": "ok"}},
+                    handlers={"local_gemini": lambda payload, model_id, context: {"ok": True, "text": "ok"}},
                 )
                 result = router.execute_with_escalation(
                     "itc_classify",
@@ -83,7 +120,7 @@ class TestPolicyRouterTactiMainFlow(unittest.TestCase):
             self.assertIsInstance(result.get("tacti"), dict)
             self.assertTrue(result["tacti"].get("enabled"))
             self.assertTrue(result["tacti"].get("agent_ids"))
-            self.assertIn("google-gemini-cli", result["tacti"].get("agent_ids", []))
+            self.assertIn("local_gemini", result["tacti"].get("agent_ids", []))
 
             events_payload = []
             if events.exists():
@@ -113,10 +150,11 @@ class TestPolicyRouterTactiMainFlow(unittest.TestCase):
             }
             with patch.dict(os.environ, env, clear=False):
                 router = policy_router.PolicyRouter(
+                    policy_path=self._policy_path(tmp),
                     budget_path=budget,
                     circuit_path=circuit,
                     event_log=events,
-                    handlers={"google-gemini-cli": lambda payload, model_id, context: {"ok": True, "text": "ok"}},
+                    handlers={"local_gemini": lambda payload, model_id, context: {"ok": True, "text": "ok"}},
                 )
                 result = router.execute_with_escalation(
                     "itc_classify",

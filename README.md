@@ -37,18 +37,35 @@ ENABLE_RESERVOIR=1        # Echo-state dynamics
 ENABLE_PHYSARUM_ROUTER=1  # Adaptive routing
 ENABLE_TRAIL_MEMORY=1     # External memory trails
 
-# Evolution pack (all default OFF; opt-in only)
-OPENCLAW_ROUTER_PROPRIOCEPTION=0  # Attach internal router telemetry in result meta
-OPENCLAW_NARRATIVE_DISTILL=0      # Run episodic->semantic distillation in nightly memory job
-OPENCLAW_WITNESS_LEDGER=0         # Append tamper-evident witness commits for routing decisions
-OPENCLAW_DREAM_PRUNE=0            # Enable deterministic competing-cluster prune merge
-OPENCLAW_TRAIL_VALENCE=0          # Persist optional damped valence signatures on trails
-OPENCLAW_SURPRISE_GATE=0          # Gate episodic writes by surprise-score proxy
-OPENCLAW_PEER_ANNEAL=0            # Temperature-decay peer churn schedule
-OPENCLAW_COUNTERFACTUAL_REPLAY=0  # Heuristic alternative-routing generation
-OPENCLAW_EPITOPE_CACHE=0          # Cache known losing-claim fingerprints
-OPENCLAW_OSCILLATORY_GATING=0     # Phase-based maintenance subsystem gating
+# Evolution ideas (all default OFF; opt-in only)
+OPENCLAW_DREAM_PRUNING=0               # Competitive dream-cluster pruning
+OPENCLAW_ROUTER_PROPRIOCEPTION=0       # Router proprioception + TACTI arousal input
+OPENCLAW_TRAILS_VALENCE=0              # Trail valence inheritance and consensus
+OPENCLAW_TEMPORAL_SURPRISE_GATE=0      # KL surprise-gated episodic writes
+OPENCLAW_PEERGRAPH_ANNEAL=0            # Session-step topology annealing
+OPENCLAW_NARRATIVE_DISTILL=0           # Episodic -> semantic distillation writes
+OPENCLAW_AIF_COUNTERFACTUAL=0          # Active inference counterfactual replay
+OPENCLAW_SEMANTIC_IMMUNE_EPITOPES=0    # Bounded epitope cache fast-path
+OPENCLAW_OSCILLATORY_ATTENTION=0       # Phase scheduler for maintenance gating
+OPENCLAW_WITNESS_LEDGER=0              # Append-only witness hash-chain commits
+OPENCLAW_TEAMCHAT=0                    # Multi-agent Team Chat CLI mode
+OPENCLAW_TEAMCHAT_WITNESS=0            # Witness ledger on Team Chat turns
 ```
+All `OPENCLAW_*` evolution flags default OFF unless explicitly enabled.
+When enabled, runtime TACTI events write to `workspace/state_runtime/tacti_cr/events.jsonl` (ignored); `workspace/state/tacti_cr/events.jsonl` remains a deterministic tracked stub.
+Backward-compatible aliases still accepted: `OPENCLAW_DREAM_PRUNE`, `OPENCLAW_TRAIL_VALENCE`, `OPENCLAW_SURPRISE_GATE`, `OPENCLAW_PEER_ANNEAL`, `OPENCLAW_COUNTERFACTUAL_REPLAY`, `OPENCLAW_EPITOPE_CACHE`, `OPENCLAW_OSCILLATORY_GATING`.
+
+Team Chat is also default OFF and flag-gated. Runtime session logs and witness ledger write only to `workspace/state_runtime/teamchat/` (ignored). See `workspace/teamchat/README.md` for Team Chat Witness verification steps.
+
+## Team Chat
+
+Team Chat adds a policy-routed multi-agent conversational workspace with append-only session logs.
+
+- Enable with `OPENCLAW_TEAMCHAT=1` and run `python3 workspace/scripts/team_chat.py --agents planner,coder,critic --session teamchat_demo --max-turns 3`
+- Optional witness commitments per agent turn via `OPENCLAW_TEAMCHAT_WITNESS=1`
+- Auto-commit remains dual opt-in only:
+  - `TEAMCHAT_USER_DIRECTED_TEAMCHAT=1`
+  - `TEAMCHAT_ALLOW_AUTOCOMMIT=1`
 
 ---
 
@@ -125,6 +142,62 @@ python workspace/time_management/time_management.py self_care
 # Daily Technique
 python scripts/daily_technique.py --format briefing
 ```
+
+## MCP Runtime Hardening Quickstart
+
+```bash
+export ANTHROPIC_API_KEY=\"<required>\"
+export NODE_ENV=production
+export WORKSPACE_ROOT=\"$PWD\"
+export AGENT_WORKSPACE_ROOT=\"$PWD/.agent_workspace\"
+export SKILLS_ROOT=\"$PWD/skills\"
+export SESSION_TTL_MS=21600000
+export SESSION_MAX=50
+export HISTORY_MAX_MESSAGES=200
+export MCP_SERVER_START_TIMEOUT_MS=30000
+export FS_ALLOW_OUTSIDE_WORKSPACE=false
+export LOG_LEVEL=info
+
+# deterministic checks
+npm run typecheck:hardening
+npm run test:hardening
+
+# rebuild runtime with hardening overlay
+npm run runtime:rebuild
+```
+
+## Multi-Session Example
+
+```js
+import { SessionManager } from './workspace/runtime_hardening/src/session.mjs';
+
+const sessions = new SessionManager({
+  config: {
+    anthropicApiKey: process.env.ANTHROPIC_API_KEY,
+    nodeEnv: process.env.NODE_ENV || 'development',
+    workspaceRoot: process.cwd(),
+    agentWorkspaceRoot: `${process.cwd()}/.agent_workspace`,
+    skillsRoot: `${process.cwd()}/skills`,
+    sessionTtlMs: 6 * 60 * 60 * 1000,
+    sessionMax: 50,
+    historyMaxMessages: 200,
+    mcpServerStartTimeoutMs: 30_000,
+    logLevel: process.env.LOG_LEVEL || 'info',
+    fsAllowOutsideWorkspace: false
+  }
+});
+
+sessions.appendHistory('session-a', { role: 'user', content: 'hello' });
+sessions.appendHistory('session-b', { role: 'user', content: 'start task' });
+```
+
+## Skill Creation Mini-Guide
+
+- Put skills under `workspace/skills/<skill-name>/`.
+- Include a `SKILL.md` with purpose, trigger conditions, and exact command interface.
+- Keep command payloads small and deterministic; validate args before execution.
+- Add at least one deterministic test that exercises the skill entrypoint.
+- Document required env vars and security boundaries in the skill README/SKILL file.
 
 ---
 

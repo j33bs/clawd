@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "workspace/skills/mlx-infer/schemas/output.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "completion": { "type": "string" },
+    "latency_ms": { "type": "integer" },
+    "tokens_used": { "type": "integer" }
+  },
+  "required": ["completion", "latency_ms", "tokens_used"]
+}

@@ -16,6 +16,8 @@ import asyncio
 import aiohttp
 from datetime import datetime
 from typing import Optional
+from agent_orchestration import build_default_orchestrator
+from telegram_recall import inject_telegram_recall_context
 
 # Configuration
 GATEWAY_URL = os.environ.get("GATEWAY_URL", "http://127.0.0.1:18789")
@@ -153,21 +155,63 @@ async def spawn_chatgpt_subagent(task: str, context: dict, gateway_url: str, tok
     """
     headers = {"Authorization": f"Bearer {token}"} if token else {}
     
+    orchestrator = build_default_orchestrator()
+    spawn_plan = orchestrator.prepare_spawn(
+        task=task,
+        context=context or {},
+        priority=(context or {}).get("priority", "normal"),
+        specialization_tags=(context or {}).get("specialization_tags"),
+        providers=["openai-codex/gpt-5.3-codex"],
+        enqueue_if_busy=False,
+    )
+
+    handoff_id = None
+    if (context or {}).get("handoff_from_agent") and (context or {}).get("handoff_to_agent"):
+        handoff_id = orchestrator.create_handoff(
+            str(context.get("handoff_from_agent")),
+            str(context.get("handoff_to_agent")),
+            str(context.get("handoff_summary") or "spawn request handoff"),
+            payload={"task_preview": task[:200]},
+        )
+
     payload = {
         "agentId": "main",
-        "model": "openai-codex/gpt-5.3-codex",
+        "model": spawn_plan["provider"],
         "task": task,
-        "context": context,
-        "timeoutSeconds": 120
+        "context": {
+            **(context or {}),
+            "specializationTags": spawn_plan["specialization_tags"],
+            **({"handoffId": handoff_id} if handoff_id else {}),
+        },
+        "timeoutSeconds": spawn_plan["timeout_seconds"]
     }
-    
-    async with aiohttp.ClientSession() as session:
-        async with session.post(
-            f"{gateway_url}/api/agents/spawn",
-            json=payload,
-            headers=headers
-        ) as resp:
-            return await resp.json()
+
+    run_id = orchestrator.register_run_start(
+        agent_id="main",
+        provider=spawn_plan["provider"],
+        request={"task_preview": task[:200], "priority": spawn_plan["priority"]},
+    )
+
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                f"{gateway_url}/api/agents/spawn",
+                json=payload,
+                headers=headers
+            ) as resp:
+                result = await resp.json()
+                status = "ok" if resp.status < 400 else "error"
+                orchestrator.register_run_end(
+                    run_id,
+                    status=status,
+                    state_update={"mood": str((context or {}).get("mood", "active"))},
+                )
+                if handoff_id and status == "ok":
+                    orchestrator.acknowledge_handoff(handoff_id, "main", "spawn accepted")
+                return result
+    except Exception:
+        orchestrator.register_run_end(run_id, status="error")
+        raise
 
 
 async def handle_incoming_message(message: dict, handler: MessageHandler) -> dict:
@@ -180,16 +224,24 @@ async def handle_incoming_message(message: dict, handler: MessageHandler) -> dic
     content = message.get("content", "")
     message_id = message.get("message_id")
     chat_id = message.get("chat_id")
+    session_start = bool(message.get("session_start", False))
+
+    # Optional semantic recall hook from Telegram vector store (disabled by default).
+    content_with_recall = inject_telegram_recall_context(
+        str(content),
+        env=os.environ,
+        session_start=session_start,
+    )
     
     # Apply prompt caching
-    cached_prompt = handler.cache_prompt(content)
+    cached_prompt = handler.cache_prompt(content_with_recall)
     
     # Get conversation context
     history = handler.message_history[-10:]  # Last 10 messages
     context = handler.summarize_context(history)
     
     # Build full prompt
-    full_prompt = context + f"\n\nUser: {content}" if context else content
+    full_prompt = context + f"\n\nUser: {content_with_recall}" if context else content_with_recall
     
     if route["route"] == "chatgpt":
         # Spawn ChatGPT subagent

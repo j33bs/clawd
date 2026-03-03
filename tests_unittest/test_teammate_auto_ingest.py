@@ -196,7 +196,7 @@ class TestTeammateAutoIngest(unittest.TestCase):
                 self.assertIsNotNone(s1)
                 self.assertFalse(s1.get("stopped"))
 
-                with unittest.mock.patch.object(preflight_check, "_scan_token_like", return_value=["rule_test"]):
+                with unittest.mock.patch.object(preflight_check, "_scan_token_like", return_value=["rule_openai_sk"]):
                     s2 = preflight_check._auto_ingest_allowlisted_teammate_untracked(repo)
 
             self.assertIsNotNone(s2)

@@ -179,6 +179,14 @@ def test_budget_enforcement_and_token_cap():
         policy["budgets"]["intents"]["itc_classify"]["dailyCallBudget"] = 1
         policy["budgets"]["tiers"]["free"]["dailyCallBudget"] = 1
         policy["providers"] = {
+            "local_vllm_assistant": {
+                "enabled": True,
+                "paid": False,
+                "tier": "free",
+                "type": "openai_compatible",
+                "baseUrl": "http://127.0.0.1:8001/v1",
+                "models": [{"id": "local-assistant"}],
+            },
             "freeA": {"enabled": True, "paid": False, "tier": "free", "type": "mock", "models": [{"id": "free"}]},
         }
         policy["routing"]["free_order"] = ["freeA"]
@@ -187,7 +195,7 @@ def test_budget_enforcement_and_token_cap():
         def ok_handler(payload, model_id, ctx):
             return {"ok": True, "text": "news"}
 
-        router = make_router(tmpdir, policy, {"freeA": ok_handler})
+        router = make_router(tmpdir, policy, {"local_vllm_assistant": ok_handler, "freeA": ok_handler})
 
         # budget allows once, then blocks
         res_ok = router.execute_with_escalation("itc_classify", {"prompt": "short"})
@@ -199,6 +207,7 @@ def test_budget_enforcement_and_token_cap():
 def test_missing_anthropic_key_falls_back_to_local_vllm():
     with tempfile.TemporaryDirectory() as tmpdir:
         policy = base_policy()
+        policy["routing"]["capability_router"] = {"enabled": False}
         policy["providers"] = {
             "anthropic": {
                 "enabled": True,
@@ -244,6 +253,7 @@ def test_missing_anthropic_key_falls_back_to_local_vllm():
 def test_anthropic_missing_key_is_ineligible():
     with tempfile.TemporaryDirectory() as tmpdir:
         policy = base_policy()
+        policy["routing"]["capability_router"] = {"enabled": False}
         policy["providers"] = {
             "anthropic": {
                 "enabled": True,
@@ -338,15 +348,15 @@ def test_capability_routing_precedence_and_targets():
         router = make_router(tmpdir, policy, {})
 
         default_sel = router.select_model("conversation", {"input_text": "hello there"})
-        assert default_sel["provider"] == "minimax_m25", default_sel
-        assert default_sel["model"] == "minimax-portal/MiniMax-M2.5", default_sel
+        assert default_sel["provider"] == "local_vllm_assistant", default_sel
+        assert default_sel["model"] == "vllm/local-assistant", default_sel
 
         ordinary_chat_sel = router.select_model(
             "conversation",
             {"input_text": "Tell me something interesting about whales."},
         )
-        assert ordinary_chat_sel["provider"] == "minimax_m25", ordinary_chat_sel
-        assert ordinary_chat_sel["model"] == "minimax-portal/MiniMax-M2.5", ordinary_chat_sel
+        assert ordinary_chat_sel["provider"] == "local_vllm_assistant", ordinary_chat_sel
+        assert ordinary_chat_sel["model"] == "vllm/local-assistant", ordinary_chat_sel
         assert ordinary_chat_sel["model"] not in {
             "gpt-5.2-chat-latest",
             "gpt-5.3-codex",
@@ -357,9 +367,9 @@ def test_capability_routing_precedence_and_targets():
             "conversation",
             {"input_text": "Tell me something interesting about whales."},
         )
-        assert ordinary_explain["matched_trigger"] == "default", ordinary_explain
-        assert ordinary_explain["reason"] == "default intent routing order", ordinary_explain
-        assert ordinary_explain["chosen"]["provider"] == "minimax_m25", ordinary_explain
+        assert ordinary_explain["matched_trigger"] == "capability_class", ordinary_explain
+        assert ordinary_explain["reason"] == "planning class without strong remote cues keeps local-first routing", ordinary_explain
+        assert ordinary_explain["chosen"]["provider"] == "local_vllm_assistant", ordinary_explain
 
         chatgpt_sel = router.select_model("conversation", {"input_text": "Please USE ChatGPT for this request"})
         assert chatgpt_sel["provider"] == "openai_gpt52_chat", chatgpt_sel
@@ -380,7 +390,7 @@ def test_capability_routing_precedence_and_targets():
             "conversation",
             {"input_text": "Plan the architecture and evaluate options with trade-offs"},
         )
-        assert reasoning_sel["provider"] == "openai_gpt52_chat", reasoning_sel
+        assert reasoning_sel["provider"] == "local_vllm_assistant", reasoning_sel
 
         code_sel = router.select_model(
             "conversation",

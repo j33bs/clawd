@@ -72,4 +72,39 @@ def commit(record: dict, ledger_path: str, timestamp_utc: str | None = None) -> 
     }
 
 
-__all__ = ["canonicalize", "commit"]
+def verify_chain(ledger_path: str) -> dict:
+    path = Path(ledger_path)
+    if not path.exists():
+        return {"ok": True, "entries": 0}
+    prev_hash = None
+    prev_seq = 0
+    entries = 0
+    for idx, line in enumerate(path.read_text(encoding="utf-8", errors="ignore").splitlines(), start=1):
+        raw = line.strip()
+        if not raw:
+            continue
+        try:
+            row = json.loads(raw)
+        except Exception:
+            return {"ok": False, "entries": entries, "error": "invalid_json", "line": idx}
+        if not isinstance(row, dict):
+            return {"ok": False, "entries": entries, "error": "invalid_row", "line": idx}
+        seq = int(row.get("seq", 0) or 0)
+        if seq != prev_seq + 1:
+            return {"ok": False, "entries": entries, "error": "seq_gap", "line": idx, "seq": seq}
+        record = row.get("record", {})
+        if not isinstance(record, dict):
+            return {"ok": False, "entries": entries, "error": "invalid_record", "line": idx}
+        row_prev_hash = row.get("prev_hash")
+        if row_prev_hash != prev_hash:
+            return {"ok": False, "entries": entries, "error": "prev_hash_mismatch", "line": idx}
+        expected = _payload_hash(seq=seq, timestamp_utc=str(row.get("timestamp_utc", "")), prev_hash=row_prev_hash, record=record)
+        if str(row.get("hash", "")) != expected:
+            return {"ok": False, "entries": entries, "error": "hash_mismatch", "line": idx}
+        prev_hash = str(row.get("hash", ""))
+        prev_seq = seq
+        entries += 1
+    return {"ok": True, "entries": entries, "head_hash": prev_hash}
+
+
+__all__ = ["canonicalize", "commit", "verify_chain"]

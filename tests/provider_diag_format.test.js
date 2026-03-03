@@ -1,12 +1,11 @@
 'use strict';
 
 const assert = require('node:assert/strict');
-const { spawnSync } = require('node:child_process');
 const path = require('node:path');
 
-function run(name, fn) {
+async function run(name, fn) {
   try {
-    fn();
+    await fn();
     console.log(`PASS ${name}`);
   } catch (error) {
     console.error(`FAIL ${name}: ${error.message}`);
@@ -14,35 +13,48 @@ function run(name, fn) {
   }
 }
 
-run('provider_diag includes grep-friendly providers_summary section', () => {
-  const script = path.join(__dirname, '..', 'scripts', 'system2', 'provider_diag.js');
-  const res = spawnSync(process.execPath, [script], {
-    env: {
+async function main() {
+  await run('provider_diag includes grep-friendly providers_summary section', async () => {
+    const script = path.join(__dirname, '..', 'scripts', 'system2', 'provider_diag.js');
+    const { generateDiagnostics } = require(script);
+    const out = await generateDiagnostics({
       ...process.env,
       PROVIDER_DIAG_NO_PROBES: '1',
       ENABLE_SECRETS_BRIDGE: '0',
       ENABLE_FREECOMPUTE_CLOUD: '0',
-    },
-    encoding: 'utf8',
+    });
+
+    // New stable canary/coder markers.
+    assert.match(out, /^coder_status=/m);
+    assert.match(out, /^coder_degraded_reason=/m);
+    assert.match(out, /^replay_log_writable=/m);
+    assert.match(out, /^router_local_context_max_tokens_assistant=/m);
+    assert.match(out, /^router_local_context_soft_limit_tokens=/m);
+    assert.match(out, /^router_context_compression_enabled=/m);
+    assert.match(out, /^router_remote_routing_enabled=/m);
+    assert.match(out, /^router_budget_state_loaded=/m);
+    assert.match(out, /^event_envelope_schema=openclaw\.event_envelope\.v1$/m);
+    assert.match(out, /^canary_recommendations:\n/m);
+
+    // Detailed section remains unchanged (dash-prefixed lines).
+    assert.match(out, /^providers:\n/m);
+    assert.match(out, /^- groq: configured=/m);
+    assert.match(out, /^- local_vllm: configured=/m);
+
+    // New stable summary section: provider_id begins at column 0.
+    assert.match(out, /^providers_summary:\n/m);
+    assert.match(out, /^groq: configured=/m);
+    assert.match(out, /^local_vllm: configured=/m);
+
+    // Summary should not include auth_env_keys (keep that in detailed section only).
+    const summaryBlock = out.split('providers_summary:\n')[1] || '';
+    assert.ok(!/auth_env_keys=/.test(summaryBlock), 'auth_env_keys should not appear in providers_summary');
   });
 
-  assert.equal(res.status, 0, res.stderr || '');
-  const out = res.stdout || '';
+  console.log('provider_diag_format tests complete');
+}
 
-  // Detailed section remains unchanged (dash-prefixed lines).
-  assert.match(out, /^providers:\n/m);
-  assert.match(out, /^- groq: configured=/m);
-  assert.match(out, /^- local_vllm: configured=/m);
-
-  // New stable summary section: provider_id begins at column 0.
-  assert.match(out, /^providers_summary:\n/m);
-  assert.match(out, /^groq: configured=/m);
-  assert.match(out, /^local_vllm: configured=/m);
-
-  // Summary should not include auth_env_keys (keep that in detailed section only).
-  const summaryBlock = out.split('providers_summary:\n')[1] || '';
-  assert.ok(!/auth_env_keys=/.test(summaryBlock), 'auth_env_keys should not appear in providers_summary');
+main().catch((error) => {
+  console.error(error && error.stack ? error.stack : String(error));
+  process.exitCode = 1;
 });
-
-console.log('provider_diag_format tests complete');
-

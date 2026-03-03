@@ -33,6 +33,7 @@ bash workspace/scripts/verify_team_chat.sh
 ```
 
 This uses fake adapters and deterministic outputs. No network calls required.
+Verification runs explicitly force-disable patch acceptance and auto-commit (`TEAMCHAT_ACCEPT_PATCHES=0`, `TEAMCHAT_AUTO_COMMIT=0`, `TEAMCHAT_LIVE=0`).
 
 ## Live adapters
 

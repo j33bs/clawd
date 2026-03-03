@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://openclaw.local/schemas/local_exec/doc_compactor_task.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "inputs",
+    "max_input_bytes",
+    "max_output_bytes"
+  ],
+  "properties": {
+    "inputs": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 64,
+      "items": {
+        "type": "string",
+        "maxLength": 512
+      }
+    },
+    "max_input_bytes": {
+      "type": "integer",
+      "minimum": 128,
+      "maximum": 10485760
+    },
+    "max_output_bytes": {
+      "type": "integer",
+      "minimum": 128,
+      "maximum": 1048576
+    },
+    "title": {
+      "type": "string",
+      "maxLength": 120
+    }
+  }
+}

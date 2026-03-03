@@ -1,36 +1,21 @@
-"""Task 1 interface seam for Expected Free Energy ranking."""
+"""
+DEPRECATED: compatibility forwarder.
+Canonical source is workspace/tacti/efe_calculator.py.
+"""
 
-from __future__ import annotations
+from importlib.util import spec_from_file_location
+from pathlib import Path
 
-from typing import Any, Mapping, Sequence
-
-
-def evaluate(
-    policies: Sequence[Mapping[str, Any]],
-    beliefs: Mapping[str, Any],
-    model: Mapping[str, Any] | None = None,
-) -> list[dict[str, Any]]:
-    """
-    Rank policies by a minimal EFE-like score.
-
-    TODO: replace with full pragmatic/epistemic decomposition once model contracts settle.
-    """
-    _ = beliefs
-    curiosity = float((model or {}).get("curiosity_coeff", 1.0))
-    ranked: list[dict[str, Any]] = []
-    for idx, policy in enumerate(policies):
-        pragmatic = float(policy.get("pragmatic_value", 0.0))
-        epistemic = float(policy.get("epistemic_value", 0.0))
-        score = pragmatic + (curiosity * epistemic)
-        ranked.append(
-            {
-                "policy": dict(policy),
-                "index": idx,
-                "pragmatic_value": pragmatic,
-                "epistemic_value": epistemic,
-                "score": score,
-            }
-        )
-    ranked.sort(key=lambda item: item["score"], reverse=True)
-    return ranked
-
+_shim_file = Path(__file__).resolve()
+_src = _shim_file.parents[1] / "tacti" / "efe_calculator.py"
+__file__ = str(_src)
+if not globals().get("__package__"):
+    __package__ = __name__.rpartition(".")[0]
+if globals().get("__spec__") is None:
+    __spec__ = spec_from_file_location(__name__, str(_src))
+if not globals().get("_TACTI_SHIM_EXECUTED", False):
+    _code = _src.read_text(encoding="utf-8")
+    exec(compile(_code, str(_src), "exec"), globals(), globals())
+    globals()["_TACTI_SHIM_EXECUTED"] = True
+if "__all__" in globals():
+    __all__ = list(__all__)

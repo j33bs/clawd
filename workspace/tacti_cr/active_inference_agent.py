@@ -1,30 +1,21 @@
-"""Task 6 composition-root seam for an Active Inference agent."""
+"""
+DEPRECATED: compatibility forwarder.
+Canonical source is workspace/tacti/active_inference_agent.py.
+"""
 
-from __future__ import annotations
+from importlib.util import spec_from_file_location
+from pathlib import Path
 
-from dataclasses import dataclass, field
-from typing import Any, Mapping
-
-from .efe_calculator import evaluate
-
-
-@dataclass
-class ActiveInferenceAgent:
-    """Minimal contract-first agent shell."""
-
-    beliefs: dict[str, Any] = field(default_factory=dict)
-    model: dict[str, Any] = field(default_factory=dict)
-
-    def step(self, observation: Mapping[str, Any]) -> dict[str, Any]:
-        """
-        Produce the next action from a single observation.
-
-        TODO: replace heuristic policy extraction with proper generative model updates.
-        """
-        self.beliefs["last_observation"] = dict(observation)
-        policies = observation.get("candidate_policies", [])
-        if not isinstance(policies, list) or not policies:
-            return {"type": "noop", "reason": "no_candidate_policies"}
-        ranked = evaluate(policies=policies, beliefs=self.beliefs, model=self.model)
-        return {"type": "policy", "policy": ranked[0]["policy"], "score": ranked[0]["score"]}
-
+_shim_file = Path(__file__).resolve()
+_src = _shim_file.parents[1] / "tacti" / "active_inference_agent.py"
+__file__ = str(_src)
+if not globals().get("__package__"):
+    __package__ = __name__.rpartition(".")[0]
+if globals().get("__spec__") is None:
+    __spec__ = spec_from_file_location(__name__, str(_src))
+if not globals().get("_TACTI_SHIM_EXECUTED", False):
+    _code = _src.read_text(encoding="utf-8")
+    exec(compile(_code, str(_src), "exec"), globals(), globals())
+    globals()["_TACTI_SHIM_EXECUTED"] = True
+if "__all__" in globals():
+    __all__ = list(__all__)

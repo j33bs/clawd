@@ -1,22 +1,21 @@
-from __future__ import annotations
+"""
+DEPRECATED: compatibility forwarder.
+Canonical source is workspace/tacti/events_paths.py.
+"""
 
-import os
+from importlib.util import spec_from_file_location
 from pathlib import Path
 
-
-def resolve_events_path(repo_root: Path) -> Path:
-    root = Path(repo_root)
-    raw = str(os.environ.get("TACTI_CR_EVENTS_PATH", "")).strip()
-    if raw:
-        candidate = Path(raw)
-        if not candidate.is_absolute():
-            candidate = root / candidate
-        return candidate
-    return root / "workspace" / "state_runtime" / "tacti_cr" / "events.jsonl"
-
-
-def ensure_parent(p: Path) -> None:
-    Path(p).parent.mkdir(parents=True, exist_ok=True)
-
-
-__all__ = ["resolve_events_path", "ensure_parent"]
+_shim_file = Path(__file__).resolve()
+_src = _shim_file.parents[1] / "tacti" / "events_paths.py"
+__file__ = str(_src)
+if not globals().get("__package__"):
+    __package__ = __name__.rpartition(".")[0]
+if globals().get("__spec__") is None:
+    __spec__ = spec_from_file_location(__name__, str(_src))
+if not globals().get("_TACTI_SHIM_EXECUTED", False):
+    _code = _src.read_text(encoding="utf-8")
+    exec(compile(_code, str(_src), "exec"), globals(), globals())
+    globals()["_TACTI_SHIM_EXECUTED"] = True
+if "__all__" in globals():
+    __all__ = list(__all__)

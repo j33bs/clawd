@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import random
+import os
 from typing import Any, Dict, List, Tuple
 
 from .peer_graph import PeerGraph
@@ -78,8 +79,12 @@ class PhysarumRouter:
                 break
         return paths if paths else [[src]]
 
-    def update(self, path: List[str], reward_signal: float) -> None:
+    def update(self, path: List[str], reward_signal: float, valence: float | None = None) -> None:
         reward = float(reward_signal)
+        trail_valence_enabled = str(os.environ.get("OPENCLAW_TRAIL_VALENCE", "0")).strip().lower() in {"1", "true", "yes", "on"}
+        if trail_valence_enabled and isinstance(valence, (int, float)):
+            valence_adj = max(-1.0, min(1.0, float(valence)))
+            reward = reward * (1.0 + (0.25 * valence_adj))
         if len(path) < 2:
             return
         for i in range(len(path) - 1):

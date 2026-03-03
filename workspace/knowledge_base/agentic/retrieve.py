@@ -1,232 +1,218 @@
 """
 Multi-Step Retrieval
-Coordinates QMD, HiveMind, and Knowledge Graph for retrieval
+Coordinates ModernBERT/LanceDB retrieval with optional HiveMind and graph overlays.
 """
+
+from __future__ import annotations
+
 import json
 import subprocess
 from pathlib import Path
-from typing import Dict, List, Any
+from typing import Any, Dict, List
 
-# Import local modules
-from .intent import extract_entities_from_query, build_search_query
+from .intent import build_search_query, extract_entities_from_query
 
-
-def run_qmd_search(query: str, limit: int = 5) -> List[Dict]:
-    """Run QMD search query."""
-    results = []
-    try:
-        result = subprocess.run(
-            ["npx", "@tobilu/qmd", "search", query, "-n", str(limit), "--json"],
-            capture_output=True,
-            text=True,
-            timeout=30,
-            cwd=str(Path(__file__).parents[2].parent.parent)
-        )
-        
-        if result.returncode != 0:
-            return []
-        
-        # Parse JSON output (QMD returns array)
-        try:
-            data = json.loads(result.stdout)
-            if isinstance(data, list):
-                for item in data:
-                    results.append({
-                        "source": "qmd",
-                        "type": "document",
-                        "title": item.get("title", ""),
-                        "path": item.get("file", ""),
-                        "score": item.get("score", 0),
-                        "content": item.get("snippet", "")[:500]
-                    })
-        except json.JSONDecodeError:
-            # Fallback: parse line by line
-            lines = result.stdout.strip().split('\n')
-            for line in lines:
-                if line.strip():
-                    try:
-                        data = json.loads(line)
-                        results.append({
-                            "source": "qmd",
-                            "type": "document",
-                            "title": data.get("title", ""),
-                            "path": data.get("path", ""),
-                            "score": data.get("score", 0),
-                            "content": data.get("content", "")[:500]
-                        })
-                    except json.JSONDecodeError:
-                        continue
-        
-        return results
-    
-    except Exception as e:
-        return [{"source": "qmd", "error": str(e)}]
-
-
-def run_qmd_vsearch(query: str, limit: int = 5) -> List[Dict]:
-    """Run QMD vector semantic search."""
-    try:
-        result = subprocess.run(
-            ["npx", "@tobilu/qmd", "vsearch", query, "-n", str(limit)],
-            capture_output=True,
-            text=True,
-            timeout=60,
-            cwd=str(Path(__file__).parents[2].parent.parent)
-        )
-        
-        if result.returncode != 0:
-            return []
-        
-        # Similar parsing to search
-        return parse_qmd_output(result.stdout)
-    
-    except Exception as e:
-        return [{"source": "qmd_vsearch", "error": str(e)}]
+from retrieval import retrieve as vector_retrieve
 
 
 def run_hivemind_query(query: str, agent: str = "main", limit: int = 5) -> List[Dict]:
     """Run HiveMind query."""
     try:
         result = subprocess.run(
-            ["python3", "scripts/memory_tool.py", "query", 
-             "--agent", agent, "--q", query, "--limit", str(limit), "--json"],
+            [
+                "python3",
+                "scripts/memory_tool.py",
+                "query",
+                "--agent",
+                agent,
+                "--q",
+                query,
+                "--limit",
+                str(limit),
+                "--json",
+            ],
             capture_output=True,
             text=True,
             timeout=15,
-            cwd=str(Path(__file__).parents[2].parent.parent)
+            cwd=str(Path(__file__).parents[2].parent.parent),
         )
-        
+
         if result.returncode != 0:
             return []
-        
+
         data = json.loads(result.stdout)
-        
+
         results = []
-        for r in data.get("results", []):
-            results.append({
-                "source": "hivemind",
-                "type": r.get("kind", "fact"),
-                "scope": r.get("agent_scope", "shared"),
-                "content": r.get("content", "")[:500],
-                "metadata": r.get("metadata", {})
-            })
-        
+        for row in data.get("results", []):
+            results.append(
+                {
+                    "source": "hivemind",
+                    "type": row.get("kind", "fact"),
+                    "scope": row.get("agent_scope", "shared"),
+                    "content": row.get("content", "")[:500],
+                    "metadata": row.get("metadata", {}),
+                }
+            )
         return results
-    
-    except Exception as e:
-        return [{"source": "hivemind", "error": str(e)}]
+    except Exception as exc:  # pragma: no cover
+        return [{"source": "hivemind", "error": str(exc)}]
 
 
-def run_graph_search(query: str, limit: int = 5) -> List[Dict]:
-    """Search knowledge graph."""
+def run_graph_search(
+    query: str,
+    limit: int = 5,
+    overlay_doc_ids: list[str] | None = None,
+    overlay_paths: list[str] | None = None,
+) -> List[Dict]:
+    """Search knowledge graph and attach vector-retrieval overlay context."""
     try:
-        kb_dir = Path(__file__).parent.parent
         result = subprocess.run(
             ["python3", "workspace/knowledge_base/kb.py", "graph", "--limit", str(limit)],
             capture_output=True,
             text=True,
             timeout=10,
-            cwd=str(Path(__file__).parents[2].parent.parent)
+            cwd=str(Path(__file__).parents[2].parent.parent),
         )
-        
+
         if result.returncode != 0:
             return []
-        
-        return [{
-            "source": "graph",
-            "type": "entity",
-            "content": result.stdout[:500]
-        }]
-    
-    except Exception as e:
-        return [{"source": "graph", "error": str(e)}]
+
+        overlay_doc_ids = overlay_doc_ids or []
+        overlay_paths = overlay_paths or []
+        overlay_lines = []
+        if overlay_doc_ids:
+            overlay_lines.append(f"overlay_doc_ids={', '.join(overlay_doc_ids[:8])}")
+        if overlay_paths:
+            overlay_lines.append(f"overlay_paths={', '.join(overlay_paths[:8])}")
+
+        content = result.stdout[:500]
+        if overlay_lines:
+            content = f"{content}\n{'; '.join(overlay_lines)}"
+
+        return [
+            {
+                "source": "graph",
+                "type": "entity",
+                "content": content,
+                "query": query,
+                "overlay_doc_ids": overlay_doc_ids,
+                "overlay_paths": overlay_paths,
+            }
+        ]
+    except Exception as exc:  # pragma: no cover
+        return [{"source": "graph", "error": str(exc)}]
+
+
+def _resolve_retrieval_mode(query: str, intent: Dict[str, Any]) -> str:
+    strategy = str(intent.get("strategy", "")).lower()
+    if strategy in {"governance", "research", "code_critical"}:
+        return "PRECISE"
+    if strategy in {"search_autocomplete", "search_only"}:
+        return "FAST"
+
+    query_lower = query.lower()
+    if any(token in query_lower for token in ["governance", "research", "code-critical"]):
+        return "PRECISE"
+    return "HYBRID"
+
+
+def _vector_context_to_result(context: Dict[str, Any], mode: str, authoritative: bool) -> Dict[str, Any]:
+    return {
+        "source": "kb_vectors",
+        "type": "document",
+        "title": context.get("path", ""),
+        "path": context.get("path", ""),
+        "doc_id": context.get("doc_id", ""),
+        "chunk_id": context.get("chunk_id", ""),
+        "score": context.get("score", 0.0) or 0.0,
+        "content": context.get("text", "")[:1200],
+        "retrieval_mode": mode,
+        "authoritative": authoritative,
+        "model_id": context.get("model_id", ""),
+    }
 
 
 def multi_step_retrieve(query: str, intent: Dict, agent: str = "main") -> Dict:
     """
     Execute multi-step retrieval based on intent.
-    
+
     Returns:
         {
-            "qmd": [...],
+            "qmd": [...],  # now backed by KB vectors
             "hivemind": [...],
             "graph": [...],
             "combined": [...]
         }
     """
-    # Build optimized search query
     search_query = build_search_query(query)
-    
-    # Extract entities
     entities = extract_entities_from_query(query)
-    
+    mode = _resolve_retrieval_mode(query, intent)
+
+    vector = vector_retrieve(query, mode=mode, k=12)
+    contexts = vector.get("contexts", [])
+
+    qmd_results = [
+        _vector_context_to_result(ctx, mode=vector.get("mode", mode), authoritative=bool(vector.get("authoritative")))
+        for ctx in contexts
+    ]
+
     results = {
         "query": query,
         "intent": intent,
         "entities": entities,
-        "qmd": [],
+        "vector": vector,
+        "qmd": qmd_results,
         "hivemind": [],
         "graph": [],
-        "combined": []
+        "combined": [],
     }
-    
-    steps = intent.get("steps", ["qmd_search"])
-    
-    # Execute steps
-    for step in steps:
-        if step == "qmd_search" and "qmd" not in str(results["qmd"]):
-            results["qmd"] = run_qmd_search(search_query, limit=5)
-        
-        elif step == "qmd_vsearch":
-            v_results = run_qmd_vsearch(search_query, limit=5)
-            results["qmd"].extend(v_results)
-        
-        elif step == "hivemind_query" and not results["hivemind"]:
-            results["hivemind"] = run_hivemind_query(query, agent, limit=5)
-        
-        elif step == "graph_search" and not results["graph"]:
-            results["graph"] = run_graph_search(query, limit=5)
-        
-        elif step == "fallback":
-            # Try QMD if nothing else worked
-            if not results["qmd"]:
-                results["qmd"] = run_qmd_search(query, limit=3)
-    
-    # Combine results (prioritize by source)
+
+    steps = intent.get("steps", ["hivemind_query", "graph_search"])
+
+    overlay_doc_ids = [str(row.get("doc_id", "")) for row in contexts if row.get("doc_id")]
+    overlay_paths = [str(row.get("path", "")) for row in contexts if row.get("path")]
+    seen_doc_ids: set[str] = set()
+    dedup_doc_ids = []
+    for doc_id in overlay_doc_ids:
+        if doc_id in seen_doc_ids:
+            continue
+        seen_doc_ids.add(doc_id)
+        dedup_doc_ids.append(doc_id)
+
+    seen_paths: set[str] = set()
+    dedup_paths = []
+    for path in overlay_paths:
+        if path in seen_paths:
+            continue
+        seen_paths.add(path)
+        dedup_paths.append(path)
+
+    if "hivemind_query" in steps:
+        results["hivemind"] = run_hivemind_query(search_query, agent, limit=5)
+
+    if "graph_search" in steps or dedup_doc_ids or dedup_paths:
+        results["graph"] = run_graph_search(
+            query=search_query,
+            limit=5,
+            overlay_doc_ids=dedup_doc_ids,
+            overlay_paths=dedup_paths,
+        )
+
     combined = []
-    
-    # Add QMD results
-    for r in results["qmd"]:
-        r["priority"] = 1
-        combined.append(r)
-    
-    # Add HiveMind results
-    for r in results["hivemind"]:
-        r["priority"] = 2
-        combined.append(r)
-    
-    # Add Graph results
-    for r in results["graph"]:
-        r["priority"] = 3
-        combined.append(r)
-    
-    # Sort by priority
-    combined.sort(key=lambda x: x.get("priority", 99))
+
+    for row in results["qmd"]:
+        row["priority"] = 1
+        combined.append(row)
+
+    for row in results["hivemind"]:
+        row["priority"] = 2
+        combined.append(row)
+
+    for row in results["graph"]:
+        row["priority"] = 3
+        combined.append(row)
+
+    combined.sort(key=lambda item: (item.get("priority", 99), -(float(item.get("score", 0.0) or 0.0))))
     results["combined"] = combined
-    
-    return results
 
-
-def parse_qmd_output(output: str) -> List[Dict]:
-    """Parse QMD command output."""
-    results = []
-    
-    for line in output.strip().split('\n'):
-        if line.strip() and not line.startswith('qmd://'):
-            results.append({
-                "source": "qmd",
-                "type": "document",
-                "content": line[:500]
-            })
-    
     return results

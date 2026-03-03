@@ -1,9 +1,13 @@
 #!/bin/bash
-set -e
+set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 OUT_DIR="/tmp/teamchat_verify"
 SESSION_ID="verify_teamchat_offline"
+
+export TEAMCHAT_AUTO_COMMIT=0
+export TEAMCHAT_ACCEPT_PATCHES=0
+export TEAMCHAT_LIVE=0
 
 rm -rf "$OUT_DIR"
 
@@ -12,7 +16,9 @@ python3 "$REPO_ROOT/workspace/scripts/team_chat.py" \
   --session-id "$SESSION_ID" \
   --output-root "$OUT_DIR" \
   --max-cycles 2 \
-  --max-commands-per-cycle 3
+  --max-commands-per-cycle 3 \
+  --auto-commit 0 \
+  --accept-patches 0
 
 python3 - <<'PY'
 import json

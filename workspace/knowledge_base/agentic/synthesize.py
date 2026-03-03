@@ -50,6 +50,11 @@ def synthesize_response(query: str, results: Dict, intent: Dict) -> Dict:
             elif r.get("source") == "graph":
                 citations.append("Knowledge Graph")
                 sources.append("graph")
+            elif r.get("source") == "kb_vectors":
+                path = r.get("path", "")
+                mode = r.get("retrieval_mode", "HYBRID")
+                citations.append(f"KB Vector ({mode}): {path}")
+                sources.append(path or "kb_vectors")
     
     # Build answer based on intent
     answer = build_answer(query, contents, intent)

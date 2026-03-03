@@ -1,0 +1,9 @@
+[Unit]
+Description=Run sleep consolidation prototype overnight (manual example)
+
+[Timer]
+OnCalendar=*-*-* 03:30:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

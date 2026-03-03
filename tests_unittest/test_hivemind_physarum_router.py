@@ -1,6 +1,8 @@
 import sys
+import os
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -39,7 +41,20 @@ class TestPhysarumRouter(unittest.TestCase):
         for src, neighbors in grouped.items():
             self.assertGreaterEqual(len(neighbors), 2, src)
 
+    def test_valence_weighting_adjusts_reward_when_enabled(self):
+        router = PhysarumRouter(seed=5, explore_rate=0.0)
+        path = ["x", "y"]
+        with patch.dict(os.environ, {"OPENCLAW_TRAIL_VALENCE": "1"}, clear=False):
+            router.update(path, reward_signal=1.0, valence=-1.0)
+        low_cond = router.snapshot()["conductance"]["x->y"]
+
+        router = PhysarumRouter(seed=5, explore_rate=0.0)
+        with patch.dict(os.environ, {"OPENCLAW_TRAIL_VALENCE": "1"}, clear=False):
+            router.update(path, reward_signal=1.0, valence=1.0)
+        high_cond = router.snapshot()["conductance"]["x->y"]
+
+        self.assertGreater(high_cond, low_cond)
+
 
 if __name__ == "__main__":
     unittest.main()
-
