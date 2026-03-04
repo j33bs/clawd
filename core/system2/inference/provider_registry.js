@@ -18,6 +18,8 @@ const { SecretsBridge } = require('./secrets_bridge');
 const { QuotaLedger } = require('./quota_ledger');
 const { routeRequest, explainRouting } = require('./router');
 const { createIntegrityGuard } = require('../security/integrity_guard');
+const { sanitizeToolOutputsForContext } = require('./tool_output_sanitizer');
+const { TokenUsageLogger, hashHex } = require('./token_usage_logger');
 
 const CB_STATES = Object.freeze({
   CLOSED: 'CLOSED',
@@ -126,6 +128,14 @@ function flattenMessagesForTiering(messages, maxChars = 4000) {
     total += slice.length;
   }
   return parts.join('\n');
+}
+
+function computePromptHash(messages) {
+  try {
+    return hashHex(JSON.stringify(messages || []));
+  } catch (_) {
+    return null;
+  }
 }
 
 function sanitizeModelIdForEnv(modelId) {
@@ -348,6 +358,7 @@ class ProviderRegistry {
     this.config = options.configOverride || loadFreeComputeConfig(this._env);
     this._secretsBridge = null;
     this._integrityGuard = createIntegrityGuard({ env: this._env });
+    this._tokenUsageLogger = new TokenUsageLogger({ env: this._env });
 
     this._adapters = new Map();       // provider_id → ProviderAdapter
     this._health = new Map();         // provider_id → { ok, reason, checkedAt }
@@ -401,6 +412,22 @@ class ProviderRegistry {
     }
 
     this._integrityGuard.enforceRequest(params);
+    const metadata = (params && params.metadata && typeof params.metadata === 'object') ? params.metadata : {};
+    const requestId = metadata.request_id || metadata.requestId || hashHex(`${Date.now()}_${Math.random()}`).slice(0, 16);
+    const reasonTag = metadata.reason_tag || metadata.reasonTag || params.taskClass || null;
+    const agentId = metadata.agent_id || metadata.agentId || null;
+    const channel = metadata.channel || null;
+    const sanitizedTools = sanitizeToolOutputsForContext(params.messages, { env: this._env });
+    const dispatchMessages = sanitizedTools.messages;
+    const promptHash = computePromptHash(dispatchMessages);
+    if (sanitizedTools.sanitized_count > 0) {
+      this._emitEvent('freecompute_tool_output_sanitized', {
+        request_id: requestId,
+        sanitized_count: sanitizedTools.sanitized_count,
+        total_tool_output_chars: sanitizedTools.total_tool_output_chars,
+        run_id: sanitizedTools.run_id
+      });
+    }
 
     // Refresh local vLLM generation probe (deterministic, cached).
     await this._ensureLocalVllmGenerationProbe();
@@ -445,7 +472,7 @@ class ProviderRegistry {
       taskClass: params.taskClass,
       contextLength: params.contextLength,
       latencyTarget: params.latencyTarget,
-      taskInput: flattenMessagesForTiering(params.messages),
+      taskInput: flattenMessagesForTiering(dispatchMessages),
       budget: params.budget,
       providerHealth,
       quotaState,
@@ -456,6 +483,22 @@ class ProviderRegistry {
     if (candidates.length === 0) {
       this._emitEvent('freecompute_no_candidates', {
         taskClass: params.taskClass
+      });
+      this._tokenUsageLogger.log({
+        request_id: requestId,
+        agent_id: agentId,
+        channel,
+        provider: null,
+        model: null,
+        reason_tag: reasonTag,
+        prompt_chars: estimateRequestShape(dispatchMessages).char_count_total,
+        tool_output_chars: sanitizedTools.total_tool_output_chars,
+        tokens_in: 0,
+        tokens_out: 0,
+        total_tokens: 0,
+        latency_ms: 0,
+        status: 'no_candidates',
+        prompt_hash: promptHash
       });
       return null;
     }
@@ -468,7 +511,7 @@ class ProviderRegistry {
       if (!adapter) continue;
 
       const baseCallParams = {
-        messages: params.messages,
+        messages: dispatchMessages,
         metadata: {
           model: candidate.model_id,
           ...(params.metadata || {})
@@ -537,6 +580,25 @@ class ProviderRegistry {
             tokens_in: result.usage.inputTokens,
             tokens_out: result.usage.outputTokens,
             ok: true
+          });
+          const usage = result.usage || {};
+          this._tokenUsageLogger.log({
+            request_id: requestId,
+            agent_id: agentId,
+            channel,
+            provider: candidate.provider_id,
+            model: resolvedModelId,
+            reason_tag: reasonTag,
+            prompt_chars: shape.char_count_total,
+            tool_output_chars: sanitizedTools.total_tool_output_chars,
+            tokens_in: usage.inputTokens || 0,
+            tokens_out: usage.outputTokens || 0,
+            total_tokens: usage.totalTokens || ((usage.inputTokens || 0) + (usage.outputTokens || 0)),
+            cache_read_tokens: usage.cacheReadTokens || 0,
+            cache_write_tokens: usage.cacheWriteTokens || 0,
+            latency_ms: result.latencyMs || 0,
+            status: 'ok',
+            prompt_hash: promptHash
           });
 
           return {
@@ -610,6 +672,22 @@ class ProviderRegistry {
     this._emitEvent('freecompute_all_candidates_failed', {
       taskClass: params.taskClass,
       attempts: attemptSummaries
+    });
+    this._tokenUsageLogger.log({
+      request_id: requestId,
+      agent_id: agentId,
+      channel,
+      provider: null,
+      model: null,
+      reason_tag: reasonTag,
+      prompt_chars: estimateRequestShape(dispatchMessages).char_count_total,
+      tool_output_chars: sanitizedTools.total_tool_output_chars,
+      tokens_in: 0,
+      tokens_out: 0,
+      total_tokens: 0,
+      latency_ms: 0,
+      status: 'failed_all_candidates',
+      prompt_hash: promptHash
     });
 
     return null; // All candidates exhausted
