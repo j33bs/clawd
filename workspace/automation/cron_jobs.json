@@ -53,6 +53,18 @@
         "tz": "Australia/Brisbane"
       },
       "command": "Run weekly session pattern analysis and write report:\nnode scripts/analyze_session_patterns.js --output reports/health/session-patterns-latest.md"
+    },
+    {
+      "name": "Daily Token Burn Summary",
+      "sessionTarget": "isolated",
+      "wakeMode": "now",
+      "estimated_tokens": 300,
+      "on_budget_fail": "skip",
+      "schedule": {
+        "expr": "0 9 * * *",
+        "tz": "Australia/Brisbane"
+      },
+      "command": "Run local-only token burn summary:\nbash tools/run_daily_token_burn_summary.sh\nIf the token log is missing/empty, keep the generated note file and exit without retries."
     }
   ]
 }
