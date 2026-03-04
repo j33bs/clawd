@@ -18,6 +18,8 @@ const { SecretsBridge } = require('./secrets_bridge');
 const { QuotaLedger } = require('./quota_ledger');
 const { routeRequest, explainRouting } = require('./router');
 const { createIntegrityGuard } = require('../security/integrity_guard');
+const { sanitizeToolOutputsForContext } = require('./tool_output_sanitizer');
+const { TokenUsageLogger, hashHex } = require('./token_usage_logger');
 
 const CB_STATES = Object.freeze({
   CLOSED: 'CLOSED',
@@ -181,6 +183,57 @@ function flattenMessagesForTiering(messages, maxChars = 4000) {
     total += slice.length;
   }
   return parts.join('\n');
+}
+
+function computePromptHash(messages) {
+  try {
+    return hashHex(JSON.stringify(messages || []));
+  } catch (_) {
+    return null;
+  }
+}
+
+function isLocalTierCandidate(candidate) {
+  const providerId = String(candidate && candidate.provider_id || '').toLowerCase();
+  const modelId = String(candidate && candidate.model_id || '').toLowerCase();
+  return providerId === 'local_vllm' || providerId === 'ollama' || modelId.startsWith('ollama/');
+}
+
+function parseProviderTierOrder(env) {
+  const raw = String((env && env.OPENCLAW_PROVIDER_TIER_ORDER) || '').trim();
+  if (!raw) {
+    return ['local_vllm', 'groq', 'xai', 'minimax-portal'];
+  }
+  return raw
+    .split(',')
+    .map((v) => v.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+function providerTierRank(candidate, order) {
+  const providerId = String(candidate && candidate.provider_id || '').toLowerCase();
+  const idx = order.indexOf(providerId);
+  if (idx >= 0) return idx;
+  // Keep local aliases in tier-0 even if provider IDs differ.
+  if (isLocalTierCandidate(candidate)) return 0;
+  return Number.MAX_SAFE_INTEGER;
+}
+
+function enforceProviderTierOrder(candidates, env) {
+  const flag = String((env && env.OPENCLAW_ENFORCE_PROVIDER_TIER_ORDER) || '1').trim().toLowerCase();
+  if (flag === '0' || flag === 'false' || flag === 'off' || flag === 'no') {
+    return Array.isArray(candidates) ? candidates : [];
+  }
+  if (!Array.isArray(candidates) || candidates.length <= 1) return Array.isArray(candidates) ? candidates : [];
+
+  const order = parseProviderTierOrder(env);
+  return candidates
+    .map((c, i) => ({ c, i, r: providerTierRank(c, order) }))
+    .sort((a, b) => {
+      if (a.r !== b.r) return a.r - b.r;
+      return a.i - b.i;
+    })
+    .map((x) => x.c);
 }
 
 function sanitizeModelIdForEnv(modelId) {
@@ -403,6 +456,7 @@ class ProviderRegistry {
     this.config = options.configOverride || loadFreeComputeConfig(this._env);
     this._secretsBridge = null;
     this._integrityGuard = createIntegrityGuard({ env: this._env });
+    this._tokenUsageLogger = new TokenUsageLogger({ env: this._env });
 
     this._adapters = new Map();       // provider_id → ProviderAdapter
     this._health = new Map();         // provider_id → { ok, reason, checkedAt }
@@ -456,6 +510,22 @@ class ProviderRegistry {
     }
 
     this._integrityGuard.enforceRequest(params);
+    const metadata = (params && params.metadata && typeof params.metadata === 'object') ? params.metadata : {};
+    const requestId = metadata.request_id || metadata.requestId || hashHex(`${Date.now()}_${Math.random()}`).slice(0, 16);
+    const reasonTag = metadata.reason_tag || metadata.reasonTag || params.taskClass || null;
+    const agentId = metadata.agent_id || metadata.agentId || null;
+    const channel = metadata.channel || null;
+    const sanitizedTools = sanitizeToolOutputsForContext(params.messages, { env: this._env });
+    const dispatchMessages = sanitizedTools.messages;
+    const promptHash = computePromptHash(dispatchMessages);
+    if (sanitizedTools.sanitized_count > 0) {
+      this._emitEvent('freecompute_tool_output_sanitized', {
+        request_id: requestId,
+        sanitized_count: sanitizedTools.sanitized_count,
+        total_tool_output_chars: sanitizedTools.total_tool_output_chars,
+        run_id: sanitizedTools.run_id
+      });
+    }
 
     // Refresh local vLLM generation probe (deterministic, cached).
     await this._ensureLocalVllmGenerationProbe();
@@ -500,17 +570,34 @@ class ProviderRegistry {
       taskClass: params.taskClass,
       contextLength: params.contextLength,
       latencyTarget: params.latencyTarget,
-      taskInput: flattenMessagesForTiering(params.messages),
+      taskInput: flattenMessagesForTiering(dispatchMessages),
       budget: params.budget,
       providerHealth,
       quotaState,
       config: this.config,
       availableProviderIds: Array.from(this._adapters.keys())
     });
+    const orderedCandidates = enforceProviderTierOrder(candidates, this._env);
 
-    if (candidates.length === 0) {
+    if (orderedCandidates.length === 0) {
       this._emitEvent('freecompute_no_candidates', {
         taskClass: params.taskClass
+      });
+      this._tokenUsageLogger.log({
+        request_id: requestId,
+        agent_id: agentId,
+        channel,
+        provider: null,
+        model: null,
+        reason_tag: reasonTag,
+        prompt_chars: estimateRequestShape(dispatchMessages).char_count_total,
+        tool_output_chars: sanitizedTools.total_tool_output_chars,
+        tokens_in: 0,
+        tokens_out: 0,
+        total_tokens: 0,
+        latency_ms: 0,
+        status: 'no_candidates',
+        prompt_hash: promptHash
       });
       return null;
     }
@@ -519,12 +606,12 @@ class ProviderRegistry {
     let xaiFailoverAttempted = false;
 
     // Try candidates in order
-    for (const candidate of candidates) {
+    for (const candidate of orderedCandidates) {
       const adapter = this._adapters.get(candidate.provider_id);
       if (!adapter) continue;
 
       const baseCallParams = {
-        messages: params.messages,
+        messages: dispatchMessages,
         metadata: {
           model: candidate.model_id,
           ...(params.metadata || {})
@@ -561,7 +648,7 @@ class ProviderRegistry {
 
       let timeoutRetries = 0;
       let sizeRetry = 0;
-      const maxTimeoutRetries = 1;
+      const maxTimeoutRetries = isLocalTierCandidate(candidate) ? 0 : 1;
       const maxSizeRetries = 1;
 
       while (true) {
@@ -593,6 +680,25 @@ class ProviderRegistry {
             tokens_in: result.usage.inputTokens,
             tokens_out: result.usage.outputTokens,
             ok: true
+          });
+          const usage = result.usage || {};
+          this._tokenUsageLogger.log({
+            request_id: requestId,
+            agent_id: agentId,
+            channel,
+            provider: candidate.provider_id,
+            model: resolvedModelId,
+            reason_tag: reasonTag,
+            prompt_chars: shape.char_count_total,
+            tool_output_chars: sanitizedTools.total_tool_output_chars,
+            tokens_in: usage.inputTokens || 0,
+            tokens_out: usage.outputTokens || 0,
+            total_tokens: usage.totalTokens || ((usage.inputTokens || 0) + (usage.outputTokens || 0)),
+            cache_read_tokens: usage.cacheReadTokens || 0,
+            cache_write_tokens: usage.cacheWriteTokens || 0,
+            latency_ms: result.latencyMs || 0,
+            status: 'ok',
+            prompt_hash: promptHash
           });
 
           return {
@@ -684,6 +790,22 @@ class ProviderRegistry {
     this._emitEvent('freecompute_all_candidates_failed', {
       taskClass: params.taskClass,
       attempts: attemptSummaries
+    });
+    this._tokenUsageLogger.log({
+      request_id: requestId,
+      agent_id: agentId,
+      channel,
+      provider: null,
+      model: null,
+      reason_tag: reasonTag,
+      prompt_chars: estimateRequestShape(dispatchMessages).char_count_total,
+      tool_output_chars: sanitizedTools.total_tool_output_chars,
+      tokens_in: 0,
+      tokens_out: 0,
+      total_tokens: 0,
+      latency_ms: 0,
+      status: 'failed_all_candidates',
+      prompt_hash: promptHash
     });
 
     return null; // All candidates exhausted
@@ -956,6 +1078,9 @@ module.exports = {
     estimateRequestShape,
     resolveMaxChars,
     compactMessagesForBudget,
-    isLikelyRequestTooLargeError
+    isLikelyRequestTooLargeError,
+    enforceProviderTierOrder,
+    parseProviderTierOrder,
+    isLocalTierCandidate
   }
 };
