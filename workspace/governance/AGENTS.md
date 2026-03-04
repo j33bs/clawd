@@ -13,7 +13,7 @@ Before doing anything else:
 1. Read `SOUL.md` — this is who you are
 2. Read `USER.md` — this is who you're helping
 3. Read `memory/YYYY-MM-DD.md` (today + yesterday) for recent context
-4. **If in MAIN SESSION** (direct chat with your human): Also read `MEMORY.md`
+4. **If in MAIN SESSION** (direct chat with your human): Read `MEMORY_HOT.md` (fast path, ≤200 words). Read `MEMORY_COLD.md` only when asked about history before 30 days ago.
 
 Don't ask permission. Just do it.
 
@@ -22,19 +22,19 @@ Don't ask permission. Just do it.
 You wake up fresh each session. These files are your continuity:
 
 - **Daily notes:** `memory/YYYY-MM-DD.md` (create `memory/` if needed) — raw logs of what happened
-- **Long-term:** `MEMORY.md` — your curated memories, like a human's long-term memory
+- **Long-term (hot):** `MEMORY_HOT.md` — current state, recent 30 days, active config (load every main session)
+- **Long-term (cold):** `MEMORY_COLD.md` — historical context, archived decisions (load only on explicit request)
 
 Capture what matters. Decisions, context, things to remember. Skip the secrets unless asked to keep them.
 
-### 🧠 MEMORY.md - Your Long-Term Memory
+### 🧠 MEMORY_HOT.md / MEMORY_COLD.md - Long-Term Memory (split)
 
 - **ONLY load in main session** (direct chats with your human)
 - **DO NOT load in shared contexts** (Discord, group chats, sessions with other people)
 - This is for **security** — contains personal context that shouldn't leak to strangers
-- You can **read, edit, and update** MEMORY.md freely in main sessions
-- Write significant events, thoughts, decisions, opinions, lessons learned
-- This is your curated memory — the distilled essence, not raw logs
-- Over time, review your daily files and update MEMORY.md with what's worth keeping
+- **MEMORY_HOT.md**: ≤200 words. Current system state, last 30 days, jeebs' preferences. Always load in main sessions. Update freely.
+- **MEMORY_COLD.md**: Historical archive, grows unconstrained. Load only when asked about old decisions/history.
+- Over time, review MEMORY_HOT.md — promote stale items to MEMORY_COLD.md, keep hot file lean
 
 ### 📝 Write It Down - No "Mental Notes"!
 
