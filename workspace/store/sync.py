@@ -11,10 +11,13 @@ RULE-STORE-002: exec_tags and status_tags are NEVER included in embedding input.
 RULE-STORE-005: collision evidence preserved in collision.log + section_number_filed field.
 """
 from __future__ import annotations
+import json
 import os
+import re
 import time
 import lancedb
 import pyarrow as pa
+from collections import Counter
 from datetime import datetime
 from sentence_transformers import SentenceTransformer
 from schema import CorrespondenceSection
@@ -26,6 +29,7 @@ GOVERNANCE_DIR = os.path.join(WORKSPACE, "governance")
 STORE_DIR = os.path.join(WORKSPACE, "store", "lancedb_data")
 COLLISION_LOG = os.path.join(GOVERNANCE_DIR, "collision.log")
 SECTION_COUNT_FILE = os.path.join(GOVERNANCE_DIR, ".section_count")
+INDEX_FILE = os.path.join(GOVERNANCE_DIR, "OPEN_QUESTIONS_INDEX.json")
 OQ_PATH = os.path.join(GOVERNANCE_DIR, "OPEN_QUESTIONS.md")
 
 # Embedding model — MiniLM for PoC (fast, local); nomic-embed-text-v1.5 for Dali production
@@ -143,6 +147,59 @@ def sections_to_records(sections: list[CorrespondenceSection]) -> list[dict]:
     return records
 
 
+def _extract_keyphrases(body: str, n: int = 5) -> list[str]:
+    """
+    Extract top-N capitalized multi-word phrases (proper nouns / concept names).
+    Stdlib-only — no LLM required. Used for the lightweight /index endpoint.
+    """
+    phrases = re.findall(r'\b[A-Z][A-Za-z\-]+(?:\s+[A-Z][A-Za-z\-]+){0,2}\b', body)
+    # Skip single-word all-caps acronyms shorter than 4 chars (noise)
+    filtered = [p for p in phrases if not (p.isupper() and len(p) < 4)]
+    return [p for p, _ in Counter(filtered).most_common(n)]
+
+
+def build_index(sections: list[CorrespondenceSection]) -> dict:
+    """
+    Build a lightweight navigation index from parsed sections.
+    Each entry contains: section number, title, authors, exec_tags,
+    a one-sentence synopsis (first sentence of body), and top keyphrases.
+
+    Written to OPEN_QUESTIONS_INDEX.json at ~20 KB vs 451 KB for the full doc.
+    Governance sessions should start with GET /index, not the raw file.
+    """
+    entries = []
+    for s in sections:
+        body = s.body or ""
+        # First sentence heuristic: split on '. ' or '.\n', cap at 200 chars
+        synopsis_match = re.split(r'\.\s', body, maxsplit=1)
+        synopsis = (synopsis_match[0][:200] + ".") if synopsis_match else body[:200]
+        entries.append({
+            "n":          s.canonical_section_number,
+            "filed":      s.section_number_filed,
+            "title":      s.title,
+            "authors":    s.authors,
+            "created_at": s.created_at,
+            "exec_tags":  s.exec_tags,
+            "status_tags": s.status_tags,
+            "synopsis":   synopsis,
+            "keyphrases": _extract_keyphrases(body),
+        })
+    return {
+        "generated_at":  datetime.utcnow().isoformat() + "Z",
+        "section_count": len(sections),
+        "sections":      entries,
+    }
+
+
+def write_index(sections: list[CorrespondenceSection]) -> None:
+    """Write OPEN_QUESTIONS_INDEX.json alongside the governance docs."""
+    index = build_index(sections)
+    with open(INDEX_FILE, "w", encoding="utf-8") as f:
+        json.dump(index, f, indent=2, ensure_ascii=False)
+    size_kb = os.path.getsize(INDEX_FILE) / 1024
+    print(f"  Index written: {INDEX_FILE} ({size_kb:.1f} KB, {len(sections)} sections)")
+
+
 def full_rebuild(sections: list[CorrespondenceSection], model_name: str = DEFAULT_MODEL) -> lancedb.table.Table:
     """
     Full idempotent rebuild of the LanceDB table from a list of sections.
@@ -197,6 +254,9 @@ def full_rebuild(sections: list[CorrespondenceSection], model_name: str = DEFAUL
     with open(SECTION_COUNT_FILE, 'w') as f:
         f.write(str(max_canon))
     print(f"  .section_count updated to {max_canon}")
+
+    # Write lightweight navigation index (OPEN_QUESTIONS_INDEX.json)
+    write_index(sections)
 
     return table
 
