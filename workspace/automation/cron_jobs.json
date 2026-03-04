@@ -22,8 +22,6 @@
       "name": "Daily Morning Briefing",
       "sessionTarget": "main",
       "wakeMode": "now",
-      "estimated_tokens": 8000,
-      "on_budget_fail": "use_cached",
       "schedule": {
         "expr": "0 7 * * *",
         "tz": "Australia/Brisbane"
@@ -34,8 +32,6 @@
       "name": "HiveMind Ingest",
       "sessionTarget": "isolated",
       "wakeMode": "now",
-      "estimated_tokens": 500,
-      "on_budget_fail": "skip",
       "schedule": {
         "expr": "30 7 * * *",
         "tz": "Australia/Brisbane"
@@ -46,8 +42,6 @@
       "name": "Session Pattern Analysis",
       "sessionTarget": "isolated",
       "wakeMode": "now",
-      "estimated_tokens": 2000,
-      "on_budget_fail": "skip",
       "schedule": {
         "expr": "0 9 * * 5",
         "tz": "Australia/Brisbane"

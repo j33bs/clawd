@@ -116,57 +116,37 @@ class MessageHandler:
 """
         return static_context + prompt
     
-    # Rolling history compaction constants
-    _HISTORY_MAX_VERBATIM = 3       # last N messages kept verbatim
-    _HISTORY_MAX_CHARS = 1600       # budget for compressed older-message summary (≈400 tokens)
-    _CHARS_PER_TOKEN = 4.0
-
-    def compact_history(self, history: list[dict]) -> list[dict]:
-        """
-        Rolling compaction: keep the last _HISTORY_MAX_VERBATIM messages verbatim,
-        compress older messages to 1-line per-message summaries (role + first 80 chars).
-
-        Replaces the coarse summarize_context() approach (message counts only).
-        Saves 0–400 tokens per message when history depth > 3.
-        Token budget for the summary block: ~400 tokens (_HISTORY_MAX_CHARS / 4).
-        """
-        if len(history) <= self._HISTORY_MAX_VERBATIM:
-            return history
-
-        recent = history[-self._HISTORY_MAX_VERBATIM:]
-        older = history[:-self._HISTORY_MAX_VERBATIM]
-
-        # Collapse each older message to a 1-line summary
-        lines = []
-        for msg in older:
-            role = msg.get("role", "?")[:1].upper()   # U / A / S / T
-            content = str(msg.get("content", "")).replace("\n", " ").strip()
-            snippet = content[:80] + ("…" if len(content) > 80 else "")
-            lines.append(f"[{role}] {snippet}")
-
-        summary_text = "\n".join(lines)
-        # Truncate if summary itself exceeds budget
-        if len(summary_text) > self._HISTORY_MAX_CHARS:
-            summary_text = summary_text[-self._HISTORY_MAX_CHARS:]
-
-        summary_msg = {"role": "system", "content": f"[Prior context]\n{summary_text}"}
-        return [summary_msg] + recent
-
     def summarize_context(self, history: list, max_tokens: int = 2000) -> str:
-        """
-        Build a summarized context string from history.
-        Delegates to compact_history() for rolling compaction.
-        Kept for backward compatibility with callers expecting a string return.
+        """Summarize conversation history to save tokens.
+        
+        Keeps the most recent context while summarizing older messages.
         """
         if not history:
             return ""
-        compacted = self.compact_history(history)
-        parts = []
-        for msg in compacted:
-            role = msg.get("role", "?")
-            content = str(msg.get("content", ""))[:300]
-            parts.append(f"{role}: {content}")
-        return "\n".join(parts)
+        
+        # Keep last N messages, summarize the rest
+        keep_recent = 5
+        recent = history[-keep_recent:]
+        older = history[:-keep_recent]
+        
+        summary = f"[Earlier conversation summarized from {len(older)} messages]"
+        
+        if older:
+            # Simple summarization - just count messages by role
+            roles = {}
+            for msg in older:
+                role = msg.get("role", "unknown")
+                roles[role] = roles.get(role, 0) + 1
+            summary += f" ({roles.get('user', 0)} user messages, {roles.get('assistant', 0)} assistant responses)"
+        
+        # Build context
+        context = summary + "\n\nRecent messages:\n"
+        for msg in recent:
+            role = msg.get("role", "unknown")
+            content = msg.get("content", "")[:200]  # Truncate long messages
+            context += f"{role}: {content}\n"
+        
+        return context
 
 
 async def send_telegram_reply(chat_id: str, message_id: str, text: str, gateway_url: str, token: str):

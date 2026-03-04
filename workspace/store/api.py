@@ -28,18 +28,17 @@ Environment:
   EMBED_MODEL     — embedding model name (default: all-MiniLM-L6-v2)
 """
 from __future__ import annotations
-import hashlib
 import os
 import sys
 import time
 from datetime import datetime
-from typing import Literal, Optional
+from typing import Optional
 
 WORKSPACE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(WORKSPACE, "store"))
 
-from fastapi import FastAPI, HTTPException, Header, Query, Request
-from fastapi.responses import JSONResponse, Response
+from fastapi import FastAPI, HTTPException, Header, Query
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from sync import linear_tail, semantic_search, full_rebuild, get_table, DEFAULT_MODEL
@@ -63,11 +62,6 @@ OQ_PATH     = os.path.join(WORKSPACE, "governance", "OPEN_QUESTIONS.md")
 COUNT_FILE  = os.path.join(WORKSPACE, "governance", ".section_count")
 STORE_KEY   = os.environ.get("STORE_API_KEY", "")  # empty = reads open
 _start_time = time.time()
-
-# ---------------------------------------------------------------------------
-# ETag state — updated on each /rebuild so callers can use If-None-Match
-# ---------------------------------------------------------------------------
-_tail_etag: str = hashlib.sha1(f"boot:{_start_time}".encode()).hexdigest()
 
 # ---------------------------------------------------------------------------
 # Auth helper
@@ -147,25 +141,8 @@ def get_status():
     )
 
 
-def _apply_detail(section_dict: dict, detail: str) -> dict:
-    """
-    Apply detail level truncation to a section dict before serialization.
-    metadata — body stripped; preview — body[:500]; full — unchanged.
-    """
-    if detail == "full":
-        return section_dict
-    out = dict(section_dict)
-    if detail == "metadata":
-        out["body"] = ""
-    elif detail == "preview":
-        body = out.get("body", "")
-        out["body"] = body[:500] + ("…" if len(body) > 500 else "")
-    return out
-
-
 @app.get("/tail", response_model=list[SectionOut])
 def get_tail(
-    request: Request,
     n: int = Query(default=40, ge=1, le=200, description="Number of sections to return (RULE-STORE-001 default: 40)"),
     retro_dark: Optional[bool] = Query(
         default=None,
@@ -176,54 +153,22 @@ def get_tail(
             "null=no filtering."
         ),
     ),
-    detail: Literal["metadata", "preview", "full"] = Query(
-        default="full",
-        description=(
-            "Response verbosity: "
-            "metadata=title+tags only (no body); "
-            "preview=title+first 500 chars; "
-            "full=complete body (default, backward-compatible)."
-        ),
-    ),
     x_store_key: Optional[str] = Header(default=None),
 ):
     """
     RULE-STORE-001: Returns the last N sections in temporal order.
     This is the default route for external callers reconstructing project dispositions.
     Use this before using /search — it provides context, not fragments.
-
-    ETag support: send If-None-Match with a prior ETag to get 304 Not Modified on cache hit.
-    detail=metadata or detail=preview for scan-mode queries (saves 80–93% payload).
     """
     if STORE_KEY:
         _require_key(x_store_key)
-
-    # ETag short-circuit — only for full detail (preview/metadata are cheap; skip for simplicity)
-    if detail == "full":
-        etag = f'"{_tail_etag}"'
-        if request.headers.get("If-None-Match") == etag:
-            return Response(status_code=304, headers={"ETag": etag})
-        try:
-            results = linear_tail(n=n)
-            if retro_dark is True:
-                results = [r for r in results if len(r.get("retro_dark_fields") or []) > 0]
-            elif retro_dark is False:
-                results = [r for r in results if len(r.get("retro_dark_fields") or []) == 0]
-            sections = [SectionOut(**r) for r in results]
-            return JSONResponse(
-                content=[s.model_dump() for s in sections],
-                headers={"ETag": etag, "Cache-Control": "max-age=60"},
-            )
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=str(e))
-
     try:
         results = linear_tail(n=n)
         if retro_dark is True:
             results = [r for r in results if len(r.get("retro_dark_fields") or []) > 0]
         elif retro_dark is False:
             results = [r for r in results if len(r.get("retro_dark_fields") or []) == 0]
-        return [SectionOut(**_apply_detail(r, detail)) for r in results]
+        return [SectionOut(**r) for r in results]
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -233,24 +178,19 @@ def search(
     q: str = Query(..., description="Semantic search query"),
     k: int = Query(default=5, ge=1, le=50, description="Number of results"),
     exec_tag: Optional[str] = Query(default=None, description="Filter by exec_tag (e.g. EXEC:GOV)"),
-    detail: Literal["metadata", "preview", "full"] = Query(
-        default="full",
-        description="Response verbosity (same semantics as /tail?detail=).",
-    ),
     x_store_key: Optional[str] = Header(default=None),
 ):
     """
     RULE-STORE-001 opt-in: Semantic search for factual queries.
     Prefer /tail for orientation and context reconstruction.
     exec_tag filter operates on metadata only (RULE-STORE-002).
-    detail=preview returns 500-char body snippets — good for scan-then-fetch workflows.
     """
     if STORE_KEY:
         _require_key(x_store_key)
     try:
         filters = {"exec_tags": [exec_tag]} if exec_tag else None
         results = semantic_search(q, k=k, filters=filters)
-        return [SectionOut(**_apply_detail(r, detail)) for r in results]
+        return [SectionOut(**r) for r in results]
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -292,20 +232,16 @@ def trigger_rebuild(
     Trigger a full store rebuild from OPEN_QUESTIONS.md.
     Authenticated endpoint — requires X-Store-Key header.
     This is a blocking operation (~20s on Apple silicon for 85 sections).
-    Rotates the ETag so cached clients know to re-fetch.
     """
-    global _tail_etag
     _require_key(x_store_key)  # always auth-required regardless of STORE_KEY setting
     try:
         sections = parse_sections(OQ_PATH)
         model = os.environ.get("EMBED_MODEL", DEFAULT_MODEL)
         full_rebuild(sections, model_name=model)
-        _tail_etag = hashlib.sha1(f"rebuild:{len(sections)}:{time.time()}".encode()).hexdigest()
         return {
             "status": "rebuilt",
             "sections": len(sections),
             "model": model,
-            "etag": _tail_etag,
             "timestamp": datetime.utcnow().isoformat() + "Z",
         }
     except Exception as e:

@@ -12,8 +12,7 @@ from telegram_vector_store import DEFAULT_STORE_DIR, search_store
 
 
 DEFAULT_TOPK = 6
-DEFAULT_MAX_CHARS = 2000       # was 6000; remaining is low-density noise (env-tunable)
-DEFAULT_RECALL_THRESHOLD = 0.65  # cosine similarity floor — suppress false-trigger injections
+DEFAULT_MAX_CHARS = 6000
 
 
 def parse_bool(value: str | None, default: bool = False) -> bool:
@@ -83,15 +82,6 @@ def _row_to_line(row: dict, per_line_limit: int = 1000) -> str:
     return f"- [{ts}] {sender}: {text}"
 
 
-def _parse_recall_threshold(env_map: Mapping[str, str]) -> float:
-    raw = env_map.get("OPENCLAW_RECALL_THRESHOLD", "")
-    try:
-        val = float(raw)
-        return val if 0.0 <= val <= 1.0 else DEFAULT_RECALL_THRESHOLD
-    except (ValueError, TypeError):
-        return DEFAULT_RECALL_THRESHOLD
-
-
 def build_recall_block(
     prompt: str,
     *,
@@ -106,18 +96,8 @@ def build_recall_block(
     topk = parse_positive_int(env_map.get("OPENCLAW_TELEGRAM_RECALL_TOPK"), DEFAULT_TOPK)
     max_chars = parse_positive_int(env_map.get("OPENCLAW_TELEGRAM_RECALL_MAX_CHARS"), DEFAULT_MAX_CHARS)
     chat_filter = env_map.get("OPENCLAW_TELEGRAM_RECALL_CHAT_ID")
-    threshold = _parse_recall_threshold(env_map)
 
     rows = search_store(prompt, topk=topk, chat_id=chat_filter or None, store_dir=Path(store_dir))
-
-    # Relevance gate: suppress injection when top result is below similarity threshold.
-    # Prevents false-trigger recall (keyword match with low semantic relevance).
-    # search_store returns rows sorted by similarity desc; check the best score first.
-    if not session_start and rows:
-        top_score = float(rows[0].get("score", 0.0))
-        if top_score < threshold:
-            return ""
-
     for phrase in extract_keyphrases(prompt):
         extra = search_store(phrase, topk=max(1, topk // 2), chat_id=chat_filter or None, store_dir=Path(store_dir))
         rows.extend(extra)

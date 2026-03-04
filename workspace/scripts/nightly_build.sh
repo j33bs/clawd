@@ -68,31 +68,8 @@ run_openclaw_config_preflight() {
     fi
 }
 
-_budget_gate() {
-    # Usage: _budget_gate <job_name> <estimated_tokens> <on_fail>
-    # Returns 0 (proceed) or 1 (skip). Always succeeds if gate script is missing.
-    local job="$1" estimate="$2" on_fail="${3:-skip}"
-    local gate="$CLAWD_DIR/workspace/tools/token_budget_gate.py"
-    if [ ! -f "$gate" ]; then
-        return 0
-    fi
-    if python3 "$gate" --job "$job" --estimate "$estimate" --on-fail "$on_fail" >>"$LOG_FILE" 2>&1; then
-        return 0
-    else
-        log "⚠️ $job SKIPPED — daily token budget exceeded (on_fail=$on_fail)"
-        return 1
-    fi
-}
-
-run_budget_summary() {
-    local gate="$CLAWD_DIR/workspace/tools/token_budget_gate.py"
-    [ -f "$gate" ] && python3 "$gate" --summary >>"$LOG_FILE" 2>&1 || true
-}
-
 run_research() {
     log "=== Research Ingest ==="
-
-    _budget_gate "research_ingest" 15000 "defer_24h" || return 0
 
     local ingest_cmd=(
         python3
@@ -254,7 +231,6 @@ PY
 
 run_kb_sync() {
     log "=== Knowledge Base Sync ==="
-    _budget_gate "kb_sync" 3000 "skip" || return 0
     if python3 "$CLAWD_DIR/workspace/knowledge_base/kb.py" sync >>"$LOG_FILE" 2>&1; then
         log "KB sync complete"
     else
@@ -293,7 +269,6 @@ case "${1:-all}" in
         ;;
     all)
         log "=== Nightly Build Starting ==="
-        run_budget_summary
         run_research
         run_health
         run_memory
