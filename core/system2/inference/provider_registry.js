@@ -27,6 +27,10 @@ const CB_STATES = Object.freeze({
 
 const COMPACTION_MARKER = '[TRUNCATED FOR SIZE]';
 const COMPACTION_NOTE = '(Context compacted due to provider limits.)';
+const XAI_PROVIDER_ID = 'xai';
+const XAI_FAST_MODEL = 'xai/grok-4-1-fast';
+const MINIMAX_PROVIDER_ID = 'minimax-portal';
+const MINIMAX_MODEL_ID = 'MiniMax-M2.1';
 
 function classifyDispatchError(err) {
   const code = err && err.code;
@@ -41,6 +45,57 @@ function classifyDispatchError(err) {
     return 'http_error';
   }
   return 'unknown';
+}
+
+function sanitizeBodySnippet(value, maxLen = 180) {
+  const text = String(value || '').replace(/\s+/g, ' ').trim();
+  if (text.length <= maxLen) return text;
+  return `${text.slice(0, maxLen)}…`;
+}
+
+function isXaiBillingOrQuotaExhausted(status, bodyText) {
+  const s = Number.isFinite(Number(status)) ? Number(status) : 0;
+  const text = sanitizeBodySnippet(bodyText, 240).toLowerCase();
+
+  if (s === 402) return true;
+
+  if (s === 429) {
+    if (/(insufficient|quota|rate limit|exceeded|credits|credit|billing)/i.test(text)) {
+      return true;
+    }
+  }
+
+  if (s === 403 || s === 401) {
+    if (/(billing|payment|credits|quota|insufficient|account)/i.test(text)) {
+      return true;
+    }
+  }
+
+  return /(insufficient credits|payment required|quota exceeded|exceeded your quota|billing)/i.test(text);
+}
+
+function isProviderUnavailableError(err) {
+  const code = String((err && err.code) || '').toUpperCase();
+  const message = String((err && err.message) || '').toLowerCase();
+  if (
+    code === 'PROVIDER_TIMEOUT' ||
+    code === 'ETIMEDOUT' ||
+    code === 'ECONNREFUSED' ||
+    code === 'ECONNRESET' ||
+    code === 'ENOTFOUND' ||
+    code === 'EAI_AGAIN' ||
+    code === 'EHOSTUNREACH'
+  ) {
+    return true;
+  }
+
+  return /(provider unavailable|connection refused|timed out|timeout|dns|eai_again|enotfound|socket hang up)/i.test(message);
+}
+
+function isXaiFastCandidate(candidate = {}) {
+  const providerId = String(candidate.provider_id || '').toLowerCase();
+  const modelId = String(candidate.model_id || '').toLowerCase();
+  return providerId === XAI_PROVIDER_ID || modelId === XAI_FAST_MODEL;
 }
 
 function hasAuthCredential(auth, env) {
@@ -461,6 +516,7 @@ class ProviderRegistry {
     }
 
     const attemptSummaries = [];
+    let xaiFailoverAttempted = false;
 
     // Try candidates in order
     for (const candidate of candidates) {
@@ -599,6 +655,24 @@ class ProviderRegistry {
               messages_after: compacted.after.messages_count
             });
             continue;
+          }
+
+          if (!xaiFailoverAttempted && isXaiFastCandidate(candidate)) {
+            const bodySnippet = sanitizeBodySnippet(err && (err.bodySnippet || err.message));
+            const statusCode = Number.isFinite(Number(err && err.statusCode))
+              ? Number(err.statusCode)
+              : 0;
+            const isBilling = isXaiBillingOrQuotaExhausted(statusCode, bodySnippet);
+            const isUnavailable = isProviderUnavailableError(err);
+            if (isBilling || isUnavailable) {
+              xaiFailoverAttempted = true;
+              const reason = isBilling ? 'billing_or_quota' : 'provider_unavailable';
+              const failoverResult = await this._attemptMiniMaxFailover({
+                callParams,
+                reason
+              });
+              if (failoverResult) return failoverResult;
+            }
           }
 
           // Try next candidate
@@ -822,6 +896,54 @@ class ProviderRegistry {
     if (cb.state === CB_STATES.HALF_OPEN || cb.failures >= threshold) {
       cb.state = CB_STATES.OPEN;
       cb.openedAt = Date.now();
+    }
+  }
+
+  async _attemptMiniMaxFailover({ callParams, reason }) {
+    const fallback = this._adapters.get(MINIMAX_PROVIDER_ID);
+    if (!fallback) return null;
+
+    const fallbackParams = {
+      messages: callParams.messages,
+      metadata: {
+        ...(callParams.metadata || {}),
+        model: MINIMAX_MODEL_ID
+      }
+    };
+
+    try {
+      const result = await fallback.call(fallbackParams);
+      const resolvedModelId = result.model || MINIMAX_MODEL_ID;
+      this.ledger.record(MINIMAX_PROVIDER_ID, {
+        tokensIn: result.usage.inputTokens,
+        tokensOut: result.usage.outputTokens
+      });
+      this._recordCbSuccess(MINIMAX_PROVIDER_ID);
+
+      const logLine = `MODEL_FAILOVER provider=xai reason=${reason} primary=${XAI_FAST_MODEL} fallback=minimax-portal/${MINIMAX_MODEL_ID}`;
+      console.log(logLine);
+      this._emitEvent('freecompute_model_failover', {
+        provider: 'xai',
+        reason,
+        primary: XAI_FAST_MODEL,
+        fallback: `${MINIMAX_PROVIDER_ID}/${MINIMAX_MODEL_ID}`
+      });
+
+      return {
+        ...result,
+        provider_id: MINIMAX_PROVIDER_ID,
+        model_id: resolvedModelId
+      };
+    } catch (err) {
+      const kind = classifyDispatchError(err);
+      this._recordCbFailure(MINIMAX_PROVIDER_ID, kind);
+      this._emitEvent('freecompute_model_failover_error', {
+        provider: 'xai',
+        reason,
+        fallback: `${MINIMAX_PROVIDER_ID}/${MINIMAX_MODEL_ID}`,
+        error: err && err.message ? String(err.message) : 'unknown'
+      });
+      return null;
     }
   }
 }
