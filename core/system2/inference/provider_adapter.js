@@ -20,6 +20,14 @@ const https = require('node:https');
 const { URL } = require('node:url');
 const { redactIfSensitive } = require('./config');
 
+const XAI_FAST_MODEL_ID = 'xai/grok-4-1-fast';
+
+function sanitizeBodySnippet(value, maxLen = 240) {
+  const text = String(value || '').replace(/\s+/g, ' ').trim();
+  if (text.length <= maxLen) return text;
+  return `${text.slice(0, maxLen)}…`;
+}
+
 class ProviderAdapter {
   /**
    * @param {object} catalogEntry - A provider catalog entry
@@ -254,6 +262,19 @@ class ProviderAdapter {
   }
 
   async _callOpenAI({ messages, model, maxTokens, temperature }) {
+    // Test-only deterministic path for failover verification.
+    if (
+      this.providerId === 'xai' &&
+      String(model || '').toLowerCase() === XAI_FAST_MODEL_ID &&
+      this._env.OPENCLAW_XAI_SIMULATE_BILLING_EXHAUST === '1'
+    ) {
+      const err = new Error('simulated xai billing exhaustion');
+      err.code = 'PROVIDER_HTTP_ERROR';
+      err.statusCode = 402;
+      err.bodySnippet = 'insufficient credits';
+      throw err;
+    }
+
     const chatUrl = this.baseUrl.replace(/\/+$/, '') + '/chat/completions';
 
     const body = {
@@ -462,6 +483,7 @@ class ProviderAdapter {
             const err = new Error(`http ${res.statusCode} from ${this.providerId}`);
             err.code = 'PROVIDER_HTTP_ERROR';
             err.statusCode = res.statusCode;
+            err.bodySnippet = sanitizeBodySnippet(data);
             reject(err);
             return;
           }
