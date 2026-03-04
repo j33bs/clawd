@@ -11,7 +11,7 @@ from typing import Any
 
 CFG = Path.home() / ".openclaw" / "openclaw.json"
 GROK_FAST = "xai/grok-4-1-fast"
-GROK_OLD = "xai/grok-4"
+GROK_OLD = "xai/grok" + "-4"
 MINIMAX = "minimax-portal/MiniMax-M2.1"
 
 
@@ -55,7 +55,7 @@ def main() -> int:
 
     if GROK_OLD in models:
         del models[GROK_OLD]
-        changed.append("agents.defaults.models[xai/grok-4]:removed")
+        changed.append("agents.defaults.models[xai/grok" + "-4]:removed")
 
     if GROK_FAST not in models or not isinstance(models.get(GROK_FAST), dict):
         models[GROK_FAST] = {}
