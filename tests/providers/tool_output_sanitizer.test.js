@@ -40,6 +40,8 @@ test('sanitizeToolOutputsForContext writes artifact and injects stable pointer p
   assert.ok(payload.artifact_path);
   assert.ok(payload.sha256);
   assert.ok(payload.bytes > 0);
+  assert.ok(payload.byte_size > 0);
+  assert.strictEqual(payload.byte_size, payload.bytes);
   assert.ok(Object.prototype.hasOwnProperty.call(payload, 'preview_head'));
   assert.ok(Object.prototype.hasOwnProperty.call(payload, 'preview_tail'));
 });

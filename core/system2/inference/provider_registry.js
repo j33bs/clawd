@@ -193,6 +193,49 @@ function computePromptHash(messages) {
   }
 }
 
+function isLocalTierCandidate(candidate) {
+  const providerId = String(candidate && candidate.provider_id || '').toLowerCase();
+  const modelId = String(candidate && candidate.model_id || '').toLowerCase();
+  return providerId === 'local_vllm' || providerId === 'ollama' || modelId.startsWith('ollama/');
+}
+
+function parseProviderTierOrder(env) {
+  const raw = String((env && env.OPENCLAW_PROVIDER_TIER_ORDER) || '').trim();
+  if (!raw) {
+    return ['local_vllm', 'groq', 'xai', 'minimax-portal'];
+  }
+  return raw
+    .split(',')
+    .map((v) => v.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+function providerTierRank(candidate, order) {
+  const providerId = String(candidate && candidate.provider_id || '').toLowerCase();
+  const idx = order.indexOf(providerId);
+  if (idx >= 0) return idx;
+  // Keep local aliases in tier-0 even if provider IDs differ.
+  if (isLocalTierCandidate(candidate)) return 0;
+  return Number.MAX_SAFE_INTEGER;
+}
+
+function enforceProviderTierOrder(candidates, env) {
+  const flag = String((env && env.OPENCLAW_ENFORCE_PROVIDER_TIER_ORDER) || '1').trim().toLowerCase();
+  if (flag === '0' || flag === 'false' || flag === 'off' || flag === 'no') {
+    return Array.isArray(candidates) ? candidates : [];
+  }
+  if (!Array.isArray(candidates) || candidates.length <= 1) return Array.isArray(candidates) ? candidates : [];
+
+  const order = parseProviderTierOrder(env);
+  return candidates
+    .map((c, i) => ({ c, i, r: providerTierRank(c, order) }))
+    .sort((a, b) => {
+      if (a.r !== b.r) return a.r - b.r;
+      return a.i - b.i;
+    })
+    .map((x) => x.c);
+}
+
 function sanitizeModelIdForEnv(modelId) {
   return String(modelId || '')
     .toUpperCase()
@@ -534,8 +577,9 @@ class ProviderRegistry {
       config: this.config,
       availableProviderIds: Array.from(this._adapters.keys())
     });
+    const orderedCandidates = enforceProviderTierOrder(candidates, this._env);
 
-    if (candidates.length === 0) {
+    if (orderedCandidates.length === 0) {
       this._emitEvent('freecompute_no_candidates', {
         taskClass: params.taskClass
       });
@@ -562,7 +606,7 @@ class ProviderRegistry {
     let xaiFailoverAttempted = false;
 
     // Try candidates in order
-    for (const candidate of candidates) {
+    for (const candidate of orderedCandidates) {
       const adapter = this._adapters.get(candidate.provider_id);
       if (!adapter) continue;
 
@@ -604,7 +648,7 @@ class ProviderRegistry {
 
       let timeoutRetries = 0;
       let sizeRetry = 0;
-      const maxTimeoutRetries = 1;
+      const maxTimeoutRetries = isLocalTierCandidate(candidate) ? 0 : 1;
       const maxSizeRetries = 1;
 
       while (true) {
@@ -1034,6 +1078,9 @@ module.exports = {
     estimateRequestShape,
     resolveMaxChars,
     compactMessagesForBudget,
-    isLikelyRequestTooLargeError
+    isLikelyRequestTooLargeError,
+    enforceProviderTierOrder,
+    parseProviderTierOrder,
+    isLocalTierCandidate
   }
 };

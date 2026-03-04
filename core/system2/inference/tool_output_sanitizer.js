@@ -183,6 +183,7 @@ function sanitizeToolOutputsForContext(messages, options = {}) {
       artifact_path: artifactPath,
       sha256,
       bytes,
+      byte_size: bytes,
       preview_head: clipText(preview.preview_head, 1800),
       preview_tail: clipText(preview.preview_tail, 1200),
       truncated: preview.truncated || raw.length > maxChars,
@@ -206,7 +207,8 @@ function sanitizeToolOutputsForContext(messages, options = {}) {
       tool: toolName,
       artifact_path: artifactPath,
       sha256,
-      bytes
+      bytes,
+      byte_size: bytes
     });
 
     out.push({
