@@ -303,11 +303,64 @@ class ProviderAdapter {
     return { ok: true, models };
   }
 
+  /**
+   * Apply Anthropic prompt caching markers to the message array.
+   *
+   * Anthropic's ephemeral cache (cache_control: {type: "ephemeral"}) caches
+   * the context prefix for up to 5 minutes, charging 10% of normal input token
+   * price on cache hits instead of 100%. For static prefixes (SOUL+AGENTS ~1,750
+   * tokens), this eliminates ~1,575 tokens of input cost per cached turn.
+   *
+   * Strategy: mark the LAST system message that contains static context as
+   * the cache boundary. Everything before it (system messages) is assumed static;
+   * everything after (the live user turn) is dynamic and never cached.
+   *
+   * Only applied when:
+   * - Protocol is anthropic_messages
+   * - There is at least one system message
+   * - OPENCLAW_ANTHROPIC_CACHE is not explicitly "0" or "false"
+   */
+  _applyAnthropicCacheMarkers(messages) {
+    const cacheEnabled = (process.env.OPENCLAW_ANTHROPIC_CACHE || '1') !== '0' &&
+                         (process.env.OPENCLAW_ANTHROPIC_CACHE || '1') !== 'false';
+    if (!cacheEnabled) return messages;
+
+    // Find the last system message index — this is the cache boundary
+    let lastSystemIdx = -1;
+    for (let i = 0; i < messages.length; i++) {
+      if (messages[i].role === 'system') lastSystemIdx = i;
+    }
+    if (lastSystemIdx < 0) return messages;  // no system messages, nothing to cache
+
+    return messages.map((m, idx) => {
+      if (idx !== lastSystemIdx) return m;
+      // Wrap the content as a content block array with cache_control marker
+      const text = String(m.content || '');
+      return {
+        role: m.role,
+        content: [
+          { type: 'text', text, cache_control: { type: 'ephemeral' } }
+        ]
+      };
+    });
+  }
+
   async _callAnthropic({ messages, model, maxTokens, temperature }) {
     const messagesPath = (this._hc.endpoints && this._hc.endpoints.messages) || '/v1/messages';
     const url = this.baseUrl.replace(/\/+$/, '') + messagesPath;
 
-    const mappedMessages = messages.map((m) => ({
+    // Separate system messages from user/assistant turns (Anthropic API format)
+    const systemMessages = messages.filter((m) => m.role === 'system');
+    const conversationMessages = messages.filter((m) => m.role !== 'system');
+
+    // Apply prompt caching to static system context if enabled
+    const cachedSystemMessages = this._applyAnthropicCacheMarkers(systemMessages);
+
+    const systemContent = cachedSystemMessages.length > 0
+      ? cachedSystemMessages.map((m) => m.content).flat()
+      : undefined;
+
+    const mappedMessages = conversationMessages.map((m) => ({
       role: m.role === 'assistant' ? 'assistant' : 'user',
       content: String(m.content || '')
     }));
@@ -318,6 +371,9 @@ class ProviderAdapter {
       max_tokens: maxTokens,
       temperature
     };
+    if (systemContent && systemContent.length > 0) {
+      body.system = systemContent;
+    }
 
     const data = await this._httpPost(url, body, {
       timeoutMs: (this._hc.timeouts_ms && this._hc.timeouts_ms.read) || 30000
@@ -335,10 +391,12 @@ class ProviderAdapter {
       model: data.model || model,
       raw: data,
       usage: {
-        inputTokens: usage.input_tokens || 0,
-        outputTokens: usage.output_tokens || 0,
-        totalTokens: (usage.input_tokens || 0) + (usage.output_tokens || 0),
-        estimatedCostUsd: 0
+        inputTokens:       usage.input_tokens || 0,
+        outputTokens:      usage.output_tokens || 0,
+        totalTokens:       (usage.input_tokens || 0) + (usage.output_tokens || 0),
+        cacheReadTokens:   usage.cache_read_input_tokens || 0,    // tokens served from cache
+        cacheWriteTokens:  usage.cache_creation_input_tokens || 0, // tokens written to cache
+        estimatedCostUsd:  0
       }
     };
   }
