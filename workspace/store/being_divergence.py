@@ -562,7 +562,7 @@ def _style_consistency_value(
     *,
     author_silhouette: float | None,
     topic_silhouette: float | None,
-    min_sections_per_being: int = 5,
+    min_sections_per_being: int = 3,
 ) -> bool | str:
     if any(int(v["n_sections"]) < min_sections_per_being for v in per_being_scores.values()):
         return "untested"
@@ -672,7 +672,7 @@ def run_being_divergence(
             metrics.per_being_scores,
             author_silhouette=author_sil,
             topic_silhouette=topic_sil,
-            min_sections_per_being=5,
+            min_sections_per_being=3,
         )
         verdict = _masking_variant_verdict(dispositional_attractor, style_consistency)
     else:
