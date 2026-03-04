@@ -16,6 +16,7 @@ import os
 import re
 import time
 import lancedb
+import numpy as np
 import pyarrow as pa
 from collections import Counter
 from datetime import datetime
@@ -60,6 +61,27 @@ def _mps_available() -> bool:
         return False
 
 
+def _sliding_embed(model: SentenceTransformer, text: str, chunk_size: int = 512, stride: int = 256) -> list[float]:
+    """
+    Weighted average of overlapping chunk embeddings for long texts.
+    Falls back to single-shot encode for texts shorter than chunk_size.
+
+    Fixes the hard 2,048-char truncation that silently discarded 50–60% of
+    long sections (e.g. CXLV 4.4 KB, CXXXV 5.1 KB) before vectorization.
+    First and last chunks are weighted 2× / 1.5× to capture topic + conclusion.
+    """
+    if len(text) <= chunk_size:
+        return model.encode([text])[0].tolist()
+    chunks = [text[i:i + chunk_size] for i in range(0, max(1, len(text) - chunk_size // 2), stride)]
+    if not chunks:
+        return model.encode([text[:chunk_size]])[0].tolist()
+    vecs = model.encode(chunks)
+    weights = np.ones(len(vecs))
+    weights[0] = 2.0
+    weights[-1] = max(weights[-1], 1.5)  # avoid overwriting if len==1
+    return np.average(vecs, axis=0, weights=weights).tolist()
+
+
 def embed_sections(
     sections: list[CorrespondenceSection],
     model: SentenceTransformer,
@@ -67,18 +89,22 @@ def embed_sections(
 ) -> list[CorrespondenceSection]:
     """
     Embed the body of each section. NEVER embeds exec_tags or status_tags.
+    Uses sliding-window averaging for sections >512 chars so long sections
+    are fully represented (previously hard-truncated at 2,048 chars).
     Returns sections with embedding field populated.
     """
     print(f"  Embedding {len(sections)} sections (body only — no exec_tags in vectors)...")
     print(f"  Sanitizer: v{sanitizer_version()} (strips [EXEC:*], [JOINT:*], [UPPER:*], status phrases)")
-    bodies = [sanitize(s.body)[:2048] for s in sections]  # sanitize before truncation
     t0 = time.time()
-    vectors = model.encode(bodies, show_progress_bar=True, batch_size=32)
+    vectors = []
+    for s in sections:
+        clean = sanitize(s.body)
+        vectors.append(_sliding_embed(model, clean))
     elapsed = time.time() - t0
-    print(f"  Embedded in {elapsed:.1f}s")
+    print(f"  Embedded in {elapsed:.1f}s (sliding-window for sections >512 chars)")
 
     for section, vec in zip(sections, vectors):
-        section.embedding = vec.tolist()
+        section.embedding = vec
         section.embedding_model_version = f"{model_name}+sanitizer-{sanitizer_version()}"
         section.embedding_version = EMBEDDING_VERSION
 
