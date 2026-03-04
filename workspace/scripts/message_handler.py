@@ -15,9 +15,31 @@ import json
 import asyncio
 import aiohttp
 from datetime import datetime
-from typing import Optional
+from pathlib import Path
+from typing import Any, Optional
 from agent_orchestration import build_default_orchestrator
 from telegram_recall import inject_telegram_recall_context
+
+# CEL tool imports are optional to preserve backward compatibility.
+REPO_ROOT = Path(__file__).resolve().parents[2]
+TOOLS_DIR = REPO_ROOT / "tools"
+if str(TOOLS_DIR) not in sys.path:
+    sys.path.insert(0, str(TOOLS_DIR))
+try:
+    from codex_prepare_prompt import build_prepared_prompt_payload, write_prepared_prompt_file
+    from codex_spawn_session import spawn_codex_session
+except Exception:  # pragma: no cover
+    build_prepared_prompt_payload = None
+    write_prepared_prompt_file = None
+    spawn_codex_session = None
+
+SCRIPTS_DIR = REPO_ROOT / "workspace" / "scripts"
+if str(SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPTS_DIR))
+try:
+    from model_intent_router import maybe_apply_model_intent
+except Exception:  # pragma: no cover
+    maybe_apply_model_intent = None
 
 # Configuration
 GATEWAY_URL = os.environ.get("GATEWAY_URL", "http://127.0.0.1:18789")
@@ -154,7 +176,7 @@ async def spawn_chatgpt_subagent(task: str, context: dict, gateway_url: str, tok
     Uses OpenClaw's sessions_spawn internally.
     """
     headers = {"Authorization": f"Bearer {token}"} if token else {}
-    
+
     orchestrator = build_default_orchestrator()
     spawn_plan = orchestrator.prepare_spawn(
         task=task,
@@ -174,15 +196,17 @@ async def spawn_chatgpt_subagent(task: str, context: dict, gateway_url: str, tok
             payload={"task_preview": task[:200]},
         )
 
+    payload_context = {
+        **(context or {}),
+        "specializationTags": spawn_plan["specialization_tags"],
+        **({"handoffId": handoff_id} if handoff_id else {}),
+    }
+
     payload = {
         "agentId": "main",
         "model": spawn_plan["provider"],
         "task": task,
-        "context": {
-            **(context or {}),
-            "specializationTags": spawn_plan["specialization_tags"],
-            **({"handoffId": handoff_id} if handoff_id else {}),
-        },
+        "context": payload_context,
         "timeoutSeconds": spawn_plan["timeout_seconds"]
     }
 
@@ -193,6 +217,65 @@ async def spawn_chatgpt_subagent(task: str, context: dict, gateway_url: str, tok
     )
 
     try:
+        # Preferred path: CEL prepare+spawn wrapper for deterministic token discipline.
+        cel_available = (
+            callable(build_prepared_prompt_payload)
+            and callable(write_prepared_prompt_file)
+            and callable(spawn_codex_session)
+        )
+        if cel_available:
+            runtime_dir = REPO_ROOT / "workspace" / "runtime"
+            runtime_dir.mkdir(parents=True, exist_ok=True)
+
+            prompt_text = "\n\n".join(
+                [
+                    "GOAL\nHandle the incoming message task via Codex session.",
+                    (
+                        "INPUTS\n"
+                        f"- Task text:\n{task}\n"
+                        f"- Context JSON:\n{json.dumps(payload_context, ensure_ascii=True, sort_keys=True)}\n"
+                        "- workspace/scripts/message_handler.py"
+                    ),
+                    "OUTPUTS\n- A response payload suitable for gateway reply routing.",
+                    "CONSTRAINTS\n- Preserve existing contracts and backwards compatibility.",
+                    "SUCCESS_CRITERIA\n- Session spawn succeeds and returns structured response payload.",
+                ]
+            )
+            prompt_path = runtime_dir / "codex_prompt_latest.md"
+            prompt_path.write_text(prompt_text + "\n", encoding="utf-8")
+
+            prepared_path = runtime_dir / "codex_prepared_prompt.json"
+            prepared_payload = build_prepared_prompt_payload(
+                prompt_text,
+                source_path=prompt_path,
+                cwd=REPO_ROOT,
+            )
+            write_prepared_prompt_file(prepared_path, prepared_payload)
+
+            wrapped = spawn_codex_session(
+                prepared_prompt_path=prepared_path,
+                gateway_url=gateway_url,
+                gateway_token=token,
+                agent_id="main",
+                model_override=str(spawn_plan["provider"]),
+                timeout_seconds=int(spawn_plan["timeout_seconds"]),
+                thread=True,
+                mode="session",
+                context_overrides=payload_context,
+            )
+            status = "ok" if bool(wrapped.get("ok")) else "error"
+            orchestrator.register_run_end(
+                run_id,
+                status=status,
+                state_update={"mood": str((context or {}).get("mood", "active"))},
+            )
+            if handoff_id and status == "ok":
+                orchestrator.acknowledge_handoff(handoff_id, "main", "spawn accepted")
+            if isinstance(wrapped.get("response"), dict):
+                return wrapped["response"]
+            return wrapped
+
+        # Fallback path: direct gateway spawn to preserve legacy behavior.
         async with aiohttp.ClientSession() as session:
             async with session.post(
                 f"{gateway_url}/api/agents/spawn",
@@ -216,12 +299,17 @@ async def spawn_chatgpt_subagent(task: str, context: dict, gateway_url: str, tok
 
 async def handle_incoming_message(message: dict, handler: MessageHandler) -> dict:
     """Process an incoming message with load balancing."""
-    
+    content = message.get("content", "")
+    try:
+        if callable(maybe_apply_model_intent):
+            maybe_apply_model_intent(str(content))
+    except Exception:
+        pass
+
     # Route message
     route = await handler.route_message(message)
     
     # Get message content
-    content = message.get("content", "")
     message_id = message.get("message_id")
     chat_id = message.get("chat_id")
     session_start = bool(message.get("session_start", False))

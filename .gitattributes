@@ -42,3 +42,9 @@
 # Diff settings for better readability
 *.md diff=markdown
 *.json diff=json
+
+# Governance files — use "ours" merge strategy so cron commits on other branches
+# cannot silently overwrite these files when branches diverge.
+# Claude Code is the authoritative maintainer of these files on the governance branch.
+workspace/governance/CONTRIBUTION_REGISTER.md merge=ours
+workspace/governance/.section_count merge=ours

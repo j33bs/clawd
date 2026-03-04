@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>ai.openclaw.ain</string>
+
+  <key>RunAtLoad</key>
+  <true/>
+
+  <key>KeepAlive</key>
+  <true/>
+
+  <key>WorkingDirectory</key>
+  <string>/Users/heathyeager/clawd</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/bin/python3</string>
+    <string>workspace/source-ui/app.py</string>
+    <string>--host</string>
+    <string>127.0.0.1</string>
+    <string>--port</string>
+    <string>18990</string>
+  </array>
+
+  <key>StandardOutPath</key>
+  <string>/Users/heathyeager/clawd/workspace/runtime/logs/ain_18990.out</string>
+
+  <key>StandardErrorPath</key>
+  <string>/Users/heathyeager/clawd/workspace/runtime/logs/ain_18990.err</string>
+</dict>
+</plist>

@@ -20,6 +20,7 @@ from graph.entities import extract_entities
 from agentic.intent import classify_intent
 from agentic.retrieve import multi_step_retrieve
 from agentic.synthesize import synthesize_response
+from indexer import run_index
 
 try:
     from tacti_cr.prefetch import PrefetchCache, predict_topics
@@ -89,7 +90,20 @@ def cmd_query(args: argparse.Namespace) -> int:
     print(f"🔍 Intent: {intent['strategy']}")
     
     # Step 2: Multi-step retrieval
-    results = multi_step_retrieve(query, intent, args.agent)
+    try:
+        results = multi_step_retrieve(query, intent, args.agent)
+    except RuntimeError as exc:
+        print(f"❌ Retrieval error: {exc}")
+        return 1
+
+    vector = results.get("vector", {})
+    contexts = vector.get("contexts", [])
+    if vector:
+        print(
+            f"📦 Retrieval mode={vector.get('mode', 'unknown')} "
+            f"authoritative={vector.get('authoritative', False)} "
+            f"contexts={len(contexts)}"
+        )
     
     # Step 3: Synthesize response
     response = synthesize_response(query, results, intent)
@@ -109,6 +123,13 @@ def cmd_query(args: argparse.Namespace) -> int:
         for src in response["sources"]:
             print(f"  - {src}")
     
+    return 0
+
+
+def cmd_index(args: argparse.Namespace) -> int:
+    """Build or refresh the ModernBERT/MiniLM LanceDB indexes."""
+    summary = run_index(evidence_dir=args.evidence_dir)
+    print(json.dumps(summary, indent=2, ensure_ascii=True))
     return 0
 
 
@@ -344,6 +365,11 @@ def build_parser() -> argparse.ArgumentParser:
     # sync
     y = sub.add_parser("sync", help="Sync recent documents to KB")
     y.set_defaults(func=cmd_sync)
+
+    # index
+    i = sub.add_parser("index", help="Build embeddings indexes (ModernBERT canonical + MiniLM accelerator)")
+    i.add_argument("--evidence-dir", help="Optional directory for index summary report")
+    i.set_defaults(func=cmd_index)
     
     return parser
 
