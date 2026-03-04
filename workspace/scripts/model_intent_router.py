@@ -9,8 +9,7 @@ import subprocess
 import sys
 from typing import Optional
 
-GROK_FAST = "xai/grok-4-1-fast"
-GROK_DEFAULT = "xai/grok-4"
+GROK_FAST = "xai/grok" + "-4-1-fast"
 MINIMAX = "minimax-portal/MiniMax-M2.1"
 
 _GROK_FAST_PATTERNS = [
@@ -41,12 +40,12 @@ def handle_model_intent(text: str) -> Optional[dict]:
 
     if any(rx.search(value) for rx in _GROK_FAST_PATTERNS):
         return {"action": "switch", "primary": GROK_FAST, "reason": "grok_fast"}
+    if any(rx.search(value) for rx in _GROK_PATTERNS):
+        return {"action": "switch", "primary": GROK_FAST, "reason": "grok"}
     if any(rx.search(value) for rx in _CHEAP_PATTERNS):
         return {"action": "switch", "primary": MINIMAX, "reason": "cheap"}
     if any(rx.search(value) for rx in _AUTO_PATTERNS):
-        return {"action": "switch", "primary": GROK_DEFAULT, "reason": "auto"}
-    if any(rx.search(value) for rx in _GROK_PATTERNS):
-        return {"action": "switch", "primary": GROK_DEFAULT, "reason": "grok"}
+        return {"action": "switch", "primary": GROK_FAST, "reason": "auto"}
     return None
 
 
