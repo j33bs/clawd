@@ -48,3 +48,6 @@
 # Claude Code is the authoritative maintainer of these files on the governance branch.
 workspace/governance/CONTRIBUTION_REGISTER.md merge=ours
 workspace/governance/.section_count merge=ours
+
+# LanceDB runtime state — never merge
+workspace/store/lancedb_data/** merge=ours
