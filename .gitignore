@@ -183,3 +183,7 @@ workspace/audit/.dali_ultra_*
 # --- runtime vectorstore/db exhaust ---
 workspace/state_runtime/vectorstores/
 workspace/state_runtime/vectorstores/**
+
+# --- runtime db + generated governance counters (local-only) ---
+workspace/store/lancedb_data/
+workspace/governance/.section_count
