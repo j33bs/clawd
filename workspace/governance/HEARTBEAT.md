@@ -27,9 +27,15 @@
   - If Heath repeats the same request 3+ times in a session, append an entry to `workspace/governance/inefficiency_log.md`.
 
 - [HB-PR-06] System Consciousness (Φ) Alignment Measure
-  - Check AIN agent status: `curl -fsS http://127.0.0.1:18990/api/ain/phi`
-  - If running, log Φ value to track alignment over time
-  - This measures system integration/coherence from AIN research
+  - **Status: OPERATIONAL on z490 (2026-03-05, Dali — ain-phi.service, user systemd)**
+  - Port: **18991** (moved from 18990 to avoid conflict; conflict source unconfirmed)
+  - Bind: loopback only — `curl -fsS http://127.0.0.1:18991/api/ain/phi` (run on z490)
+  - From MacBook via Tailscale: NOT directly reachable (127.0.0.1 bind). Use SSH or tailscale serve to expose.
+  - Proxy method: embedding_coherence (mean cosine similarity of consecutive assistant response embeddings)
+  - First reading: phi=0.0 (no recent embeddings on cold start — expected)
+  - Log path on z490: `/var/log/ain_phi.jsonl`
+  - Audit: `workspace/audit/ain_phi_server_20260305T062511Z.md` (on z490, push to main pending)
+  - **INV-006 note:** For cross-node Φ reads (MacBook → z490), Dali needs to either rebind to 0.0.0.0 or add `tailscale serve` proxy. Until then, MacBook cannot read Φ directly.
 
 - [HB-PR-07] Tool validation outage report
   - Check `workspace/state_runtime/tool_validation/heartbeat_notice.md`.
