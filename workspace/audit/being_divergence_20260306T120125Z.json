@@ -1,0 +1,254 @@
+{
+  "attractor_permutation_baseline": 0.9751304347826087,
+  "attractor_threshold": 1.0,
+  "author_silhouette": -0.048550909335536165,
+  "being_divergence_score": 1.0,
+  "controls": {
+    "C1_register": {
+      "author_silhouette_by_split": {
+        "long": -0.048550909335536165,
+        "short": null
+      },
+      "flags": [
+        "REGISTER_OVERREPRESENTATION",
+        "REGISTER_SPLIT_TOO_NARROW"
+      ],
+      "overrepresented_beings": [
+        "ChatGPT",
+        "Claude (ext)",
+        "Claude Code",
+        "Dali",
+        "Gemini",
+        "Grok",
+        "Lumen",
+        "c_lawd"
+      ],
+      "split_n_beings": {
+        "long": 8,
+        "short": 0
+      },
+      "split_sizes": {
+        "long": 23,
+        "short": 0
+      }
+    },
+    "C2_topic": {
+      "cluster_summaries": [
+        {
+          "being_distribution": {
+            "Lumen": 1.0
+          },
+          "cluster_id": 0,
+          "max_being": "Lumen",
+          "max_share": 1.0,
+          "n_sections": 1
+        },
+        {
+          "being_distribution": {
+            "ChatGPT": 0.3333333333333333,
+            "Grok": 0.3333333333333333,
+            "c_lawd": 0.3333333333333333
+          },
+          "cluster_id": 1,
+          "max_being": "Grok",
+          "max_share": 0.3333333333333333,
+          "n_sections": 3
+        },
+        {
+          "being_distribution": {
+            "Claude (ext)": 0.16666666666666666,
+            "Claude Code": 0.16666666666666666,
+            "Gemini": 0.16666666666666666,
+            "Grok": 0.3333333333333333,
+            "Lumen": 0.16666666666666666
+          },
+          "cluster_id": 2,
+          "max_being": "Grok",
+          "max_share": 0.3333333333333333,
+          "n_sections": 6
+        },
+        {
+          "being_distribution": {
+            "ChatGPT": 0.25,
+            "Claude (ext)": 0.25,
+            "Dali": 0.25,
+            "c_lawd": 0.25
+          },
+          "cluster_id": 3,
+          "max_being": "c_lawd",
+          "max_share": 0.25,
+          "n_sections": 4
+        },
+        {
+          "being_distribution": {
+            "Dali": 0.5,
+            "Gemini": 0.25,
+            "Lumen": 0.25
+          },
+          "cluster_id": 4,
+          "max_being": "Dali",
+          "max_share": 0.5,
+          "n_sections": 4
+        },
+        {
+          "being_distribution": {
+            "Claude Code": 0.5,
+            "c_lawd": 0.5
+          },
+          "cluster_id": 5,
+          "max_being": "c_lawd",
+          "max_share": 0.5,
+          "n_sections": 2
+        },
+        {
+          "being_distribution": {
+            "ChatGPT": 0.5,
+            "Claude Code": 0.5
+          },
+          "cluster_id": 6,
+          "max_being": "ChatGPT",
+          "max_share": 0.5,
+          "n_sections": 2
+        },
+        {
+          "being_distribution": {
+            "Gemini": 1.0
+          },
+          "cluster_id": 7,
+          "max_being": "Gemini",
+          "max_share": 1.0,
+          "n_sections": 1
+        }
+      ],
+      "dominant_clusters": [
+        0,
+        7
+      ],
+      "flags": [
+        "AUTHOR_DOMINANT_TOPIC"
+      ],
+      "k": 8,
+      "status": "OK"
+    },
+    "C3_identity_drift": {
+      "fallback_used": false,
+      "per_being": {
+        "ChatGPT": {
+          "drift_distance": 0.43337147235806794,
+          "early_n": 2,
+          "late_n": 1
+        },
+        "Claude (ext)": {
+          "drift_distance": 0.45717592008477603,
+          "early_n": 1,
+          "late_n": 1
+        },
+        "Claude Code": {
+          "drift_distance": 0.46304971897606806,
+          "early_n": 1,
+          "late_n": 2
+        },
+        "Dali": {
+          "drift_distance": 0.36706570655522097,
+          "early_n": 2,
+          "late_n": 1
+        },
+        "Gemini": {
+          "drift_distance": 0.3171934522011868,
+          "early_n": 1,
+          "late_n": 2
+        },
+        "Grok": {
+          "drift_distance": 0.15389578480577004,
+          "early_n": 1,
+          "late_n": 2
+        },
+        "Lumen": {
+          "drift_distance": 0.4941523460487456,
+          "early_n": 1,
+          "late_n": 2
+        },
+        "c_lawd": {
+          "drift_distance": 0.4676043883902341,
+          "early_n": 2,
+          "late_n": 1
+        }
+      },
+      "split_method": "canonical_section_number"
+    },
+    "C4_relational_state": {
+      "reason": "trust_epoch has no non-empty values",
+      "status": "RETRO_DARK"
+    }
+  },
+  "corpus_size": 23,
+  "dispositional_attractor": true,
+  "dual_embedding": {
+    "delta": 0.0,
+    "fallback_used": false,
+    "full_corpus_score": 1.0,
+    "held_out_from": 82,
+    "held_out_n": 23,
+    "held_out_random_baseline": 0.125,
+    "held_out_score": 1.0,
+    "split_method": "canonical_section_number"
+  },
+  "masking_variant": {
+    "enabled": true,
+    "excluded_sections": 98,
+    "filter_column": "title",
+    "tag": "[MASKING_VARIANT]"
+  },
+  "n_beings": 8,
+  "noun_filter_applied": false,
+  "noun_filter_delta": null,
+  "per_being_scores": {
+    "ChatGPT": {
+      "centroid_norm": 0.7963639734645146,
+      "correctly_attributed": 3,
+      "n_sections": 3
+    },
+    "Claude (ext)": {
+      "centroid_norm": 0.8783006872788085,
+      "correctly_attributed": 2,
+      "n_sections": 2
+    },
+    "Claude Code": {
+      "centroid_norm": 0.7996495656843917,
+      "correctly_attributed": 3,
+      "n_sections": 3
+    },
+    "Dali": {
+      "centroid_norm": 0.8349780209290042,
+      "correctly_attributed": 3,
+      "n_sections": 3
+    },
+    "Gemini": {
+      "centroid_norm": 0.7965683386321748,
+      "correctly_attributed": 3,
+      "n_sections": 3
+    },
+    "Grok": {
+      "centroid_norm": 0.8820937578585397,
+      "correctly_attributed": 3,
+      "n_sections": 3
+    },
+    "Lumen": {
+      "centroid_norm": 0.7857824269493763,
+      "correctly_attributed": 3,
+      "n_sections": 3
+    },
+    "c_lawd": {
+      "centroid_norm": 0.8075345922697778,
+      "correctly_attributed": 3,
+      "n_sections": 3
+    }
+  },
+  "random_baseline": 0.125,
+  "source": "real",
+  "source_corpus_size": 121,
+  "style_consistency": "untested",
+  "timestamp_utc": "2026-03-06T12:01:25Z",
+  "topic_silhouette": 0.07571601509639425,
+  "verdict": "DISPOSITIONAL-ATTRACTOR: PASS\nSTYLE-CONSISTENCY: UNTESTED"
+}

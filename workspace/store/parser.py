@@ -39,7 +39,7 @@ def roman_to_int(s: str) -> int:
 # Known author names for extraction
 KNOWN_AUTHORS = [
     "Claude Code", "Claude (ext)", "Claude ext", "Claude",
-    "c_lawd", "Dali", "Grok", "Gemini", "ChatGPT", "Heath"
+    "c_lawd", "Dali", "Grok", "Gemini", "ChatGPT", "Heath", "Lumen"
 ]
 # Ordered longest-first to avoid partial matches
 KNOWN_AUTHORS_SORTED = sorted(KNOWN_AUTHORS, key=lambda x: -len(x))
