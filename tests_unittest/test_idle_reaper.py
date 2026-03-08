@@ -39,5 +39,82 @@ class IdleReaperTest(unittest.TestCase):
             self.assertEqual(event.get("reason"), "service_not_active")
 
 
+class TestIdleReaperPure(unittest.TestCase):
+    """Unit tests for idle_reaper pure functions — parse_z, utc_stamp, load/save json."""
+
+    def setUp(self):
+        import importlib.util
+        from pathlib import Path
+        script = Path(__file__).resolve().parents[1] / "workspace" / "scripts" / "idle_reaper.py"
+        spec = importlib.util.spec_from_file_location("idle_reaper", script)
+        self.mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(self.mod)
+        self._tmpdir = tempfile.TemporaryDirectory()
+        self.tmpdir = pathlib.Path(self._tmpdir.name)
+
+    def tearDown(self):
+        self._tmpdir.cleanup()
+
+    # --- parse_z ---
+
+    def test_parse_z_none_returns_none(self):
+        self.assertIsNone(self.mod.parse_z(None))
+
+    def test_parse_z_empty_returns_none(self):
+        self.assertIsNone(self.mod.parse_z(""))
+
+    def test_parse_z_z_suffix_parsed(self):
+        result = self.mod.parse_z("2026-03-08T00:00:00Z")
+        self.assertIsNotNone(result)
+        self.assertEqual(result.year, 2026)
+
+    def test_parse_z_invalid_returns_none(self):
+        self.assertIsNone(self.mod.parse_z("not-a-date"))
+
+    def test_parse_z_utc_aware(self):
+        import datetime
+        result = self.mod.parse_z("2026-01-01T00:00:00Z")
+        self.assertIsNotNone(result.tzinfo)
+
+    # --- utc_stamp ---
+
+    def test_utc_stamp_returns_string(self):
+        result = self.mod.utc_stamp()
+        self.assertIsInstance(result, str)
+
+    def test_utc_stamp_ends_with_z(self):
+        result = self.mod.utc_stamp()
+        self.assertTrue(result.endswith("Z"))
+
+    def test_utc_stamp_is_parseable(self):
+        result = self.mod.utc_stamp()
+        parsed = self.mod.parse_z(result)
+        self.assertIsNotNone(parsed)
+
+    # --- load_json / save_json ---
+
+    def test_load_json_missing_returns_default(self):
+        p = self.tmpdir / "missing.json"
+        result = self.mod.load_json(p, {"default": True})
+        self.assertEqual(result, {"default": True})
+
+    def test_save_json_then_load_roundtrip(self):
+        p = self.tmpdir / "data.json"
+        self.mod.save_json(p, {"key": "value"})
+        result = self.mod.load_json(p, {})
+        self.assertEqual(result["key"], "value")
+
+    def test_save_json_creates_parent_dirs(self):
+        p = self.tmpdir / "sub" / "data.json"
+        self.mod.save_json(p, {"x": 1})
+        self.assertTrue(p.exists())
+
+    def test_load_json_invalid_json_returns_default(self):
+        p = self.tmpdir / "bad.json"
+        p.write_text("not json", encoding="utf-8")
+        result = self.mod.load_json(p, "fallback")
+        self.assertEqual(result, "fallback")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -187,5 +187,184 @@ class MemoryMaintenanceTests(unittest.TestCase):
             self.assertFalse(stale_empty.exists())
 
 
+class TestParseBool(unittest.TestCase):
+    """Tests for parse_bool(value, default) — pure coercion logic."""
+
+    def setUp(self):
+        self.mod = load_module()
+
+    def test_none_returns_default_true(self):
+        self.assertTrue(self.mod.parse_bool(None, True))
+
+    def test_none_returns_default_false(self):
+        self.assertFalse(self.mod.parse_bool(None, False))
+
+    def test_1_returns_true(self):
+        self.assertTrue(self.mod.parse_bool("1", False))
+
+    def test_true_returns_true(self):
+        self.assertTrue(self.mod.parse_bool("true", False))
+
+    def test_yes_returns_true(self):
+        self.assertTrue(self.mod.parse_bool("yes", False))
+
+    def test_on_returns_true(self):
+        self.assertTrue(self.mod.parse_bool("on", False))
+
+    def test_0_returns_false(self):
+        self.assertFalse(self.mod.parse_bool("0", True))
+
+    def test_false_string_returns_false(self):
+        self.assertFalse(self.mod.parse_bool("false", True))
+
+    def test_no_returns_false(self):
+        self.assertFalse(self.mod.parse_bool("no", True))
+
+    def test_off_returns_false(self):
+        self.assertFalse(self.mod.parse_bool("off", True))
+
+    def test_case_insensitive_TRUE(self):
+        self.assertTrue(self.mod.parse_bool("TRUE", False))
+
+    def test_whitespace_stripped(self):
+        self.assertTrue(self.mod.parse_bool("  true  ", False))
+
+    def test_unknown_returns_default(self):
+        self.assertFalse(self.mod.parse_bool("maybe", False))
+
+
+class TestParsePositiveInt(unittest.TestCase):
+    """Tests for parse_positive_int(value, default, minimum)."""
+
+    def setUp(self):
+        self.mod = load_module()
+
+    def test_none_returns_default(self):
+        self.assertEqual(self.mod.parse_positive_int(None, 10), 10)
+
+    def test_empty_returns_default(self):
+        self.assertEqual(self.mod.parse_positive_int("", 5), 5)
+
+    def test_whitespace_returns_default(self):
+        self.assertEqual(self.mod.parse_positive_int("   ", 7), 7)
+
+    def test_valid_int_returned(self):
+        self.assertEqual(self.mod.parse_positive_int("42", 0), 42)
+
+    def test_zero_below_minimum_returns_default(self):
+        self.assertEqual(self.mod.parse_positive_int("0", 5, minimum=1), 5)
+
+    def test_negative_returns_default(self):
+        self.assertEqual(self.mod.parse_positive_int("-1", 5), 5)
+
+    def test_invalid_string_returns_default(self):
+        self.assertEqual(self.mod.parse_positive_int("abc", 3), 3)
+
+    def test_custom_minimum_satisfied(self):
+        self.assertEqual(self.mod.parse_positive_int("5", 1, minimum=5), 5)
+
+    def test_custom_minimum_not_satisfied_returns_default(self):
+        self.assertEqual(self.mod.parse_positive_int("4", 10, minimum=5), 10)
+
+
+class TestNormalizeFragmentKey(unittest.TestCase):
+    """Tests for normalize_fragment_key(text)."""
+
+    def setUp(self):
+        self.mod = load_module()
+
+    def test_lowercases(self):
+        self.assertEqual(self.mod.normalize_fragment_key("HELLO"), "hello")
+
+    def test_strips_whitespace(self):
+        self.assertEqual(self.mod.normalize_fragment_key("  hello  "), "hello")
+
+    def test_collapses_internal_whitespace(self):
+        self.assertEqual(self.mod.normalize_fragment_key("hello   world"), "hello world")
+
+    def test_empty_string(self):
+        self.assertEqual(self.mod.normalize_fragment_key(""), "")
+
+    def test_tab_collapsed(self):
+        self.assertEqual(self.mod.normalize_fragment_key("hello\tworld"), "hello world")
+
+    def test_already_normalized(self):
+        self.assertEqual(self.mod.normalize_fragment_key("hello world"), "hello world")
+
+
+class TestParseDailyFileDate(unittest.TestCase):
+    """Tests for parse_daily_file_date(path)."""
+
+    def setUp(self):
+        self.mod = load_module()
+
+    def test_iso_date_stem_parsed(self):
+        result = self.mod.parse_daily_file_date(Path("/some/dir/2026-03-08.md"))
+        self.assertEqual(result, dt.date(2026, 3, 8))
+
+    def test_non_date_stem_returns_none(self):
+        result = self.mod.parse_daily_file_date(Path("/some/dir/MEMORY.md"))
+        self.assertIsNone(result)
+
+    def test_invalid_date_returns_none(self):
+        result = self.mod.parse_daily_file_date(Path("/some/dir/2026-99-08.md"))
+        self.assertIsNone(result)
+
+    def test_returns_date_type(self):
+        result = self.mod.parse_daily_file_date(Path("/some/dir/2026-01-01.md"))
+        self.assertIsInstance(result, dt.date)
+
+
+class TestExtractMemoryBullets(unittest.TestCase):
+    """Tests for extract_memory_bullets(path)."""
+
+    def setUp(self):
+        self.mod = load_module()
+        self._tmpdir = tempfile.TemporaryDirectory()
+        self.tmpdir = Path(self._tmpdir.name)
+
+    def tearDown(self):
+        self._tmpdir.cleanup()
+
+    def _write(self, content: str) -> Path:
+        p = self.tmpdir / "f.md"
+        p.write_text(content, encoding="utf-8")
+        return p
+
+    def test_empty_file_returns_empty(self):
+        p = self._write("")
+        self.assertEqual(self.mod.extract_memory_bullets(p), [])
+
+    def test_bullet_extracted(self):
+        p = self._write("## Context\n- Session focus: governance\n")
+        result = self.mod.extract_memory_bullets(p)
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]["text"], "Session focus: governance")
+
+    def test_section_lowercased(self):
+        p = self._write("## Actions\n- ran tests\n")
+        result = self.mod.extract_memory_bullets(p)
+        self.assertEqual(result[0]["section"], "actions")
+
+    def test_placeholder_bullet_excluded(self):
+        p = self._write("## Context\n- \n- real bullet\n")
+        result = self.mod.extract_memory_bullets(p)
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]["text"], "real bullet")
+
+    def test_non_bullet_lines_excluded(self):
+        p = self._write("## Context\nJust a paragraph.\n- actual bullet\n")
+        result = self.mod.extract_memory_bullets(p)
+        self.assertEqual(len(result), 1)
+
+    def test_multiple_sections(self):
+        content = "## Context\n- ctx bullet\n## Actions\n- action bullet\n"
+        p = self._write(content)
+        result = self.mod.extract_memory_bullets(p)
+        sections = {r["section"] for r in result}
+        self.assertIn("context", sections)
+        self.assertIn("actions", sections)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -270,5 +270,121 @@ class TestAutomationStatus(unittest.TestCase):
             self.assertEqual(report["error"], "no-recent-run")
 
 
+class TestPureFunctions(unittest.TestCase):
+    """Unit tests for pure functions in automation_status — no subprocess needed."""
+
+    def setUp(self):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("automation_status", SCRIPT)
+        self.mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(self.mod)
+        self._tmpdir = tempfile.TemporaryDirectory()
+        self.tmpdir = Path(self._tmpdir.name)
+
+    def tearDown(self):
+        self._tmpdir.cleanup()
+
+    # --- ms_to_iso ---
+
+    def test_ms_to_iso_none_returns_none(self):
+        self.assertIsNone(self.mod.ms_to_iso(None))
+
+    def test_ms_to_iso_returns_string(self):
+        result = self.mod.ms_to_iso(0)
+        self.assertIsInstance(result, str)
+
+    def test_ms_to_iso_known_epoch(self):
+        result = self.mod.ms_to_iso(0)
+        self.assertIn("1970", result)
+
+    def test_ms_to_iso_ends_with_00(self):
+        result = self.mod.ms_to_iso(1000 * 1000)
+        self.assertIn("+00:00", result)
+
+    # --- read_jsonl ---
+
+    def test_read_jsonl_missing_returns_empty(self):
+        result, invalid = self.mod.read_jsonl(self.tmpdir / "missing.jsonl")
+        self.assertEqual(result, [])
+        self.assertEqual(invalid, 0)
+
+    def test_read_jsonl_valid_lines(self):
+        p = self.tmpdir / "data.jsonl"
+        p.write_text('{"a": 1}\n{"b": 2}\n', encoding="utf-8")
+        result, invalid = self.mod.read_jsonl(p)
+        self.assertEqual(len(result), 2)
+        self.assertEqual(invalid, 0)
+
+    def test_read_jsonl_invalid_lines_counted(self):
+        p = self.tmpdir / "data.jsonl"
+        p.write_text('{"a": 1}\nnot_json\n{"c": 3}\n', encoding="utf-8")
+        result, invalid = self.mod.read_jsonl(p)
+        self.assertEqual(len(result), 2)
+        self.assertEqual(invalid, 1)
+
+    def test_read_jsonl_skips_non_dict_lines(self):
+        p = self.tmpdir / "data.jsonl"
+        p.write_text('["list"]\n{"dict": true}\n', encoding="utf-8")
+        result, invalid = self.mod.read_jsonl(p)
+        self.assertEqual(len(result), 1)  # only dict lines
+
+    def test_read_jsonl_blank_lines_ignored(self):
+        p = self.tmpdir / "data.jsonl"
+        p.write_text('{"a": 1}\n\n\n{"b": 2}\n', encoding="utf-8")
+        result, invalid = self.mod.read_jsonl(p)
+        self.assertEqual(len(result), 2)
+        self.assertEqual(invalid, 0)
+
+    # --- load_jobs_store ---
+
+    def test_load_jobs_store_missing_returns_empty(self):
+        result = self.mod.load_jobs_store(self.tmpdir / "missing.json")
+        self.assertEqual(result, [])
+
+    def test_load_jobs_store_extracts_jobs_list(self):
+        p = self.tmpdir / "jobs.json"
+        p.write_text('{"jobs": [{"id": "1", "name": "test"}]}', encoding="utf-8")
+        result = self.mod.load_jobs_store(p)
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]["id"], "1")
+
+    def test_load_jobs_store_filters_non_dicts(self):
+        p = self.tmpdir / "jobs.json"
+        p.write_text('{"jobs": [{"id": "1"}, "string", null, 42]}', encoding="utf-8")
+        result = self.mod.load_jobs_store(p)
+        self.assertEqual(len(result), 1)
+
+    # --- find_job ---
+
+    def test_find_job_by_id(self):
+        jobs = [{"id": "abc", "name": "test"}, {"id": "xyz", "name": "other"}]
+        result = self.mod.find_job(jobs, job_id="abc", job_name=None)
+        self.assertEqual(result["id"], "abc")
+
+    def test_find_job_by_name(self):
+        jobs = [{"id": "abc", "name": "Test Job"}, {"id": "xyz", "name": "Other"}]
+        result = self.mod.find_job(jobs, job_id=None, job_name="test job")
+        self.assertEqual(result["id"], "abc")
+
+    def test_find_job_name_case_insensitive(self):
+        jobs = [{"id": "abc", "name": "Test Job"}]
+        result = self.mod.find_job(jobs, job_id=None, job_name="TEST JOB")
+        self.assertIsNotNone(result)
+
+    def test_find_job_not_found_returns_none(self):
+        jobs = [{"id": "abc", "name": "test"}]
+        result = self.mod.find_job(jobs, job_id="zzz", job_name="nonexistent")
+        self.assertIsNone(result)
+
+    def test_find_job_empty_list_returns_none(self):
+        result = self.mod.find_job([], job_id="abc", job_name=None)
+        self.assertIsNone(result)
+
+    def test_find_job_id_takes_priority_over_name(self):
+        jobs = [{"id": "abc", "name": "by_id"}, {"id": "xyz", "name": "by_name"}]
+        result = self.mod.find_job(jobs, job_id="abc", job_name="by_name")
+        self.assertEqual(result["name"], "by_id")
+
+
 if __name__ == "__main__":
     unittest.main()
