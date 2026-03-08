@@ -11,7 +11,7 @@ if str(HIVEMIND_ROOT) not in sys.path:
     sys.path.insert(0, str(HIVEMIND_ROOT))
 
 from hivemind.peer_graph import PeerGraph  # noqa: E402
-from hivemind.physarum_router import PhysarumRouter  # noqa: E402
+from hivemind.physarum_router import PhysarumRouter, _edge_key  # noqa: E402
 
 
 class TestPhysarumRouter(unittest.TestCase):
@@ -54,6 +54,63 @@ class TestPhysarumRouter(unittest.TestCase):
         high_cond = router.snapshot()["conductance"]["x->y"]
 
         self.assertGreater(high_cond, low_cond)
+
+
+class TestEdgeKey(unittest.TestCase):
+    """Tests for physarum_router._edge_key() — canonical edge string."""
+
+    def test_returns_string(self):
+        self.assertIsInstance(_edge_key("a", "b"), str)
+
+    def test_format_is_arrow(self):
+        result = _edge_key("src", "dst")
+        self.assertEqual(result, "src->dst")
+
+    def test_different_order_different_key(self):
+        self.assertNotEqual(_edge_key("a", "b"), _edge_key("b", "a"))
+
+    def test_self_loop(self):
+        result = _edge_key("x", "x")
+        self.assertEqual(result, "x->x")
+
+
+class TestPhysarumRouterPure(unittest.TestCase):
+    """Tests for PhysarumRouter snapshot/load round-trip and init behavior."""
+
+    def setUp(self):
+        agents = ["a", "b", "c", "d", "e"]
+        self.graph = PeerGraph.init(agents, k=2, seed=7)
+        self.router = PhysarumRouter(seed=42, explore_rate=0.1)
+
+    def test_snapshot_returns_dict(self):
+        snap = self.router.snapshot()
+        self.assertIsInstance(snap, dict)
+
+    def test_snapshot_has_conductance(self):
+        snap = self.router.snapshot()
+        self.assertIn("conductance", snap)
+
+    def test_snapshot_has_explore_rate(self):
+        snap = self.router.snapshot()
+        self.assertIn("explore_rate", snap)
+
+    def test_load_roundtrip(self):
+        # Do some updates first to have non-trivial state
+        paths = self.router.propose_paths("a", "route", self.graph, n_paths=2)
+        for p in paths:
+            self.router.update(p, reward_signal=0.7)
+        snap = self.router.snapshot()
+        restored = PhysarumRouter.load(snap)
+        self.assertEqual(restored.snapshot()["conductance"], snap["conductance"])
+
+    def test_propose_paths_returns_list(self):
+        result = self.router.propose_paths("a", "route", self.graph, n_paths=2)
+        self.assertIsInstance(result, list)
+
+    def test_get_conductance_default_one(self):
+        # Unknown edges default to conductance 1.0 (neutral exploration bias)
+        result = self.router._get_conductance("zzz_unknown", "abc_unknown")
+        self.assertAlmostEqual(result, 1.0)
 
 
 if __name__ == "__main__":
