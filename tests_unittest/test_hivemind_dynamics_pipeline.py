@@ -11,7 +11,7 @@ HIVEMIND_ROOT = REPO_ROOT / "workspace" / "hivemind"
 if str(HIVEMIND_ROOT) not in sys.path:
     sys.path.insert(0, str(HIVEMIND_ROOT))
 
-from hivemind.dynamics_pipeline import TactiDynamicsPipeline  # noqa: E402
+from hivemind.dynamics_pipeline import TactiDynamicsPipeline, _env_int, _norm  # noqa: E402
 from hivemind.trails import TrailStore  # noqa: E402
 
 
@@ -161,6 +161,67 @@ class TestTactiDynamicsPipeline(unittest.TestCase):
                             candidate_agents=["codex", "claude-code"],
                         )
                     self.assertIn(plan["counterfactual"]["reason"], {"error", "temporarily_disabled"})
+
+
+class TestEnvInt(unittest.TestCase):
+    """Tests for dynamics_pipeline._env_int() — env var to int with default."""
+
+    def test_env_var_parsed(self):
+        with patch.dict(os.environ, {"SOME_TEST_INT": "42"}, clear=False):
+            result = _env_int("SOME_TEST_INT", 0)
+            self.assertEqual(result, 42)
+
+    def test_missing_returns_default(self):
+        os.environ.pop("SOME_TEST_INT_MISSING", None)
+        result = _env_int("SOME_TEST_INT_MISSING", 7)
+        self.assertEqual(result, 7)
+
+    def test_invalid_string_returns_default(self):
+        with patch.dict(os.environ, {"SOME_TEST_INT": "notanint"}, clear=False):
+            result = _env_int("SOME_TEST_INT", 99)
+            self.assertEqual(result, 99)
+
+    def test_returns_int(self):
+        result = _env_int("SOME_TEST_INT_MISSING_99", 5)
+        self.assertIsInstance(result, int)
+
+    def test_float_string_truncated_to_int(self):
+        # "3.7" → int("3.7") fails → returns default; NOT converted via float()
+        with patch.dict(os.environ, {"SOME_TEST_INT": "3.7"}, clear=False):
+            result = _env_int("SOME_TEST_INT", 0)
+            self.assertEqual(result, 0)
+
+
+class TestNorm(unittest.TestCase):
+    """Tests for dynamics_pipeline._norm() — min-max normalization."""
+
+    def test_empty_returns_empty(self):
+        self.assertEqual(_norm({}), {})
+
+    def test_all_same_values_become_point_five(self):
+        result = _norm({"a": 3.0, "b": 3.0, "c": 3.0})
+        for v in result.values():
+            self.assertAlmostEqual(v, 0.5)
+
+    def test_min_maps_to_zero(self):
+        result = _norm({"lo": 0.0, "hi": 10.0})
+        self.assertAlmostEqual(result["lo"], 0.0)
+
+    def test_max_maps_to_one(self):
+        result = _norm({"lo": 0.0, "hi": 10.0})
+        self.assertAlmostEqual(result["hi"], 1.0)
+
+    def test_midpoint_maps_to_half(self):
+        result = _norm({"lo": 0.0, "mid": 5.0, "hi": 10.0})
+        self.assertAlmostEqual(result["mid"], 0.5)
+
+    def test_keys_preserved(self):
+        result = _norm({"alpha": 1.0, "beta": 3.0})
+        self.assertIn("alpha", result)
+        self.assertIn("beta", result)
+
+    def test_returns_dict(self):
+        self.assertIsInstance(_norm({"a": 1.0}), dict)
 
 
 if __name__ == "__main__":
