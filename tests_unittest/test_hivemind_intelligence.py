@@ -14,8 +14,17 @@ HIVEMIND_DIR = REPO_ROOT / "workspace" / "hivemind"
 if str(HIVEMIND_DIR) not in sys.path:
     sys.path.insert(0, str(HIVEMIND_DIR))
 
+import json
+import tempfile
+
 from hivemind.intelligence.contradictions import (
     _ku_id, _tokens, _sim, _has_negation, _iso, _NEGATIONS
+)
+from hivemind.intelligence.pruning import (
+    _iso as _pruning_iso,
+    _tokenize as _pruning_tokenize,
+    _sim as _pruning_sim,
+    _append_jsonl,
 )
 from hivemind.intelligence.summaries import _parse_period, _summarize_group
 
@@ -277,6 +286,124 @@ class TestSummarizeGroup(unittest.TestCase):
         result = _summarize_group([{}])
         self.assertIsInstance(result, list)
         self.assertEqual(len(result), 1)
+
+
+class TestPruningIso(unittest.TestCase):
+    """Tests for pruning._iso() — ISO timestamp to aware datetime."""
+
+    def test_z_suffix_parsed(self):
+        from datetime import timezone
+        dt = _pruning_iso("2026-03-08T12:00:00Z")
+        self.assertEqual(dt.tzinfo, timezone.utc)
+
+    def test_offset_aware_preserved(self):
+        from datetime import timezone
+        dt = _pruning_iso("2026-03-08T12:00:00+00:00")
+        self.assertIsNotNone(dt.tzinfo)
+
+    def test_naive_gets_utc(self):
+        from datetime import timezone
+        dt = _pruning_iso("2026-03-08T12:00:00")
+        self.assertEqual(dt.tzinfo, timezone.utc)
+
+    def test_returns_datetime(self):
+        from datetime import datetime
+        dt = _pruning_iso("2026-03-08T00:00:00Z")
+        self.assertIsInstance(dt, datetime)
+
+
+class TestPruningTokenize(unittest.TestCase):
+    """Tests for pruning._tokenize() — word-boundary tokenizer."""
+
+    def test_empty_returns_empty(self):
+        self.assertEqual(_pruning_tokenize(""), [])
+
+    def test_simple_word(self):
+        result = _pruning_tokenize("hello")
+        self.assertIn("hello", result)
+
+    def test_lowercased(self):
+        result = _pruning_tokenize("HELLO")
+        self.assertIn("hello", result)
+
+    def test_punctuation_splits(self):
+        result = _pruning_tokenize("foo.bar")
+        self.assertIn("foo", result)
+        self.assertIn("bar", result)
+
+    def test_hyphen_preserved(self):
+        result = _pruning_tokenize("cross-timescale")
+        self.assertIn("cross-timescale", result)
+
+    def test_returns_list(self):
+        self.assertIsInstance(_pruning_tokenize("hello"), list)
+
+
+class TestPruningSim(unittest.TestCase):
+    """Tests for pruning._sim() — cosine similarity on token counts."""
+
+    def test_identical_returns_one(self):
+        self.assertAlmostEqual(_pruning_sim("hello world", "hello world"), 1.0, places=5)
+
+    def test_no_overlap_returns_zero(self):
+        self.assertAlmostEqual(_pruning_sim("alpha beta", "gamma delta"), 0.0, places=5)
+
+    def test_empty_first_returns_zero(self):
+        self.assertEqual(_pruning_sim("", "hello"), 0.0)
+
+    def test_empty_second_returns_zero(self):
+        self.assertEqual(_pruning_sim("hello", ""), 0.0)
+
+    def test_returns_float(self):
+        self.assertIsInstance(_pruning_sim("hello", "world"), float)
+
+    def test_symmetric(self):
+        a = "memory consolidation replay"
+        b = "replay consolidation systems"
+        self.assertAlmostEqual(_pruning_sim(a, b), _pruning_sim(b, a), places=10)
+
+
+class TestAppendJsonl(unittest.TestCase):
+    """Tests for pruning._append_jsonl() — JSONL file appender."""
+
+    def test_creates_file(self):
+        with tempfile.TemporaryDirectory() as td:
+            p = Path(td) / "sub" / "log.jsonl"
+            _append_jsonl(p, [{"key": "value"}])
+            self.assertTrue(p.exists())
+
+    def test_appends_rows(self):
+        with tempfile.TemporaryDirectory() as td:
+            p = Path(td) / "log.jsonl"
+            _append_jsonl(p, [{"a": 1}, {"b": 2}])
+            lines = [l for l in p.read_text(encoding="utf-8").splitlines() if l.strip()]
+            self.assertEqual(len(lines), 2)
+
+    def test_appends_multiple_calls(self):
+        with tempfile.TemporaryDirectory() as td:
+            p = Path(td) / "log.jsonl"
+            _append_jsonl(p, [{"a": 1}])
+            _append_jsonl(p, [{"b": 2}])
+            lines = [l for l in p.read_text(encoding="utf-8").splitlines() if l.strip()]
+            self.assertEqual(len(lines), 2)
+
+    def test_valid_json_per_line(self):
+        with tempfile.TemporaryDirectory() as td:
+            p = Path(td) / "log.jsonl"
+            _append_jsonl(p, [{"x": 42}])
+            for line in p.read_text(encoding="utf-8").splitlines():
+                if line.strip():
+                    obj = json.loads(line)
+                    self.assertEqual(obj["x"], 42)
+
+    def test_empty_rows_writes_no_content(self):
+        with tempfile.TemporaryDirectory() as td:
+            p = Path(td) / "log.jsonl"
+            _append_jsonl(p, [])
+            # File may or may not exist; if it does, it must have no JSON rows
+            if p.exists():
+                lines = [l for l in p.read_text(encoding="utf-8").splitlines() if l.strip()]
+                self.assertEqual(lines, [])
 
 
 if __name__ == "__main__":
