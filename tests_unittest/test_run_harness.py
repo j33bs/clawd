@@ -104,5 +104,143 @@ class RunHarnessTests(unittest.TestCase):
             self.assertEqual(on_disk["completed_checkpoints"], 1)
 
 
+class TestPureFunctions(unittest.TestCase):
+    """Tests for run_harness pure/utility functions."""
+
+    def setUp(self):
+        self.mod = load_module()
+
+    # --- utc_stamp ---
+
+    def test_utc_stamp_returns_string(self):
+        self.assertIsInstance(self.mod.utc_stamp(), str)
+
+    def test_utc_stamp_ends_with_z(self):
+        stamp = self.mod.utc_stamp()
+        self.assertTrue(stamp.endswith("Z"), f"Expected Z suffix: {stamp}")
+
+    def test_utc_stamp_format(self):
+        import re
+        stamp = self.mod.utc_stamp()
+        self.assertRegex(stamp, r"^\d{8}T\d{6}Z$")
+
+    # --- make_run_id ---
+
+    def test_make_run_id_returns_string(self):
+        self.assertIsInstance(self.mod.make_run_id(), str)
+
+    def test_make_run_id_contains_prefix(self):
+        run_id = self.mod.make_run_id("myprefix")
+        self.assertTrue(run_id.startswith("myprefix_"))
+
+    def test_make_run_id_default_prefix(self):
+        run_id = self.mod.make_run_id()
+        self.assertIn("_", run_id)
+
+    # --- redact_env ---
+
+    def test_redact_env_key_containing_key(self):
+        self.assertEqual(self.mod.redact_env("OPENAI_API_KEY", "sk-secret"), "<redacted>")
+
+    def test_redact_env_key_containing_token(self):
+        self.assertEqual(self.mod.redact_env("AUTH_TOKEN", "mytoken"), "<redacted>")
+
+    def test_redact_env_key_containing_secret(self):
+        self.assertEqual(self.mod.redact_env("MY_SECRET", "s3cr3t"), "<redacted>")
+
+    def test_redact_env_key_containing_pass(self):
+        self.assertEqual(self.mod.redact_env("DB_PASS", "pw123"), "<redacted>")
+
+    def test_redact_env_safe_key_passthrough(self):
+        result = self.mod.redact_env("OPENCLAW_MODEL", "gpt-4")
+        self.assertEqual(result, "gpt-4")
+
+    def test_redact_env_case_insensitive(self):
+        self.assertEqual(self.mod.redact_env("api_key", "val"), "<redacted>")
+
+    # --- collect_openclaw_env ---
+
+    def test_collect_openclaw_env_filters_prefix(self):
+        env = {"OPENCLAW_MODEL": "gpt-4", "HOME": "/home/user", "OPENCLAW_TIMEOUT": "30"}
+        result = self.mod.collect_openclaw_env(env)
+        self.assertIn("OPENCLAW_MODEL", result)
+        self.assertIn("OPENCLAW_TIMEOUT", result)
+        self.assertNotIn("HOME", result)
+
+    def test_collect_openclaw_env_redacts_keys(self):
+        env = {"OPENCLAW_API_KEY": "sk-secret"}
+        result = self.mod.collect_openclaw_env(env)
+        self.assertEqual(result["OPENCLAW_API_KEY"], "<redacted>")
+
+    def test_collect_openclaw_env_empty_returns_empty(self):
+        result = self.mod.collect_openclaw_env({})
+        self.assertEqual(result, {})
+
+    def test_collect_openclaw_env_sorted(self):
+        env = {"OPENCLAW_Z": "z", "OPENCLAW_A": "a", "OPENCLAW_M": "m"}
+        result = self.mod.collect_openclaw_env(env)
+        self.assertEqual(list(result.keys()), sorted(result.keys()))
+
+    # --- exceeds_caps ---
+
+    def test_exceeds_caps_within_limits(self):
+        self.assertFalse(self.mod.exceeds_caps({"file_count": 10, "total_bytes": 100}, 100, 1000))
+
+    def test_exceeds_caps_file_count_over(self):
+        self.assertTrue(self.mod.exceeds_caps({"file_count": 101, "total_bytes": 100}, 100, 1000))
+
+    def test_exceeds_caps_bytes_over(self):
+        self.assertTrue(self.mod.exceeds_caps({"file_count": 10, "total_bytes": 1001}, 100, 1000))
+
+    def test_exceeds_caps_exactly_at_limit(self):
+        self.assertFalse(self.mod.exceeds_caps({"file_count": 100, "total_bytes": 1000}, 100, 1000))
+
+    # --- scan_tree_usage ---
+
+    def test_scan_tree_usage_missing_dir(self):
+        result = self.mod.scan_tree_usage(Path("/nonexistent/path/xyz"))
+        self.assertEqual(result, {"file_count": 0, "total_bytes": 0})
+
+    def test_scan_tree_usage_counts_files(self):
+        with tempfile.TemporaryDirectory() as td:
+            p = Path(td)
+            (p / "a.txt").write_text("hello", encoding="utf-8")
+            (p / "b.txt").write_text("world", encoding="utf-8")
+            result = self.mod.scan_tree_usage(p)
+            self.assertEqual(result["file_count"], 2)
+            self.assertGreater(result["total_bytes"], 0)
+
+    def test_scan_tree_usage_returns_dict(self):
+        with tempfile.TemporaryDirectory() as td:
+            result = self.mod.scan_tree_usage(Path(td))
+            self.assertIsInstance(result, dict)
+            self.assertIn("file_count", result)
+            self.assertIn("total_bytes", result)
+
+    # --- append_line ---
+
+    def test_append_line_creates_file(self):
+        with tempfile.TemporaryDirectory() as td:
+            p = Path(td) / "sub" / "log.txt"
+            self.mod.append_line(p, "hello")
+            self.assertTrue(p.exists())
+            self.assertEqual(p.read_text(encoding="utf-8"), "hello\n")
+
+    def test_append_line_appends_multiple(self):
+        with tempfile.TemporaryDirectory() as td:
+            p = Path(td) / "log.txt"
+            self.mod.append_line(p, "first")
+            self.mod.append_line(p, "second")
+            lines = p.read_text(encoding="utf-8").splitlines()
+            self.assertEqual(lines, ["first", "second"])
+
+    def test_append_line_strips_trailing_newline(self):
+        with tempfile.TemporaryDirectory() as td:
+            p = Path(td) / "log.txt"
+            self.mod.append_line(p, "hello\n\n")
+            content = p.read_text(encoding="utf-8")
+            self.assertEqual(content.count("\n"), 1)
+
+
 if __name__ == "__main__":
     unittest.main()
