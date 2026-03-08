@@ -11,6 +11,131 @@ sys.path.insert(0, str(REPO_ROOT / "workspace" / "research"))
 
 import research_ingest  # noqa: E402
 
+from research_ingest import compute_hash, extract_text_from_html, normalize_topic, parse_topics_file  # noqa: E402
+
+
+class TestComputeHash(unittest.TestCase):
+    """Tests for research_ingest.compute_hash() — SHA-256 hex[:12]."""
+
+    def test_returns_string(self):
+        self.assertIsInstance(compute_hash("hello"), str)
+
+    def test_length_is_12(self):
+        self.assertEqual(len(compute_hash("hello")), 12)
+
+    def test_deterministic(self):
+        self.assertEqual(compute_hash("hello"), compute_hash("hello"))
+
+    def test_different_inputs_different_hashes(self):
+        self.assertNotEqual(compute_hash("a"), compute_hash("b"))
+
+    def test_empty_string(self):
+        result = compute_hash("")
+        self.assertEqual(len(result), 12)
+
+    def test_hex_chars_only(self):
+        result = compute_hash("test content")
+        self.assertTrue(all(c in "0123456789abcdef" for c in result))
+
+
+class TestExtractTextFromHtml(unittest.TestCase):
+    """Tests for research_ingest.extract_text_from_html() — HTML stripper."""
+
+    def test_plain_text_unchanged(self):
+        result = extract_text_from_html("hello world")
+        self.assertIn("hello world", result)
+
+    def test_script_tags_removed(self):
+        html = "<script>alert('xss')</script>hello"
+        result = extract_text_from_html(html)
+        self.assertNotIn("alert", result)
+        self.assertIn("hello", result)
+
+    def test_style_tags_removed(self):
+        html = "<style>body{color:red}</style>hello"
+        result = extract_text_from_html(html)
+        self.assertNotIn("color", result)
+        self.assertIn("hello", result)
+
+    def test_html_tags_stripped(self):
+        html = "<p>hello <b>world</b></p>"
+        result = extract_text_from_html(html)
+        self.assertIn("hello", result)
+        self.assertIn("world", result)
+        self.assertNotIn("<", result)
+
+    def test_html_entities_decoded(self):
+        result = extract_text_from_html("&amp; &lt; &gt;")
+        self.assertIn("&", result)
+        self.assertIn("<", result)
+        self.assertIn(">", result)
+
+    def test_returns_string(self):
+        self.assertIsInstance(extract_text_from_html("<p>hi</p>"), str)
+
+    def test_empty_string(self):
+        result = extract_text_from_html("")
+        self.assertIsInstance(result, str)
+
+
+class TestNormalizeTopic(unittest.TestCase):
+    """Tests for research_ingest.normalize_topic() — slug normalization."""
+
+    def test_lowercases(self):
+        self.assertEqual(normalize_topic("Memory"), "memory")
+
+    def test_spaces_become_underscores(self):
+        self.assertEqual(normalize_topic("active inference"), "active_inference")
+
+    def test_hyphens_become_underscores(self):
+        self.assertEqual(normalize_topic("cross-timescale"), "cross_timescale")
+
+    def test_special_chars_removed(self):
+        self.assertEqual(normalize_topic("foo!bar"), "foobar")
+
+    def test_multiple_underscores_collapsed(self):
+        result = normalize_topic("a  b")
+        self.assertNotIn("__", result)
+
+    def test_returns_string(self):
+        self.assertIsInstance(normalize_topic("test"), str)
+
+
+class TestParseTopicsFileIngest(unittest.TestCase):
+    """Tests for research_ingest.parse_topics_file() — Markdown topic parser."""
+
+    def test_missing_file_raises(self):
+        with self.assertRaises(FileNotFoundError):
+            parse_topics_file(Path("/nonexistent/TOPICS.md"))
+
+    def test_table_format_extracted(self):
+        with tempfile.TemporaryDirectory() as td:
+            p = Path(td) / "TOPICS.md"
+            p.write_text("| **memory** | desc |\n| **arousal** |\n", encoding="utf-8")
+            result = parse_topics_file(p)
+            self.assertIn("memory", result)
+            self.assertIn("arousal", result)
+
+    def test_heading_format_extracted(self):
+        with tempfile.TemporaryDirectory() as td:
+            p = Path(td) / "TOPICS.md"
+            p.write_text("#### Active Inference\n", encoding="utf-8")
+            result = parse_topics_file(p)
+            self.assertIn("active_inference", result)
+
+    def test_no_duplicates(self):
+        with tempfile.TemporaryDirectory() as td:
+            p = Path(td) / "TOPICS.md"
+            p.write_text("| **memory** |\n| **memory** |\n", encoding="utf-8")
+            result = parse_topics_file(p)
+            self.assertEqual(result.count("memory"), 1)
+
+    def test_returns_list(self):
+        with tempfile.TemporaryDirectory() as td:
+            p = Path(td) / "TOPICS.md"
+            p.write_text("| **memory** |\n", encoding="utf-8")
+            self.assertIsInstance(parse_topics_file(p), list)
+
 
 class TestResearchIngest(unittest.TestCase):
     def test_parse_topics_file_extracts_framework_topics(self):
