@@ -46,8 +46,14 @@ class MemoryMaintenanceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             memory_dir = Path(td) / "memory"
             memory_dir.mkdir(parents=True, exist_ok=True)
-            (memory_dir / "2026-02-25.md").write_text("# Daily Memory - 2026-02-25\n\nhello world\n", encoding="utf-8")
-            (memory_dir / "2026-02-26.md").write_text("# Daily Memory - 2026-02-26\n\nsecond note\n", encoding="utf-8")
+            (memory_dir / "2026-02-25.md").write_text(
+                "# Daily Memory - 2026-02-25\n\n## Context\n- routing check\n\n## Actions\n- hello world\n\n## Follow-ups\n- add tests\n",
+                encoding="utf-8",
+            )
+            (memory_dir / "2026-02-26.md").write_text(
+                "# 2026-02-26\n\n## Updates\n- second note\\nwrapped oddly\n",
+                encoding="utf-8",
+            )
 
             output = Path(td) / "state" / "memory_index.json"
             payload = self.mod.build_memory_index(memory_dir, output)
@@ -57,6 +63,12 @@ class MemoryMaintenanceTests(unittest.TestCase):
             on_disk = json.loads(output.read_text(encoding="utf-8"))
             self.assertEqual(on_disk["total_files"], 2)
             self.assertEqual([entry["date"] for entry in on_disk["entries"]], ["2026-02-25", "2026-02-26"])
+            self.assertTrue(on_disk["entries"][0]["template_compliant"])
+            self.assertTrue(on_disk["entries"][0]["machine_readable"])
+            self.assertIn("actions", on_disk["entries"][0]["section_names"])
+            self.assertTrue(on_disk["entries"][1]["contains_literal_escaped_newlines"])
+            self.assertFalse(on_disk["entries"][1]["template_compliant"])
+            self.assertTrue(on_disk["entries"][1]["machine_readable"])
 
     def test_create_memory_snapshot_copies_daily_files_and_manifest(self):
         with tempfile.TemporaryDirectory() as td:
@@ -115,6 +127,33 @@ class MemoryMaintenanceTests(unittest.TestCase):
             )
             self.assertFalse(second["changed"])
             self.assertEqual(second["consolidated_count"], 2)
+
+    def test_consolidate_memory_fragments_prioritizes_recent_actionable_repeated_signals(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            memory_dir = root / "memory"
+            memory_dir.mkdir(parents=True, exist_ok=True)
+            (memory_dir / "2026-02-24.md").write_text(
+                "# Daily Memory - 2026-02-24\n\n## Context\n- quiet day\n\n## Actions\n- reviewed queue\n\n## Follow-ups\n- add retry tests\n",
+                encoding="utf-8",
+            )
+            (memory_dir / "2026-02-26.md").write_text(
+                "# Daily Memory - 2026-02-26\n\n## Actions\n- add retry tests\n- rotate logs\n",
+                encoding="utf-8",
+            )
+            output = root / "workspace" / "state_runtime" / "memory" / "heartbeat_consolidation.json"
+
+            result = self.mod.consolidate_memory_fragments(
+                memory_dir,
+                output,
+                today=dt.date(2026, 2, 26),
+                window_days=3,
+            )
+
+            self.assertTrue(result["changed"])
+            payload = json.loads(output.read_text(encoding="utf-8"))
+            self.assertEqual(payload["consolidated"][0]["text"], "add retry tests")
+            self.assertGreaterEqual(payload["consolidated"][0]["score"], payload["consolidated"][1]["score"])
 
     def test_distill_weekly_memory_updates_once_per_week_and_migrates_old_state(self):
         with tempfile.TemporaryDirectory() as td:
@@ -185,6 +224,76 @@ class MemoryMaintenanceTests(unittest.TestCase):
             self.assertTrue(recent.exists())
             self.assertEqual(result["pruned_count"], 1)
             self.assertFalse(stale_empty.exists())
+
+    def test_assess_memory_health_reports_gap_and_format_drift(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            memory_dir = root / "memory"
+            memory_dir.mkdir(parents=True, exist_ok=True)
+            (memory_dir / "2026-02-24.md").write_text(
+                "# Daily Memory - 2026-02-24\n\n## Context\n- stable\n\n## Actions\n- reviewed queue\n\n## Follow-ups\n- add retry tests\n",
+                encoding="utf-8",
+            )
+            (memory_dir / "2026-02-26.md").write_text(
+                "# 2026-02-26\n\n## Updates\n- malformed\\nentry\n",
+                encoding="utf-8",
+            )
+            memory_md = root / "MEMORY.md"
+            memory_md.write_text("# MEMORY.md - Long-Term Context\n\n## Daily Distillations\n", encoding="utf-8")
+            output = root / "workspace" / "state_runtime" / "memory" / "memory_health.json"
+
+            report = self.mod.assess_memory_health(
+                memory_dir,
+                memory_md,
+                output,
+                today=dt.date(2026, 2, 26),
+                recent_days=3,
+            )
+
+            self.assertEqual(report["missing_recent_dates"], ["2026-02-25"])
+            self.assertEqual(len(report["files_with_literal_escaped_newlines"]), 1)
+            self.assertGreater(report["machine_readable_rate_recent"], 0)
+            self.assertFalse(report["long_term_memory"]["has_weekly_distillations"])
+            self.assertFalse(report["compounding_ready"])
+            self.assertTrue(output.exists())
+
+    def test_normalize_recent_daily_memory_files_decodes_escaped_newlines_and_normalizes_title(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            memory_dir = root / "memory"
+            memory_dir.mkdir(parents=True, exist_ok=True)
+            target = memory_dir / "2026-02-26.md"
+            target.write_text("# 2026-02-26\\n\\n## Updates\\n- malformed\\nentry", encoding="utf-8")
+
+            result = self.mod.normalize_recent_daily_memory_files(
+                memory_dir,
+                today=dt.date(2026, 2, 26),
+                window_days=3,
+            )
+
+            self.assertEqual(result["normalized_count"], 1)
+            body = target.read_text(encoding="utf-8")
+            self.assertIn("# Daily Memory - 2026-02-26\n", body)
+            self.assertIn("## Updates\n- malformed\nentry\n", body)
+
+    def test_run_maintain_returns_normalization_summary(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            memory_dir = root / "memory"
+            memory_dir.mkdir(parents=True, exist_ok=True)
+            (root / "MEMORY.md").write_text("# MEMORY.md - Long-Term Context\n\n## Daily Distillations\n## Weekly Distillations\n", encoding="utf-8")
+            (memory_dir / "2026-02-26.md").write_text("# 2026-02-26\\n\\n## Updates\\n- malformed\\nentry", encoding="utf-8")
+
+            result = self.mod.run_maintain(
+                root,
+                dt.date(2026, 2, 26),
+                with_normalization=True,
+                with_weekly_distill=False,
+                with_cleanup=False,
+            )
+
+            self.assertIsNotNone(result["normalization"])
+            self.assertEqual(result["normalization"]["normalized_count"], 1)
 
 
 if __name__ == "__main__":
