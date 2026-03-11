@@ -1,0 +1,167 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://openclaw.local/schemas/market_sentiment.v1.json",
+  "title": "Market Sentiment Snapshot",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "generated_at",
+    "producer",
+    "status",
+    "poll",
+    "model",
+    "artifacts",
+    "sources",
+    "aggregate"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "generated_at": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+    },
+    "producer": {
+      "type": "string",
+      "minLength": 1
+    },
+    "status": {
+      "type": "string",
+      "enum": ["ok", "degraded", "error"]
+    },
+    "poll": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["recommended_interval_seconds", "stale_after_seconds"],
+      "properties": {
+        "recommended_interval_seconds": { "type": "integer", "minimum": 1 },
+        "stale_after_seconds": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "model": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["provider", "requested", "resolved", "fallback_used", "status", "error"],
+      "properties": {
+        "provider": { "type": "string" },
+        "requested": { "type": "string" },
+        "resolved": { "type": "string" },
+        "fallback_used": { "type": "boolean" },
+        "status": { "type": "string", "enum": ["ok", "error"] },
+        "error": { "type": ["string", "null"] }
+      }
+    },
+    "artifacts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["events_ref", "snapshot_ref"],
+      "properties": {
+        "events_ref": { "type": "string", "minLength": 1 },
+        "snapshot_ref": { "type": "string", "minLength": 1 }
+      }
+    },
+    "sources": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": { "$ref": "#/$defs/source" }
+    },
+    "aggregate": { "$ref": "#/$defs/aggregate" }
+  },
+  "$defs": {
+    "classification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source",
+        "sentiment",
+        "confidence",
+        "risk_on",
+        "risk_off",
+        "regime",
+        "drivers",
+        "latency_ms"
+      ],
+      "properties": {
+        "source": { "type": "string", "minLength": 1 },
+        "sentiment": { "type": "number", "minimum": -1, "maximum": 1 },
+        "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+        "risk_on": { "type": "number", "minimum": 0, "maximum": 1 },
+        "risk_off": { "type": "number", "minimum": 0, "maximum": 1 },
+        "regime": { "type": "string", "enum": ["risk_on", "risk_off", "neutral", "mixed"] },
+        "drivers": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "latency_ms": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "optional",
+        "fetched_at",
+        "stale_after_seconds",
+        "weight_hint",
+        "transport",
+        "raw_ref",
+        "summary",
+        "metrics"
+      ],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["ok", "degraded", "error", "optional_offline", "stale"]
+        },
+        "optional": { "type": "boolean" },
+        "fetched_at": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+        },
+        "stale_after_seconds": { "type": "integer", "minimum": 1 },
+        "weight_hint": { "type": "number", "minimum": 0 },
+        "transport": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "raw_ref": { "type": "string" },
+        "summary": { "type": "string" },
+        "metrics": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "classification": { "$ref": "#/$defs/classification" }
+      }
+    },
+    "aggregate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sentiment",
+        "confidence",
+        "risk_on",
+        "risk_off",
+        "regime",
+        "sources_considered",
+        "source_weights"
+      ],
+      "properties": {
+        "sentiment": { "type": "number", "minimum": -1, "maximum": 1 },
+        "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+        "risk_on": { "type": "number", "minimum": 0, "maximum": 1 },
+        "risk_off": { "type": "number", "minimum": 0, "maximum": 1 },
+        "regime": { "type": "string", "enum": ["risk_on", "risk_off", "neutral", "mixed"] },
+        "sources_considered": { "type": "integer", "minimum": 0 },
+        "source_weights": {
+          "type": "object",
+          "additionalProperties": { "type": "number", "minimum": 0 }
+        }
+      }
+    }
+  }
+}
+
