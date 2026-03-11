@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import hashlib
 import importlib
+import importlib.util
 import os
+import sys
 import threading
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -20,8 +23,37 @@ _MODEL_CACHE: dict[tuple[str, str], Any] = {}
 _MODEL_CACHE_LOCK = threading.Lock()
 
 
+def _kb_mlx_venv_root() -> Path:
+    raw = os.getenv("OPENCLAW_KB_MLX_VENV", "workspace/runtime/embeddings/.venv_kb_mlx").strip()
+    return Path(raw).expanduser().resolve()
+
+
+def _boot_kb_mlx_site_packages() -> None:
+    root = _kb_mlx_venv_root()
+    if not root.exists():
+        return
+    for site in sorted((root / "lib").glob("python*/site-packages")):
+        site_str = str(site.resolve())
+        if site_str not in sys.path:
+            sys.path.insert(0, site_str)
+
+
 def _backend_mode() -> str:
     return os.getenv("OPENCLAW_KB_EMBEDDINGS_BACKEND", "mlx").strip().lower()
+
+
+def _mlx_embeddings_available() -> bool:
+    if importlib.util.find_spec("mlx_embeddings") is not None:
+        return True
+    _boot_kb_mlx_site_packages()
+    return importlib.util.find_spec("mlx_embeddings") is not None
+
+
+def _effective_backend_mode() -> str:
+    requested = _backend_mode()
+    if requested != "mlx":
+        return requested
+    return "mlx" if _mlx_embeddings_available() else "mock"
 
 
 def _normalize_rows(matrix: np.ndarray) -> np.ndarray:
@@ -65,6 +97,9 @@ def _load_mlx_model(model_id: str) -> Any:
 
 
 def _run_mlx_embed(model: Any, texts: list[str]) -> Any:
+    if isinstance(model, tuple) and len(model) == 2:
+        module = importlib.import_module("mlx_embeddings")
+        return module.generate(model[0], model[1], texts)
     if hasattr(model, "embed_batch"):
         return model.embed_batch(texts)
     if hasattr(model, "embed"):
@@ -79,7 +114,19 @@ def _run_mlx_embed(model: Any, texts: list[str]) -> Any:
 
 
 def _coerce_matrix(raw: Any, expected_rows: int) -> np.ndarray:
+    if hasattr(raw, "text_embeds") and getattr(raw, "text_embeds") is not None:
+        raw = getattr(raw, "text_embeds")
+    elif hasattr(raw, "pooler_output") and getattr(raw, "pooler_output") is not None:
+        raw = getattr(raw, "pooler_output")
+    elif hasattr(raw, "last_hidden_state") and getattr(raw, "last_hidden_state") is not None:
+        raw = np.asarray(getattr(raw, "last_hidden_state"))[:, 0, :]
+
     arr = np.asarray(raw, dtype=np.float32)
+
+    # ModernBERT masked-LM exports token-level embeddings instead of one vector
+    # per text. Collapse the token axis here so the KB contract remains 2D.
+    if arr.ndim == 3:
+        arr = arr.mean(axis=1)
 
     if arr.ndim == 1:
         arr = arr.reshape(1, -1)
@@ -108,7 +155,7 @@ class MlxEmbedder:
         self.normalize = bool(normalize)
         self.dim = MODEL_DIMS[model_id]
         self.batch_size = max(1, int(os.getenv("OPENCLAW_KB_EMBED_BATCH_SIZE", "32")))
-        self._mode = _backend_mode()
+        self._mode = _effective_backend_mode()
         self._backend = self._get_backend(model_id=model_id, mode=self._mode)
 
     @classmethod

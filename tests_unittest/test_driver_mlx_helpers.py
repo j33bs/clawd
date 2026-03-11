@@ -2,6 +2,7 @@
 
 Covers:
 - _backend_mode() — reads OPENCLAW_KB_EMBEDDINGS_BACKEND env var
+- _effective_backend_mode() — downgrades to mock when mlx_embeddings is unavailable
 - _mock_embed(text, dim) — deterministic hash-based mock embedding
 - _normalize_rows(matrix) — L2-normalizes rows of a numpy matrix
 """
@@ -21,8 +22,11 @@ sys.modules["driver_mlx_real"] = drv
 _spec.loader.exec_module(drv)
 
 _backend_mode = drv._backend_mode
+_effective_backend_mode = drv._effective_backend_mode
+_kb_mlx_venv_root = drv._kb_mlx_venv_root
 _mock_embed = drv._mock_embed
 _normalize_rows = drv._normalize_rows
+_coerce_matrix = drv._coerce_matrix
 
 try:
     import numpy as np
@@ -59,6 +63,43 @@ class TestBackendMode(unittest.TestCase):
     def test_returns_string(self):
         result = _backend_mode()
         self.assertIsInstance(result, str)
+
+
+class TestKbMlxVenvRoot(unittest.TestCase):
+    def test_default_path(self):
+        with patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("OPENCLAW_KB_MLX_VENV", None)
+            self.assertTrue(str(_kb_mlx_venv_root()).endswith("workspace/runtime/embeddings/.venv_kb_mlx"))
+
+    def test_env_override(self):
+        with patch.dict(os.environ, {"OPENCLAW_KB_MLX_VENV": "/tmp/kb-mlx"}):
+            self.assertEqual(_kb_mlx_venv_root(), Path("/tmp/kb-mlx").resolve())
+
+
+class TestEffectiveBackendMode(unittest.TestCase):
+    def test_defaults_to_mock_when_mlx_embeddings_missing(self):
+        with patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("OPENCLAW_KB_EMBEDDINGS_BACKEND", None)
+            with patch.object(drv, "_mlx_embeddings_available", return_value=False):
+                self.assertEqual(_effective_backend_mode(), "mock")
+
+    def test_keeps_mlx_when_package_available(self):
+        with patch.dict(os.environ, {"OPENCLAW_KB_EMBEDDINGS_BACKEND": "mlx"}, clear=False):
+            with patch.object(drv, "_mlx_embeddings_available", return_value=True):
+                self.assertEqual(_effective_backend_mode(), "mlx")
+
+    def test_respects_explicit_non_mlx_backend(self):
+        with patch.dict(os.environ, {"OPENCLAW_KB_EMBEDDINGS_BACKEND": "mock"}, clear=False):
+            with patch.object(drv, "_mlx_embeddings_available", return_value=True):
+                self.assertEqual(_effective_backend_mode(), "mock")
+
+
+class TestRunMlxEmbed(unittest.TestCase):
+    def test_uses_generate_for_tuple_backend(self):
+        fake_module = type("FakeModule", (), {"generate": lambda self, model, tokenizer, texts: [[1.0, 2.0]]})()
+        with patch.object(drv.importlib, "import_module", return_value=fake_module):
+            result = drv._run_mlx_embed(("model", "tokenizer"), ["hello"])
+        self.assertEqual(result, [[1.0, 2.0]])
 
 
 # ---------------------------------------------------------------------------
@@ -176,6 +217,33 @@ class TestNormalizeRows(unittest.TestCase):
         result = _normalize_rows(m)
         norm = float(np.linalg.norm(result[0]))
         self.assertAlmostEqual(norm, 1.0, places=5)
+
+
+@unittest.skipUnless(_NUMPY_AVAILABLE, "numpy not available")
+class TestCoerceMatrix(unittest.TestCase):
+    def test_uses_pooler_output_when_present(self):
+        import numpy as np
+
+        class FakeOutput:
+            pooler_output = np.array([[1.0, 2.0]], dtype=np.float32)
+
+        result = _coerce_matrix(FakeOutput(), expected_rows=1)
+        np.testing.assert_allclose(result, [[1.0, 2.0]], atol=1e-6)
+
+    def test_mean_pools_token_level_text_embeds(self):
+        import numpy as np
+
+        class FakeOutput:
+            text_embeds = np.array(
+                [
+                    [[1.0, 3.0], [3.0, 5.0]],
+                    [[2.0, 4.0], [6.0, 8.0]],
+                ],
+                dtype=np.float32,
+            )
+
+        result = _coerce_matrix(FakeOutput(), expected_rows=2)
+        np.testing.assert_allclose(result, [[2.0, 4.0], [4.0, 6.0]], atol=1e-6)
 
 
 if __name__ == "__main__":

@@ -20,22 +20,31 @@ EOF
   exit 0
 fi
 
+KB_MLX_VENV="${OPENCLAW_KB_MLX_VENV:-$ROOT/workspace/runtime/embeddings/.venv_kb_mlx}"
+
 if [[ -z "${OPENCLAW_KB_EMBEDDINGS_BACKEND:-}" ]]; then
-  if ! python3 - <<'PY' >/dev/null 2>&1
+  if ! OPENCLAW_KB_MLX_VENV="$KB_MLX_VENV" python3 - <<'PY' >/dev/null 2>&1
+import sys
+from pathlib import Path
 import importlib.util
-raise SystemExit(0 if importlib.util.find_spec("mlx_embeddings") else 1)
+
+root = Path(Path.cwd() / "workspace" / "knowledge_base" / "embeddings").resolve()
+sys.path.insert(0, str(root.parent.parent.parent))
+from workspace.knowledge_base.embeddings.driver_mlx import _mlx_embeddings_available
+
+raise SystemExit(0 if _mlx_embeddings_available() else 1)
 PY
   then
     export OPENCLAW_KB_EMBEDDINGS_BACKEND=mock
-    echo "[verify] mlx_embeddings not found; using OPENCLAW_KB_EMBEDDINGS_BACKEND=mock"
+    echo "[verify] mlx_embeddings not found in $KB_MLX_VENV; using OPENCLAW_KB_EMBEDDINGS_BACKEND=mock"
   fi
 fi
 
-python3 -m unittest tests_unittest/test_embeddings_contract.py
-python3 workspace/knowledge_base/kb.py index
-python3 workspace/knowledge_base/kb.py query "What does OPEN_QUESTIONS.md discuss?"
+OPENCLAW_KB_MLX_VENV="$KB_MLX_VENV" python3 -m unittest tests_unittest/test_embeddings_contract.py
+OPENCLAW_KB_MLX_VENV="$KB_MLX_VENV" python3 workspace/knowledge_base/kb.py index
+OPENCLAW_KB_MLX_VENV="$KB_MLX_VENV" python3 workspace/knowledge_base/kb.py query "What does OPEN_QUESTIONS.md discuss?"
 
-python3 - <<'PY'
+OPENCLAW_KB_MLX_VENV="$KB_MLX_VENV" python3 - <<'PY'
 import sys
 from pathlib import Path
 
