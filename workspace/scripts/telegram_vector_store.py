@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import shutil
 from pathlib import Path
 from typing import Any
 
@@ -244,14 +245,25 @@ def build_store(
                 batch_size=max(1, int(batch_size)),
             )
         except Exception as exc:
-            fallback = build_json_backend(
-                normalized_rows,
-                store_dir=store_dir,
-                embedder_name=embedder_name,
-                batch_size=max(1, int(batch_size)),
-            )
-            fallback["warning"] = f"lancedb_unavailable_fallback={exc}"
-            return fallback
+            try:
+                shutil.rmtree(store_dir, ignore_errors=True)
+                rebuilt = build_lancedb_backend(
+                    normalized_rows,
+                    store_dir=store_dir,
+                    embedder_name=embedder_name,
+                    batch_size=max(1, int(batch_size)),
+                )
+                rebuilt["warning"] = f"lancedb_store_rebuilt_after_error={exc}"
+                return rebuilt
+            except Exception as retry_exc:
+                fallback = build_json_backend(
+                    normalized_rows,
+                    store_dir=store_dir,
+                    embedder_name=embedder_name,
+                    batch_size=max(1, int(batch_size)),
+                )
+                fallback["warning"] = f"lancedb_unavailable_fallback={retry_exc}"
+                return fallback
 
     return build_json_backend(
         normalized_rows,

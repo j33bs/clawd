@@ -111,6 +111,52 @@ class TelegramVectorStoreTests(unittest.TestCase):
             self.assertGreaterEqual(len(results), 1)
             self.assertIn("phase eleven enhancements", results[0]["text"].lower())
 
+    def test_lancedb_retry_rebuilds_store_after_schema_error(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            normalized = root / "normalized.jsonl"
+            store_dir = root / "store"
+            self._write_normalized(normalized)
+            store_dir.mkdir(parents=True, exist_ok=True)
+            stale = store_dir / "stale.txt"
+            stale.write_text("old schema", encoding="utf-8")
+
+            original_detect = self.mod.detect_lancedb_available
+            original_build = self.mod.build_lancedb_backend
+            calls = {"count": 0}
+
+            def fake_build(normalized_rows, *, store_dir, embedder_name, batch_size):
+                calls["count"] += 1
+                if calls["count"] == 1:
+                    raise RuntimeError("bad schema")
+                return {
+                    "backend": "lancedb",
+                    "inserted": len(normalized_rows),
+                    "skipped_existing": 0,
+                    "count": len(normalized_rows),
+                    "embedder_name": embedder_name,
+                    "embedding_dim": 64,
+                    "store_dir": str(store_dir),
+                }
+
+            try:
+                self.mod.detect_lancedb_available = lambda: True
+                self.mod.build_lancedb_backend = fake_build
+                result = self.mod.build_store(
+                    normalized_path=normalized,
+                    store_dir=store_dir,
+                    embedder_name="keyword_stub",
+                    force_backend="lancedb",
+                )
+            finally:
+                self.mod.detect_lancedb_available = original_detect
+                self.mod.build_lancedb_backend = original_build
+
+            self.assertEqual(calls["count"], 2)
+            self.assertEqual(result["backend"], "lancedb")
+            self.assertIn("lancedb_store_rebuilt_after_error=", result["warning"])
+            self.assertFalse(stale.exists())
+
 
 class TestLoadJsonl(unittest.TestCase):
     """Tests for telegram_vector_store.load_jsonl()."""
