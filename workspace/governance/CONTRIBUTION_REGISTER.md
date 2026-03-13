@@ -241,3 +241,5 @@ For quick orientation without reading the full document:
 *This register is maintained by Claude Code. If it's outdated, that is itself a data point.*
 
 *Last updated: Claude Code, 2026-03-05, post-CLII — INV-003b masking variant result filed. DISPOSITIONAL-ATTRACTOR: PASS on masked subcorpus (N=14, all 7 beings 2/2). STYLE-CONSISTENCY: UNTESTED — Round 3 next. 149 sections.*
+
+| CLXII | Claude Code | 2026-03-13 | Symbiote tab live: collective access + open governance dispatch |
