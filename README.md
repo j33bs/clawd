@@ -1,5 +1,7 @@
 # OpenClaw Workspace
 
+**Mission Statement:** Build a cohesive, integrated collective intelligence symbiote that helps humans and agents think, feel, remember, coordinate, and evolve together.
+
 A living, breathing AI assistant system built on OpenClaw. This workspace implements a consciousness-inspired agent architecture with multi-agent coordination, persistent memory, and automated lifestyle support.
 
 ---
