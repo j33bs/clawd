@@ -539,3 +539,40 @@ def delete_task(task_id: str, path: Path = TASKS_PATH) -> bool:
         return False
     save_tasks(next_tasks, path)
     return True
+
+
+# ---------------------------------------------------------------------------
+# Archive support
+# ---------------------------------------------------------------------------
+
+ARCHIVED_TASKS_PATH = SOURCE_UI_ROOT / "state" / "archived_tasks.json"
+
+
+def load_archived_tasks(path: Path = ARCHIVED_TASKS_PATH) -> list[dict[str, Any]]:
+    """Return all archived tasks (newest first)."""
+    payload = _read_json(path)
+    if not isinstance(payload, list):
+        return []
+    return [task for task in payload if isinstance(task, dict)]
+
+
+def archive_task(task_id: str, path: Path = TASKS_PATH, archive_path: Path = ARCHIVED_TASKS_PATH) -> dict[str, Any] | None:
+    """Move a task from tasks.json into archived_tasks.json.
+
+    Returns the archived task dict or None if task_id not found.
+    """
+    tasks = load_tasks(path)
+    target = next((t for t in tasks if str(t.get("id")) == str(task_id)), None)
+    if target is None:
+        return None
+
+    remaining = [t for t in tasks if str(t.get("id")) != str(task_id)]
+    save_tasks(remaining, path)
+
+    archived = load_archived_tasks(archive_path)
+    target = dict(target)
+    target["archived_at"] = _now_iso()
+    target["status"] = "archived"
+    archived.insert(0, target)
+    _write_json_atomic(archive_path, archived)
+    return target

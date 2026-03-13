@@ -3420,3 +3420,32 @@ body::after {
 .coord-msg-text { font-size: .82rem; color: var(--text-secondary); white-space: pre-wrap; word-break: break-word; }
 .coord-empty { font-size: .82rem; color: var(--text-tertiary); padding: 1rem; }
 /* ── end Source Intelligence ─────────────────────────────────────────────── */
+
+
+/* ---- Task review & archive ---- */
+.task-card-badge-review {
+    background: var(--warn, #f59e0b);
+    color: #1a1a1a;
+    font-size: 0.65rem;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-weight: 600;
+}
+.task-card-badge-reviewer {
+    background: var(--surface2, #2a2a3a);
+    color: var(--text-muted, #94a3b8);
+    font-size: 0.65rem;
+    padding: 2px 6px;
+    border-radius: 4px;
+}
+.task-action-btn-archive {
+    background: transparent;
+    border: 1px solid var(--border-muted, #334155);
+    color: var(--text-muted, #94a3b8);
+    opacity: 0.7;
+}
+.task-action-btn-archive:hover {
+    border-color: var(--warn, #f59e0b);
+    color: var(--warn, #f59e0b);
+    opacity: 1;
+}

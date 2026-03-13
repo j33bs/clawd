@@ -1254,6 +1254,20 @@ async function taskQuickAction(taskId, action) {
     } else if (action === 'priority') {
         const nextPriority = task.priority === 'low' ? 'medium' : (task.priority === 'medium' ? 'high' : 'low');
         updates = { priority: nextPriority };
+    } else if (action === 'archive') {
+        // Archive: remove from active tasks, no status update needed
+        try {
+            await api.archiveTask(taskId);
+            const nextTasks = tasks.filter(item => String(item.id) !== String(taskId));
+            store.set('tasks', nextTasks);
+            renderTasks();
+            renderDashboard();
+            Toast.success(`Task archived: ${task.title}`);
+        } catch (error) {
+            console.error('Task archive failed', error);
+            Toast.error('Archive failed');
+        }
+        return;
     } else {
         return;
     }

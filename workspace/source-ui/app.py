@@ -31,17 +31,21 @@ except Exception:  # pragma: no cover
 
 try:
     from api.task_store import (
+        archive_task as task_store_archive_task,
         create_task as task_store_create_task,
         delete_task as task_store_delete_task,
         load_all_tasks as task_store_load_all_tasks,
+        load_archived_tasks as task_store_load_archived_tasks,
         load_runtime_tasks as task_store_load_runtime_tasks,
         load_tasks as task_store_load_tasks,
         update_task as task_store_update_task,
     )
 except Exception:  # pragma: no cover
+    task_store_archive_task = None
     task_store_create_task = None
     task_store_delete_task = None
     task_store_load_all_tasks = None
+    task_store_load_archived_tasks = None
     task_store_load_runtime_tasks = None
     task_store_load_tasks = None
     task_store_update_task = None
@@ -362,6 +366,9 @@ class SourceUIHandler(SimpleHTTPRequestHandler):
             self.restart_gateway()
         elif parsed.path == '/api/commands':
             self.execute_command_deck()
+        elif parsed.path.startswith('/api/tasks/') and parsed.path.endswith('/archive'):
+            task_id = parsed.path.split('/')[-2]
+            self.archive_task_handler(task_id)
         else:
             self.send_error(404)
     
@@ -455,6 +462,8 @@ class SourceUIHandler(SimpleHTTPRequestHandler):
                 data = {'valence': 0.0, 'agent': agent}
         elif path == 'symbiote':
             data = self.symbiote_data()
+        elif path == 'tasks/archived':
+            data = self.get_archived_tasks_data()
         elif path == 'source/phi':
             data = self._source_phi_data()
         elif path == 'source/coordination-feed':
@@ -510,7 +519,25 @@ class SourceUIHandler(SimpleHTTPRequestHandler):
             return
         self.state.tasks = self._load_tasks()
         self.send_json({'success': True})
-    
+
+    def archive_task_handler(self, task_id):
+        """Archive a completed task (moves it to archived_tasks.json)."""
+        if task_store_archive_task is None:
+            self.send_json({'error': 'task_store_unavailable'}, status=400)
+            return
+        archived = task_store_archive_task(task_id)
+        if archived is None:
+            self.send_json({'error': 'Task not found'}, status=404)
+            return
+        self.state.tasks = self._load_tasks()
+        self.send_json({'success': True, 'task': archived})
+
+    def get_archived_tasks_data(self):
+        """Return all archived tasks."""
+        if task_store_load_archived_tasks is None:
+            return []
+        return task_store_load_archived_tasks()
+
     def refresh_data(self):
         """Refresh all data."""
         self.state.tasks = self._load_tasks()

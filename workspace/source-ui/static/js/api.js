@@ -62,6 +62,25 @@ class APIClient {
     async getHealth() {
         return this.request('/api/health');
     }
+
+    async getPortfolio() {
+        return this.request('/api/portfolio');
+    }
+
+    async runCommand(payload) {
+        return this.request('/api/commands', {
+            method: 'POST',
+            body: JSON.stringify(payload)
+        });
+    }
+
+    async getCommandHistory() {
+        return this.request('/api/commands/history');
+    }
+
+    async getCommandReceipts() {
+        return this.request('/api/commands/receipts');
+    }
     
     // Agents
     async getAgents() {
@@ -97,6 +116,14 @@ class APIClient {
     
     async deleteTask(id) {
         return this.request(`/api/tasks/${id}`, { method: 'DELETE' });
+    }
+
+    async archiveTask(id) {
+        return this.request(`/api/tasks/${id}/archive`, { method: 'POST' });
+    }
+
+    async getArchivedTasks() {
+        return this.request('/api/tasks/archived');
     }
     
     // Schedule
@@ -172,6 +199,17 @@ class MockAPIClient extends APIClient {
             memory: Math.floor(Math.random() * 40) + 40,
             disk: Math.floor(Math.random() * 30) + 30,
             gpu: Math.floor(Math.random() * 50) + 30
+        };
+    }
+
+    async getPortfolio() {
+        return {
+            generated_at: new Date().toISOString(),
+            projects: [],
+            sims: [],
+            work_items: [],
+            components: [],
+            health_metrics: await this.getHealth()
         };
     }
     
