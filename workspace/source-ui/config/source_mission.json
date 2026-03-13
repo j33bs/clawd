@@ -1,0 +1,121 @@
+{
+  "statement": "Build a cohesive, integrated collective intelligence symbiote that helps beings think, feel, remember, coordinate, and evolve together.",
+  "tagline": "Source is the shared command, memory, and meaning surface for collective intelligence among beings.",
+  "north_star": "Every meaningful interaction should leave the system more context-rich, more coordinated, more aligned, and more capable than it was before.",
+  "operating_commitments": [
+    "Make important state legible across surfaces without forcing beings to reconstruct it.",
+    "Turn raw interaction into attributable memory, then into reviewed inference and better future behavior.",
+    "Preserve provenance, consent, and clear authority while increasing useful agency for every lane.",
+    "Prefer local-first orchestration and tight feedback loops where latency and continuity matter.",
+    "Measure whether the collective is genuinely getting better, not just getting busier."
+  ],
+  "pillars": [
+    {
+      "id": "think",
+      "label": "Think",
+      "summary": "Shared context, deliberate routing, and model-specific reasoning harnesses."
+    },
+    {
+      "id": "feel",
+      "label": "Feel",
+      "summary": "Relational state, tone, urgency, and co-regulation become first-class system inputs."
+    },
+    {
+      "id": "remember",
+      "label": "Remember",
+      "summary": "Evidence becomes durable memory, then distilled preference and personal inference."
+    },
+    {
+      "id": "coordinate",
+      "label": "Coordinate",
+      "summary": "Beings share tasks, handoffs, receipts, and live operating state."
+    },
+    {
+      "id": "evolve",
+      "label": "Evolve",
+      "summary": "The system reviews itself, measures compounding gains, and improves on purpose."
+    }
+  ],
+  "tasks": [
+    {
+      "id": "source-001",
+      "title": "Universal Context Packet",
+      "pillar": "think",
+      "priority": "critical",
+      "summary": "Generate one compact, provenance-tagged context packet for Source UI, Telegram, Discord, and local agent lanes.",
+      "definition_of_done": "All major surfaces render and consume the same current-state packet with recency markers, open work, active models, and human preference lines."
+    },
+    {
+      "id": "source-002",
+      "title": "Mission Control Timeline",
+      "pillar": "coordinate",
+      "priority": "critical",
+      "summary": "Unify commands, model runs, handoffs, memory promotions, and sim transitions into one causally ordered event stream.",
+      "definition_of_done": "An operator can answer what happened, why it happened, and what changed next from one timeline view."
+    },
+    {
+      "id": "source-003",
+      "title": "Memory Promotion Review Queue",
+      "pillar": "remember",
+      "priority": "high",
+      "summary": "Build a review surface for promoting raw evidence into trusted user inferences, preferences, and reusable summaries.",
+      "definition_of_done": "Every durable inference has evidence links, contradiction state, confidence, and an operator review action."
+    },
+    {
+      "id": "source-004",
+      "title": "Personal Inference Graph",
+      "pillar": "remember",
+      "priority": "high",
+      "summary": "Move from flat prompt lines to a structured graph of preferences, aversions, rhythms, collaborators, and recurring goals.",
+      "definition_of_done": "Prompt harnesses can request targeted inference packets by context instead of reloading the same generic preferences."
+    },
+    {
+      "id": "source-005",
+      "title": "Relational State Layer",
+      "pillar": "feel",
+      "priority": "high",
+      "summary": "Track interaction tone, overload, trust, urgency, and social context so the system can respond with more tact and less noise.",
+      "definition_of_done": "Source exposes a live relational-state card and model harnesses can adapt response style from it."
+    },
+    {
+      "id": "source-006",
+      "title": "Multi-Agent Deliberation Cells",
+      "pillar": "think",
+      "priority": "high",
+      "summary": "Create bounded cells where specialist lanes can deliberate, disagree, and return one attributed recommendation.",
+      "definition_of_done": "Source can launch a cell with explicit roles, capture each contribution, and show the final synthesis with dissent if present."
+    },
+    {
+      "id": "source-007",
+      "title": "Research-to-Action Distillation",
+      "pillar": "coordinate",
+      "priority": "high",
+      "summary": "Turn research-channel discussions, saved links, and external feeds into actionable briefs, experiments, and queued tasks.",
+      "definition_of_done": "Research messages can be promoted into experiments or tasks with source links and owner assignment in one flow."
+    },
+    {
+      "id": "source-008",
+      "title": "Consent and Provenance Boundary Map",
+      "pillar": "feel",
+      "priority": "high",
+      "summary": "Make it explicit what can be shared across surfaces, what stays private, and what requires human approval.",
+      "definition_of_done": "Every memory and outbound action surface displays provenance and shareability state before use."
+    },
+    {
+      "id": "source-009",
+      "title": "Weekly Evolution Loop",
+      "pillar": "evolve",
+      "priority": "medium",
+      "summary": "Add a scheduled review that summarizes what the collective learned, what regressed, and what should change next.",
+      "definition_of_done": "Source produces a concise weekly evolution report with wins, regressions, and top three upgrades."
+    },
+    {
+      "id": "source-010",
+      "title": "Continuity and Recovery Pack",
+      "pillar": "evolve",
+      "priority": "medium",
+      "summary": "Capture the minimum viable state needed for a clean restart after service failure, model swap, or machine interruption.",
+      "definition_of_done": "A restart packet can reconstruct active work, latest decisions, memory health, and pending approvals without human re-explanation."
+    }
+  ]
+}

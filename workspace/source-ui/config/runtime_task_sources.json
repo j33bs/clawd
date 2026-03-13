@@ -1,0 +1,11 @@
+{
+  "sources": [
+    {
+      "id": "c_lawd",
+      "label": "c_lawd",
+      "enabled": true,
+      "url": "http://100.84.143.50:18990/api/runtime-tasks",
+      "timeout_s": 0.6
+    }
+  ]
+}

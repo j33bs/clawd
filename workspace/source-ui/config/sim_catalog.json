@@ -1,0 +1,68 @@
+{
+  "sims": [
+    {
+      "id": "SIM_A",
+      "display_name": "Legacy Regime Baseline",
+      "bucket": "Legacy",
+      "thesis": "15m trend baseline; no local latency edge",
+      "active_book": false,
+      "status_note": "Demoted from active book"
+    },
+    {
+      "id": "SIM_B",
+      "display_name": "Legacy ITC Tilt",
+      "bucket": "Legacy",
+      "thesis": "15m bar model with ITC sentiment tilt",
+      "active_book": false,
+      "status_note": "Demoted from active book"
+    },
+    {
+      "id": "SIM_C",
+      "display_name": "LOAR Walk-Forward Ensemble",
+      "bucket": "LOAR",
+      "thesis": "Local orderflow-assisted reasoning on bar cadence",
+      "active_book": false,
+      "status_note": "Research only until horizon is shortened"
+    },
+    {
+      "id": "SIM_D",
+      "display_name": "Bleeding Edge Tick Scalper",
+      "bucket": "Bleeding Edge",
+      "thesis": "Pure tick scalp for local execution advantage",
+      "active_book": false,
+      "status_note": "Frozen pending churn and win-rate redesign"
+    },
+    {
+      "id": "SIM_E",
+      "display_name": "CBP Reversion Grid",
+      "bucket": "CBP",
+      "thesis": "Core basis portfolio mean-reversion candidate",
+      "active_book": true,
+      "status_note": "Primary low-latency candidate"
+    },
+    {
+      "id": "SIM_F",
+      "display_name": "Bleeding Edge Spread Arb",
+      "bucket": "Bleeding Edge",
+      "thesis": "Cross-exchange spread capture with local quote edge",
+      "active_book": false,
+      "status_note": "Frozen pending maker-first redesign"
+    },
+    {
+      "id": "SIM_G",
+      "display_name": "CBP Funding Carry",
+      "bucket": "CBP",
+      "thesis": "Core basis portfolio carry sleeve",
+      "active_book": true,
+      "status_note": "Keep in book; currently inactive"
+    },
+    {
+      "id": "SIM_H",
+      "display_name": "LOAR Consensus",
+      "bucket": "LOAR",
+      "thesis": "Local orderflow-assisted reasoning manager/bias layer",
+      "active_book": true,
+      "status_note": "Active as manager, not pure latency scalper"
+    }
+  ]
+}

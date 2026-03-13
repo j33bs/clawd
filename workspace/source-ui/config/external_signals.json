@@ -1,0 +1,20 @@
+[
+  {
+    "id": "macbook_sentiment",
+    "name": "c_lawd MacBook Sentiment",
+    "kind": "sentiment",
+    "required": false,
+    "mode": "poll_json",
+    "path": "workspace/state/external/macbook_sentiment.json",
+    "summary": "Optional sentiment snapshot built on the MacBook M2 and polled by the 3090 stack. Trading must continue without it if the laptop goes offline."
+  },
+  {
+    "id": "fingpt_sentiment",
+    "name": "FinGPT External Sentiment",
+    "kind": "sentiment",
+    "required": false,
+    "mode": "poll_json",
+    "path": "workspace/state/external/fingpt_sentiment.json",
+    "summary": "Optional FinGPT sentiment or forecasting artifact. Dali consumes it as input only and continues trading if it is offline."
+  }
+]

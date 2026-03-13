@@ -1,0 +1,112 @@
+[
+  {
+    "id": "sm-001",
+    "title": "Universal Context Packet",
+    "description": "Generate one compact, provenance-tagged context packet for Source UI, Telegram, Discord, and local agent lanes.",
+    "status": "backlog",
+    "priority": "critical",
+    "assignee": "dali",
+    "project": "source-mission",
+    "origin": "source_mission_config",
+    "segment": "think"
+  },
+  {
+    "id": "sm-002",
+    "title": "Mission Control Timeline",
+    "description": "Unify commands, model runs, handoffs, memory promotions, and sim transitions into one causally ordered event stream.",
+    "status": "backlog",
+    "priority": "critical",
+    "assignee": "dali",
+    "project": "source-mission",
+    "origin": "source_mission_config",
+    "segment": "coordinate"
+  },
+  {
+    "id": "sm-003",
+    "title": "Memory Promotion Review Queue",
+    "description": "Build a review surface for promoting raw evidence into trusted user inferences, preferences, and reusable summaries.",
+    "status": "backlog",
+    "priority": "high",
+    "assignee": "dali",
+    "project": "source-mission",
+    "origin": "source_mission_config",
+    "segment": "remember"
+  },
+  {
+    "id": "sm-004",
+    "title": "Personal Inference Graph",
+    "description": "Move from flat prompt lines to a structured graph of preferences, aversions, rhythms, collaborators, and recurring goals.",
+    "status": "backlog",
+    "priority": "high",
+    "assignee": "dali",
+    "project": "source-mission",
+    "origin": "source_mission_config",
+    "segment": "remember"
+  },
+  {
+    "id": "sm-005",
+    "title": "Relational State Layer",
+    "description": "Track interaction tone, overload, trust, urgency, and social context so the system can respond with more tact and less noise.",
+    "status": "backlog",
+    "priority": "high",
+    "assignee": "dali",
+    "project": "source-mission",
+    "origin": "source_mission_config",
+    "segment": "feel"
+  },
+  {
+    "id": "sm-006",
+    "title": "Multi-Agent Deliberation Cells",
+    "description": "Create bounded cells where specialist lanes can deliberate, disagree, and return one attributed recommendation.",
+    "status": "backlog",
+    "priority": "high",
+    "assignee": "dali",
+    "project": "source-mission",
+    "origin": "source_mission_config",
+    "segment": "think"
+  },
+  {
+    "id": "sm-007",
+    "title": "Research-to-Action Distillation",
+    "description": "Turn research-channel discussions, saved links, and external feeds into actionable briefs, experiments, and queued tasks.",
+    "status": "backlog",
+    "priority": "high",
+    "assignee": "dali",
+    "project": "source-mission",
+    "origin": "source_mission_config",
+    "segment": "coordinate"
+  },
+  {
+    "id": "sm-008",
+    "title": "Consent and Provenance Boundary Map",
+    "description": "Make it explicit what can be shared across surfaces, what stays private, and what requires human approval.",
+    "status": "backlog",
+    "priority": "high",
+    "assignee": "dali",
+    "project": "source-mission",
+    "origin": "source_mission_config",
+    "segment": "feel"
+  },
+  {
+    "id": "sm-009",
+    "title": "Weekly Evolution Loop",
+    "description": "Add a scheduled review that summarizes what the collective learned, what regressed, and what should change next.",
+    "status": "backlog",
+    "priority": "medium",
+    "assignee": "dali",
+    "project": "source-mission",
+    "origin": "source_mission_config",
+    "segment": "evolve"
+  },
+  {
+    "id": "sm-010",
+    "title": "Continuity and Recovery Pack",
+    "description": "Capture the minimum viable state needed for a clean restart after service failure, model swap, or machine interruption.",
+    "status": "backlog",
+    "priority": "medium",
+    "assignee": "dali",
+    "project": "source-mission",
+    "origin": "source_mission_config",
+    "segment": "evolve"
+  }
+]
