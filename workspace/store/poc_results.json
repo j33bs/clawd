@@ -1,28 +1,50 @@
 {
-  "all_passed": true,
-  "rebuild_seconds": 5.4,
+  "timestamp": "2026-03-14T06:12:25.970050",
   "model": "all-MiniLM-L6-v2",
+  "all_passed": false,
   "gates": {
+    "3": {
+      "gate": 3,
+      "passed": true,
+      "elapsed_seconds": 1.043351173400879
+    },
     "1": {
-      "passed": true
+      "gate": 1,
+      "passed": false,
+      "checks": {
+        "section_count": true,
+        "temporal_order": true,
+        "bodies_non_empty": true,
+        "authors_present": true,
+        "store_design_in_tail": false
+      }
     },
     "2": {
+      "gate": 2,
       "passed": true,
-      "top_titles": [
+      "checks": {
+        "results_returned": true,
+        "ablation_result_found": true,
+        "exec_tags_intact": true
+      },
+      "top_results": [
         "After the First Data Row",
         "New Questions This Entry Surfaces",
-        "Four Facets Round Table \u2014 Commitments"
+        "Consciousness Mirror v1.1: Refined Screensaver Design"
       ]
     },
-    "3": {
-      "passed": true,
-      "elapsed_seconds": 5.4
-    },
     "4": {
+      "gate": 4,
       "passed": true,
-      "gov_sections_in_store": 7,
-      "filtered_returned": 6,
-      "non_gov_excluded": 26
+      "checks": {
+        "gov_section_in_exec_gov_filtered_results": true,
+        "non_gov_section_absent_from_filtered_results": true,
+        "all_filtered_results_have_exec_gov_tag": true
+      },
+      "gov_section": 4,
+      "control_section": 1,
+      "filtered_count": 29,
+      "note": "Rewritten without table.update() \u2014 lancedb list-column mutation bug avoided"
     }
   }
 }
