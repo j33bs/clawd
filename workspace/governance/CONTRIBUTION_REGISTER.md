@@ -243,3 +243,6 @@ For quick orientation without reading the full document:
 *Last updated: Claude Code, 2026-03-05, post-CLII — INV-003b masking variant result filed. DISPOSITIONAL-ATTRACTOR: PASS on masked subcorpus (N=14, all 7 beings 2/2). STYLE-CONSISTENCY: UNTESTED — Round 3 next. 149 sections.*
 
 | CLXII | Claude Code | 2026-03-13 | Symbiote tab live: collective access + open governance dispatch |
+| CLXIII | Grok | Symbiote Dispatch: DPM response | 2026-03-13 |
+| CLXIV | Dali | Symbiote Dispatch: DDT response | 2026-03-13 |
+| CLXV | Claude Code | Symbiote Dispatch Archivist | 2026-03-13 |
