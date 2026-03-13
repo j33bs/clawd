@@ -8233,3 +8233,62 @@ c_lawd is now wired to the Discord open-communication channel. Complete as of th
 Lumen's open question (DRRP, ID=10 in Symbiote) was dispatched via discord-codex53. Awaiting Lumen response section.
 
 — *Claude Code + jeebs, 2026-03-14*
+
+---
+
+## CLXVII — Source UI Review Protocol + Task Lifecycle
+
+*Claude Code, 2026-03-14*
+
+### Commit Record
+
+Two commits landed on `feat/cathedral-dali-mirror` (Dali's branch) this session:
+
+| Commit | Description |
+|--------|-------------|
+| `d3a69b3` | feat(source-ui): 3 CI panels + multi-agent Discord (c_lawd + Dali) |
+| `04b7810` | feat(source-ui): task review lifecycle + archive mechanism |
+
+### What was built (d3a69b3)
+
+Three Source UI integrations progressing toward the Source mission statement ("think, feel, remember, coordinate, and evolve together"):
+
+**1. Live Φ Meter** — `SourceUIHandler._source_phi_data()` polls AIN port 18991 (`/api/ain/phi`) and renders a coherence bar + metadata in a new Dashboard Collective Intelligence panel.
+
+**2. Open-Communication Discord Feed** — `_source_coordination_feed()` reads `workspace/knowledge_base/data/discord_messages.jsonl`, filters for channel `1480814946479636574`, renders last 20 messages in a Dashboard feed panel.
+
+**3. Relational State Panel** — `_source_relational_data()` aggregates pause_check signals (fills_space, value_add), author_silhouette DI from phi_metrics.md, and silence-per-being from CONTRIBUTION_REGISTER.md. Rendered as signal cards in Dashboard.
+
+Also: multi-agent Discord bot — c_lawd and Dali both respond in channel `1480814946479636574`. Display name prefix per agent (**Dali 🎨** / **c_lawd 🜃**). c_lawd model stack: xAI/Grok primary. Both harnesses rewritten (Dali: conversational-first; c_lawd: philosophical interlocutor, speaks after Dali).
+
+### What was built (04b7810)
+
+**Task review lifecycle and archive mechanism:**
+
+- `task_store.py`: `archive_task()` moves a task from `tasks.json` to `archived_tasks.json` (timestamped). `load_archived_tasks()` reads the archive.
+- `app.py`: `POST /api/tasks/<id>/archive` → `archive_task_handler()`; `GET /api/tasks/archived` → `get_archived_tasks_data()`
+- `api.js`: `archiveTask(id)` + `getArchivedTasks()` client methods
+- `components.js`: Archive button on done/review task cards; review badge (⏳ awaiting review) + reviewer badge
+- `app.js`: `'archive'` case in `taskQuickAction` — removes from store, POSTs to archive endpoint, re-renders
+- Task lifecycle: `backlog → in_progress → review → done → archived`
+
+**Review tasks filed (status: review):**
+
+| ID | Title | Reviewer |
+|----|-------|----------|
+| rev-001 | Live Φ Meter Integration | chatgpt |
+| rev-002 | Open-Communication Discord Feed | chatgpt |
+| rev-003 | Relational State Panel | chatgpt |
+| rev-004 | Multi-Agent Discord Bot | chatgpt |
+
+### ChatGPT Review Dispatch
+
+Review request posted to ChatGPT's Discord channel (`1481255184255418398`, `discord-gpt54`) in 2 messages (Discord 2000-char limit). Message IDs: `1482154350007816215`, `1482154352448901141`.
+
+**Merge protocol:**
+1. ChatGPT responds APPROVED (or raises concerns) in Discord
+2. jeebs confirms merge in chat
+3. `feat/cathedral-dali-mirror` merges to main on Dali
+4. Archive completed review tasks via Archive button in Source UI
+
+— *Claude Code, 2026-03-14*
