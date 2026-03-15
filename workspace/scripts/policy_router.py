@@ -1002,8 +1002,19 @@ def _count_bullets(text):
 def _count_file_paths(text):
     if not text:
         return 0
-    pattern = r"(?:[A-Za-z0-9._-]+/)+[A-Za-z0-9._-]+|[A-Za-z0-9._-]+\.[A-Za-z0-9]{1,8}"
-    return len(set(re.findall(pattern, text)))
+    matches = set()
+    for raw in re.split(r"\s+", str(text)):
+        token = raw.strip("()[]{}<>,:;\"'`")
+        if not token:
+            continue
+        if "/" in token:
+            parts = [part for part in token.split("/") if part]
+            if len(parts) >= 2 and all(re.fullmatch(r"[A-Za-z0-9._-]+", part) for part in parts):
+                matches.add(token)
+            continue
+        if "." in token and re.fullmatch(r"[A-Za-z0-9._-]+\.[A-Za-z0-9]{1,8}", token):
+            matches.add(token)
+    return len(matches)
 
 
 _INTENT_ACTION_WORD = re.compile(
