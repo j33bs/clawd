@@ -1520,17 +1520,18 @@ class FishTankRenderer:
             b = int(start[2] + ((end[2] - start[2]) * ratio))
             return f"#{r:02x}{g:02x}{b:02x}"
 
-        def breath_state(elapsed: float) -> tuple[float, str]:
+        def breath_state(elapsed: float) -> tuple[float, str, float]:
             elapsed = elapsed % breath_seconds
             if elapsed < inhale_seconds:
-                local = elapsed / max(0.001, inhale_seconds)
-                return 0.2 + (0.8 * local), "inhale"
+                local = ease_in_out(elapsed / max(0.001, inhale_seconds))
+                return 0.14 + (0.86 * local), "inhale", local
             elapsed -= inhale_seconds
             if elapsed < hold_seconds:
-                return 1.0, "hold"
+                local = elapsed / max(0.001, hold_seconds) if hold_seconds > 0.0 else 1.0
+                return 1.0, "hold", clamp01(local)
             elapsed -= hold_seconds
-            local = elapsed / max(0.001, exhale_seconds)
-            return 1.0 - (0.8 * local), "exhale"
+            local = ease_in_out(elapsed / max(0.001, exhale_seconds))
+            return 1.0 - (0.86 * local), "exhale", local
 
         def ease_in_out(value: float) -> float:
             value = clamp01(value)
@@ -1620,11 +1621,11 @@ class FishTankRenderer:
 
         breath_elapsed = scene_age % breath_seconds
         breath_progress = breath_elapsed / max(0.001, breath_seconds)
-        breath_strength, breath_label = breath_state(breath_elapsed)
+        breath_strength, breath_label, breath_phase_progress = breath_state(breath_elapsed)
         center_x = (width * 0.5) + drift_x
         center_y = (height * 0.56) + drift_y
         base_radius = min(width, height) * 0.09
-        ring_radius = base_radius * (0.92 + (0.24 * breath_strength))
+        ring_radius = base_radius * (0.82 + (0.34 * breath_strength))
         ring_thickness = max(2.0, min(width, height) * 0.003)
         glow_radius = ring_radius * (1.45 + ambient_strength * 0.35)
         canvas.create_oval(center_x - glow_radius, center_y - glow_radius, center_x + glow_radius, center_y + glow_radius, outline="#315f6a", width=1, tags="atmo")
@@ -1749,6 +1750,9 @@ class FishTankRenderer:
         state["current_phase"] = motion_label
         state["current_direction"] = direction_label
         state["current_breath"] = breath_label
+        state["breath_elapsed_seconds"] = round(float(breath_elapsed), 3)
+        state["breath_phase_progress"] = round(float(breath_phase_progress), 6)
+        state["ring_radius_px"] = round(float(ring_radius), 3)
         state["text_enabled"] = text_enabled
         state["cue_text_visible"] = cue_visible
         state["footer_text_visible"] = footer_visible
@@ -4117,11 +4121,14 @@ class FishTankRenderer:
                 "current_phase": str(therapeutic_state.get("current_phase", "") or ""),
                 "current_direction": str(therapeutic_state.get("current_direction", "") or ""),
                 "current_breath": str(therapeutic_state.get("current_breath", "") or ""),
+                "breath_elapsed_seconds": round(float(therapeutic_state.get("breath_elapsed_seconds", 0.0) or 0.0), 3),
+                "breath_phase_progress": round(float(therapeutic_state.get("breath_phase_progress", 0.0) or 0.0), 6),
                 "text_enabled": bool(therapeutic_state.get("text_enabled", False)),
                 "cue_text_visible": bool(therapeutic_state.get("cue_text_visible", False)),
                 "footer_text_visible": bool(therapeutic_state.get("footer_text_visible", False)),
                 "breath_label_visible": bool(therapeutic_state.get("breath_label_visible", False)),
                 "breath_caption_visible": bool(therapeutic_state.get("breath_caption_visible", False)),
+                "ring_radius_px": round(float(therapeutic_state.get("ring_radius_px", 0.0) or 0.0), 3),
                 "drift_x_px": round(float(therapeutic_state.get("drift_x_px", 0.0) or 0.0), 3),
                 "drift_y_px": round(float(therapeutic_state.get("drift_y_px", 0.0) or 0.0), 3),
                 "grounding_enabled": bool(getattr(self, "_therapeutic_grounding_enabled", True)),
