@@ -1,0 +1,12 @@
+[Unit]
+Description=OpenClaw periodic sim strategy review timer
+
+[Timer]
+OnBootSec=7m
+OnUnitActiveSec=6h
+AccuracySec=5m
+Unit=openclaw-sim-strategy-review.service
+Persistent=true
+
+[Install]
+WantedBy=timers.target

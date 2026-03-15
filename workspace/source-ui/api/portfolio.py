@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import urllib.error
@@ -12,8 +13,22 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+try:
+    import yaml
+except Exception:  # pragma: no cover - optional dependency in some environments
+    yaml = None
+
+from .boundary_state import (
+    build_inference_boundary,
+    build_memory_source_boundary,
+    build_preference_packet_boundary,
+    build_research_boundary,
+)
 from .discord_bridge import bridge_payload as discord_bridge_payload
+from .research_promotions import list_research_items
+from .sim_review import load_or_build_sim_strategy_review
 from .task_store import load_all_tasks
+from .user_inference import build_user_context_packet
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 SOURCE_UI_ROOT = REPO_ROOT / "workspace" / "source-ui"
@@ -23,6 +38,7 @@ SIM_CATALOG_PATH = SOURCE_UI_ROOT / "config" / "sim_catalog.json"
 SOURCE_MISSION_PATH = SOURCE_UI_ROOT / "config" / "source_mission.json"
 TEAMCHAT_ROOT = REPO_ROOT / "workspace" / "teamchat"
 SIM_ROOT = REPO_ROOT / "sim"
+TRADING_PIPELINE_PATH = REPO_ROOT / "pipelines" / "system1_trading.yaml"
 LOCAL_EXEC_LEDGER = REPO_ROOT / "workspace" / "local_exec" / "state" / "jobs.jsonl"
 PHASE1_STATUS_PATH = REPO_ROOT / "workspace" / "runtime" / "phase1_idle_status.json"
 OPENCLAW_LOG_ROOT = Path.home() / ".local" / "state" / "openclaw"
@@ -35,6 +51,17 @@ TELEGRAM_MEMORY_PATH = REPO_ROOT / "workspace" / "knowledge_base" / "data" / "te
 USER_INFERENCES_PATH = REPO_ROOT / "workspace" / "knowledge_base" / "data" / "user_inferences.jsonl"
 PREFERENCE_PROFILE_PATH = REPO_ROOT / "workspace" / "knowledge_base" / "data" / "preference_profile.json"
 ASSISTANT_MODELS_URL = "http://127.0.0.1:8001/v1/models"
+TRADING_STRATEGY_REPORT_PATHS = (
+    Path.home() / "Taildrive" / "shared" / "openclaw_trading_strategy_report_v2.md",
+    REPO_ROOT / "docs" / "openclaw_trading_strategy_report_v2.md",
+)
+TRADING_BLUEPRINT_CONFIGS = (
+    REPO_ROOT / "configs" / "base.yaml",
+    REPO_ROOT / "configs" / "live.au.yaml",
+    REPO_ROOT / "configs" / "universes" / "equities.yaml",
+    REPO_ROOT / "configs" / "universes" / "etfs.yaml",
+    REPO_ROOT / "configs" / "universes" / "crypto.yaml",
+)
 
 COMPONENT_UNITS = [
     ("gateway", "Gateway", "openclaw-gateway.service"),
@@ -54,6 +81,15 @@ def _read_json(path: Path) -> Any | None:
         return None
     try:
         return json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+
+
+def _read_text(path: Path) -> str | None:
+    if not path.exists() or not path.is_file():
+        return None
+    try:
+        return path.read_text(encoding="utf-8", errors="ignore")
     except Exception:
         return None
 
@@ -117,6 +153,293 @@ def _excerpt(value: Any, limit: int = 120) -> str:
     if len(text) <= limit:
         return text
     return text[: max(0, limit - 1)].rstrip() + "…"
+
+
+def _strip_markdown(text: str) -> str:
+    cleaned = re.sub(r"\*\*(.*?)\*\*", r"\1", str(text or ""))
+    cleaned = re.sub(r"`([^`]+)`", r"\1", cleaned)
+    cleaned = re.sub(r"\[(.*?)\]\((.*?)\)", r"\1", cleaned)
+    return " ".join(cleaned.strip().split())
+
+
+def _markdown_section(text: str, heading: str) -> str:
+    lines = str(text or "").splitlines()
+    start = None
+    level = None
+    for idx, line in enumerate(lines):
+        stripped = line.strip()
+        if not stripped.startswith("#"):
+            continue
+        hash_count = len(stripped) - len(stripped.lstrip("#"))
+        title = stripped[hash_count:].strip()
+        if title == heading:
+            start = idx + 1
+            level = hash_count
+            break
+    if start is None or level is None:
+        return ""
+    end = len(lines)
+    for idx in range(start, len(lines)):
+        stripped = lines[idx].strip()
+        if not stripped.startswith("#"):
+            continue
+        hash_count = len(stripped) - len(stripped.lstrip("#"))
+        if hash_count <= level:
+            end = idx
+            break
+    return "\n".join(lines[start:end]).strip()
+
+
+def _markdown_items(section: str, *, ordered: bool | None = None) -> list[str]:
+    rows: list[str] = []
+    for raw_line in str(section or "").splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        is_bullet = line.startswith("- ")
+        is_ordered = bool(re.match(r"^\d+\.\s+", line))
+        if ordered is True and not is_ordered:
+            continue
+        if ordered is False and not is_bullet:
+            continue
+        if not is_bullet and not is_ordered:
+            continue
+        line = re.sub(r"^-\s+", "", line)
+        line = re.sub(r"^\d+\.\s+", "", line)
+        rows.append(_strip_markdown(line))
+    return rows
+
+
+def _first_heading_title(text: str) -> str | None:
+    for raw_line in str(text or "").splitlines():
+        line = raw_line.strip()
+        if line.startswith("# "):
+            return _strip_markdown(line[2:])
+    return None
+
+
+def _parse_strategy_titles(text: str) -> list[str]:
+    rows: list[str] = []
+    for raw_line in str(text or "").splitlines():
+        line = raw_line.strip()
+        match = re.match(r"^##\s+Strategy\s+\d+\s+[—-]\s+(.+)$", line)
+        if match:
+            rows.append(_strip_markdown(match.group(1)))
+    return rows
+
+
+def _load_trading_pipeline_snapshot() -> dict[str, Any]:
+    if yaml is None or not TRADING_PIPELINE_PATH.exists():
+        return {
+            "status": "offline",
+            "enabled_sims": [],
+            "enabled_universe": [],
+            "path": str(TRADING_PIPELINE_PATH),
+        }
+    try:
+        payload = yaml.safe_load(TRADING_PIPELINE_PATH.read_text(encoding="utf-8")) or {}
+    except Exception:
+        return {
+            "status": "warning",
+            "enabled_sims": [],
+            "enabled_universe": [],
+            "path": str(TRADING_PIPELINE_PATH),
+        }
+    sims = payload.get("sims") if isinstance(payload, dict) else None
+    enabled_rows: list[dict[str, Any]] = []
+    universe: list[str] = []
+    if isinstance(sims, list):
+        for entry in sims:
+            if not isinstance(entry, dict) or not bool(entry.get("enabled", False)):
+                continue
+            symbols = [str(symbol) for symbol in entry.get("universe", []) if str(symbol).strip()]
+            enabled_rows.append(
+                {
+                    "id": str(entry.get("id", "")),
+                    "display_name": str(entry.get("display_name", entry.get("id", "sim"))),
+                    "strategy": str(entry.get("strategy", "")),
+                    "runtime_strategy": str(entry.get("runtime_strategy", entry.get("strategy", ""))),
+                    "bucket": str(entry.get("bucket", "")),
+                    "target_venue": str(entry.get("target_venue", "")),
+                    "universe": symbols,
+                }
+            )
+            universe.extend(symbols)
+    return {
+        "status": "active" if enabled_rows else "warning",
+        "enabled_sims": enabled_rows,
+        "enabled_universe": sorted({symbol for symbol in universe if symbol}),
+        "path": str(TRADING_PIPELINE_PATH),
+    }
+
+
+def _classify_trading_alignment(sim: dict[str, Any]) -> tuple[str, str]:
+    strategy = str(sim.get("strategy") or "").strip().lower()
+    runtime_strategy = str(sim.get("runtime_strategy") or sim.get("strategy") or "").strip().lower()
+    universe = [str(symbol).strip() for symbol in list(sim.get("universe") or []) if str(symbol).strip()]
+    target_venue = str(sim.get("target_venue") or "").strip()
+    if strategy == "us_equity_event_impulse":
+        return "partial", f"Report-aligned Alpaca event sleeve is paper-live on public equity bars, but it still needs local {target_venue or 'Alpaca'} credentials and richer event/news ingestion."
+    if strategy == "etf_narrative_spillover":
+        return "partial", f"Report-aligned Alpaca ETF spillover sleeve is paper-live on public ETF bars, but local {target_venue or 'Alpaca'} market data remains the preferred upgrade."
+    if strategy == "crypto_sentiment_breakout":
+        if any(symbol.endswith("USDT") for symbol in universe):
+            return "partial", "Report-aligned crypto sleeve is active, but it still runs on legacy USDT paper symbols instead of Kraken spot pairs."
+        return "aligned", "Report-aligned crypto sleeve is mapped to the intended spot venue."
+    if strategy == "perp_funding_carry":
+        return "blocked", "Perp funding carry conflicts with the AU phase-1 no-derivatives rule."
+    if runtime_strategy in {"cross_exchange_spread_arbitrage", "tick_crypto_scalping"}:
+        return "research_only", "Keep as AU paper research only until venue, legality, and fee controls are stable."
+    if runtime_strategy == "tick_grid_reversion":
+        return "research_only", "Useful as an AU paper crypto lane, but keep it out of the initial live brief until Kraken mapping is explicit."
+    if runtime_strategy == "latency_consensus_long_flat":
+        return "partial", "Useful as an AU-portable bias layer, but the brief wants it feeding venue-specific sleeves rather than standing alone."
+    if runtime_strategy in {
+        "regime_gated_long_flat",
+        "itc_sentiment_tilt_long_flat",
+        "ensemble_competing_models_long_flat",
+    }:
+        return "legacy", "Legacy bar-cadence sim; keep as AU-portable research/support, not the final live sleeve."
+    if not strategy:
+        return "unknown", "No strategy name found in the current trading config."
+    return "partial", "Strategy is not explicitly covered by the current AU live brief."
+
+
+def _build_trading_strategy_integration(pipeline_snapshot: dict[str, Any]) -> dict[str, Any]:
+    enabled = list(pipeline_snapshot.get("enabled_sims") or [])
+    enabled_universe = [str(symbol) for symbol in pipeline_snapshot.get("enabled_universe", []) if str(symbol).strip()]
+    alignment_rows: list[dict[str, Any]] = []
+    notes: list[str] = []
+    has_blocked = False
+    has_research_only = False
+    has_partial = False
+    has_staged = False
+    has_aligned = False
+
+    for sim in enabled:
+        status, note = _classify_trading_alignment(sim)
+        has_blocked = has_blocked or status == "blocked"
+        has_research_only = has_research_only or status == "research_only"
+        has_partial = has_partial or status in {"partial", "legacy", "unknown"}
+        has_staged = has_staged or status == "staged"
+        has_aligned = has_aligned or status == "aligned"
+        alignment_rows.append(
+            {
+                "id": str(sim.get("id", "")),
+                "display_name": str(sim.get("display_name", sim.get("id", "sim"))),
+                "strategy": str(sim.get("strategy", "")),
+                "runtime_strategy": str(sim.get("runtime_strategy", sim.get("strategy", ""))),
+                "status": status,
+                "note": note,
+            }
+        )
+
+    legacy_symbol_feed = any(symbol.endswith("USDT") for symbol in enabled_universe)
+    missing_equity_sleeve = enabled and not any(
+        str(sim.get("strategy") or "").strip().lower() in {"us_equity_event_impulse", "etf_narrative_spillover"}
+        for sim in enabled
+    )
+    if has_staged:
+        notes.append("UEEI and ETNS are configured but still gated behind local venue/data wiring.")
+    if any(str(sim.get("strategy") or "").strip().lower() in {"us_equity_event_impulse", "etf_narrative_spillover"} for sim in enabled):
+        notes.append("UEEI and ETNS can now run on public equity/ETF bars, but Alpaca credentials and higher-quality event/news ingestion remain the preferred upgrade path.")
+    if legacy_symbol_feed:
+        notes.append("Enabled paper lanes still read Binance-style USDT symbols; map them to Kraken spot USD/AUD pairs before treating them as AU-live.")
+    if missing_equity_sleeve:
+        notes.append("No Alpaca equity/ETF sleeve is configured yet; the report wants Alpaca event and ETF spillover lanes in the initial live scope.")
+    if any(str(row.get("status") or "") == "legacy" for row in alignment_rows):
+        notes.append("Legacy control lanes remain enabled as comparative benchmarks while the report-aligned sleeves self-calibrate.")
+    if has_blocked:
+        notes.append("At least one enabled sim violates the report's Australia-operable phase-1 constraints and should stay retired.")
+    elif enabled and (has_research_only or has_partial or has_staged):
+        notes.append("The remaining enabled sims are AU-viable paper compute lanes, not the final live deployment shape.")
+    if not enabled:
+        notes.append("No sims are currently enabled in the runtime trading config.")
+
+    if has_blocked:
+        status = "misaligned"
+        summary = "Active runtime still includes a non-AU-operable sleeve and is not ready for the Australia-only brief."
+    elif has_staged and (has_partial or legacy_symbol_feed):
+        status = "partial"
+        summary = "Report-aligned sleeves are configured beside the control lanes, but Alpaca/Kraken cutover and local feeds are still incomplete."
+    elif has_research_only or has_partial or has_staged or legacy_symbol_feed or missing_equity_sleeve:
+        status = "partial"
+        summary = "AU-viable paper lanes are retained, but the live stack still needs Alpaca/Kraken venue cutover."
+    elif has_aligned:
+        status = "aligned"
+        summary = "Report-aligned trading sleeves are present and mapped to the intended venues."
+    else:
+        status = "aligned"
+        summary = "Current enabled trading paths are aligned with the AU live brief."
+
+    return {
+        "status": status,
+        "summary": summary,
+        "enabled_sims": alignment_rows,
+        "enabled_universe": enabled_universe,
+        "notes": notes,
+        "pipeline_path": pipeline_snapshot.get("path"),
+    }
+
+
+def _load_trading_strategy() -> dict[str, Any]:
+    report_path = next((path for path in TRADING_STRATEGY_REPORT_PATHS if path.exists()), None)
+    if report_path is None:
+        return {
+            "status": "offline",
+            "title": "Trading strategy report unavailable",
+            "summary": "No trading strategy report was found on the shared Taildrive surface.",
+            "path": None,
+            "updated_at": None,
+            "live_scope": [],
+            "research_scope": [],
+            "excluded_scope": [],
+            "hard_limits": [],
+            "strategy_stack": [],
+            "next_steps": [],
+            "config_paths": [
+                {
+                    "label": path.name,
+                    "path": str(path),
+                    "exists": path.exists(),
+                }
+                for path in TRADING_BLUEPRINT_CONFIGS
+            ],
+            "integration": _build_trading_strategy_integration(_load_trading_pipeline_snapshot()),
+        }
+
+    text = _read_text(report_path) or ""
+    executive_section = _markdown_section(text, "Executive Summary")
+    live_scope = _markdown_items(_markdown_section(executive_section, "Recommended live scope"), ordered=True)
+    research_scope = _markdown_items(_markdown_section(executive_section, "Supported but not initially live"), ordered=True)
+    excluded_scope = _markdown_items(_markdown_section(executive_section, "Explicitly excluded for Australia"), ordered=True)
+    hard_limits = _markdown_items(_markdown_section(text, "Hard portfolio limits"), ordered=False)
+    next_steps = _markdown_items(_markdown_section(text, "What Another Model Should Do Next in the Repo"), ordered=True)
+    pipeline_snapshot = _load_trading_pipeline_snapshot()
+    title = _first_heading_title(text) or "OpenClaw Trading System Strategy Report"
+
+    return {
+        "status": "active",
+        "title": title,
+        "summary": "AU semantic-latency trading brief: Alpaca equities/ETFs + Kraken spot, deterministic risk, OpenClaw as control plane only.",
+        "path": str(report_path),
+        "updated_at": _format_ts(report_path),
+        "live_scope": live_scope[:4],
+        "research_scope": research_scope[:3],
+        "excluded_scope": excluded_scope[:4],
+        "hard_limits": hard_limits[:6],
+        "strategy_stack": _parse_strategy_titles(text)[:4],
+        "next_steps": next_steps[:6],
+        "config_paths": [
+            {
+                "label": path.name,
+                "path": str(path),
+                "exists": path.exists(),
+            }
+            for path in TRADING_BLUEPRINT_CONFIGS
+        ],
+        "integration": _build_trading_strategy_integration(pipeline_snapshot),
+    }
 
 
 def _run_command(args: list[str], timeout: float = 1.5) -> tuple[int, str, str]:
@@ -355,6 +678,7 @@ def _load_source_mission(
     model_ops: dict[str, Any],
     work_items: list[dict[str, Any]],
     teamchat: dict[str, Any],
+    context_packet: dict[str, Any],
 ) -> dict[str, Any]:
     payload = _read_json(SOURCE_MISSION_PATH)
     if not isinstance(payload, dict):
@@ -378,16 +702,23 @@ def _load_source_mission(
         if isinstance(item, dict) and str(item.get("id", "")).strip()
     }
 
+    live_task_map = {
+        str(task.get("mission_task_id") or task.get("id") or "").strip(): task
+        for task in tasks
+        if isinstance(task, dict) and str(task.get("origin") or "").strip() == "source_mission_config"
+    }
     task_rows: list[dict[str, Any]] = []
     raw_tasks = payload.get("tasks") if isinstance(payload.get("tasks"), list) else []
     for index, item in enumerate(raw_tasks, start=1):
         if not isinstance(item, dict):
             continue
+        source_id = str(item.get("id", f"source-{index:03d}"))
         pillar_id = str(item.get("pillar", "")).strip()
         pillar = pillar_map.get(pillar_id, {})
+        live_task = live_task_map.get(source_id, {})
         task_rows.append(
             {
-                "id": str(item.get("id", f"source-{index:03d}")),
+                "id": source_id,
                 "sequence": index,
                 "title": str(item.get("title", "Untitled task")),
                 "pillar": pillar_id,
@@ -395,6 +726,9 @@ def _load_source_mission(
                 "priority": str(item.get("priority", "medium")),
                 "summary": str(item.get("summary", "")),
                 "definition_of_done": str(item.get("definition_of_done", "")),
+                "status": str(live_task.get("status", "")),
+                "assignee": str(live_task.get("assignee", "")),
+                "status_reason": str(live_task.get("status_reason") or live_task.get("fix_instructions") or ""),
             }
         )
 
@@ -403,6 +737,11 @@ def _load_source_mission(
     memory_totals = memory_ops.get("totals", {}) if isinstance(memory_ops, dict) else {}
     model_summary = model_ops.get("summary", {}) if isinstance(model_ops, dict) else {}
     signals = [
+        {
+            "label": "Context Packet",
+            "value": str(len(context_packet.get("summary_lines") or [])),
+            "detail": "Recency markers, open work, active models, and preference lines",
+        },
         {
             "label": "Shared Surfaces",
             "value": "4",
@@ -449,6 +788,7 @@ def _load_source_mission(
         ],
         "tasks": task_rows,
         "signals": signals,
+        "context_packet": context_packet,
         "summary": f"{len(task_rows)} mission tasks across {len(pillar_map)} pillars",
         "path": str(SOURCE_MISSION_PATH),
     }
@@ -584,6 +924,14 @@ def _load_sims() -> list[dict[str, Any]]:
         net_return_pct = float(perf.get("net_return_pct", 0.0))
         realized_pnl = float(perf.get("realized_pnl", 0.0))
         total_fees = float(perf.get("total_fees_usd", 0.0))
+        initial_capital = float(perf.get("initial_capital", 0.0) or 0.0)
+        final_equity_raw = float(perf.get("final_equity", 0.0) or 0.0)
+        mark_equity_raw = float(perf.get("mark_equity", final_equity_raw) or final_equity_raw)
+        open_positions = int(perf.get("open_positions", 0) or 0)
+        live_equity_raw = mark_equity_raw if open_positions > 0 else final_equity_raw
+        live_equity_change_raw = live_equity_raw - initial_capital
+        live_return_pct = (live_equity_change_raw / initial_capital * 100.0) if initial_capital > 0 else 0.0
+        unrealized_pnl = mark_equity_raw - final_equity_raw
         fee_drag = total_fees > abs(realized_pnl) and total_fees > 1.0
         halted = bool(state.get("halted")) if isinstance(state, dict) else False
         updated_candidates = [path for path in (perf_path, state_path) if path.exists()]
@@ -596,14 +944,31 @@ def _load_sims() -> list[dict[str, Any]]:
                 "thesis": str(sim_meta.get("thesis", "")),
                 "active_book": bool(sim_meta.get("active_book", True)),
                 "status_note": str(sim_meta.get("status_note", "")),
+                "strategy_role": str(sim_meta.get("strategy_role", "candidate" if bool(sim_meta.get("active_book", True)) else "research")),
+                "stage": str(sim_meta.get("stage", "paper_live" if bool(sim_meta.get("active_book", True)) else "research")),
+                "report_strategy": str(sim_meta.get("report_strategy", sim_meta.get("display_name", sim_dir.name))),
+                "target_venue": str(sim_meta.get("target_venue", "")),
+                "runtime_engine": str(sim_meta.get("runtime_engine", "")),
+                "continuous_improvement": bool(sim_meta.get("continuous_improvement", bool(sim_meta.get("active_book", True)))),
+                "control_lane": bool(sim_meta.get("control_lane", False)),
+                "data_dependency": str(sim_meta.get("data_dependency", "")),
+                "improvement_focus": str(sim_meta.get("improvement_focus", "")),
                 "status": _sim_status(net_return_pct),
+                "initial_capital": round(initial_capital, 2),
+                "net_equity_change": round(float(perf.get("net_equity_change", 0.0)), 2),
                 "net_return_pct": round(net_return_pct, 3),
-                "final_equity": round(float(perf.get("final_equity", 0.0)), 2),
+                "final_equity": round(final_equity_raw, 2),
+                "mark_equity": round(mark_equity_raw, 2),
+                "live_equity": round(live_equity_raw, 2),
+                "live_equity_change": round(live_equity_change_raw, 2),
+                "live_return_pct": round(live_return_pct, 3),
+                "unrealized_pnl": round(unrealized_pnl, 2),
                 "win_rate": round(float(perf.get("win_rate", 0.0)) * 100.0, 1),
                 "round_trips": int(perf.get("round_trips", 0)),
-                "open_positions": int(perf.get("open_positions", 0)),
+                "open_positions": open_positions,
                 "fees_usd": round(total_fees, 3),
                 "turnover_usd": round(float(perf.get("turnover_usd", 0.0)), 2),
+                "avg_hold_hours": round(float(perf.get("avg_hold_hours", 0.0) or 0.0), 2),
                 "halted": halted,
                 "fee_drag": fee_drag,
                 "updated_at": updated_at,
@@ -624,7 +989,7 @@ def _load_command_history(limit: int = 16) -> list[dict[str, Any]]:
     return rows
 
 
-def _load_memory_ops() -> dict[str, Any]:
+def _load_memory_ops(*, tasks: list[dict[str, Any]] | None = None) -> dict[str, Any]:
     source_defs = [
         ("discord_chat", "Discord Chat", DISCORD_MEMORY_PATH),
         ("discord_research", "Discord Research", DISCORD_RESEARCH_PATH),
@@ -653,6 +1018,7 @@ def _load_memory_ops() -> dict[str, Any]:
                 "updated_at": latest_at or _format_ts(path),
                 "latest_excerpt": latest_excerpt,
                 "path": str(path),
+                "boundary": build_memory_source_boundary(source_id, label, latest_row if isinstance(latest_row, dict) else None),
             }
         )
         if latest_at:
@@ -671,6 +1037,31 @@ def _load_memory_ops() -> dict[str, Any]:
     active_inferences = [
         row for row in inference_rows if isinstance(row, dict) and str(row.get("status", "active")) == "active"
     ]
+    rendered_inferences: list[dict[str, Any]] = []
+    for row in active_inferences[:6]:
+        item = {
+            "id": str(row.get("id", "")),
+            "statement": str(row.get("statement", "")),
+            "confidence": float(row.get("confidence", 0.0) or 0.0),
+            "profile_section": str(row.get("profile_section", "")),
+            "review_state": str(row.get("review_state", "")),
+            "contradiction_state": str(row.get("contradiction_state", "")),
+            "review_notes": str(row.get("review_notes", "")),
+            "reviewed_by": str(row.get("reviewed_by", "")),
+            "reviewed_at": _iso_from_any(row.get("reviewed_at")) or row.get("reviewed_at"),
+            "evidence_refs": [
+                str(ref) for ref in (row.get("evidence_refs") or []) if str(ref).strip()
+            ][:3],
+            "evidence_count": len([ref for ref in (row.get("evidence_refs") or []) if str(ref).strip()]),
+            "operator_actions": [
+                str(action)
+                for action in (row.get("operator_actions") or [])
+                if str(action).strip()
+            ],
+        }
+        item["boundary"] = build_inference_boundary(item)
+        rendered_inferences.append(item)
+
     profile = _read_json(PREFERENCE_PROFILE_PATH)
     profile_updated_at = profile.get("updated_at") if isinstance(profile, dict) else None
     top_prompt_lines = [
@@ -678,11 +1069,13 @@ def _load_memory_ops() -> dict[str, Any]:
         for row in active_inferences
         if isinstance(row, dict) and row.get("prompt_line")
     ][:4]
-    research_topics = [
-        _excerpt(row.get("content"), limit=88)
+    research_rows = [
+        row
         for row in _read_jsonl(DISCORD_RESEARCH_PATH, limit=40)
         if isinstance(row, dict) and str(row.get("role")) == "user" and row.get("content")
-    ][:4]
+    ]
+    research_topics = [_excerpt(row.get("content"), limit=88) for row in research_rows][:4]
+    research_items = list_research_items(limit=6, tasks=tasks or [], research_path=DISCORD_RESEARCH_PATH)
 
     if profile_updated_at:
         latest_events.append(
@@ -707,22 +1100,94 @@ def _load_memory_ops() -> dict[str, Any]:
             "inferences": len(active_inferences),
         },
         "sources": sources,
-        "active_inferences": [
-            {
-                "id": str(row.get("id", "")),
-                "statement": str(row.get("statement", "")),
-                "confidence": float(row.get("confidence", 0.0) or 0.0),
-                "profile_section": str(row.get("profile_section", "")),
-                "review_state": str(row.get("review_state", "")),
-            }
-            for row in active_inferences[:6]
-        ],
+        "active_inferences": rendered_inferences,
         "preference_profile": {
             "updated_at": _iso_from_any(profile_updated_at) or profile_updated_at,
             "top_prompt_lines": top_prompt_lines,
+            "boundary": build_preference_packet_boundary(rendered_inferences),
         },
         "research_topics": research_topics,
+        "research_items": research_items,
+        "research_boundary": build_research_boundary(len(research_rows)),
         "events": latest_events,
+    }
+
+
+def build_source_context_packet(
+    *,
+    tasks: list[dict[str, Any]],
+    memory_ops: dict[str, Any],
+    model_ops: dict[str, Any],
+    work_items: list[dict[str, Any]],
+    teamchat: dict[str, Any],
+) -> dict[str, Any]:
+    board_tasks = [
+        task
+        for task in tasks
+        if isinstance(task, dict) and not str(task.get("id") or "").startswith("runtime:")
+    ]
+    status_counts = {
+        "backlog": sum(1 for task in board_tasks if str(task.get("status") or "").lower() == "backlog"),
+        "in_progress": sum(1 for task in board_tasks if str(task.get("status") or "").lower() == "in_progress"),
+        "review": sum(1 for task in board_tasks if str(task.get("status") or "").lower() == "review"),
+        "done": sum(1 for task in board_tasks if str(task.get("status") or "").lower() == "done"),
+    }
+    preference_lines = [
+        str(line).strip()
+        for line in list(((memory_ops.get("preference_profile") or {}).get("top_prompt_lines") or []))
+        if str(line).strip()
+    ]
+    if not preference_lines:
+        preference_lines = [str(line).strip() for line in build_user_context_packet(limit=4) if str(line).strip()]
+
+    memory_sources = memory_ops.get("sources") if isinstance(memory_ops, dict) else []
+    latest_memory_at = next(
+        (
+            str(row.get("updated_at"))
+            for row in memory_sources
+            if isinstance(row, dict) and str(row.get("updated_at") or "").strip()
+        ),
+        None,
+    )
+    latest_teamchat_at = next(
+        (
+            str(row.get("updated_at"))
+            for row in list(teamchat.get("sessions") or [])
+            if isinstance(row, dict) and str(row.get("updated_at") or "").strip()
+        ),
+        None,
+    )
+    latest_runtime_at = next(
+        (
+            str(row.get("updated_at") or row.get("started_at"))
+            for row in work_items
+            if isinstance(row, dict) and str(row.get("updated_at") or row.get("started_at") or "").strip()
+        ),
+        None,
+    )
+    model_summary = model_ops.get("summary", {}) if isinstance(model_ops, dict) else {}
+    distinct_models = int(model_summary.get("distinct_models", 0) or 0)
+    default_model = str(model_summary.get("default_model") or "").strip() or "unset"
+    summary_lines = [
+        f"Open work {sum(status_counts[key] for key in ('backlog', 'in_progress', 'review'))}: {status_counts['backlog']} backlog, {status_counts['in_progress']} in progress, {status_counts['review']} review.",
+        f"Active models: {distinct_models} routed, default {default_model}.",
+        f"Human preference lines: {len(preference_lines)} available.",
+        f"Recency markers: memory {latest_memory_at or 'n/a'} | teamchat {latest_teamchat_at or 'n/a'} | runtime {latest_runtime_at or 'n/a'}.",
+    ]
+    return {
+        "generated_at": now_iso(),
+        "open_work": status_counts,
+        "active_models": {
+            "distinct": distinct_models,
+            "default_model": default_model,
+        },
+        "recency_markers": {
+            "memory_updated_at": latest_memory_at,
+            "teamchat_updated_at": latest_teamchat_at,
+            "runtime_updated_at": latest_runtime_at,
+        },
+        "preference_lines": preference_lines,
+        "summary_lines": summary_lines,
     }
 
 
@@ -790,22 +1255,32 @@ def _load_model_ops(
 
 
 def _load_sim_ops(sims: list[dict[str, Any]]) -> dict[str, Any]:
-    active_book = [sim for sim in sims if bool(sim.get("active_book", False))]
+    active_book = sorted(
+        [sim for sim in sims if bool(sim.get("active_book", False))],
+        key=lambda item: float(item.get("live_return_pct", item.get("net_return_pct", 0.0)) or 0.0),
+        reverse=True,
+    )
     frozen = [sim for sim in sims if not bool(sim.get("active_book", False))]
     attention: list[dict[str, Any]] = []
     for sim in active_book:
+        live_return_pct = float(sim.get("live_return_pct", sim.get("net_return_pct", 0.0)) or 0.0)
+        stage = str(sim.get("stage", "") or "").strip().lower()
         flags: list[str] = []
         if sim.get("halted"):
             flags.append("halted")
         if sim.get("fee_drag"):
             flags.append("fee drag")
-        if float(sim.get("net_return_pct", 0.0) or 0.0) <= -1.0:
+        if live_return_pct <= -1.0:
             flags.append("underwater")
         if int(sim.get("open_positions", 0) or 0) > 0:
             flags.append(f"{sim.get('open_positions', 0)} open")
+        if stage == "staged":
+            flags.append("feed pending")
         tone = "healthy"
-        if sim.get("halted") or float(sim.get("net_return_pct", 0.0) or 0.0) <= -3.0:
+        if sim.get("halted") or live_return_pct <= -3.0:
             tone = "error"
+        elif stage == "staged" and int(sim.get("round_trips", 0) or 0) == 0:
+            tone = "warning"
         elif flags:
             tone = "warning"
         attention.append(
@@ -813,11 +1288,28 @@ def _load_sim_ops(sims: list[dict[str, Any]]) -> dict[str, Any]:
                 "id": sim.get("id"),
                 "display_name": sim.get("display_name", sim.get("id")),
                 "bucket": sim.get("bucket"),
+                "strategy_role": sim.get("strategy_role", "candidate"),
+                "stage": sim.get("stage", ""),
+                "report_strategy": sim.get("report_strategy", sim.get("display_name", sim.get("id"))),
+                "target_venue": sim.get("target_venue", ""),
+                "continuous_improvement": bool(sim.get("continuous_improvement", False)),
+                "control_lane": bool(sim.get("control_lane", False)),
+                "improvement_focus": sim.get("improvement_focus", ""),
                 "tone": tone,
+                "initial_capital": sim.get("initial_capital", 0.0),
+                "net_equity_change": sim.get("net_equity_change", 0.0),
                 "net_return_pct": sim.get("net_return_pct", 0.0),
+                "final_equity": sim.get("final_equity", 0.0),
+                "mark_equity": sim.get("mark_equity", sim.get("final_equity", 0.0)),
+                "live_equity": sim.get("live_equity", sim.get("final_equity", 0.0)),
+                "live_equity_change": sim.get("live_equity_change", sim.get("net_equity_change", 0.0)),
+                "live_return_pct": sim.get("live_return_pct", sim.get("net_return_pct", 0.0)),
+                "unrealized_pnl": sim.get("unrealized_pnl", 0.0),
+                "fees_usd": sim.get("fees_usd", 0.0),
                 "win_rate": sim.get("win_rate", 0.0),
                 "round_trips": sim.get("round_trips", 0),
                 "open_positions": sim.get("open_positions", 0),
+                "avg_hold_hours": sim.get("avg_hold_hours", 0.0),
                 "flags": flags,
                 "status_note": sim.get("status_note", ""),
                 "updated_at": sim.get("updated_at"),
@@ -838,8 +1330,31 @@ def _load_sim_ops(sims: list[dict[str, Any]]) -> dict[str, Any]:
         "status": "active" if active_book else "warning",
         "summary": {
             "active_count": len(active_book),
+            "growing_count": sum(
+                1 for sim in active_book if float(sim.get("live_return_pct", sim.get("net_return_pct", 0.0)) or 0.0) > 0.0
+            ),
             "frozen_count": len(frozen_rows),
             "attention_count": sum(1 for row in attention if row["tone"] != "healthy"),
+            "trade_count": sum(int(sim.get("round_trips", 0) or 0) for sim in active_book),
+            "book_equity": round(sum(float(sim.get("final_equity", 0.0) or 0.0) for sim in active_book), 2),
+            "live_equity": round(
+                sum(float(sim.get("live_equity", sim.get("final_equity", 0.0)) or 0.0) for sim in active_book), 2
+            ),
+            "book_pnl": round(sum(float(sim.get("net_equity_change", 0.0) or 0.0) for sim in active_book), 2),
+            "live_pnl": round(
+                sum(float(sim.get("live_equity_change", sim.get("net_equity_change", 0.0)) or 0.0) for sim in active_book),
+                2,
+            ),
+            "live_return_pct": round(
+                (
+                    sum(float(sim.get("live_equity_change", sim.get("net_equity_change", 0.0)) or 0.0) for sim in active_book)
+                    / sum(float(sim.get("initial_capital", 0.0) or 0.0) for sim in active_book)
+                    * 100.0
+                )
+                if sum(float(sim.get("initial_capital", 0.0) or 0.0) for sim in active_book) > 0.0
+                else 0.0,
+                2,
+            ),
             "open_positions": sum(int(sim.get("open_positions", 0) or 0) for sim in active_book),
         },
         "active": attention,
@@ -936,6 +1451,21 @@ def _load_finance_brain() -> dict[str, Any]:
             continue
         decision = row.get("decision") if isinstance(row.get("decision"), dict) else {}
         llm_manager = row.get("llm_manager") if isinstance(row.get("llm_manager"), dict) else {}
+        analysis_model_resolved = (
+            decision.get("analysis_model_resolved")
+            or decision.get("model_resolved")
+            or llm_manager.get("model_resolved")
+        )
+        analysis_model_requested = (
+            decision.get("analysis_model_requested")
+            or decision.get("model_requested")
+            or llm_manager.get("model_requested")
+        )
+        sentiment_models = (
+            decision.get("sentiment_models_resolved")
+            if isinstance(decision.get("sentiment_models_resolved"), dict)
+            else (decision.get("models_resolved") if isinstance(decision.get("models_resolved"), dict) else {})
+        )
         rows.append(
             {
                 "symbol": str(symbol),
@@ -943,8 +1473,11 @@ def _load_finance_brain() -> dict[str, Any]:
                 "bias": round(float(decision.get("bias", 0.0)), 4),
                 "confidence": round(float(decision.get("confidence", 0.0)), 4),
                 "risk_state": str(decision.get("risk_state", "normal")),
-                "model_resolved": decision.get("model_resolved"),
-                "models_resolved": decision.get("models_resolved") if isinstance(decision.get("models_resolved"), dict) else {},
+                "model_resolved": analysis_model_resolved or analysis_model_requested,
+                "analysis_model_resolved": analysis_model_resolved,
+                "analysis_model_requested": analysis_model_requested,
+                "sentiment_model_resolved": decision.get("sentiment_model_resolved"),
+                "models_resolved": sentiment_models,
                 "llm_used": bool(llm_manager.get("used", False)),
                 "llm_reason": llm_manager.get("reason"),
                 "llm_latency_ms": llm_manager.get("latency_ms"),
@@ -955,8 +1488,29 @@ def _load_finance_brain() -> dict[str, Any]:
     status = "active" if rows else "warning"
     summary = f"{len(rows)} symbols with live consensus" if rows else "Snapshot present but no symbol rows"
     external = payload.get("external_signal") if isinstance(payload.get("external_signal"), dict) else {}
-    if external.get("model_resolved"):
-        summary = f"{summary} | ext={external.get('model_resolved')}"
+    analysis_models = sorted(
+        {
+            str(row.get("analysis_model_resolved") or row.get("analysis_model_requested"))
+            for row in rows
+            if row.get("analysis_model_resolved") or row.get("analysis_model_requested")
+        }
+    )
+    if analysis_models:
+        summary = f"{summary} | analysis={analysis_models[0]}"
+    external_inputs = external.get("inputs") if isinstance(external.get("inputs"), dict) else {}
+    macbook = external_inputs.get("macbook_sentiment") if isinstance(external_inputs.get("macbook_sentiment"), dict) else {}
+    fallback = external_inputs.get("fingpt_sentiment") if isinstance(external_inputs.get("fingpt_sentiment"), dict) else {}
+    sentiment_model = None
+    if str(macbook.get("status") or "") == "ok" and macbook.get("model_resolved"):
+        sentiment_model = macbook.get("model_resolved")
+    elif str(fallback.get("status") or "") == "ok" and fallback.get("model_resolved"):
+        sentiment_model = fallback.get("model_resolved")
+    elif macbook.get("model_resolved"):
+        sentiment_model = macbook.get("model_resolved")
+    elif fallback.get("model_resolved"):
+        sentiment_model = fallback.get("model_resolved")
+    if sentiment_model:
+        summary = f"{summary} | sentiment={sentiment_model}"
     return {
         "status": status,
         "summary": summary,
@@ -1108,25 +1662,36 @@ def portfolio_payload() -> dict[str, Any]:
     tasks = load_all_tasks()
     external_signals = _load_external_signals()
     finance_brain = _load_finance_brain()
+    trading_strategy = _load_trading_strategy()
     sims = _load_sims()
     work_items = _load_work_items()
     components = _load_components()
     command_history = _load_command_history()
-    memory_ops = _load_memory_ops()
+    memory_ops = _load_memory_ops(tasks=tasks)
     sim_ops = _load_sim_ops(sims)
+    sim_strategy_review = load_or_build_sim_strategy_review(sims, finance_brain, trading_strategy)
     teamchat = _load_teamchat_sessions()
     model_ops = _load_model_ops(
         components=components,
         external_signals=external_signals,
         finance_brain=finance_brain,
     )
+    context_packet = build_source_context_packet(
+        tasks=tasks,
+        memory_ops=memory_ops,
+        model_ops=model_ops,
+        work_items=work_items,
+        teamchat=teamchat,
+    )
     payload = {
         "generated_at": now_iso(),
         "projects": _load_projects(),
         "external_signals": external_signals,
         "finance_brain": finance_brain,
+        "trading_strategy": trading_strategy,
         "sims": sims,
         "sim_ops": sim_ops,
+        "sim_strategy_review": sim_strategy_review,
         "tasks": tasks,
         "work_items": work_items,
         "components": components,
@@ -1135,6 +1700,7 @@ def portfolio_payload() -> dict[str, Any]:
         "command_history": command_history,
         "memory_ops": memory_ops,
         "model_ops": model_ops,
+        "context_packet": context_packet,
     }
     payload["source_mission"] = _load_source_mission(
         tasks=tasks,
@@ -1142,6 +1708,7 @@ def portfolio_payload() -> dict[str, Any]:
         model_ops=model_ops,
         work_items=work_items,
         teamchat=teamchat,
+        context_packet=context_packet,
     )
     payload["operator_timeline"] = _build_operator_timeline(
         commands=command_history,

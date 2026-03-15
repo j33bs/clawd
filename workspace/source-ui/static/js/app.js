@@ -9,6 +9,7 @@ let refreshInterval = null;
 let refreshInFlight = false;
 let refreshQueued = false;
 let commandSubmissionInFlight = false;
+let displayModeToggleInFlight = false;
 
 window.addEventListener('error', (event) => {
     console.error('Source UI runtime error', event.error || event.message);
@@ -38,6 +39,7 @@ async function initApp() {
     initSettings();
     initKeyboardShortcuts();
     initMoodWidget();
+    initCoordFeedCollapse();
     
     renderCommandStatus('Synchronizing live state…', 'working');
     await refreshAll({ quiet: true });
@@ -127,6 +129,7 @@ function initViews() {
     // Quick actions
     $('#quick-restart')?.addEventListener('click', restartGateway);
     $('#quick-health')?.addEventListener('click', runHealthCheck);
+    $('#display-mode-toggle')?.addEventListener('click', toggleDisplayMode);
     
     // New task button
     $('#new-task-btn')?.addEventListener('click', openNewTaskModal);
@@ -144,6 +147,15 @@ function initViews() {
     // Schedule navigation
     $('#prev-week')?.addEventListener('click', () => navigateWeek(-1));
     $('#next-week')?.addEventListener('click', () => navigateWeek(1));
+    document.addEventListener('click', (event) => {
+        const button = event.target.closest('[data-inference-review]');
+        if (!button) return;
+        reviewInference(
+            button.dataset.inferenceReview || '',
+            button.dataset.reviewState || '',
+            button.dataset.contradictionState || ''
+        );
+    });
 }
 
 function renderAll() {
@@ -196,6 +208,8 @@ function renderDashboard() {
     const workItems = portfolio.work_items || [];
     const externalSignals = portfolio.external_signals || [];
     const financeBrain = portfolio.finance_brain || {};
+    const tradingStrategy = portfolio.trading_strategy || {};
+    const simStrategyReview = portfolio.sim_strategy_review || {};
     const sims = (portfolio.sims || []).filter(sim => sim.active_book);
     const discordBridge = portfolio.discord_bridge || {};
     const teamchat = portfolio.teamchat || {};
@@ -205,12 +219,15 @@ function renderDashboard() {
     const simOps = portfolio.sim_ops || {};
     const memoryOps = portfolio.memory_ops || {};
     const modelOps = portfolio.model_ops || {};
+    const displayMode = store.get('displayMode') || {};
     
     renderCommandDeck({ portfolio, tasks, components, commands });
+    renderDisplayModeControl(displayMode);
     renderSourceMission(sourceMission);
     renderWorkItems(workItems, tasks);
     renderExternalSignals(externalSignals);
     renderFinanceBrain(financeBrain);
+    renderTradingStrategy(tradingStrategy, simStrategyReview);
     renderDiscordBridge(discordBridge);
     renderTeamchat(teamchat);
     renderOperatorTimeline(operatorTimeline);
@@ -219,7 +236,7 @@ function renderDashboard() {
     renderModelOps(modelOps);
     renderSourceIntelligence();
 
-    const pendingTasks = tasks.filter(t => t.status !== 'done').length;
+    const pendingTasks = visibleTasks(tasks).filter(t => t.status !== 'done').length;
     const taskBadge = $('#task-badge');
     if (taskBadge) taskBadge.textContent = pendingTasks;
 }
@@ -231,6 +248,39 @@ function renderCommandDeck({ portfolio, tasks, components, commands }) {
     renderCommandReceipts(store.get('commandReceipts') || []);
 }
 
+function renderDisplayModeControl(displayMode) {
+    const currentNode = $('#display-mode-current');
+    const subtitleNode = $('#display-mode-subtitle');
+    const metricsNode = $('#display-mode-metrics');
+    const statusNode = $('#display-mode-status-pill');
+    const button = $('#display-mode-toggle');
+    if (!currentNode || !subtitleNode || !metricsNode || !statusNode || !button) return;
+
+    const profile = String(displayMode.profile_current || 'unknown');
+    const requestedMode = String(displayMode.requested_mode || 'auto');
+    const effectiveMode = String(displayMode.effective_mode || requestedMode || 'unknown');
+    const displayActive = Boolean(displayMode.display_mode_active);
+    const queue = displayMode.queue || {};
+    const toggleTarget = String(displayMode.toggle_target || (profile === 'fishtank' ? 'work' : 'fishtank'));
+    const tone = profile === 'work' ? 'healthy' : (profile === 'fishtank' ? 'warning' : 'neutral');
+
+    currentNode.textContent = profile === 'unknown' ? 'Display mode unavailable' : `${profile.toUpperCase()} profile`;
+    subtitleNode.textContent = `Requested ${requestedMode} · effective ${effectiveMode} · display ${displayActive ? 'attached' : 'hidden'}`;
+    metricsNode.innerHTML = `
+        <span class="meta-pill">${queue.pending || 0} queued</span>
+        <span class="meta-pill">${queue.review_required || 0} review</span>
+        <span class="meta-pill">${queue.discord_pending || 0} discord</span>
+        <span class="meta-pill">${queue.router_pending || 0} router</span>
+    `;
+    statusNode.className = `status-pill status-${tone}`;
+    statusNode.textContent = profile === 'unknown' ? 'syncing' : profile;
+    button.disabled = displayModeToggleInFlight || !displayMode.ok;
+    button.innerHTML = `
+        <span class="quick-command-label">${displayModeToggleInFlight ? 'Switching…' : `Switch to ${toggleTarget[0].toUpperCase()}${toggleTarget.slice(1)}`}</span>
+        <span class="quick-command-meta">${displayModeToggleInFlight ? 'Applying cathedral mode change' : 'Flip the live work/fishtank profile'}</span>
+    `;
+}
+
 function renderCommandLanes(portfolio, tasks, components) {
     const container = $('#command-lanes');
     if (!container) return;
@@ -239,8 +289,10 @@ function renderCommandLanes(portfolio, tasks, components) {
     const discordChannels = portfolio.discord_bridge?.channels || [];
     const activeWork = portfolio.work_items || [];
     const assistant = (components || []).find(component => component.id === 'assistant');
-    const queueDepth = tasks.filter(task => task.status !== 'done').length;
-    const dominantModel = financeRows.find(row => row.model_resolved)?.model_resolved || 'local-assistant';
+    const boardTasks = visibleTasks(tasks);
+    const queueDepth = boardTasks.filter(task => task.status !== 'done').length;
+    const dominantModel = financeRows.find(row => row.analysis_model_resolved || row.analysis_model_requested || row.model_resolved);
+    const dominantModelLabel = dominantModel?.analysis_model_resolved || dominantModel?.analysis_model_requested || dominantModel?.model_resolved || 'local-assistant';
     const activeSignals = financeRows.length;
     const healthyBridgeCount = discordChannels.filter(channel => channel.enabled && channel.has_webhook).length;
 
@@ -254,7 +306,7 @@ function renderCommandLanes(portfolio, tasks, components) {
         {
             label: 'Finance Loop',
             value: `${activeSignals} symbols`,
-            meta: `Primary model ${dominantModel}`,
+            meta: `Primary model ${dominantModelLabel}`,
             tone: activeSignals ? 'healthy' : 'neutral',
         },
         {
@@ -266,7 +318,7 @@ function renderCommandLanes(portfolio, tasks, components) {
         {
             label: 'Task Queue',
             value: `${queueDepth} open`,
-            meta: `${tasks.filter(task => task.status === 'in_progress').length} in progress`,
+            meta: `${boardTasks.filter(task => task.status === 'in_progress').length} in progress`,
             tone: queueDepth > 6 ? 'warning' : 'healthy',
         },
     ];
@@ -348,10 +400,37 @@ function renderCommandReceipts(receipts) {
                     ${metaBits.map(bit => `<span>${escapeHtml(bit)}</span>`).join('')}
                 </div>
                 ${receipt.output ? `<pre class="command-history-output">${escapeHtml(String(receipt.output).slice(0, 180))}</pre>` : ''}
+                ${renderBoundaryState(receipt.boundary)}
                 ${approvalButton}
             </article>
         `;
     }).join('');
+}
+
+function renderBoundaryState(boundary) {
+    const items = Array.isArray(boundary?.items)
+        ? boundary.items.filter(item => item && item.label)
+        : [];
+    if (!items.length) return '';
+    const detail = String(boundary?.detail || '').trim();
+    const prefixMap = {
+        provenance: 'from',
+        shareability: 'share',
+        approval: 'approval',
+    };
+    return `
+        <div class="boundary-state">
+            <div class="boundary-pill-list">
+                ${items.map(item => {
+                    const tone = statusTone(item.tone || 'neutral');
+                    const prefix = prefixMap[item.key] || item.key || 'boundary';
+                    const title = item.detail ? ` title="${escapeHtml(item.detail)}"` : '';
+                    return `<span class="boundary-pill boundary-${tone}"${title}>${escapeHtml(prefix)}: ${escapeHtml(item.label || '')}</span>`;
+                }).join('')}
+            </div>
+            ${detail ? `<div class="boundary-detail">${escapeHtml(detail)}</div>` : ''}
+        </div>
+    `;
 }
 
 function renderProjectCards(projects) {
@@ -385,7 +464,13 @@ function renderSourceMission(mission) {
     $('#source-mission-statement').textContent = mission.statement || 'No mission statement configured.';
     $('#source-mission-tagline').textContent = mission.tagline || '';
     $('#source-mission-north-star').textContent = mission.north_star || '';
-    $('#source-mission-summary').textContent = mission.summary || '';
+    const summaryNode = $('#source-mission-summary');
+    if (summaryNode) {
+        const summaryBits = [mission.summary]
+            .concat((mission.context_packet?.summary_lines || []).slice(0, 2))
+            .filter(Boolean);
+        summaryNode.textContent = summaryBits.join(' • ');
+    }
 
     const pillarContainer = $('#source-mission-pillars');
     if (pillarContainer) {
@@ -429,11 +514,14 @@ function renderSourceMission(mission) {
                         <div class="mission-task-title">${escapeHtml(task.title || task.id || 'task')}</div>
                     </div>
                     <div class="mission-task-meta">
+                        ${task.status ? `<span class="status-pill status-${statusTone(task.status)}">${escapeHtml(task.status)}</span>` : ''}
                         <span class="meta-pill">${escapeHtml(task.pillar_label || task.pillar || 'mission')}</span>
                         <span class="meta-pill">${escapeHtml(task.priority || 'medium')}</span>
+                        ${task.assignee ? `<span class="meta-pill">${escapeHtml(task.assignee)}</span>` : ''}
                     </div>
                 </div>
                 <div class="mission-task-summary">${escapeHtml(task.summary || '')}</div>
+                ${task.status_reason ? `<div class="mission-task-status-note">${escapeHtml(task.status_reason)}</div>` : ''}
                 <div class="mission-task-definition">${escapeHtml(task.definition_of_done || '')}</div>
             </article>
         `).join('') : `<div class="dashboard-empty">No mission tasks configured.</div>`;
@@ -529,7 +617,8 @@ function renderFinanceBrain(financeBrain) {
                 <div class="compact-row-title">${escapeHtml(row.symbol || 'symbol')}</div>
                 <div class="compact-row-subtitle">${escapeHtml(row.action || 'hold')} bias ${formatNumber(row.bias, 2)} | confidence ${formatNumber(row.confidence, 2)} | risk ${escapeHtml(row.risk_state || 'normal')}</div>
                 <div class="compact-row-metrics">
-                    <span class="meta-pill">${escapeHtml(row.model_resolved || 'local heuristic')}</span>
+                    <span class="meta-pill">${escapeHtml(row.analysis_model_resolved || row.analysis_model_requested || row.model_resolved || 'local heuristic')}</span>
+                    ${row.sentiment_model_resolved ? `<span class="meta-pill">sent ${escapeHtml(row.sentiment_model_resolved)}</span>` : ''}
                     <span class="meta-pill">${row.llm_used ? `llm ${escapeHtml(String(row.llm_latency_ms || '0'))}ms` : escapeHtml(row.llm_reason || 'heuristic')}</span>
                 </div>
             </div>
@@ -540,14 +629,137 @@ function renderFinanceBrain(financeBrain) {
     `).join('');
 }
 
+function renderTradingStrategy(report, simStrategyReview = {}) {
+    const metaNode = $('#trading-strategy-meta');
+    const listNode = $('#trading-strategy-list');
+    if (!metaNode || !listNode) return;
+
+    if (!report || report.status === 'offline') {
+        metaNode.innerHTML = '';
+        listNode.innerHTML = `<div class="dashboard-empty">${escapeHtml(report?.summary || 'No trading strategy brief wired into the system yet.')}</div>`;
+        return;
+    }
+
+    const integration = report.integration || {};
+    const configPaths = Array.isArray(report.config_paths) ? report.config_paths : [];
+    const existingConfigs = configPaths.filter(item => item && item.exists);
+    metaNode.innerHTML = `
+        <span class="status-pill status-${statusTone(integration.status || report.status)}">${escapeHtml(integration.status || report.status || 'active')}</span>
+        <span class="meta-pill">${(report.live_scope || []).length} live lanes</span>
+        <span class="meta-pill">${existingConfigs.length}/${configPaths.length} configs</span>
+        <span class="meta-pill">${escapeHtml(formatRelativeTime(report.updated_at) || 'now')}</span>
+    `;
+
+    const enabledSims = Array.isArray(integration.enabled_sims) ? integration.enabled_sims : [];
+    const notes = Array.isArray(integration.notes) ? integration.notes : [];
+    const liveScope = Array.isArray(report.live_scope) ? report.live_scope : [];
+    const nextSteps = Array.isArray(report.next_steps) ? report.next_steps : [];
+    const hardLimits = Array.isArray(report.hard_limits) ? report.hard_limits : [];
+    const strategyStack = Array.isArray(report.strategy_stack) ? report.strategy_stack : [];
+    const reviewSummary = simStrategyReview.summary || {};
+    const reviewRows = Array.isArray(simStrategyReview.recommendations) ? simStrategyReview.recommendations : [];
+    const freeSignal = simStrategyReview.free_realtime_signal || {};
+    const weeklyX = simStrategyReview.weekly_x_review || {};
+
+    const cards = [];
+    cards.push(`
+        <article class="compact-row compact-row-rich">
+            <div>
+                <div class="compact-row-title">${escapeHtml(report.title || 'Trading brief')}</div>
+                <div class="compact-row-subtitle">${escapeHtml(report.summary || '')}</div>
+                <div class="compact-row-metrics">
+                    ${strategyStack.slice(0, 4).map(item => `<span class="meta-pill">${escapeHtml(item)}</span>`).join('')}
+                </div>
+            </div>
+            <div class="compact-row-metrics compact-row-metrics-end">
+                <span class="meta-pill">${escapeHtml(relativePath(report.path || 'strategy report'))}</span>
+            </div>
+        </article>
+    `);
+
+    if (enabledSims.length || notes.length) {
+        cards.push(`
+            <article class="compact-row compact-row-rich">
+                <div>
+                    <div class="compact-row-title">System Integration</div>
+                    <div class="compact-row-subtitle">${escapeHtml(integration.summary || 'No integration summary available.')}</div>
+                    <div class="compact-row-metrics">
+                        ${enabledSims.slice(0, 4).map(row => `<span class="meta-pill ${row.status === 'blocked' ? 'meta-warning' : ''}">${escapeHtml(row.id || 'sim')} ${escapeHtml(row.status || 'unknown')}</span>`).join('')}
+                    </div>
+                    ${notes.length ? notes.slice(0, 3).map(note => `<div class="memory-line">${escapeHtml(note)}</div>`).join('') : ''}
+                </div>
+            </article>
+        `);
+    }
+
+    if (liveScope.length || hardLimits.length) {
+        cards.push(`
+            <article class="compact-row compact-row-rich">
+                <div>
+                    <div class="compact-row-title">Recommended Live Scope</div>
+                    <div class="compact-row-subtitle">${escapeHtml(liveScope.join(' • ') || 'No live scope parsed.')}</div>
+                    <div class="compact-row-metrics">
+                        ${hardLimits.slice(0, 4).map(item => `<span class="meta-pill">${escapeHtml(item)}</span>`).join('')}
+                    </div>
+                </div>
+            </article>
+        `);
+    }
+
+    if (nextSteps.length || configPaths.length) {
+        cards.push(`
+            <article class="compact-row compact-row-rich">
+                <div>
+                    <div class="compact-row-title">Next Build Steps</div>
+                    ${nextSteps.slice(0, 4).map(step => `<div class="memory-line">${escapeHtml(step)}</div>`).join('')}
+                    <div class="compact-row-metrics">
+                        ${configPaths.map(item => `<span class="meta-pill ${item.exists ? '' : 'meta-warning'}">${escapeHtml(item.label || 'config')} ${item.exists ? 'ready' : 'missing'}</span>`).join('')}
+                    </div>
+                </div>
+            </article>
+        `);
+    }
+
+    if (reviewRows.length) {
+        cards.push(`
+            <article class="compact-row compact-row-rich">
+                <div>
+                    <div class="compact-row-title">Periodic Review</div>
+                    <div class="compact-row-subtitle">${escapeHtml(simStrategyReview.focus || 'No periodic review focus set.')}</div>
+                    <div class="compact-row-metrics">
+                        <span class="meta-pill">${reviewSummary.keep_count || 0} keep</span>
+                        <span class="meta-pill">${reviewSummary.retune_count || 0} retune</span>
+                        <span class="meta-pill">${reviewSummary.retire_count || 0} retire</span>
+                        <span class="meta-pill">${Number(simStrategyReview.review_interval_hours || 0)}h cadence</span>
+                        <span class="meta-pill ${freeSignal.ready ? 'meta-growth' : 'meta-warning'}">free sentiment ${escapeHtml(freeSignal.ready ? 'ready' : 'limited')}</span>
+                        <span class="meta-pill ${weeklyX.status === 'fresh' ? 'meta-growth' : 'meta-warning'}">weekly X ${escapeHtml(weeklyX.status || 'pending')}</span>
+                    </div>
+                    ${reviewRows.slice(0, 3).map(row => `<div class="memory-line">${escapeHtml(`${row.display_name || row.id}: ${row.recommendation} — ${row.summary}`)}</div>`).join('')}
+                </div>
+                <div class="compact-row-metrics compact-row-metrics-end">
+                    <span class="meta-pill">${escapeHtml(formatRelativeTime(simStrategyReview.generated_at) || 'now')}</span>
+                </div>
+            </article>
+        `);
+    }
+
+    listNode.innerHTML = cards.join('');
+}
+
 function renderSimOps(simOps, sims) {
     const activeContainer = $('#sim-ops-active');
     const summaryNode = $('#sim-ops-summary');
     if (!activeContainer || !summaryNode) return;
 
     const summary = simOps.summary || {};
+    const livePnl = Number(summary.live_pnl || 0);
+    const liveReturnPct = Number(summary.live_return_pct || 0);
     summaryNode.innerHTML = `
         <span class="meta-pill">${summary.active_count || 0} active</span>
+        <span class="meta-pill">${summary.trade_count || 0} trades</span>
+        <span class="meta-pill">live $${Number(summary.live_equity || 0).toFixed(2)}</span>
+        <span class="meta-pill">live P/L ${formatSignedCurrency(livePnl)} (${formatSignedPercent(liveReturnPct)})</span>
+        <span class="meta-pill">${summary.growing_count || 0} growing</span>
         <span class="meta-pill">${summary.attention_count || 0} flagged</span>
         <span class="meta-pill">${summary.open_positions || 0} open</span>
     `;
@@ -558,17 +770,22 @@ function renderSimOps(simOps, sims) {
             <div class="ops-strip-top">
                 <div>
                     <div class="ops-strip-title">${escapeHtml(sim.display_name || sim.id)}</div>
-                    <div class="ops-strip-subtitle">${escapeHtml(sim.bucket || 'sim')} | P/L ${formatSignedPercent(sim.net_return_pct)} | fees $${Number(sim.fees_usd || 0).toFixed(2)}</div>
+                    <div class="ops-strip-subtitle">${escapeHtml(sim.bucket || 'sim')}${sim.stage ? ` | ${escapeHtml(String(sim.stage).replaceAll('_', ' '))}` : ''}${sim.target_venue ? ` | ${escapeHtml(sim.target_venue)}` : ''} | ${Number(sim.open_positions || 0) > 0 && Math.abs(Number(sim.mark_equity || sim.final_equity || 0) - Number(sim.final_equity || 0)) >= 0.01 ? `book $${Number(sim.final_equity || 0).toFixed(2)} | mark $${Number(sim.mark_equity || sim.final_equity || 0).toFixed(2)}` : `capital $${Number(sim.live_equity || sim.final_equity || 0).toFixed(2)}`} | live P/L ${formatSignedCurrency(sim.live_equity_change ?? sim.net_equity_change)} (${formatSignedPercent(sim.live_return_pct ?? sim.net_return_pct)})</div>
                 </div>
-                <span class="status-pill status-${statusTone(sim.tone)}">$${Number(sim.final_equity || 0).toFixed(2)}</span>
+                <span class="status-pill status-${statusTone(sim.tone)}">${Number((sim.live_return_pct ?? sim.net_return_pct) || 0) > 0 ? 'growing' : escapeHtml(sim.tone || 'steady')}</span>
             </div>
             <div class="ops-strip-meta">
+                <span class="meta-pill ${Number((sim.live_return_pct ?? sim.net_return_pct) || 0) > 0 ? 'meta-growth' : ''}">${Number((sim.live_return_pct ?? sim.net_return_pct) || 0) > 0 ? 'growth lane' : 'watch'}</span>
+                ${sim.strategy_role ? `<span class="meta-pill">${escapeHtml(String(sim.strategy_role).replaceAll('_', ' '))}</span>` : ''}
                 <span class="meta-pill">${Number(sim.win_rate || 0).toFixed(1)}% win</span>
-                <span class="meta-pill">${sim.round_trips || 0} RT</span>
+                <span class="meta-pill">${sim.round_trips || 0} trades</span>
                 <span class="meta-pill">${sim.open_positions || 0} open</span>
+                <span class="meta-pill">fees $${Number(sim.fees_usd || 0).toFixed(2)}</span>
+                ${Number(sim.open_positions || 0) > 0 && Math.abs(Number(sim.mark_equity || sim.final_equity || 0) - Number(sim.final_equity || 0)) >= 0.01 ? `<span class="meta-pill">booked ${formatSignedCurrency(sim.net_equity_change)}</span>` : ''}
+                ${Number(sim.avg_hold_hours || 0) > 0 ? `<span class="meta-pill">${Number(sim.avg_hold_hours || 0).toFixed(1)}h hold</span>` : ''}
                 ${(sim.flags || []).map(flag => `<span class="meta-pill meta-warning">${escapeHtml(flag)}</span>`).join('')}
             </div>
-            <div class="ops-strip-foot">${escapeHtml(sim.status_note || '')}</div>
+            <div class="ops-strip-foot">${escapeHtml(sim.status_note || '')}${sim.improvement_focus ? ` Focus: ${escapeHtml(sim.improvement_focus)}.` : ''}</div>
         </article>
     `).join('') : `<div class="dashboard-empty">No active-book sims are reporting yet.</div>`;
 }
@@ -615,13 +832,15 @@ function renderMemoryOps(memoryOps) {
     const sources = memoryOps.sources || [];
     if (sourcesNode) {
         sourcesNode.innerHTML = sources.length ? sources.map(source => `
-        <article class="compact-row">
+        <article class="compact-row compact-row-rich">
             <div>
                 <div class="compact-row-title">${escapeHtml(source.label || source.id)}</div>
                 <div class="compact-row-subtitle">${escapeHtml(source.latest_excerpt || relativePath(source.path || ''))}</div>
+                ${renderBoundaryState(source.boundary)}
             </div>
-            <div class="compact-row-metrics">
+            <div class="compact-row-metrics compact-row-metrics-end">
                 <span class="meta-pill">${source.count || 0} rows</span>
+                <span class="meta-pill">${source.user_count || 0} user</span>
                 <span class="meta-pill">${escapeHtml(formatRelativeTime(source.updated_at))}</span>
             </div>
         </article>
@@ -635,22 +854,68 @@ function renderMemoryOps(memoryOps) {
             <div>
                 <div class="compact-row-title">${escapeHtml(item.profile_section || 'inference')}</div>
                 <div class="compact-row-subtitle">${escapeHtml(item.statement || '')}</div>
+                <div class="compact-row-subtitle">${escapeHtml((item.evidence_refs || []).join(' • ') || `${item.evidence_count || 0} evidence refs`)}</div>
+                ${renderBoundaryState(item.boundary)}
+                ${item.review_notes ? `<div class="memory-line">${escapeHtml(item.review_notes)}</div>` : ''}
+                <div class="compact-row-metrics">
+                    <span class="meta-pill">${formatPercent(item.confidence)}</span>
+                    <span class="meta-pill">${escapeHtml(item.review_state || 'pending_review')}</span>
+                    <span class="meta-pill">${escapeHtml(item.contradiction_state || 'no_known_contradiction')}</span>
+                    <span class="meta-pill">${item.evidence_count || 0} evidence</span>
+                </div>
+                <div class="compact-row-metrics">
+                    ${(item.operator_actions || []).includes('operator_approved') ? `<button class="command-chip" type="button" data-inference-review="${escapeHtml(item.id || '')}" data-review-state="operator_approved">Approve</button>` : ''}
+                    ${(item.operator_actions || []).includes('needs_review') ? `<button class="command-chip" type="button" data-inference-review="${escapeHtml(item.id || '')}" data-review-state="needs_review">Needs Review</button>` : ''}
+                    <button class="command-chip" type="button" data-inference-review="${escapeHtml(item.id || '')}" data-contradiction-state="contradicted" data-review-state="needs_review">Mark Contradicted</button>
+                </div>
             </div>
-            <div class="compact-row-metrics">
-                <span class="meta-pill">${formatPercent(item.confidence)}</span>
-                <span class="meta-pill">${escapeHtml(item.review_state || 'active')}</span>
+            <div class="compact-row-metrics compact-row-metrics-end">
+                ${item.reviewed_by ? `<span class="meta-pill">${escapeHtml(item.reviewed_by)}</span>` : ''}
+                ${item.reviewed_at ? `<span class="meta-pill">${escapeHtml(formatRelativeTime(item.reviewed_at))}</span>` : ''}
             </div>
         </article>
     `).join('') : `<div class="dashboard-empty">No active inferences distilled yet.</div>`;
     }
 
     const topics = memoryOps.research_topics || [];
+    const researchItems = memoryOps.research_items || [];
+    const researchBoundary = memoryOps.research_boundary || {};
     const promptLines = memoryOps.preference_profile?.top_prompt_lines || [];
+    const promptBoundary = memoryOps.preference_profile?.boundary || {};
     if (researchNode) {
-        researchNode.innerHTML = (topics.length || promptLines.length) ? `
-        ${topics.length ? `<div class="stack-label">Recent Research Threads</div>${topics.map(topic => `<div class="topic-pill">${escapeHtml(topic)}</div>`).join('')}` : ''}
-        ${promptLines.length ? `<div class="stack-label">Prompt Packet</div>${promptLines.map(line => `<div class="memory-line">${escapeHtml(line)}</div>`).join('')}` : ''}
-    ` : `<div class="dashboard-empty">No research topics or preference packet lines available yet.</div>`;
+        researchNode.innerHTML = `
+            <div class="memory-panel-section">
+                <div class="stack-label">Research to Action</div>
+                ${renderBoundaryState(researchBoundary)}
+                <div class="compact-list">${researchItems.length ? researchItems.map(item => `
+                    <article class="compact-row compact-row-rich research-action-row">
+                        <div>
+                            <div class="compact-row-title">${escapeHtml(item.excerpt || item.content || 'research item')}</div>
+                            <div class="compact-row-subtitle">${escapeHtml(`#${item.channel_name || 'research'} • ${formatRelativeTime(item.created_at) || 'recent'} • ${item.author_name || 'unknown author'}`)}</div>
+                            <div class="compact-row-metrics">
+                                <span class="meta-pill">${escapeHtml(item.source_ref || 'research')}</span>
+                                ${item.promotion_count ? `<span class="meta-pill meta-growth">${item.promotion_count} promoted</span>` : ''}
+                                ${item.source_links?.[0]?.href ? `<a class="task-source-link" href="${escapeHtml(item.source_links[0].href)}" target="_blank" rel="noreferrer">source</a>` : ''}
+                            </div>
+                            ${item.promotions?.length ? item.promotions.map(promotion => `<div class="memory-line">${escapeHtml(`${promotion.task_kind || 'task'} #${promotion.task_id}: ${promotion.title} (${promotion.status}, ${promotion.assignee || 'unassigned'})`)}</div>`).join('') : ''}
+                        </div>
+                        <div class="compact-row-metrics compact-row-metrics-end">
+                            <button class="command-chip" type="button" onclick="openResearchPromotionModal('${escapeHtml(item.id || '')}', 'task')">Promote Task</button>
+                            <button class="command-chip" type="button" onclick="openResearchPromotionModal('${escapeHtml(item.id || '')}', 'experiment')">Promote Experiment</button>
+                        </div>
+                    </article>
+                `).join('') : `<div class="dashboard-empty">No recent research items ready for promotion.</div>`}</div>
+            </div>
+            <div class="memory-panel-section">
+                <div class="stack-label">Research Topics</div>
+                ${topics.length ? topics.map(topic => `<span class="topic-pill">${escapeHtml(topic)}</span>`).join('') : `<div class="dashboard-empty">No recent research topics.</div>`}
+            </div>
+            <div class="memory-panel-section">
+                <div class="stack-label">Prompt Packet</div>
+                ${renderBoundaryState(promptBoundary)}
+                ${promptLines.length ? promptLines.map(line => `<div class="memory-line">${escapeHtml(line)}</div>`).join('') : `<div class="dashboard-empty">No prompt packet lines distilled yet.</div>`}
+            </div>
+        `;
     }
 }
 
@@ -712,8 +977,11 @@ function renderDiscordBridge(bridge) {
                     <span class="meta-pill">${escapeHtml(channel.delivery || 'webhook')}</span>
                     <span class="meta-pill">${channel.has_webhook ? 'webhook present' : 'preview only'}</span>
                 </div>
+                ${renderBoundaryState(channel.boundary)}
             </div>
-            <span class="status-pill status-${statusTone(channel.enabled ? (channel.has_webhook ? 'active' : 'warning') : 'idle')}">${channel.enabled ? (channel.has_webhook ? 'ready' : 'preview') : 'disabled'}</span>
+            <div class="compact-row-metrics compact-row-metrics-end">
+                <span class="status-pill status-${statusTone(channel.enabled ? (channel.has_webhook ? 'active' : 'warning') : 'idle')}">${channel.enabled ? (channel.has_webhook ? 'ready' : 'preview') : 'disabled'}</span>
+            </div>
         </article>
     `).join('');
 }
@@ -747,8 +1015,8 @@ function renderTeamchat(teamchat) {
 function statusTone(status) {
     const raw = String(status || '').toLowerCase();
     if (raw === 'healthy' || raw === 'active' || raw === 'running') return 'healthy';
-    if (raw === 'warning' || raw === 'busy' || raw === 'queued' || raw === 'dry_run' || raw === 'configured') return 'warning';
-    if (raw === 'critical' || raw === 'error' || raw === 'failed') return 'error';
+    if (raw === 'warning' || raw === 'busy' || raw === 'queued' || raw === 'dry_run' || raw === 'configured' || raw === 'partial' || raw === 'legacy' || raw === 'staged' || raw === 'research_only') return 'warning';
+    if (raw === 'critical' || raw === 'error' || raw === 'failed' || raw === 'misaligned' || raw === 'blocked') return 'error';
     return 'neutral';
 }
 
@@ -764,6 +1032,12 @@ function escapeHtml(value) {
 function formatSignedPercent(value) {
     const num = Number(value || 0);
     return `${num >= 0 ? '+' : ''}${num.toFixed(2)}%`;
+}
+
+function formatSignedCurrency(value) {
+    const num = Number(value || 0);
+    if (Number.isNaN(num)) return 'n/a';
+    return `${num >= 0 ? '+' : '-'}$${Math.abs(num).toFixed(2)}`;
 }
 
 function formatSignedScore(value) {
@@ -811,25 +1085,35 @@ function relativePath(value) {
     return String(value || '').replace(`${window.location.origin}/`, '').replace('/home/jeebs/src/clawd/', '');
 }
 
+function visibleTasks(tasks) {
+    return (tasks || []).filter(task => !String(task.id || '').startsWith('runtime:'));
+}
+
 // Tasks
 function renderTasks() {
     const filter = store.get('taskFilter');
-    let tasks = store.get('tasks') || [];
-
-    // Exclude runtime session tasks from the kanban by default
-    tasks = tasks.filter(t => !String(t.id || '').startsWith('runtime:'));
+    let tasks = visibleTasks(store.get('tasks') || []);
     
     if (filter !== 'all') {
         tasks = tasks.filter(t => t.status === filter);
     }
     
-    // Group by status
-    const columns = {
-        backlog: tasks.filter(t => t.status === 'backlog'),
-        in_progress: tasks.filter(t => t.status === 'in_progress'),
-        review: tasks.filter(t => t.status === 'review'),
-        done: tasks.filter(t => t.status === 'done')
+    // Sort by priority: critical/high first
+    const priorityOrder = { critical: 0, high: 1, medium: 2, low: 3 };
+    const sortByPriority = (a, b) => {
+        const pa = priorityOrder[a.priority] !== undefined ? priorityOrder[a.priority] : 1;
+        const pb = priorityOrder[b.priority] !== undefined ? priorityOrder[b.priority] : 1;
+        if (pa !== pb) return pa - pb;
+        return String(a.id || 0) < String(b.id || 0) ? -1 : 1;
     };
+
+    // Group by status with backlog leftmost in the live board
+const columns = {
+    backlog: tasks.filter(t => t.status === 'backlog').sort(sortByPriority),
+    in_progress: tasks.filter(t => t.status === 'in_progress').sort(sortByPriority),
+    review: tasks.filter(t => t.status === 'review').sort(sortByPriority),
+    done: tasks.filter(t => t.status === 'done').sort(sortByPriority)
+};
     
     // Update counts
     $('#count-backlog').textContent = columns.backlog.length;
@@ -1230,6 +1514,130 @@ async function createTask() {
     }
 }
 
+
+function researchPromotionDefaultTitle(item, taskKind) {
+    const prefix = taskKind === 'experiment' ? 'Experiment' : 'Research follow-up';
+    return `${prefix}: ${String(item?.excerpt || item?.content || 'research item').slice(0, 72)}`;
+}
+
+function researchPromotionDefaultDescription(item) {
+    const sourceHref = item?.source_links?.[0]?.href || '';
+    return [
+        'Promoted from Discord research.',
+        '',
+        item?.content || '',
+        '',
+        item?.source_ref ? `Source ref: ${item.source_ref}` : '',
+        sourceHref ? `Source link: ${sourceHref}` : ''
+    ].filter(Boolean).join('\n');
+}
+
+function openResearchPromotionModal(researchId, taskKind = 'task') {
+    const items = store.get('portfolio.memory_ops.research_items') || [];
+    const item = items.find(entry => String(entry.id) === String(researchId));
+    if (!item) {
+        Toast.error('Research item not found');
+        return;
+    }
+    const projects = store.get('portfolio.projects') || [];
+    const projectOptions = ['<option value="">Unscoped</option>']
+        .concat(projects.map(project => `<option value="${escapeHtml(project.id || '')}">${escapeHtml(project.name || project.id || 'project')}</option>`))
+        .join('');
+    const selectedTask = taskKind === 'experiment' ? ' selected' : '';
+    const selectedExperiment = taskKind === 'experiment' ? ' selected' : '';
+    const content = `
+        <input type="hidden" id="research-promote-id" value="${escapeHtml(item.id || '')}">
+        <div class="form-group">
+            <label class="form-label">Research Source</label>
+            <div class="task-card-desc">${escapeHtml(item.excerpt || item.content || 'research item')}</div>
+            <div class="compact-row-metrics">
+                <span class="meta-pill">${escapeHtml(item.source_ref || 'research')}</span>
+                ${item.source_links?.[0]?.href ? `<a class="task-source-link" href="${escapeHtml(item.source_links[0].href)}" target="_blank" rel="noreferrer">open source</a>` : ''}
+            </div>
+        </div>
+        <div class="form-group">
+            <label class="form-label">Action Type</label>
+            <select class="form-select" id="research-promote-kind">
+                <option value="task"${taskKind === 'task' ? ' selected' : ''}>Task</option>
+                <option value="experiment"${selectedExperiment}>Experiment</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label class="form-label">Title</label>
+            <input type="text" class="form-input" id="research-promote-title" value="${escapeHtml(researchPromotionDefaultTitle(item, taskKind))}">
+        </div>
+        <div class="form-group">
+            <label class="form-label">Description</label>
+            <textarea class="form-textarea" id="research-promote-desc">${escapeHtml(researchPromotionDefaultDescription(item))}</textarea>
+        </div>
+        <div class="form-group">
+            <label class="form-label">Priority</label>
+            <select class="form-select" id="research-promote-priority">
+                <option value="medium">Medium</option>
+                <option value="high" selected>High</option>
+                <option value="low">Low</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label class="form-label">Assign to</label>
+            <select class="form-select" id="research-promote-assignee">
+                <option value="dali" selected>dali</option>
+                <option value="c_lawd">c_lawd</option>
+                <option value="codex">codex</option>
+                <option value="planner">planner</option>
+                <option value="coder">coder</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label class="form-label">Project</label>
+            <select class="form-select" id="research-promote-project">${projectOptions}</select>
+        </div>
+    `;
+    const footer = `
+        <button class="btn btn-secondary" onclick="Modal.close()">Cancel</button>
+        <button class="btn btn-primary" onclick="submitResearchPromotion()">Promote</button>
+    `;
+    Modal.open(taskKind === 'experiment' ? 'Promote Research to Experiment' : 'Promote Research to Task', content, footer);
+}
+
+async function submitResearchPromotion() {
+    const researchId = $('#research-promote-id')?.value;
+    const taskKind = $('#research-promote-kind')?.value || 'task';
+    const title = $('#research-promote-title')?.value?.trim();
+    const description = $('#research-promote-desc')?.value || '';
+    const priority = $('#research-promote-priority')?.value || 'high';
+    const assignee = $('#research-promote-assignee')?.value || '';
+    const project = $('#research-promote-project')?.value || '';
+
+    if (!researchId || !title || !assignee) {
+        Toast.error('Research item, title, and assignee are required');
+        return;
+    }
+
+    try {
+        const result = await api.promoteResearchItem({
+            research_id: researchId,
+            task_kind: taskKind,
+            title,
+            description,
+            priority,
+            assignee,
+            project
+        });
+        const task = result.task || result;
+        const nextTasks = [task, ...(store.get('tasks') || []).filter(item => String(item.id) !== String(task.id))];
+        store.set('tasks', nextTasks);
+        Modal.close();
+        renderTasks();
+        renderDashboard();
+        Toast.success(taskKind === 'experiment' ? 'Research promoted to experiment' : 'Research promoted to task');
+        await refreshAll({ quiet: true });
+    } catch (error) {
+        console.error('Research promotion failed', error);
+        Toast.error('Research promotion failed');
+    }
+}
+
 function nextTaskStatus(status) {
     if (status === 'backlog') return 'in_progress';
     if (status === 'in_progress') return 'review';
@@ -1507,12 +1915,13 @@ async function refreshAll(options = {}) {
 
     refreshInFlight = true;
     try {
-        const [portfolioResult, tasksResult, commandsResult, receiptsResult, agentsResult] = await Promise.allSettled([
+        const [portfolioResult, tasksResult, commandsResult, receiptsResult, agentsResult, displayModeResult] = await Promise.allSettled([
             api.getPortfolio(),
             api.getTasks(),
             api.getCommandHistory(),
             api.getCommandReceipts(),
-            api.getAgents()
+            api.getAgents(),
+            api.getDisplayMode()
         ]);
         if (portfolioResult.status !== 'fulfilled') {
             throw portfolioResult.reason;
@@ -1537,6 +1946,9 @@ async function refreshAll(options = {}) {
         }
         if (receiptsResult.status === 'fulfilled') {
             store.set('commandReceipts', Array.isArray(receiptsResult.value) ? receiptsResult.value : []);
+        }
+        if (displayModeResult.status === 'fulfilled' && displayModeResult.value) {
+            store.set('displayMode', displayModeResult.value);
         }
         store.set('notifications', buildLiveNotifications(portfolio, tasks, store.get('commands') || []));
         store.set('connected', true);
@@ -1566,6 +1978,28 @@ async function refreshAll(options = {}) {
         renderTasks();
     }
     updateStatusIndicators();
+}
+
+async function toggleDisplayMode() {
+    if (displayModeToggleInFlight) return;
+    displayModeToggleInFlight = true;
+    renderDisplayModeControl(store.get('displayMode') || {});
+    renderCommandStatus('Applying display mode change…', 'working');
+    try {
+        const result = await api.toggleDisplayMode();
+        store.set('displayMode', result);
+        renderDisplayModeControl(result);
+        renderCommandStatus(`Display mode switched to ${String(result.profile_current || 'unknown')}.`, 'success');
+        Toast.success(`Display mode switched to ${String(result.profile_current || 'unknown')}`);
+        await refreshAll({ quiet: true });
+    } catch (error) {
+        console.error('Display mode toggle failed', error);
+        renderCommandStatus('Display mode change failed.', 'error');
+        Toast.error('Display mode change failed');
+    } finally {
+        displayModeToggleInFlight = false;
+        renderDisplayModeControl(store.get('displayMode') || {});
+    }
 }
 
 // Actions
@@ -1624,6 +2058,21 @@ async function controlAgent(agentId, action) {
     }
 }
 
+async function reviewInference(id, reviewState, contradictionState = '') {
+    if (!id) return;
+    const payload = {};
+    if (reviewState) payload.review_state = reviewState;
+    if (contradictionState) payload.contradiction_state = contradictionState;
+    try {
+        await api.updateUserInference(id, payload);
+        await refreshAll({ quiet: true });
+        Toast.success(`Inference updated: ${id}`);
+    } catch (error) {
+        console.error('Inference review failed', error);
+        Toast.error('Inference review failed');
+    }
+}
+
 window.taskQuickAction = taskQuickAction;
 
 // Update status indicators
@@ -1647,7 +2096,8 @@ function buildLiveNotifications(portfolio, tasks, commands) {
     const workItems = Array.isArray(portfolio.work_items) ? portfolio.work_items : [];
     const financeRows = Array.isArray(portfolio.finance_brain?.symbols) ? portfolio.finance_brain.symbols : [];
     const externalSignals = Array.isArray(portfolio.external_signals) ? portfolio.external_signals : [];
-    const openTasks = (tasks || []).filter(task => task.status !== 'done');
+    const tradingStrategy = portfolio.trading_strategy || {};
+    const openTasks = visibleTasks(tasks).filter(task => task.status !== 'done');
 
     components
         .filter(component => String(component.status || '').toLowerCase() !== 'healthy')
@@ -1691,6 +2141,15 @@ function buildLiveNotifications(portfolio, tasks, commands) {
             });
         });
 
+    if (String(tradingStrategy.integration?.status || '').toLowerCase() === 'misaligned') {
+        items.push({
+            id: 'trading-strategy-misaligned',
+            type: 'warning',
+            body: tradingStrategy.integration?.summary || 'Trading stack is not yet aligned with the AU live brief',
+            timestamp: tradingStrategy.updated_at || new Date().toISOString(),
+        });
+    }
+
     if (openTasks.length) {
         items.push({
             id: 'tasks-open',
@@ -1720,6 +2179,7 @@ window.restartGateway = restartGateway;
 window.runHealthCheck = runHealthCheck;
 window.refreshAll = refreshAll;
 window.controlAgent = controlAgent;
+window.reviewInference = reviewInference;
 window.openNewTaskModal = openNewTaskModal;
 window.createTask = createTask;
 window.Modal = Modal;
@@ -1784,11 +2244,10 @@ async function renderSymbiote(force = false) {
         return;
     }
 
-    const titleEl = document.querySelector('#symbiote-title');
+    // meta strip (title el removed; subtitle/count/filed remain)
     const subEl   = document.querySelector('#symbiote-subtitle');
     const cntEl   = document.querySelector('#symbiote-section-count');
     const datEl   = document.querySelector('#symbiote-filed');
-    if (titleEl) titleEl.textContent = d.title;
     if (subEl)   subEl.textContent   = d.subtitle;
     if (cntEl)   cntEl.textContent   = d.section_count + ' sections';
     if (datEl)   datEl.textContent   = 'filed ' + d.filed;
@@ -1804,7 +2263,7 @@ async function renderSymbiote(force = false) {
     const dimEl = document.querySelector('#symbiote-dimensions');
     if (dimEl) {
         dimEl.innerHTML = d.dimensions.map(dim => `
-            <div class="sym-dim-card" style="--dim-clr:${dimColour[dim.id]}">
+            <div class="sym-dim-card" style="--dim-clr:${dimColour[dim.id]}" data-dim="${dim.id}">
                 <div class="sym-dim-emoji">${dim.emoji}</div>
                 <div class="sym-dim-label">${dim.label}</div>
                 <div class="sym-dim-count">${dim.count} enhancements</div>
@@ -1815,9 +2274,10 @@ async function renderSymbiote(force = false) {
 
     const phaseLabel = ['', 'Phase 1', 'Phase 2', 'Phase 3', 'Phase 4'];
     const statusLabel = {
-        designed: { text: 'Designed', cls: 'sym-status-designed' },
-        'in-dev': { text: 'In Dev',   cls: 'sym-status-indev'    },
-        live:     { text: 'Live',     cls: 'sym-status-live'      }
+        designed:     { text: 'Designed',    cls: 'sym-status-designed'     },
+        'in-dev':     { text: 'In Dev',      cls: 'sym-status-indev'        },
+        live:         { text: 'Live',        cls: 'sym-status-live'         },
+        operational:  { text: 'Operational', cls: 'sym-status-operational'  }
     };
     // Merge writable state overlay onto base enhancement data
     const stateMap = d.enhancement_state || {};
@@ -1826,6 +2286,38 @@ async function renderSymbiote(force = false) {
         return { ...e, ...ov };
     });
 
+    // Phase filter
+    const filterBar = document.querySelector('#symbiote-phase-filter');
+    if (filterBar && !filterBar.dataset.wired) {
+        filterBar.dataset.wired = '1';
+        filterBar.addEventListener('click', (ev) => {
+            const btn = ev.target.closest('.sym-filter-btn');
+            if (!btn) return;
+            filterBar.querySelectorAll('.sym-filter-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            const phase = btn.dataset.phase;
+            const cards = document.querySelectorAll('#symbiote-grid .sym-card');
+            cards.forEach(c => {
+                const match = phase === 'all' || c.dataset.phase === phase;
+                c.style.display = match ? '' : 'none';
+            });
+        });
+    }
+
+    // Live per-dimension counts
+    const dimCountEl = document.querySelector('#symbiote-dimensions');
+    if (dimCountEl) {
+        const dimCounts = {};
+        enhancements.forEach(e => { dimCounts[e.dimension] = (dimCounts[e.dimension] || 0) + 1; });
+        dimCountEl.querySelectorAll('.sym-dim-card').forEach(card => {
+            const dim = card.dataset.dim;
+            if (dim && dimCounts[dim] !== undefined) {
+                const cnt = card.querySelector('.sym-dim-count');
+                if (cnt) cnt.textContent = dimCounts[dim] + ' enhancements';
+            }
+        });
+    }
+
     const gridEl = document.querySelector('#symbiote-grid');
     if (gridEl) {
         gridEl.innerHTML = enhancements.map(e => {
@@ -1833,7 +2325,7 @@ async function renderSymbiote(force = false) {
             const st  = statusLabel[e.status] || statusLabel.designed;
             const invBadge = e.inv ? `<span class="sym-inv-badge">${e.inv}</span>` : '';
             return `
-                <div class="sym-card phase-border-${e.phase}" style="--card-clr:${clr}">
+                <div class="sym-card phase-border-${e.phase}" style="--card-clr:${clr}" data-phase="${e.phase}" data-dim="${e.dimension}">
                     <div class="sym-card-top">
                         <span class="sym-card-num">${String(e.id).padStart(2,'0')}</span>
                         <span class="sym-card-code">${e.code}</span>
@@ -1886,7 +2378,7 @@ async function renderSymbiote(force = false) {
         `).join('');
     }
 
-    const expStatusIcon = { closed: '&#x2713;', partial: '&#x25D1;', live: '&#x25BA;', designed: '&#x25CB;', pending: '&middot;' };
+    const expStatusIcon = { closed: '&#x2713;', partial: '&#x25D1;', live: '&#x25BA;', operational: '&#x25CF;', designed: '&#x25CB;', pending: '&middot;' };
     const expEl = document.querySelector('#symbiote-experiments');
     if (expEl) {
         expEl.innerHTML = `<div class="sym-exp-table">` + d.experiments.map(ex => `
@@ -1966,6 +2458,21 @@ async function renderCoordFeed() {
     }
 }
 
+function initCoordFeedCollapse() {
+    const header = document.querySelector('.source-intelligence-feed-header');
+    const feed   = document.getElementById('coord-feed');
+    if (!header || !feed) return;
+    header.style.cursor = 'pointer';
+    header.addEventListener('click', (e) => {
+        if (e.target.closest('#coord-feed-refresh')) return;
+        const collapsed = feed.dataset.collapsed === '1';
+        feed.dataset.collapsed = collapsed ? '0' : '1';
+        feed.style.display = collapsed ? '' : 'none';
+        const tog = header.querySelector('.coord-collapse-toggle');
+        if (tog) tog.textContent = collapsed ? '▾' : '▸';
+    });
+}
+
 async function renderRelationalState() {
     const rows = document.getElementById('ci-rel-rows');
     const silence = document.getElementById('ci-rel-silence');
@@ -1975,15 +2482,25 @@ async function renderRelationalState() {
         const d = await r.json();
         // Pause check summary
         const pc = (d.pause_check || []).slice(-1)[0] || {};
+        const session = d.session || {};
+        const style = d.response_style || {};
         const fillsSpace = pc.fills_space != null ? pc.fills_space.toFixed(2) : '—';
         const valueAdd  = pc.value_add  != null ? pc.value_add.toFixed(2)  : '—';
+        const attunement = session.attunement_index != null ? Number(session.attunement_index).toFixed(2) : '—';
+        const trust = session.trust_score != null ? Number(session.trust_score).toFixed(2) : (d.trust_note || '—');
+        const arousal = session.arousal != null
+            ? Number(session.arousal).toFixed(2)
+            : (d.tacti && d.tacti.arousal != null ? Number(d.tacti.arousal).toFixed(2) : '—');
+        const promptMode = style.mode || 'steady';
         const di = d.diversity_index != null ? d.diversity_index.toFixed(3) : '—';
         const diAlert = d.di_alert ? ' ⚠ DI<0.0' : '';
         rows.innerHTML = `
             <div class="ci-rel-row"><span>fills_space</span><span>${fillsSpace}</span></div>
             <div class="ci-rel-row"><span>value_add</span><span>${valueAdd}</span></div>
+            <div class="ci-rel-row"><span>prompt_mode</span><span>${escapeHtml(promptMode)}</span></div>
+            <div class="ci-rel-row"><span>attune / trust</span><span>${attunement} / ${trust}</span></div>
+            <div class="ci-rel-row"><span>arousal</span><span>${arousal}</span></div>
             <div class="ci-rel-row"><span>author_sil (DI)</span><span>${di}${diAlert}</span></div>
-            <div class="ci-rel-row"><span>trust</span><span>${d.trust_note || 'stable'}</span></div>
         `;
         // Silence per being
         if (silence && d.silence_per_being && d.silence_per_being.length) {

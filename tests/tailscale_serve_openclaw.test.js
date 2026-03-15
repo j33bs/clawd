@@ -18,13 +18,13 @@ function runScript(envOverrides = {}) {
   });
 }
 
-test('dryrun emits explicit path-based tailscale serve command', () => {
+test('dryrun emits current tailscale serve command', () => {
   const run = runScript({ OPENCLAW_TAILSCALE_SERVE_DRYRUN: '1' });
   const output = `${run.stdout || ''}${run.stderr || ''}`;
   assert.equal(run.status, 0, output);
   assert.match(
     output,
-    /OPENCLAW_TAILSCALE_SERVE_DRYRUN_COMMAND=.*serve .*--yes .*--bg .*--https=443 .*\/ .*http:\/\/127\.0\.0\.1:18789/
+    /OPENCLAW_TAILSCALE_SERVE_DRYRUN_COMMAND=.*serve .*--yes .*--bg .*--https=443 .*http:\/\/127\.0\.0\.1:18789/
   );
 });
 
@@ -62,6 +62,19 @@ echo "serve-ok"
 
   const calls = fs.readFileSync(logPath, 'utf8').trim().split('\n');
   assert.equal(calls.length, 2);
-  assert.match(calls[0], /^CALL:serve --yes --bg --https=443 \/ http:\/\/127\.0\.0\.1:18789$/);
+  assert.match(calls[0], /^CALL:serve --yes --bg --https=443 http:\/\/127\.0\.0\.1:18789$/);
   assert.match(calls[1], /^CALL:serve status$/);
+});
+
+test('non-root serve path is passed via --set-path', () => {
+  const run = runScript({
+    OPENCLAW_TAILSCALE_SERVE_DRYRUN: '1',
+    OPENCLAW_TAILSCALE_SERVE_PATH: '/openclaw',
+  });
+  const output = `${run.stdout || ''}${run.stderr || ''}`;
+  assert.equal(run.status, 0, output);
+  assert.match(
+    output,
+    /OPENCLAW_TAILSCALE_SERVE_DRYRUN_COMMAND=.*serve .*--https=443 .*--set-path=\/openclaw .*http:\/\/127\.0\.0\.1:18789/
+  );
 });

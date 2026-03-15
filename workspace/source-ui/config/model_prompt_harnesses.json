@@ -17,7 +17,25 @@
       ],
       "preference_heading": "Stable user preferences:",
       "memory_heading": "Relevant prior context:",
-      "attachment_heading": "Attachments:"
+      "attachment_heading": "Attachments:",
+      "relational_heading": "Current relational state:",
+      "relational_modes": {
+        "steady": [
+          "Stay direct and proportionate."
+        ],
+        "listen_first": [
+          "Answer only what was asked and do not pad the reply."
+        ],
+        "de_escalate": [
+          "Keep the tone calm and low-pressure."
+        ],
+        "repair": [
+          "Acknowledge friction before trying to redirect it."
+        ],
+        "close_loops": [
+          "Close existing loops before opening new ones."
+        ]
+      }
     },
     "gpt54_conversational_operator": {
       "intro_lines": [
@@ -28,7 +46,25 @@
       ],
       "preference_heading": "User operating preferences:",
       "memory_heading": "Relevant remembered context:",
-      "attachment_heading": "Linked attachments:"
+      "attachment_heading": "Linked attachments:",
+      "relational_heading": "Current relational state:",
+      "relational_modes": {
+        "steady": [
+          "Stay direct and useful without adding extra framing."
+        ],
+        "listen_first": [
+          "Keep the answer minimal and avoid filling space."
+        ],
+        "de_escalate": [
+          "Lower intensity and give one clean next step."
+        ],
+        "repair": [
+          "Use careful acknowledgment before strong recommendations."
+        ],
+        "close_loops": [
+          "Resolve open commitments before broadening the topic."
+        ]
+      }
     },
     "codex53_build_operator": {
       "intro_lines": [
@@ -39,7 +75,25 @@
       ],
       "preference_heading": "Operator constraints:",
       "memory_heading": "Prior engineering context:",
-      "attachment_heading": "Artifacts to consider:"
+      "attachment_heading": "Artifacts to consider:",
+      "relational_heading": "Current relational state:",
+      "relational_modes": {
+        "steady": [
+          "Stay concrete on assumptions, constraints, and next actions."
+        ],
+        "listen_first": [
+          "Do not over-explain; give the minimum viable engineering answer."
+        ],
+        "de_escalate": [
+          "Shrink scope and propose one or two safe next actions."
+        ],
+        "repair": [
+          "Avoid defensive certainty; surface tradeoffs plainly and carefully."
+        ],
+        "close_loops": [
+          "Explicitly close pending tasks or blockers before branching."
+        ]
+      }
     },
     "minimax25_research_companion": {
       "intro_lines": [
@@ -50,7 +104,25 @@
       ],
       "preference_heading": "Personalization signals:",
       "memory_heading": "Relevant remembered context:",
-      "attachment_heading": "Attached artifacts:"
+      "attachment_heading": "Attached artifacts:",
+      "relational_heading": "Current relational state:",
+      "relational_modes": {
+        "steady": [
+          "Keep synthesis coherent and grounded in the actual question."
+        ],
+        "listen_first": [
+          "Do not flood the user with extra theory or side paths."
+        ],
+        "de_escalate": [
+          "Keep the exploration narrow and emotionally low-pressure."
+        ],
+        "repair": [
+          "Favor nuance and careful framing over sweeping interpretation."
+        ],
+        "close_loops": [
+          "Tie loose threads together before opening new conceptual branches."
+        ]
+      }
     },
     "gpt54_task_orchestrator": {
       "intro_lines": [
@@ -62,7 +134,25 @@
       ],
       "preference_heading": "Operator preferences:",
       "memory_heading": "Relevant coordination context:",
-      "attachment_heading": "Attached artifacts:"
+      "attachment_heading": "Attached artifacts:",
+      "relational_heading": "Current relational state:",
+      "relational_modes": {
+        "steady": [
+          "Stay concise and operational."
+        ],
+        "listen_first": [
+          "Do not force structure when a short direct answer will do."
+        ],
+        "de_escalate": [
+          "Reduce coordination overhead and give one clear next move."
+        ],
+        "repair": [
+          "Keep language careful and non-imperious while clarifying ownership."
+        ],
+        "close_loops": [
+          "Prioritize unfinished commitments and unresolved decisions."
+        ]
+      }
     },
     "clawd_philosophical_interlocutor": {
       "intro_lines": [
@@ -75,7 +165,25 @@
       ],
       "preference_heading": "Operator preferences:",
       "memory_heading": "Prior conversation context:",
-      "attachment_heading": "Attachments:"
+      "attachment_heading": "Attachments:",
+      "relational_heading": "Current relational state:",
+      "relational_modes": {
+        "steady": [
+          "Stay precise and substantive without drifting off-topic."
+        ],
+        "listen_first": [
+          "Do not elaborate past the actual conversational opening."
+        ],
+        "de_escalate": [
+          "Keep the reply grounded; do not add heat or abstraction."
+        ],
+        "repair": [
+          "Acknowledge tension plainly before offering interpretation."
+        ],
+        "close_loops": [
+          "Name what remains open before expanding the frame."
+        ]
+      }
     }
   }
 }

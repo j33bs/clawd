@@ -1,0 +1,12 @@
+[Unit]
+Description=Run OpenClaw ITC pipeline cycle every minute
+
+[Timer]
+OnBootSec=30s
+OnUnitActiveSec=1min
+AccuracySec=10s
+Persistent=true
+Unit=openclaw-itc-cycle.service
+
+[Install]
+WantedBy=timers.target

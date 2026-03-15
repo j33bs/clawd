@@ -435,6 +435,10 @@ const CommandPalette = {
 };
 
 // Export for global use
+const $ = Utils.$.bind(Utils);
+const $$ = Utils.$$.bind(Utils);
+window.$ = $;
+window.$$ = $$;
 window.Utils = Utils;
 window.Toast = Toast;
 window.Modal = Modal;

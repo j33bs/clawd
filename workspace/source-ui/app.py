@@ -50,6 +50,45 @@ except Exception:  # pragma: no cover
     task_store_load_tasks = None
     task_store_update_task = None
 
+try:
+    from api.user_inference import (
+        load_user_inferences as user_inference_load_all,
+        update_user_inference as user_inference_update,
+    )
+except Exception:  # pragma: no cover
+    user_inference_load_all = None
+    user_inference_update = None
+
+try:
+    from api.display_mode import (
+        load_display_mode_status as display_mode_load_status,
+        toggle_display_mode as display_mode_toggle,
+    )
+except Exception:  # pragma: no cover
+    display_mode_load_status = None
+    display_mode_toggle = None
+
+try:
+    from api.research_promotions import (
+        get_research_item as task_store_get_research_item,
+        list_research_items as task_store_list_research_items,
+        promote_research_item as task_store_promote_research_item,
+    )
+except Exception:  # pragma: no cover
+    task_store_get_research_item = None
+    task_store_list_research_items = None
+    task_store_promote_research_item = None
+
+try:
+    from api.relational_state import load_relational_state
+except Exception:  # pragma: no cover
+    load_relational_state = None
+
+try:
+    from api.boundary_state import build_command_receipt_boundary
+except Exception:  # pragma: no cover
+    build_command_receipt_boundary = None
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -114,6 +153,13 @@ def _write_json_atomic(path: Path, payload: Any) -> None:
     tmp_path = path.with_suffix(path.suffix + ".tmp")
     tmp_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
     tmp_path.replace(path)
+
+
+def _decorate_command_receipt(receipt: dict[str, Any]) -> dict[str, Any]:
+    row = dict(receipt)
+    if build_command_receipt_boundary is not None:
+        row["boundary"] = build_command_receipt_boundary(row)
+    return row
 
 
 # ============================================================================
@@ -208,7 +254,7 @@ class State:
         rows: list[dict] = []
         for item in payload[:50]:
             if isinstance(item, dict):
-                rows.append(item)
+                rows.append(_decorate_command_receipt(item))
         return rows
 
     def persist_command_receipts(self) -> None:
@@ -366,6 +412,10 @@ class SourceUIHandler(SimpleHTTPRequestHandler):
             self.restart_gateway()
         elif parsed.path == '/api/commands':
             self.execute_command_deck()
+        elif parsed.path == '/api/display-mode/toggle':
+            self.toggle_display_mode_handler()
+        elif parsed.path == '/api/research/promote':
+            self.promote_research_handler()
         elif parsed.path.startswith('/api/tasks/') and parsed.path.endswith('/archive'):
             task_id = parsed.path.split('/')[-2]
             self.archive_task_handler(task_id)
@@ -374,7 +424,10 @@ class SourceUIHandler(SimpleHTTPRequestHandler):
     
     def do_PATCH(self):
         parsed = urlparse(self.path)
-        if parsed.path.startswith('/api/tasks/'):
+        if parsed.path.startswith('/api/user-inferences/'):
+            inference_id = parsed.path.split('/')[-1]
+            self.update_user_inference_handler(inference_id)
+        elif parsed.path.startswith('/api/tasks/'):
             task_id = parsed.path.split('/')[-1]
             self.update_task(task_id)
         elif parsed.path.startswith('/api/symbiote/enhancement/'):
@@ -443,6 +496,21 @@ class SourceUIHandler(SimpleHTTPRequestHandler):
                 data = {'error': 'portfolio_unavailable'}
             else:
                 data = portfolio_payload()
+        elif path == 'display-mode':
+            data = self.get_display_mode_data()
+        elif path == 'research/items':
+            data = self.get_research_items_data()
+        elif path.startswith('research/items/'):
+            research_id = path.partition('research/items/')[2]
+            if task_store_get_research_item is None:
+                data = {'error': 'research_unavailable'}
+            else:
+                data = task_store_get_research_item(research_id, tasks=self._load_tasks()) or {'error': 'Not found'}
+        elif path == 'user-inferences':
+            if user_inference_load_all is None:
+                data = {'error': 'user_inference_unavailable'}
+            else:
+                data = user_inference_load_all()
         elif path == 'source-contract':
             data = source_contract_payload()
         elif path == 'trails/heatmap':
@@ -507,6 +575,24 @@ class SourceUIHandler(SimpleHTTPRequestHandler):
             self.send_json(task)
         except Exception as e:
             self.send_json({'error': str(e)}, status=400)
+
+    def update_user_inference_handler(self, inference_id):
+        """Update review state for a durable user inference."""
+        try:
+            length = int(self.headers.get('Content-Length', 0))
+            data = json.loads(self.rfile.read(length)) if length > 0 else {}
+
+            if user_inference_update is None:
+                raise RuntimeError('user_inference_unavailable')
+
+            row = user_inference_update(inference_id, data, reviewer='source-ui')
+            if row is None:
+                self.send_json({'error': 'Inference not found'}, status=404)
+                return
+            self.state.tasks = self._load_tasks()
+            self.send_json(row)
+        except Exception as e:
+            self.send_json({'error': str(e)}, status=400)
     
     def delete_task(self, task_id):
         """Delete a task."""
@@ -537,6 +623,25 @@ class SourceUIHandler(SimpleHTTPRequestHandler):
         if task_store_load_archived_tasks is None:
             return []
         return task_store_load_archived_tasks()
+
+    def get_research_items_data(self):
+        if task_store_list_research_items is None:
+            return {'error': 'research_unavailable'}
+        return task_store_list_research_items(tasks=self._load_tasks())
+
+    def promote_research_handler(self):
+        try:
+            length = int(self.headers.get('Content-Length', 0))
+            data = json.loads(self.rfile.read(length)) if length > 0 else {}
+
+            if task_store_promote_research_item is None:
+                raise RuntimeError('research_unavailable')
+
+            payload = task_store_promote_research_item(data)
+            self.state.tasks = self._load_tasks()
+            self.send_json(payload)
+        except Exception as e:
+            self.send_json({'error': str(e)}, status=400)
 
     def refresh_data(self):
         """Refresh all data."""
@@ -595,6 +700,22 @@ class SourceUIHandler(SimpleHTTPRequestHandler):
             else:
                 status = 200 if result.get('ok', False) else 400
             self.send_json(result, status=status)
+        except Exception as exc:
+            self.send_json({'ok': False, 'error': str(exc)}, status=400)
+
+    def get_display_mode_data(self):
+        if display_mode_load_status is None:
+            return {'ok': False, 'error': 'display_mode_unavailable'}
+        return display_mode_load_status()
+
+    def toggle_display_mode_handler(self):
+        if display_mode_toggle is None:
+            self.send_json({'ok': False, 'error': 'display_mode_unavailable'}, status=400)
+            return
+        try:
+            payload = display_mode_toggle()
+            status = 200 if payload.get('ok', False) else 400
+            self.send_json(payload, status=status)
         except Exception as exc:
             self.send_json({'ok': False, 'error': str(exc)}, status=400)
 
@@ -829,8 +950,9 @@ class SourceUIHandler(SimpleHTTPRequestHandler):
 
     def _store_command_receipt(self, receipt: dict[str, Any]) -> None:
         with self.state.command_lock:
-            existing = [item for item in self.state.command_receipts if str(item.get('id')) != str(receipt.get('id'))]
-            self.state.command_receipts = [receipt, *existing][:50]
+            decorated = _decorate_command_receipt(receipt)
+            existing = [item for item in self.state.command_receipts if str(item.get('id')) != str(decorated.get('id'))]
+            self.state.command_receipts = [decorated, *existing][:50]
             self.state.persist_command_receipts()
 
     def _update_command_receipt(self, receipt_id: str, **updates: Any) -> dict[str, Any]:
@@ -844,7 +966,7 @@ class SourceUIHandler(SimpleHTTPRequestHandler):
             'updated_at': datetime.now().isoformat(),
         }
         self._store_command_receipt(updated)
-        return updated
+        return _decorate_command_receipt(updated)
 
     def _infer_command_action(self, command_text: str) -> str:
         text = command_text.strip().lower()
@@ -1036,57 +1158,18 @@ class SourceUIHandler(SimpleHTTPRequestHandler):
         return {"messages": messages[-limit:], "ok": True, "channel": "open-communication"}
 
     def _source_relational_data(self) -> dict:
-        """Relational state: pause_check signals, DI score, silence per being."""
-        import re as _re
-        repo_root = Path(__file__).resolve().parents[2]
-        result: dict = {"ok": True}
-        pc_path = repo_root / "workspace" / "state" / "pause_check_log.jsonl"
-        pause_entries: list = []
-        if pc_path.exists():
-            try:
-                lines = [l for l in pc_path.read_text().splitlines() if l.strip()]
-                for line in lines[-3:]:
-                    row = json.loads(line)
-                    pause_entries.append({
-                        "ts": row.get("ts", ""),
-                        "decision": row.get("decision", ""),
-                        "fills_space": row.get("signals", {}).get("fills_space"),
-                        "value_add": row.get("signals", {}).get("value_add"),
-                    })
-            except Exception as exc:
-                pause_entries = [{"error": str(exc)}]
-        result["pause_check"] = pause_entries
-        pm_path = repo_root / "workspace" / "governance" / "phi_metrics.md"
-        di_value = None
-        if pm_path.exists():
-            try:
-                for line in pm_path.read_text().splitlines():
-                    if "author_silhouette" in line and "=" in line:
-                        m = _re.search(r"author_silhouette=(-?[\d.]+)", line)
-                        if m:
-                            di_value = float(m.group(1))
-                            break
-            except Exception:
-                pass
-        result["diversity_index"] = di_value
-        result["di_alert"] = di_value is not None and di_value < 0.0
-        cr_path = repo_root / "workspace" / "governance" / "CONTRIBUTION_REGISTER.md"
-        silence: list = []
-        if cr_path.exists():
-            try:
-                for line in cr_path.read_text().splitlines():
-                    m = _re.match(r"\|\s*([\w][\w ()\-_ext]*?)\s*\|\s*([A-Z]+)\s*\|[^|]+\|\s*(\d+)\s*behind", line)
-                    if m:
-                        silence.append({
-                            "being": m.group(1).strip(),
-                            "last_section": m.group(2).strip(),
-                            "sections_behind": int(m.group(3)),
-                        })
-            except Exception as exc:
-                silence = [{"error": str(exc)}]
-        result["silence_per_being"] = silence
-        result["trust_note"] = "stable"
-        return result
+        """Relational state shared between the UI card and prompt harnesses."""
+        if load_relational_state is None:
+            return {
+                "ok": False,
+                "pause_check": [],
+                "silence_per_being": [],
+                "trust_note": "unknown",
+                "error": "relational_state helper unavailable",
+            }
+        payload = load_relational_state(limit=3)
+        payload.setdefault("ok", True)
+        return payload
 
     def symbiote_data(self) -> dict:
         """Return the Collective Intelligence Symbiote plan data."""
@@ -1125,7 +1208,7 @@ class SourceUIHandler(SimpleHTTPRequestHandler):
                 {"id": "INV-002",  "name": "Reservoir Null Test",                    "status": "closed",  "label": "CLOSED",                 "result": "Reservoir null for routing order",        "open": False},
                 {"id": "INV-003",  "name": "Being Divergence",                       "status": "closed",  "label": "SITUATIONAL",            "result": "89.3% accuracy, topic-anchored",          "open": False},
                 {"id": "INV-003b", "name": "Masking Variant",                        "status": "closed",  "label": "CENTROID-DISPOSITIONAL", "result": "DISP-ATTRACTOR PASS (1.0); STYLE FAIL",  "open": False},
-                {"id": "INV-004",  "name": "Commit Gate (Structured Friction)",      "status": "live",    "label": "OPERATIONAL",            "result": "2 real PASSes; theta=0.1712",             "open": True},
+                {"id": "INV-004",  "name": "Commit Gate (Structured Friction)",      "status": "operational", "label": "OPERATIONAL",            "result": "2 real PASSes; theta=0.1712",             "open": True},
                 {"id": "INV-006",  "name": "UCH Falsification Protocol",             "status": "designed","label": "DESIGNED",               "result": "AIN port 18991 ready; not launched",      "open": True},
                 {"id": "INV-007",  "name": "Temporal Sequencing (new)",              "status": "pending", "label": "PENDING",                "result": "Requires TSP implementation",             "open": True},
                 {"id": "INV-008",  "name": "Trust x Diversity Correlation (new)",    "status": "pending", "label": "PENDING",                "result": "Requires DDT + trained-state INV-001",    "open": True}

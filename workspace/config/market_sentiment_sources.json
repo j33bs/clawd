@@ -1,0 +1,70 @@
+{
+  "schema_version": 1,
+  "producer": "c_lawd",
+  "poll": {
+    "recommended_interval_seconds": 900,
+    "stale_after_seconds": 2700
+  },
+  "model": {
+    "provider": "ollama",
+    "base_url": "http://127.0.0.1:11434",
+    "requested": "phi4-mini",
+    "idle_only_patterns": [
+      "phi4",
+      "phi-4"
+    ],
+    "idle_max_load_per_cpu": 0.7,
+    "fallbacks": [
+      "phi3:mini"
+    ],
+    "timeout_seconds": 120,
+    "temperature": 0.0,
+    "num_predict": 220,
+    "keep_alive": "0s"
+  },
+  "delivery": {
+    "enabled": true,
+    "mode": "ssh_push",
+    "host": "100.113.160.1",
+    "user": "jeebs",
+    "disable_ssh_config": true,
+    "remote_path": "/home/jeebs/src/clawd/workspace/state/external/macbook_sentiment.json",
+    "timeout_seconds": 15,
+    "connect_timeout_seconds": 5
+  },
+  "sources": {
+    "forex_factory": {
+      "enabled": true,
+      "optional": false,
+      "weight_hint": 1.0,
+      "timeout_seconds": 20,
+      "url": "https://nfs.faireconomy.media/ff_calendar_thisweek.xml"
+    },
+    "coingecko": {
+      "enabled": true,
+      "optional": false,
+      "weight_hint": 1.25,
+      "timeout_seconds": 20,
+      "base_url": "https://api.coingecko.com/api/v3",
+      "api_key_env": "COINGECKO_API_KEY",
+      "vs_currency": "usd",
+      "markets_limit": 20
+    },
+    "coinmarketcap": {
+      "enabled": true,
+      "optional": true,
+      "weight_hint": 1.0,
+      "timeout_seconds": 20,
+      "base_url": "https://pro-api.coinmarketcap.com",
+      "api_key_env": "COINMARKETCAP_API_KEY",
+      "limit": 20
+    },
+    "fear_greed": {
+      "enabled": true,
+      "optional": false,
+      "weight_hint": 0.85,
+      "timeout_seconds": 20,
+      "url": "https://api.alternative.me/fng/"
+    }
+  }
+}

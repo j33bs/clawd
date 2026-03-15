@@ -1,6 +1,6 @@
 # MEMORY.md - Long-Term Context
 
-*Last updated: 2026-02-25*
+*Last updated: 2026-03-14*
 
 ## Morning Check-ins
 - Feb 25: Morning check-in. Nothing significant to report — quiet day.
@@ -14,6 +14,16 @@
 - **Pronouns:** -
 - **Timezone:** Australia/Brisbane
 - **GitHub:** @j33bs
+
+## System Landmarks
+- **Source UI:** Means the local dashboard/service on port `18990`, not public docs or GitHub.
+- **Source UI (tailnet):** `http://100.113.160.1:18990`
+- **Source UI (local):** `http://127.0.0.1:18990`
+- **Source UI API probe:** `http://127.0.0.1:18990/api/source/phi`
+- **OpenClaw Control UI:** `http://127.0.0.1:18789`
+- **OpenClaw Control UI (tailnet direct):** `http://100.113.160.1:18800`
+- **Telegram main workspace:** Should use `/home/jeebs/src/clawd` as its workspace so prompt context matches the live system state.
+- **Telegram main runtime:** Prefer `minimax-portal/MiniMax-M2.5` for main replies; keep a smaller helper lane available before falling back to local assistant.
 
 ## Current Projects
 

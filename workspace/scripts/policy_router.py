@@ -29,6 +29,12 @@ except Exception:  # pragma: no cover - optional integration
     append_envelope = None
     make_envelope = None
 
+try:
+    from vllm_deferred_queue import enqueue_router_request, should_defer_local_vllm
+except Exception:  # pragma: no cover - optional integration
+    enqueue_router_request = None
+    should_defer_local_vllm = None
+
 def _resolve_repo_root(start: Path):
     current = start
     for _ in range(8):
@@ -2039,6 +2045,61 @@ class PolicyRouter:
             tier = provider.get("tier", "free")
             model_id = self._provider_model(name, intent_cfg, runtime_context)
             circuit_key = _circuit_key(name, model_id)
+            provider_id = str(provider.get("provider_id", "")).strip().lower()
+
+            if (
+                provider_id == "local_vllm"
+                and callable(should_defer_local_vllm)
+                and should_defer_local_vllm()
+            ):
+                queue_entry = None
+                if callable(enqueue_router_request):
+                    try:
+                        queue_entry = enqueue_router_request(
+                            intent=intent,
+                            payload=dict(payload or {}),
+                            context_metadata=runtime_context,
+                            provider=name,
+                            model=model_id,
+                            capability_class=capability_class,
+                            request_id=request_id,
+                        )
+                    except Exception:
+                        queue_entry = None
+                _emit(
+                    "router_deferred",
+                    {
+                        "intent": intent,
+                        "provider": name,
+                        "model": model_id,
+                        "reason_code": "deferred_fishtank",
+                        "queue_entry_id": (queue_entry or {}).get("id"),
+                    },
+                )
+                return {
+                    "ok": False,
+                    "deferred": True,
+                    "provider": name,
+                    "model": model_id,
+                    "reason_code": "deferred_fishtank",
+                    "request_id": request_id,
+                    "capability_class": capability_class,
+                    "queue_entry": {
+                        "id": (queue_entry or {}).get("id"),
+                        "kind": (queue_entry or {}).get("kind"),
+                        "status": (queue_entry or {}).get("status"),
+                    }
+                    if isinstance(queue_entry, dict)
+                    else None,
+                    "error": {
+                        "type": "DEFERRED_UNTIL_WORK_MODE",
+                        "message": "Local vLLM is deferred while fishtank mode is active.",
+                        "remediation": [
+                            "switch the system back to work mode to resume local inference",
+                            "for time-sensitive market workflows, rerun the producer after work mode is enabled",
+                        ],
+                    },
+                }
 
             if tacti_controls.get("suppress_heavy"):
                 is_heavy = tier in {"paid", "auth"} or str(name).startswith(("openai_", "claude_", "grok_"))

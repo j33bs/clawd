@@ -1,6 +1,6 @@
 {
-  "enabled": false,
-  "dry_run": true,
+  "enabled": true,
+  "dry_run": false,
   "channels": [
     {
       "id": "ops_status",
@@ -19,13 +19,13 @@
       "id": "sim_watch",
       "label": "#sim-watch",
       "title": "Sim Watch",
-      "description": "Critical or fee-drag simulation summaries.",
+      "description": "Nightly active-book trades, capital, and P/L summaries.",
       "delivery": "webhook",
       "enabled": true,
       "webhook_env": "OPENCLAW_DISCORD_SIM_WEBHOOK",
       "min_resend_minutes": 0,
       "schedule_timezone": "Australia/Brisbane",
-      "schedule_local_times": ["09:00", "21:00"],
+      "schedule_local_times": ["21:00"],
       "report_mode": "scheduled_summary"
     },
     {

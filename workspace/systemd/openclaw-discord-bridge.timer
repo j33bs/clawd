@@ -1,0 +1,11 @@
+[Unit]
+Description=OpenClaw Discord project bridge timer
+
+[Timer]
+OnBootSec=3m
+OnUnitActiveSec=10m
+Unit=openclaw-discord-bridge.service
+Persistent=true
+
+[Install]
+WantedBy=timers.target

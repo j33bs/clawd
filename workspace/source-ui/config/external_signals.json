@@ -10,11 +10,11 @@
   },
   {
     "id": "fingpt_sentiment",
-    "name": "FinGPT External Sentiment",
+    "name": "Dali Fallback Sentiment",
     "kind": "sentiment",
     "required": false,
     "mode": "poll_json",
     "path": "workspace/state/external/fingpt_sentiment.json",
-    "summary": "Optional FinGPT sentiment or forecasting artifact. Dali consumes it as input only and continues trading if it is offline."
+    "summary": "Optional Dali-side fallback sentiment artifact used only when the MacBook realtime feed is stale or missing."
   }
 ]

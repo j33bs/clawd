@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/css/styles.css?v=20260312a">
+    <link rel="stylesheet" href="/static/css/styles.css?v=20260314b">
 </head>
 <body>
     <div id="app">
@@ -258,6 +258,27 @@
 
                             <div class="command-shell">
                                 <div class="section-header">
+                                    <h2>Display Mode</h2>
+                                    <span class="section-caption">Flip work and fishtank without leaving Source</span>
+                                </div>
+                                <div class="display-mode-panel">
+                                    <div class="display-mode-top">
+                                        <div>
+                                            <div class="display-mode-current" id="display-mode-current">Loading display mode…</div>
+                                            <div class="display-mode-subtitle" id="display-mode-subtitle">Waiting for cathedral status.</div>
+                                        </div>
+                                        <span class="status-pill status-neutral" id="display-mode-status-pill">syncing</span>
+                                    </div>
+                                    <div class="display-mode-metrics" id="display-mode-metrics"></div>
+                                    <button class="quick-command-card display-mode-toggle" type="button" id="display-mode-toggle">
+                                        <span class="quick-command-label">Switching unavailable</span>
+                                        <span class="quick-command-meta">Cathedral status has not loaded yet</span>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div class="command-shell">
+                                <div class="section-header">
                                     <h2>Run Queue</h2>
                                     <span class="section-caption">Receipts, approvals, execution state</span>
                                 </div>
@@ -317,6 +338,8 @@
                                 <h2>Strategy Watch</h2>
                                 <span class="section-caption">Active strategies and current finance signals only</span>
                             </div>
+                            <div class="dashboard-card-meta" id="trading-strategy-meta"></div>
+                            <div class="dashboard-card-list compact-stack" id="trading-strategy-list"></div>
                             <div class="dashboard-card-meta" id="sim-ops-summary"></div>
                             <div class="ops-strip-list" id="sim-ops-active"></div>
                             <div class="dashboard-card-list compact-stack" id="finance-brain-list"></div>
@@ -329,7 +352,16 @@
                             </div>
                             <div class="dashboard-card-meta" id="memory-ops-summary"></div>
                             <div class="compact-list" id="external-signals-list"></div>
-                            <div class="compact-list" id="memory-inference-list"></div>
+                            <div class="ops-split-grid ops-split-grid-memory">
+                                <div class="ops-column">
+                                    <div class="stack-label">Memory Sources</div>
+                                    <div class="compact-list" id="memory-sources-list"></div>
+                                </div>
+                                <div class="ops-column">
+                                    <div class="stack-label">Active Inferences</div>
+                                    <div class="compact-list" id="memory-inference-list"></div>
+                                </div>
+                            </div>
                             <div class="memory-research-panel" id="memory-research-list"></div>
                         </div>
                     </div>
@@ -414,9 +446,10 @@
 
                     <!-- Open-Communication Feed -->
                     <div class="dashboard-section">
-                        <div class="section-header">
+                        <div class="section-header source-intelligence-feed-header">
                             <h2>Open Communication</h2>
                             <span class="section-caption">Live feed · #open-communication · Dali + c_lawd + jeebs</span>
+                            <span class="coord-collapse-toggle" style="font-size:14px;color:var(--text-tertiary);margin-left:8px">▾</span>
                             <button class="btn-text" id="coord-feed-refresh" style="margin-left:auto">↺</button>
                         </div>
                         <div class="coord-feed" id="coord-feed">loading…</div>
@@ -427,41 +460,43 @@
                     <div class="tasks-header">
                         <div class="tasks-filters">
                             <button class="filter-btn active" data-filter="all">All</button>
-                            <button class="filter-btn" data-filter="backlog">Backlog</button>
                             <button class="filter-btn" data-filter="in_progress">In Progress</button>
                             <button class="filter-btn" data-filter="review">Review</button>
+                            <button class="filter-btn" data-filter="backlog">Backlog</button>
                             <button class="filter-btn" data-filter="done">Done</button>
                         </div>
                     </div>
                     <div class="kanban-board" id="kanban-board">
-                        <div class="kanban-column" data-status="backlog">
-                            <div class="column-header">
-                                <span class="column-title">Backlog</span>
-                                <span class="column-count" id="count-backlog">0</span>
-                            </div>
-                            <div class="column-tasks" id="tasks-backlog"></div>
-                        </div>
-                        <div class="kanban-column" data-status="in_progress">
-                            <div class="column-header">
-                                <span class="column-title">In Progress</span>
-                                <span class="column-count" id="count-in_progress">0</span>
-                            </div>
-                            <div class="column-tasks" id="tasks-in_progress"></div>
-                        </div>
-                        <div class="kanban-column" data-status="review">
-                            <div class="column-header">
-                                <span class="column-title">Review</span>
-                                <span class="column-count" id="count-review">0</span>
-                            </div>
-                            <div class="column-tasks" id="tasks-review"></div>
-                        </div>
-                        <div class="kanban-column" data-status="done">
-                            <div class="column-header">
-                                <span class="column-title">Done</span>
-                                <span class="column-count" id="count-done">0</span>
-                            </div>
-                            <div class="column-tasks" id="tasks-done"></div>
-                        </div>
+
+<div class="kanban-column" data-status="backlog">
+    <div class="column-header">
+        <span class="column-title">Backlog</span>
+        <span class="column-count" id="count-backlog">0</span>
+    </div>
+    <div class="column-tasks" id="tasks-backlog"></div>
+</div>
+<div class="kanban-column kanban-column-active" data-status="in_progress">
+    <div class="column-header">
+        <span class="column-title">In Progress</span>
+        <span class="column-count" id="count-in_progress">0</span>
+    </div>
+    <div class="column-tasks" id="tasks-in_progress"></div>
+</div>
+<div class="kanban-column" data-status="review">
+    <div class="column-header">
+        <span class="column-title">Review</span>
+        <span class="column-count" id="count-review">0</span>
+    </div>
+    <div class="column-tasks" id="tasks-review"></div>
+</div>
+<div class="kanban-column" data-status="done">
+    <div class="column-header">
+        <span class="column-title">Done</span>
+        <span class="column-count" id="count-done">0</span>
+    </div>
+    <div class="column-tasks" id="tasks-done"></div>
+</div>
+
                     </div>
                 </div>
 
@@ -562,25 +597,23 @@
 
                 <!-- Symbiote View -->
                 <div class="view" id="view-symbiote">
-                    <div class="symbiote-hero">
-                        <div class="symbiote-hero-text">
-                            <h2 class="symbiote-title" id="symbiote-title">Collective Intelligence Symbiote</h2>
-                            <p class="symbiote-subtitle" id="symbiote-subtitle">loading…</p>
-                        </div>
-                        <div class="symbiote-hero-meta">
-                            <span class="symbiote-meta-item" id="symbiote-section-count">— sections</span>
-                            <span class="symbiote-meta-item" id="symbiote-filed">filed —</span>
-                        </div>
+                    <div class="symbiote-meta-strip">
+                        <span class="symbiote-meta-strip-label" id="symbiote-subtitle">loading…</span>
+                        <span class="symbiote-meta-strip-pills">
+                            <span class="symbiote-meta-pill" id="symbiote-section-count">— sections</span>
+                            <span class="symbiote-meta-pill" id="symbiote-filed">filed —</span>
+                        </span>
                     </div>
                     <div class="symbiote-dimensions" id="symbiote-dimensions"></div>
                     <div class="symbiote-section-header">
                         <h3>Ten Enhancements</h3>
-                        <span class="symbiote-phase-legend">
-                            <span class="phase-dot phase-1"></span>Phase 1
-                            <span class="phase-dot phase-2"></span>Phase 2
-                            <span class="phase-dot phase-3"></span>Phase 3
-                            <span class="phase-dot phase-4"></span>Phase 4
-                        </span>
+                        <div class="sym-phase-filter" id="symbiote-phase-filter">
+                            <button class="sym-filter-btn active" data-phase="all">All</button>
+                            <button class="sym-filter-btn" data-phase="1"><span class="phase-dot phase-1"></span>Phase 1</button>
+                            <button class="sym-filter-btn" data-phase="2"><span class="phase-dot phase-2"></span>Phase 2</button>
+                            <button class="sym-filter-btn" data-phase="3"><span class="phase-dot phase-3"></span>Phase 3</button>
+                            <button class="sym-filter-btn" data-phase="4"><span class="phase-dot phase-4"></span>Phase 4</button>
+                        </div>
                     </div>
                     <div class="symbiote-grid" id="symbiote-grid"></div>
                     <div class="symbiote-lower">
@@ -630,11 +663,12 @@
                                 <span class="setting-desc">How often to fetch new data</span>
                             </div>
                             <select id="setting-refresh-interval" class="setting-control">
-                                <option value="5000">5 seconds</option>
-                                <option value="10000" selected>10 seconds</option>
-                                <option value="30000">30 seconds</option>
-                                <option value="60000">1 minute</option>
-                            </select>
+    <option value="3000" selected>3 seconds</option>
+    <option value="5000">5 seconds</option>
+    <option value="10000">10 seconds</option>
+    <option value="30000">30 seconds</option>
+    <option value="60000">1 minute</option>
+</select>
                         </div>
                     </div>
                     <div class="settings-section">
@@ -725,11 +759,11 @@
         <div class="toast-container" id="toast-container"></div>
     </div>
 
-    <script src="/static/js/mood.js?v=20260312a"></script>
-    <script src="/static/js/store.js?v=20260312a"></script>
-    <script src="/static/js/api.js?v=20260312a"></script>
-    <script src="/static/js/utils.js?v=20260312a"></script>
-    <script src="/static/js/components.js?v=20260312a"></script>
-    <script src="/static/js/app.js?v=20260312a"></script>
+    <script src="/static/js/mood.js?v=20260314b"></script>
+    <script src="/static/js/store.js?v=20260314b"></script>
+    <script src="/static/js/api.js?v=20260314b"></script>
+    <script src="/static/js/utils.js?v=20260314b"></script>
+    <script src="/static/js/components.js?v=20260314b"></script>
+    <script src="/static/js/app.js?v=20260314b"></script>
 </body>
 </html>

@@ -8,6 +8,7 @@ import math
 import random
 import re
 import sys
+import argparse
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -295,6 +296,64 @@ def append_wander_log(question: str, *, overlap_max: float, similarity_max: floa
         f.write(row)
 
 
+def _redact_question_tokens(text: str) -> str:
+    return re.sub(r"\b[A-Za-z0-9_-]{20,}\b", "[REDACTED_TOKEN]", str(text or ""))
+
+
+def append_open_questions_session(entries: list[dict[str, Any]], *, open_questions_path: Path, run_id: str) -> dict[str, Any]:
+    open_questions_path.parent.mkdir(parents=True, exist_ok=True)
+    if not open_questions_path.exists():
+        open_questions_path.write_text("# Open Questions\n", encoding="utf-8")
+    lines = [
+        "",
+        f"## Research Wanderer Session {run_id} ({iso_utc()})",
+        "",
+    ]
+    appended = 0
+    for entry in entries:
+        question = _redact_question_tokens(str(entry.get("question", "")).strip())
+        if not question:
+            continue
+        significance = float(entry.get("significance", 0.0) or 0.0)
+        lines.append(f"- {question} [significance={significance:.3f}]")
+        appended += 1
+    if appended:
+        open_questions_path.write_text(
+            open_questions_path.read_text(encoding="utf-8").rstrip() + "\n" + "\n".join(lines) + "\n",
+            encoding="utf-8",
+        )
+    return {"ok": True, "run_id": run_id, "appended": appended, "path": str(open_questions_path)}
+
+
+def _parse_legacy_args(argv: list[str]) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument("--input")
+    parser.add_argument("--open-questions-path")
+    parser.add_argument("--run-id", default="research-wanderer")
+    parser.add_argument("--json", action="store_true")
+    return parser.parse_args(argv)
+
+
+def _run_legacy_append(argv: list[str]) -> int:
+    args = _parse_legacy_args(argv)
+    if not args.input or not args.open_questions_path:
+        print("Usage: research_wanderer.py --input payload.json --open-questions-path OPEN_QUESTIONS.md [--run-id id] [--json]")
+        return 1
+    payload = json.loads(Path(args.input).read_text(encoding="utf-8"))
+    if not isinstance(payload, list):
+        raise SystemExit("input payload must be a JSON list")
+    result = append_open_questions_session(
+        [item for item in payload if isinstance(item, dict)],
+        open_questions_path=Path(args.open_questions_path),
+        run_id=str(args.run_id or "research-wanderer"),
+    )
+    if args.json:
+        print(json.dumps(result, ensure_ascii=True, sort_keys=True))
+    else:
+        print(f"Appended {result['appended']} questions to {result['path']}")
+    return 0
+
+
 def add_topic(topic: str) -> None:
     q = load_queue()
     if topic not in q["topics"] and topic not in q["completed"]:
@@ -376,6 +435,8 @@ def main(argv: list[str] | None = None) -> int:
     if not args:
         show_status()
         return 0
+    if args[0].startswith("--"):
+        return _run_legacy_append(args)
 
     cmd = args[0]
     if cmd == "add":

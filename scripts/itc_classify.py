@@ -14,7 +14,7 @@ Usage:
   python scripts/itc_classify.py              # incremental (new messages only)
   python scripts/itc_classify.py --full       # reprocess all
   python scripts/itc_classify.py --rules-only # skip LLM pass
-  python scripts/itc_classify.py --model qwen14b-tools-32k  # override Ollama model
+  python scripts/itc_classify.py --model qwen:latest  # override local model
 """
 
 import argparse
@@ -150,7 +150,12 @@ def classify_llm(router, text, model_override=None):
         return None, "router_unavailable"
     prompt = _build_prompt(text)
     payload = build_chat_payload(prompt, temperature=0.0, max_tokens=10)
-    context = {"input_text": text}
+    context = {
+        "input_text": text,
+        "source_surface": "itc_classify",
+        "deferred_resume_policy": "review",
+        "deferred_validator_key": "itc_classify_tag",
+    }
     if model_override:
         context["override_model"] = model_override
     result = router.execute_with_escalation(
@@ -239,6 +244,7 @@ def run(full=False, rules_only=False, max_llm=100, model=None):
     llm_reclassified = 0
     llm_calls = 0
     backend_counts = {"rules": 0}
+    llm_fail_counts = {}
 
     with open(CANON_IN, "r", encoding="utf-8") as fin, \
          open(TAGGED_OUT, mode, encoding="utf-8") as fout:
@@ -257,6 +263,7 @@ def run(full=False, rules_only=False, max_llm=100, model=None):
 
             # LLM second pass: reclassify noise-tagged messages (capped)
             backend = "rules"
+            llm_fail_reason = None
             if use_llm and primary == "noise" and len(text) > 10 and llm_calls < max_llm:
                 llm_tag, llm_backend = classify_llm(router, text, model_override=model)
                 llm_calls += 1
@@ -264,15 +271,22 @@ def run(full=False, rules_only=False, max_llm=100, model=None):
                     primary = llm_tag
                     all_tags = list(set(all_tags + [llm_tag]))
                     llm_reclassified += 1
-                if llm_backend:
+                if llm_tag and llm_backend:
                     backend = llm_backend
                 if not llm_tag:
-                    log_event("llm_router_fail", {"reason_code": llm_backend})
+                    backend = "rules_fallback"
+                    llm_fail_reason = llm_backend or "llm_unclassified"
+                    llm_fail_counts[llm_fail_reason] = llm_fail_counts.get(llm_fail_reason, 0) + 1
+                    log_event("llm_router_fail", {"reason_code": llm_fail_reason})
+                    if llm_fail_reason == "deferred_fishtank":
+                        continue
 
             msg["primary_tag"] = primary
             msg["tags"] = all_tags
             msg["classified_at"] = int(time.time() * 1000)
             msg["classifier"] = f"itc_classify.py/hybrid-v4/{backend}"
+            if llm_fail_reason:
+                msg["llm_fail_reason"] = llm_fail_reason
 
             fout.write(json.dumps(msg, ensure_ascii=False) + "\n")
             seen.add(h)
@@ -289,6 +303,8 @@ def run(full=False, rules_only=False, max_llm=100, model=None):
         print(f"  LLM: {llm_calls} calls, {llm_reclassified} reclassified")
         active = {k: v for k, v in backend_counts.items() if v > 0}
         print(f"  Backends used: {', '.join(f'{k}={v}' for k, v in active.items())}")
+        if llm_fail_counts:
+            print(f"  LLM fallback reasons: {', '.join(f'{k}={v}' for k, v in sorted(llm_fail_counts.items()))}")
 
     log_event("classify_done", {
         "wrote": wrote,
@@ -296,6 +312,7 @@ def run(full=False, rules_only=False, max_llm=100, model=None):
         "llm_calls": llm_calls,
         "llm_reclassified": llm_reclassified,
         "backends": backend_counts,
+        "llm_fail_reasons": llm_fail_counts,
     })
 
     return wrote

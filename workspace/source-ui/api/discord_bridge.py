@@ -16,9 +16,13 @@ from typing import Any
 from urllib import error, request
 from zoneinfo import ZoneInfo
 
+from .boundary_state import build_discord_channel_boundary
+
 SOURCE_UI_ROOT = Path(__file__).resolve().parents[1]
 CONFIG_PATH = SOURCE_UI_ROOT / "config" / "discord_bridge.json"
 STATUS_PATH = SOURCE_UI_ROOT / "state" / "discord_bridge_status.json"
+ENV_FILE = Path.home() / ".config" / "openclaw" / "discord-bridge.env"
+_ENV_LOADED = False
 
 
 def _now_iso() -> str:
@@ -42,6 +46,24 @@ def _read_json(path: Path) -> Any | None:
         return json.loads(path.read_text(encoding="utf-8"))
     except Exception:
         return None
+
+
+def _load_env_file_once(path: Path = ENV_FILE) -> None:
+    global _ENV_LOADED
+    if _ENV_LOADED:
+        return
+    _ENV_LOADED = True
+    if not path.exists():
+        return
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        value = value.strip().strip("'").strip('"')
+        if key and key not in os.environ:
+            os.environ[key] = value
 
 
 def _write_json_atomic(path: Path, payload: Any) -> None:
@@ -75,22 +97,109 @@ def _format_component_line(component: dict[str, Any]) -> str:
     return f"{component.get('name', component.get('id', 'component'))}: {component.get('status', 'unknown')} ({component.get('details', 'no detail')})"
 
 
+def _format_signed_currency(value: Any) -> str:
+    amount = float(value or 0.0)
+    return f"{'+' if amount >= 0 else '-'}${abs(amount):.2f}"
+
+
+def _format_signed_percent(value: Any) -> str:
+    return f"{float(value or 0.0):+.2f}%"
+
+
+def _format_sim_totals_line(rows: list[dict[str, Any]]) -> str:
+    if not rows:
+        return "Active book: 0 sims"
+    sim_count = len(rows)
+    trade_count = sum(int(row.get("round_trips", 0) or 0) for row in rows)
+    open_positions = sum(int(row.get("open_positions", 0) or 0) for row in rows)
+    initial_capital = sum(float(row.get("initial_capital", 0.0) or 0.0) for row in rows)
+    live_equity = sum(float(row.get("live_equity", row.get("final_equity", 0.0)) or 0.0) for row in rows)
+    live_pnl = sum(float(row.get("live_equity_change", row.get("net_equity_change", 0.0)) or 0.0) for row in rows)
+    booked_pnl = sum(float(row.get("net_equity_change", 0.0) or 0.0) for row in rows)
+    live_return_pct = (live_pnl / initial_capital * 100.0) if initial_capital > 0.0 else 0.0
+    bits = [
+        f"Active book: {sim_count} sims",
+        f"{trade_count} trades",
+        f"live capital ${live_equity:.2f}",
+        f"live P/L {_format_signed_currency(live_pnl)} ({_format_signed_percent(live_return_pct)})",
+    ]
+    if abs(live_pnl - booked_pnl) >= 0.01:
+        bits.append(f"booked {_format_signed_currency(booked_pnl)}")
+    if open_positions > 0:
+        bits.append(f"{open_positions} open")
+    return " | ".join(bits)
+
+
+def _format_review_summary_line(review: dict[str, Any]) -> str | None:
+    if not isinstance(review, dict):
+        return None
+    summary = review.get("summary") if isinstance(review.get("summary"), dict) else {}
+    active_count = int(summary.get("active_count", 0) or 0)
+    if active_count <= 0:
+        return None
+    interval_hours = int(review.get("review_interval_hours", 0) or 0)
+    free_signal = review.get("free_realtime_signal") if isinstance(review.get("free_realtime_signal"), dict) else {}
+    weekly_x = review.get("weekly_x_review") if isinstance(review.get("weekly_x_review"), dict) else {}
+    bits = [
+        f"Review {interval_hours or '?'}h",
+        f"keep {int(summary.get('keep_count', 0) or 0)}",
+        f"retune {int(summary.get('retune_count', 0) or 0)}",
+        f"retire {int(summary.get('retire_count', 0) or 0)}",
+    ]
+    weekly_status = str(weekly_x.get("status") or "missing")
+    free_status = str(free_signal.get("status") or "missing")
+    if free_status != "fresh":
+        bits.append(f"free sentiment {free_status}")
+    if weekly_status == "stale":
+        bits.append("weekly X stale")
+    elif weekly_status != "fresh":
+        bits.append("weekly X pending")
+    return " | ".join(bits)
+
+
 def _format_sim_line(sim: dict[str, Any]) -> str:
     label = str(sim.get("display_name") or sim.get("id") or "SIM")
-    strategy_type = str(sim.get("bucket") or sim.get("strategy_type") or "Unclassified").strip()
+    live_equity = float(sim.get("live_equity", sim.get("final_equity", 0.0)) or 0.0)
+    live_pnl = float(sim.get("live_equity_change", sim.get("net_equity_change", 0.0)) or 0.0)
+    live_return_pct = float(sim.get("live_return_pct", sim.get("net_return_pct", 0.0)) or 0.0)
+    open_positions = int(sim.get("open_positions", 0) or 0)
+    stage = str(sim.get("stage") or "").strip().lower()
     bits = [
-        f"type {strategy_type}",
-        f"P/L {float(sim.get('net_return_pct', 0.0)):+.2f}%",
-        f"equity ${float(sim.get('final_equity', 0.0)):.2f}",
-        f"fees ${float(sim.get('fees_usd', 0.0)):.2f}",
+        f"capital ${live_equity:.2f}",
+        f"P/L {_format_signed_currency(live_pnl)} ({_format_signed_percent(live_return_pct)})",
+        f"trades {int(sim.get('round_trips', 0) or 0)}",
+        f"win {float(sim.get('win_rate', 0.0) or 0.0):.1f}%",
     ]
     if sim.get("halted"):
         bits.append("HALTED")
-    if int(sim.get("open_positions", 0) or 0) > 0:
-        bits.append(f"{int(sim.get('open_positions', 0) or 0)} open")
+    if open_positions > 0:
+        bits.append(f"{open_positions} open")
     if sim.get("fee_drag"):
         bits.append("fee drag")
+    if stage == "staged":
+        bits.append("awaiting feed")
+    elif bool(sim.get("control_lane")):
+        bits.append("control")
+    if live_return_pct > 0.0:
+        bits.append("growing")
     return f"{label}: " + " | ".join(bits)
+
+
+def _format_review_action_line(review: dict[str, Any]) -> str | None:
+    if not isinstance(review, dict):
+        return None
+    rows = [item for item in list(review.get("recommendations") or []) if isinstance(item, dict)]
+    retune = [str(item.get("display_name") or item.get("id") or "sim") for item in rows if str(item.get("recommendation") or "") == "retune"]
+    retire = [str(item.get("display_name") or item.get("id") or "sim") for item in rows if str(item.get("recommendation") or "") == "retire"]
+    keep = [str(item.get("display_name") or item.get("id") or "sim") for item in rows if str(item.get("recommendation") or "") == "keep"]
+    bits: list[str] = []
+    if retune:
+        bits.append("Retune: " + ", ".join(retune[:2]))
+    if retire:
+        bits.append("Retire: " + ", ".join(retire[:2]))
+    if not bits and keep:
+        bits.append("Stable: " + ", ".join(keep[:2]))
+    return " | ".join(bits) if bits else None
 
 
 def _age_minutes(ts: str | None) -> float | None:
@@ -185,15 +294,27 @@ def _sim_watch_state_snapshot(portfolio: dict[str, Any]) -> dict[str, Any]:
             "display_name": str(sim.get("display_name") or sim_id),
             "bucket": str(sim.get("bucket") or ""),
             "strategy_type": str(sim.get("bucket") or sim.get("strategy_type") or ""),
+            "strategy_role": str(sim.get("strategy_role") or ""),
+            "stage": str(sim.get("stage") or ""),
+            "target_venue": str(sim.get("target_venue") or ""),
+            "control_lane": bool(sim.get("control_lane")),
             "status": str(sim.get("status") or "unknown"),
             "halted": bool(sim.get("halted")),
             "fee_drag": bool(sim.get("fee_drag")),
             "open_positions": int(sim.get("open_positions", 0) or 0),
             "round_trips": int(sim.get("round_trips", 0) or 0),
             "win_rate": _round_float(sim.get("win_rate", 0.0), 1),
+            "initial_capital": _round_float(sim.get("initial_capital", 0.0), 2),
+            "net_equity_change": _round_float(sim.get("net_equity_change", 0.0), 2),
             "net_return_pct": _round_float(sim.get("net_return_pct", 0.0), 2),
             "final_equity": _round_float(sim.get("final_equity", 0.0), 2),
+            "mark_equity": _round_float(sim.get("mark_equity", sim.get("final_equity", 0.0)), 2),
+            "live_equity": _round_float(sim.get("live_equity", sim.get("final_equity", 0.0)), 2),
+            "live_equity_change": _round_float(sim.get("live_equity_change", sim.get("net_equity_change", 0.0)), 2),
+            "live_return_pct": _round_float(sim.get("live_return_pct", sim.get("net_return_pct", 0.0)), 2),
+            "unrealized_pnl": _round_float(sim.get("unrealized_pnl", 0.0), 2),
             "fees_usd": _round_float(sim.get("fees_usd", 0.0), 2),
+            "avg_hold_hours": _round_float(sim.get("avg_hold_hours", 0.0), 2),
             "stale": bool(age_minutes is not None and age_minutes > 10.0),
         }
 
@@ -288,7 +409,7 @@ def _build_ops_status_lines(portfolio: dict[str, Any]) -> tuple[list[str], str]:
             model = str(macbook.get("model_resolved") or "unknown")
             signal_bits.append(f"MacBook sentiment {macbook.get('status', 'unknown')} ({model})")
         if isinstance(fingpt, dict):
-            signal_bits.append(f"FinGPT {fingpt.get('status', 'unknown')}")
+            signal_bits.append(f"Dali fallback {fingpt.get('status', 'unknown')}")
         lines.append("Signals: " + "; ".join(signal_bits))
 
     footer = "Daily operating summary from Dali."
@@ -298,29 +419,37 @@ def _build_ops_status_lines(portfolio: dict[str, Any]) -> tuple[list[str], str]:
 def _build_sim_watch_summary(portfolio: dict[str, Any]) -> tuple[list[str], str, dict[str, Any]]:
     snapshot = _sim_watch_state_snapshot(portfolio)
     sim_snapshot = snapshot.get("sims", {})
-    finance_snapshot = snapshot.get("finance", {})
     feeds = snapshot.get("feeds", {})
-    halted = sum(1 for item in sim_snapshot.values() if bool(item.get("halted")))
+    strategy_review = portfolio.get("sim_strategy_review") if isinstance(portfolio.get("sim_strategy_review"), dict) else {}
+    sim_rows = list(sim_snapshot.values())
+    halted = sum(1 for item in sim_rows if bool(item.get("halted")))
+    growing = sum(1 for item in sim_rows if float(item.get("live_return_pct", item.get("net_return_pct", 0.0)) or 0.0) > 0.0)
     flagged = sum(
         1
-        for item in sim_snapshot.values()
-        if bool(item.get("halted")) or bool(item.get("fee_drag")) or bool(item.get("stale"))
+        for item in sim_rows
+        if bool(item.get("halted"))
+        or bool(item.get("fee_drag"))
+        or float(item.get("live_return_pct", item.get("net_return_pct", 0.0)) or 0.0) <= -1.0
     )
-    lines = [_format_sim_line(current) for current in list(sim_snapshot.values())[:6]]
-    if finance_snapshot:
-        lines.extend(_format_finance_line({"symbol": symbol, **current}) for symbol, current in list(finance_snapshot.items())[:2])
+    lines: list[str] = []
+    if sim_rows:
+        lines.append(_format_sim_totals_line(sim_rows))
+        review_line = _format_review_summary_line(strategy_review)
+        if review_line:
+            lines.append(review_line)
+        review_actions = _format_review_action_line(strategy_review)
+        if review_actions:
+            lines.append(review_actions)
+        lines.extend(_format_sim_line(current) for current in sim_rows[:6])
     signal_bits: list[str] = []
-    sentiment_model = str(feeds.get("sentiment_model") or "").strip()
-    if sentiment_model:
-        signal_bits.append(f"sentiment {sentiment_model}")
-    if feeds.get("macbook_status"):
+    if str(feeds.get("macbook_status") or "") not in {"ok", "healthy", "unknown"}:
         signal_bits.append(f"macbook {feeds.get('macbook_status')}")
-    if feeds.get("fingpt_status"):
-        signal_bits.append(f"FinGPT {feeds.get('fingpt_status')}")
-    footer = f"Twice-daily paper trading summary from Dali. Active book {len(sim_snapshot)} strategies, {halted} halted, {flagged} flagged."
+    if str(feeds.get("fingpt_status") or "") not in {"ok", "healthy", "missing", "optional_offline", "unknown"}:
+        signal_bits.append(f"dali fallback {feeds.get('fingpt_status')}")
+    footer = f"Nightly AU paper trading summary from Dali. Active book {len(sim_snapshot)} strategies, {growing} growing, {halted} halted, {flagged} flagged."
     if signal_bits:
         footer = f"{footer} " + "; ".join(signal_bits[:3]) + "."
-    return lines[:8], footer, snapshot
+    return lines[:10], footer, snapshot
 
 
 def _build_sim_watch_lines(portfolio: dict[str, Any], previous_state: dict[str, Any] | None = None) -> tuple[list[str], str, dict[str, Any]]:
@@ -331,7 +460,21 @@ def _build_sim_watch_lines(portfolio: dict[str, Any], previous_state: dict[str, 
     prev_feeds = prev.get("feeds") if isinstance(prev.get("feeds"), dict) else {}
 
     sim_snapshot = snapshot.get("sims", {})
-    lines: list[str] = [_format_sim_line(current) for current in list(sim_snapshot.values())[:6]]
+    sim_rows = list(sim_snapshot.values())
+    lines: list[str] = []
+    if sim_rows:
+        lines.append(_format_sim_totals_line(sim_rows))
+        review_line = _format_review_summary_line(
+            portfolio.get("sim_strategy_review") if isinstance(portfolio.get("sim_strategy_review"), dict) else {}
+        )
+        if review_line:
+            lines.append(review_line)
+        review_actions = _format_review_action_line(
+            portfolio.get("sim_strategy_review") if isinstance(portfolio.get("sim_strategy_review"), dict) else {}
+        )
+        if review_actions:
+            lines.append(review_actions)
+        lines.extend(_format_sim_line(current) for current in sim_rows[:6])
     alerts: list[str] = []
     baseline = not bool(prev_sims or prev_finance or prev_feeds)
 
@@ -370,13 +513,10 @@ def _build_sim_watch_lines(portfolio: dict[str, Any], previous_state: dict[str, 
             alerts.append(f"{symbol}: risk {previous.get('risk_state', 'unknown')} -> {current.get('risk_state', 'unknown')}")
 
     feeds = snapshot.get("feeds", {})
-    if baseline:
-        if str(feeds.get("fingpt_status") or "") not in {"ok", "healthy"}:
-            alerts.append("Sentiment feed: FinGPT missing")
-    else:
+    if not baseline:
         if str(prev_feeds.get("fingpt_status") or "") != str(feeds.get("fingpt_status") or ""):
-            alerts.append("FinGPT feed changed")
-            alerts.append(f"FinGPT feed: {prev_feeds.get('fingpt_status', 'unknown')} -> {feeds.get('fingpt_status', 'unknown')}")
+            alerts.append("Dali fallback feed changed")
+            alerts.append(f"Dali fallback feed: {prev_feeds.get('fingpt_status', 'unknown')} -> {feeds.get('fingpt_status', 'unknown')}")
         if str(prev_feeds.get("macbook_status") or "") != str(feeds.get("macbook_status") or ""):
             alerts.append(f"MacBook sentiment: {prev_feeds.get('macbook_status', 'unknown')} -> {feeds.get('macbook_status', 'unknown')}")
 
@@ -386,9 +526,6 @@ def _build_sim_watch_lines(portfolio: dict[str, Any], previous_state: dict[str, 
         summary = "Attention: " + "; ".join(alerts[:8])
     else:
         summary = "No new sim-watch transitions."
-    sentiment_model = str(feeds.get("sentiment_model") or "").strip()
-    if sentiment_model:
-        summary = f"{summary} Sentiment={sentiment_model}."
     return lines[:8], summary, snapshot
 
 
@@ -404,6 +541,7 @@ def _format_work_item_line(item: dict[str, Any]) -> str:
 
 
 def load_config(path: Path = CONFIG_PATH) -> dict[str, Any]:
+    _load_env_file_once()
     payload = _read_json(path)
     if isinstance(payload, dict):
         return payload
@@ -447,8 +585,8 @@ def _channel_previews(
             "Sim Watch",
             sim_watch_lines
             or [_format_sim_line(item) for item in flagged_sims[:6]]
-            or [_format_sim_line(item) for item in active_book_sims[:4]]
-            or [_format_sim_line(item) for item in sims[:4]],
+            or [_format_sim_line(item) for item in active_book_sims[:6]]
+            or [_format_sim_line(item) for item in sims[:6]],
             footer=sim_watch_footer,
         ),
         "project_intake": _bullet_lines(
@@ -477,16 +615,22 @@ def _channel_previews(
                 ),
             )
             state = sim_watch_state if channel_id == "sim_watch" else {}
+        label = str(entry.get("label", channel_id))
+        enabled = bool(entry.get("enabled", False))
+        delivery = str(entry.get("delivery", "webhook"))
+        has_webhook = bool(env_var and os.environ.get(env_var))
+        auto_post = bool(entry.get("auto_post", True))
+        report_mode = str(entry.get("report_mode") or "")
         channels.append(
             {
                 "id": channel_id,
-                "label": str(entry.get("label", channel_id)),
+                "label": label,
                 "title": str(entry.get("title", entry.get("label", channel_id))),
-                "enabled": bool(entry.get("enabled", False)),
-                "delivery": str(entry.get("delivery", "webhook")),
+                "enabled": enabled,
+                "delivery": delivery,
                 "webhook_env": env_var or None,
-                "has_webhook": bool(env_var and os.environ.get(env_var)),
-                "auto_post": bool(entry.get("auto_post", True)),
+                "has_webhook": has_webhook,
+                "auto_post": auto_post,
                 "preview": preview,
                 "preview_length": len(preview),
                 "preview_hash": _preview_hash(preview),
@@ -494,8 +638,16 @@ def _channel_previews(
                 "min_resend_minutes": max(0, int(entry.get("min_resend_minutes", 0) or 0)),
                 "schedule_timezone": str(entry.get("schedule_timezone") or "Australia/Brisbane"),
                 "schedule_local_times": list(entry.get("schedule_local_times") or []),
-                "report_mode": str(entry.get("report_mode") or ""),
+                "report_mode": report_mode,
                 "state": state,
+                "boundary": build_discord_channel_boundary(
+                    label=label,
+                    enabled=enabled,
+                    has_webhook=has_webhook,
+                    auto_post=auto_post,
+                    delivery=delivery,
+                    report_mode=report_mode,
+                ),
             }
         )
     return channels

@@ -1,0 +1,53 @@
+mode: live
+jurisdiction: AU
+capital_aud: 1000
+
+venues:
+  alpaca:
+    enabled: true
+  kraken:
+    enabled: true
+  hyperliquid:
+    enabled: false
+    reason: legal_review_pending
+  kalshi:
+    enabled: false
+  polymarket:
+    enabled: false
+
+execution:
+  leverage_enabled: false
+  max_gross_exposure_pct: 0.85
+  max_open_positions: 3
+  use_marketable_limits: true
+
+risk:
+  per_trade_risk_pct: 0.006
+  max_open_risk_pct: 0.018
+  daily_hard_stop_pct: 0.025
+  weekly_hard_stop_pct: 0.05
+  consecutive_loss_kill_switch: 5
+
+strategies:
+  equity_event_impulse:
+    enabled: true
+    sleeve_weight: 0.55
+  etf_narrative_spillover:
+    enabled: true
+    sleeve_weight: 0.20
+  crypto_sentiment_breakout:
+    enabled: true
+    sleeve_weight: 0.30
+  crypto_pullback_continuation:
+    enabled: false
+    reason: needs_forward_validation
+
+x_api:
+  mode: filtered_stream
+  enterprise_powerstream: false
+  hard_monthly_budget_aud: 50
+  official_accounts_only_immediate_trade: true
+
+openclaw:
+  control_plane_only: true
+  direct_order_tools_exposed: false

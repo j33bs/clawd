@@ -137,7 +137,7 @@ async function probeVllmServer(entry, options = {}, { providerFactory } = {}) {
       maxConcurrentRequests: options.maxConcurrentRequests
     };
 
-    const makeProvider = providerFactory ?? ((e, o) => new ProviderAdapter(e, o));
+    const makeProvider = providerFactory ?? ((e, o) => createVllmProvider({ entry: e, ...o }));
     const provider = makeProvider(entry, derivedOptions);
     // Override base URL if specified
     if (options.baseUrl) provider.baseUrl = options.baseUrl;

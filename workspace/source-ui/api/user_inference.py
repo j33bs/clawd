@@ -20,6 +20,38 @@ DEFAULT_OPENCLAW_WORKSPACE = Path.home() / ".openclaw" / "workspace"
 PREFERENCE_PACKET_FILENAME = "PREFERENCE_PACKET.md"
 USER_PREFERENCE_MARKER_START = "<!-- OPENCLAW:PREFERENCE_PACKET:START -->"
 USER_PREFERENCE_MARKER_END = "<!-- OPENCLAW:PREFERENCE_PACKET:END -->"
+ALLOWED_REVIEW_STATES = {
+    "pending_review",
+    "operator_approved",
+    "needs_review",
+    "rejected",
+}
+ALLOWED_CONTRADICTION_STATES = {
+    "no_known_contradiction",
+    "contradicted",
+    "superseded",
+}
+CONTEXT_TERM_STOPWORDS = {
+    "about",
+    "after",
+    "before",
+    "being",
+    "channel",
+    "direct",
+    "latest",
+    "message",
+    "reply",
+    "respond",
+    "source",
+    "their",
+    "there",
+    "these",
+    "those",
+    "through",
+    "using",
+    "want",
+    "with",
+}
 
 
 def _now_iso() -> str:
@@ -206,10 +238,120 @@ def _confidence(hits: int, source_count: int) -> float:
     return round(min(0.97, score), 4)
 
 
+def _normalize_review_state(value: Any) -> str:
+    raw = str(value or "").strip().lower().replace(" ", "_")
+    return raw if raw in ALLOWED_REVIEW_STATES else "pending_review"
+
+
+def _normalize_contradiction_state(value: Any) -> str:
+    raw = str(value or "").strip().lower().replace(" ", "_")
+    return raw if raw in ALLOWED_CONTRADICTION_STATES else "no_known_contradiction"
+
+
+def _active_inference_rows() -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for item in load_user_inferences():
+        if str(item.get("status") or "").strip().lower() != "active":
+            continue
+        if _normalize_review_state(item.get("review_state")) == "rejected":
+            continue
+        if _normalize_contradiction_state(item.get("contradiction_state")) in {"contradicted", "superseded"}:
+            continue
+        rows.append(item)
+    return rows
+
+
+def _context_terms(*values: Any) -> set[str]:
+    terms: set[str] = set()
+    for value in values:
+        for token in re.findall(r"[a-z0-9]+", str(value or "").strip().lower()):
+            if len(token) < 4 or token in CONTEXT_TERM_STOPWORDS:
+                continue
+            terms.add(token)
+    return terms
+
+
+def query_preference_graph(
+    *,
+    context: str = "",
+    profile_sections: list[str] | None = None,
+    inference_types: list[str] | None = None,
+    limit: int = 4,
+) -> dict[str, Any]:
+    allowed_sections = {str(item or "").strip().lower() for item in list(profile_sections or []) if str(item or "").strip()}
+    allowed_types = {str(item or "").strip().lower() for item in list(inference_types or []) if str(item or "").strip()}
+    context_terms = _context_terms(context, *(allowed_sections or []), *(allowed_types or []))
+    scored: list[tuple[float, dict[str, Any]]] = []
+
+    for item in _active_inference_rows():
+        profile_section = str(item.get("profile_section") or "").strip().lower()
+        inference_type = str(item.get("inference_type") or "").strip().lower()
+        if allowed_sections and profile_section not in allowed_sections:
+            continue
+        if allowed_types and inference_type not in allowed_types:
+            continue
+
+        prompt_line = str(item.get("prompt_line") or "").strip()
+        if not prompt_line:
+            continue
+
+        score = float(item.get("confidence", 0.0) or 0.0)
+        item_terms = _context_terms(
+            prompt_line,
+            item.get("statement"),
+            item.get("profile_key"),
+            profile_section,
+            inference_type,
+        )
+        matches = sorted(context_terms & item_terms)
+        if context_terms:
+            if matches:
+                score += 0.35 + (0.08 * min(3, len(matches)))
+            elif allowed_sections or allowed_types:
+                score += 0.1
+            else:
+                score -= 0.05
+        scored.append(
+            (
+                score,
+                {
+                    "id": str(item.get("id") or ""),
+                    "profile_section": profile_section,
+                    "inference_type": inference_type,
+                    "profile_key": str(item.get("profile_key") or "").strip(),
+                    "prompt_line": prompt_line,
+                    "confidence": float(item.get("confidence", 0.0) or 0.0),
+                    "matched_terms": matches,
+                },
+            )
+        )
+
+    scored.sort(
+        key=lambda entry: (
+            -entry[0],
+            -float(entry[1].get("confidence", 0.0) or 0.0),
+            str(entry[1].get("prompt_line") or ""),
+        )
+    )
+    selected = [item for _, item in scored[: max(1, int(limit))]]
+    return {
+        "context": str(context or "").strip(),
+        "matched_sections": sorted({str(item.get("profile_section") or "") for item in selected if str(item.get("profile_section") or "")}),
+        "matched_inference_types": sorted({str(item.get("inference_type") or "") for item in selected if str(item.get("inference_type") or "")}),
+        "prompt_lines": [f"- {str(item.get('prompt_line') or '').strip()}" for item in selected if str(item.get("prompt_line") or "").strip()],
+        "items": selected,
+    }
+
+
 def distill_user_inferences() -> dict[str, Any]:
     rows = _load_memory_rows()
     now = _now_iso()
     inferences: list[dict[str, Any]] = []
+    existing_by_id = {
+        str(row.get("id") or "").strip(): row
+        for row in _read_jsonl(USER_INFERENCES_PATH)
+        if isinstance(row, dict) and str(row.get("id") or "").strip()
+    }
     profile: dict[str, Any] = {
         "schema_version": 1,
         "subject": "jeebs",
@@ -235,8 +377,10 @@ def distill_user_inferences() -> dict[str, Any]:
         confidence = _confidence(len(matched_rows), source_count)
         profile_section = str(rule["profile_section"])
         profile_key = str(rule["profile_key"])
+        inference_id = _inference_id(str(rule["inference_type"]), profile_key)
+        existing = dict(existing_by_id.get(inference_id, {}))
         inference = {
-            "id": _inference_id(str(rule["inference_type"]), profile_key),
+            "id": inference_id,
             "subject": "jeebs",
             "inference_type": str(rule["inference_type"]),
             "statement": str(rule["statement"]),
@@ -251,10 +395,18 @@ def distill_user_inferences() -> dict[str, Any]:
             "first_seen_at": str(matched_rows[0].get("created_at") or now),
             "last_confirmed_at": str(matched_rows[-1].get("created_at") or now),
             "last_contradicted_at": None,
-            "review_state": "auto_distilled",
-            "review_notes": "",
+            "contradiction_state": _normalize_contradiction_state(existing.get("contradiction_state")),
+            "review_state": _normalize_review_state(existing.get("review_state")),
+            "review_notes": str(existing.get("review_notes") or ""),
+            "reviewed_by": str(existing.get("reviewed_by") or ""),
+            "reviewed_at": str(existing.get("reviewed_at") or ""),
+            "operator_actions": ["operator_approved", "needs_review", "rejected"],
             "distilled_at": now,
         }
+        if not inference["reviewed_by"]:
+            inference.pop("reviewed_by", None)
+        if not inference["reviewed_at"]:
+            inference.pop("reviewed_at", None)
         inferences.append(inference)
         section = profile.setdefault(profile_section, {})
         section[profile_key] = {
@@ -269,6 +421,7 @@ def distill_user_inferences() -> dict[str, Any]:
     inferences.sort(key=lambda item: (-float(item.get("confidence", 0.0)), str(item.get("statement", ""))))
     _write_jsonl(USER_INFERENCES_PATH, inferences)
     _write_json(PREFERENCE_PROFILE_PATH, profile)
+    sync_result = sync_preference_packet_to_workspaces(limit=8)
     return {
         "status": "ok",
         "distilled_at": now,
@@ -276,6 +429,7 @@ def distill_user_inferences() -> dict[str, Any]:
         "profile_sections": sorted(key for key in profile.keys() if key not in {"schema_version", "subject", "updated_at"}),
         "user_inferences_path": str(USER_INFERENCES_PATH),
         "preference_profile_path": str(PREFERENCE_PROFILE_PATH),
+        "workspace_sync": sync_result,
     }
 
 
@@ -293,17 +447,47 @@ def load_preference_profile() -> dict[str, Any]:
     return payload if isinstance(payload, dict) else {}
 
 
-def build_user_context_packet(limit: int = 4) -> list[str]:
-    lines: list[tuple[float, str]] = []
-    for item in load_user_inferences():
-        if str(item.get("status") or "") != "active":
+def update_user_inference(inference_id: str, updates: dict[str, Any], *, reviewer: str = "operator") -> dict[str, Any] | None:
+    target_id = str(inference_id or "").strip()
+    if not target_id:
+        return None
+    rows = load_user_inferences()
+    now = _now_iso()
+    for row in rows:
+        if str(row.get("id") or "").strip() != target_id:
             continue
-        prompt_line = str(item.get("prompt_line") or "").strip()
-        if not prompt_line:
-            continue
-        lines.append((float(item.get("confidence", 0.0) or 0.0), f"- {prompt_line}"))
-    lines.sort(key=lambda item: (-item[0], item[1]))
-    return [line for _, line in lines[: max(1, int(limit))]]
+        if "review_state" in updates:
+            row["review_state"] = _normalize_review_state(updates.get("review_state"))
+            row["reviewed_by"] = str(updates.get("reviewed_by") or reviewer).strip() or reviewer
+            row["reviewed_at"] = str(updates.get("reviewed_at") or now)
+        if "contradiction_state" in updates:
+            row["contradiction_state"] = _normalize_contradiction_state(updates.get("contradiction_state"))
+            if row["contradiction_state"] == "contradicted":
+                row["last_contradicted_at"] = now
+        if "review_notes" in updates:
+            row["review_notes"] = str(updates.get("review_notes") or "")
+        row["operator_actions"] = ["operator_approved", "needs_review", "rejected"]
+        row["updated_at"] = now
+        _write_jsonl(USER_INFERENCES_PATH, rows)
+        return row
+    return None
+
+
+def build_user_context_packet(
+    limit: int = 4,
+    *,
+    context: str = "",
+    profile_sections: list[str] | None = None,
+    inference_types: list[str] | None = None,
+) -> list[str]:
+    packet = query_preference_graph(
+        context=context,
+        profile_sections=profile_sections,
+        inference_types=inference_types,
+        limit=limit,
+    )
+    lines = [str(line).strip() for line in list(packet.get("prompt_lines") or []) if str(line).strip()]
+    return lines[: max(1, int(limit))]
 
 
 def _configured_agent_workspaces(config_path: Path = OPENCLAW_CONFIG_PATH) -> list[Path]:

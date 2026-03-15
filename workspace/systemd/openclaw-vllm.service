@@ -10,8 +10,10 @@ Type=simple
 WorkingDirectory=%h/src/clawd
 Environment=OPENCLAW_VLLM_ASSISTANT_PORT=8001
 Environment=OPENCLAW_VLLM_ASSISTANT_GPU_MEMORY_UTILIZATION=0.85
+Environment=OPENCLAW_VLLM_ASSISTANT_QUANTIZATION=awq_marlin
+EnvironmentFile=-%h/.config/openclaw/vllm-assistant.env
 ExecStartPre=/home/jeebs/src/clawd/scripts/ensure_port_free.sh 8001
-ExecStart=%h/src/clawd/scripts/vllm_launch_assistant.sh
+ExecStart=%h/src/clawd/scripts/assistant_launch.sh
 Restart=on-failure
 RestartSec=10
 StandardOutput=append:%h/.local/state/openclaw/vllm-assistant.log

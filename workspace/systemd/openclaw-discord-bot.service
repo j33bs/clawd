@@ -1,0 +1,18 @@
+[Unit]
+Description=OpenClaw Discord bot (slash commands)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=-%h/.config/openclaw/discord-bot.env
+WorkingDirectory=%h/src/clawd
+ExecStart=%h/src/clawd/workspace/scripts/run_discord_bot.sh
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=openclaw-discord-bot
+
+[Install]
+WantedBy=default.target

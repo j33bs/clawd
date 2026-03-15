@@ -1,0 +1,10 @@
+[Unit]
+Description=OpenClaw user inference distillation
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/src/clawd
+ExecStartPre=/usr/bin/mkdir -p %h/.local/state/openclaw
+ExecStart=/usr/bin/env python3 %h/src/clawd/workspace/scripts/distill_user_inferences.py
+StandardOutput=append:%h/.local/state/openclaw/user-inference-distill.log
+StandardError=append:%h/.local/state/openclaw/user-inference-distill.log

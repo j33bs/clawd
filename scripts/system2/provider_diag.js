@@ -75,9 +75,9 @@ function loadPolicyRoutingContext(env) {
     return {
       ok: true,
       path: target,
-      local_context_max_tokens_assistant: Number(defaults.local_context_max_tokens_assistant || 32768),
+      local_context_max_tokens_assistant: Number(defaults.local_context_max_tokens_assistant || 8192),
       local_context_max_tokens_coder: Number(defaults.local_context_max_tokens_coder || 32768),
-      local_context_soft_limit_tokens: Number(defaults.local_context_soft_limit_tokens || 24576),
+      local_context_soft_limit_tokens: Number(defaults.local_context_soft_limit_tokens || 6144),
       local_context_overflow_policy: String(defaults.local_context_overflow_policy || 'compress'),
       remote_routing_enabled: /^(1|true|yes|on)$/i.test(remoteRaw),
       remote_allowlist_task_classes: Array.isArray(defaults.remoteAllowlistTaskClasses)
@@ -88,9 +88,9 @@ function loadPolicyRoutingContext(env) {
     return {
       ok: false,
       path: target,
-      local_context_max_tokens_assistant: 32768,
+      local_context_max_tokens_assistant: 8192,
       local_context_max_tokens_coder: 32768,
-      local_context_soft_limit_tokens: 24576,
+      local_context_soft_limit_tokens: 6144,
       local_context_overflow_policy: 'compress',
       remote_routing_enabled: false,
       remote_allowlist_task_classes: [],

@@ -1,0 +1,16 @@
+[Unit]
+Description=OpenClaw Discord project bridge (manual/local-first)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=-%h/.config/openclaw/discord-bridge.env
+WorkingDirectory=%h/src/clawd
+ExecStart=%h/src/clawd/workspace/scripts/run_discord_bridge.sh
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=openclaw-discord-bridge
+
+[Install]
+WantedBy=default.target

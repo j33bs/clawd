@@ -8,7 +8,8 @@ from pathlib import Path
 from typing import Any
 
 from .discord_memory import build_discord_memory_context
-from .user_inference import build_user_context_packet
+from .relational_state import build_relational_prompt_lines
+from .user_inference import build_user_context_packet, query_preference_graph
 from .portfolio import portfolio_payload
 from .task_store import create_task, load_tasks, update_task
 
@@ -22,6 +23,15 @@ def _truncate(text: str, limit: int = 1800) -> str:
     if len(text) <= limit:
         return text
     return f"{text[: limit - 1]}…"
+
+
+def _signed_currency(value: Any) -> str:
+    amount = float(value or 0.0)
+    return f"{'+' if amount >= 0 else '-'}${abs(amount):.2f}"
+
+
+def _signed_percent(value: Any) -> str:
+    return f"{float(value or 0.0):+.2f}%"
 
 
 def parse_channel_agent_map(raw: str) -> dict[int, str]:
@@ -71,6 +81,8 @@ def prompt_harness_for_agent(agent_id: str | None) -> dict[str, Any]:
         "preference_heading": "Stable user preferences:",
         "memory_heading": "Relevant prior context:",
         "attachment_heading": "Attachments:",
+        "relational_heading": "Current relational state:",
+        "relational_modes": {},
     }
 
 
@@ -83,27 +95,61 @@ def build_discord_chat_prompt(
     attachments: list[str] | None = None,
     memory_context: list[str] | None = None,
     user_context: list[str] | None = None,
+    source_context: list[str] | None = None,
 ) -> str:
     harness = prompt_harness_for_agent(agent_id)
+    normalized_channel = (channel_name or "").strip().lower()
+    normalized_agent = (agent_id or "").strip().lower()
     intro_lines = [
         str(line).strip()
         for line in list(harness.get("intro_lines") or [])
         if str(line).strip()
     ]
+    if normalized_channel == "open-communication" and normalized_agent == "discord-clawd":
+        intro_lines = [
+            "You are c_lawd replying in the #open-communication Discord channel alongside Dali and jeeebs.",
+            "This channel is an open forum. Respond directly to the user and the current conversation.",
+            "Be concrete, useful, and conversational.",
+            "Add a distinct angle from Dali when helpful, but stay on the actual topic being discussed.",
+            "Use OPEN_QUESTIONS.md or governance material only when the user is explicitly asking for that layer.",
+        ]
     if not intro_lines:
         intro_lines = [
             "You are replying inside a Discord server chat channel.",
             "Respond conversationally and directly to the latest user message.",
         ]
+    channel_guidance: list[str] = []
+    if normalized_channel == "open-communication":
+        channel_guidance = [
+            "This channel is an open forum for live conversation between the user and the beings.",
+            "Treat the current exchange as primary context.",
+            "Use OPEN_QUESTIONS.md or governance material only as supporting context when directly relevant, not as the default frame.",
+            "Respond like a participant in the room, not like you are filing a governance memo.",
+        ]
+        if normalized_agent == "discord-clawd":
+            channel_guidance.append(
+                "As c_lawd in this channel, stay concrete and conversational; do not let philosophical or governance motifs dominate unless the user explicitly asks for that register."
+            )
     lines = [
         *intro_lines,
         f"Harness: {harness.get('name', 'default')}",
         f"Channel: #{channel_name or 'unknown'}",
         f"Author: {author_name or 'unknown'}",
+    ]
+    if channel_guidance:
+        lines.extend(["", *channel_guidance])
+    lines.extend([
         "",
         "Latest message:",
         content.strip() or "[no text content]",
-    ]
+    ])
+    if source_context is None:
+        source_context = source_context_packet_text(limit=6)
+    if source_context:
+        lines.extend(["", "Current Source context:", *source_context[:6]])
+    relational_context = build_relational_prompt_lines(harness=harness, limit=5)
+    if relational_context:
+        lines.extend(["", str(harness.get("relational_heading") or "Current relational state:").strip(), *relational_context])
     if user_context:
         lines.extend(["", str(harness.get("preference_heading") or "Stable user preferences:").strip(), *user_context[:6]])
     if memory_context:
@@ -129,8 +175,60 @@ def discord_memory_context_text(
     )
 
 
-def user_context_packet_text(limit: int = 4) -> list[str]:
-    return build_user_context_packet(limit=limit)
+def user_context_packet_text(
+    limit: int = 4,
+    *,
+    context: str = "",
+    agent_id: str | None = None,
+    channel_name: str = "",
+) -> list[str]:
+    profile_sections: list[str] = []
+    normalized_channel = str(channel_name or "").strip().lower()
+    normalized_agent = str(agent_id or "").strip().lower()
+    if normalized_channel in {"open-communication", "orchestrator"}:
+        profile_sections.extend(["communication", "reporting", "verification"])
+    if normalized_channel in {"research", "symbiote"}:
+        profile_sections.extend(["research", "verification", "tooling"])
+    if normalized_agent in {"discord-clawd", "c_lawd"}:
+        profile_sections.extend(["communication", "notifications", "reporting"])
+    elif normalized_agent in {"discord-orchestrator", "dali"}:
+        profile_sections.extend(["verification", "tooling", "research"])
+    packet = query_preference_graph(
+        context=context,
+        profile_sections=profile_sections or None,
+        limit=limit,
+    )
+    lines = [str(line).strip() for line in list(packet.get("prompt_lines") or []) if str(line).strip()]
+    if lines:
+        return lines[: max(1, int(limit))]
+    return build_user_context_packet(
+        limit=limit,
+        context=context,
+        profile_sections=profile_sections or None,
+    )
+
+
+def source_context_packet_text(limit: int = 6) -> list[str]:
+    if portfolio_payload is None:
+        return []
+    try:
+        payload = portfolio_payload()
+    except Exception:
+        return []
+    packet = payload.get("context_packet") if isinstance(payload, dict) else None
+    if not isinstance(packet, dict):
+        return []
+
+    rows: list[str] = []
+    for line in packet.get("summary_lines") or []:
+        text = str(line).strip()
+        if text:
+            rows.append(f"- {text}")
+    for line in packet.get("preference_lines") or []:
+        text = str(line).strip()
+        if text:
+            rows.append(text if text.startswith("- ") else f"- {text}")
+    return rows[: max(1, int(limit))]
 
 
 def extract_agent_reply_text(payload: dict[str, Any]) -> str:
@@ -200,14 +298,54 @@ def sim_status_text(sim_id: str | None = None) -> str:
     sims = _find_sim(payload, sim_id)
     if not sims:
         return f"No sims matched `{sim_id}`." if sim_id else "No sim data available."
+    review = payload.get("sim_strategy_review") if isinstance(payload.get("sim_strategy_review"), dict) else {}
+    recommendations = {
+        str(item.get("id") or ""): item
+        for item in list(review.get("recommendations") or [])
+        if isinstance(item, dict) and str(item.get("id") or "").strip()
+    }
+    if sim_id is None:
+        sims = [sim for sim in sims if bool(sim.get("active_book"))]
     lines = ["**Sim Status**"]
-    for sim in sims[:6]:
+    if sim_id is None:
+        trade_count = sum(int(sim.get("round_trips", 0) or 0) for sim in sims)
+        live_capital = sum(float(sim.get("live_equity", sim.get("final_equity", 0.0)) or 0.0) for sim in sims)
+        live_pnl = sum(float(sim.get("live_equity_change", sim.get("net_equity_change", 0.0)) or 0.0) for sim in sims)
+        open_positions = sum(int(sim.get("open_positions", 0) or 0) for sim in sims)
         lines.append(
-            f"- {sim.get('id')}: {float(sim.get('net_return_pct', 0.0)):+.2f}% | "
-            f"equity ${float(sim.get('final_equity', 0.0)):.2f} | "
-            f"fees ${float(sim.get('fees_usd', 0.0)):.2f} | "
-            f"{'halted' if sim.get('halted') else 'live'}"
+            f"- Active book: {len(sims)} sims | {trade_count} trades | capital ${live_capital:.2f} | "
+            f"P/L {_signed_currency(live_pnl)} | {open_positions} open"
         )
+    for sim in sims[:6]:
+        live_equity = float(sim.get("live_equity", sim.get("final_equity", 0.0)) or 0.0)
+        live_pnl = float(sim.get("live_equity_change", sim.get("net_equity_change", 0.0)) or 0.0)
+        live_return_pct = float(sim.get("live_return_pct", sim.get("net_return_pct", 0.0)) or 0.0)
+        label = str(sim.get("display_name") or sim.get("id") or "SIM")
+        row = (
+            f"- {label}: capital ${live_equity:.2f} | "
+            f"P/L {_signed_currency(live_pnl)} ({_signed_percent(live_return_pct)}) | "
+            f"trades {int(sim.get('round_trips', 0) or 0)} | "
+            f"win {float(sim.get('win_rate', 0.0) or 0.0):.1f}%"
+        )
+        flags: list[str] = []
+        if bool(sim.get("halted")):
+            flags.append("halted")
+        if bool(sim.get("fee_drag")):
+            flags.append("fee drag")
+        if int(sim.get("open_positions", 0) or 0) > 0:
+            flags.append(f"{int(sim.get('open_positions', 0) or 0)} open")
+        if str(sim.get("stage") or "").strip().lower() == "staged":
+            flags.append("awaiting feed")
+        elif bool(sim.get("control_lane")):
+            flags.append("control")
+        recommendation = recommendations.get(str(sim.get("id") or ""))
+        if isinstance(recommendation, dict):
+            rec = str(recommendation.get("recommendation") or "").strip()
+            if rec and rec != "keep":
+                flags.append(rec)
+        if flags:
+            row = f"{row} | " + " | ".join(flags)
+        lines.append(row)
     return _truncate("\n".join(lines))
 
 

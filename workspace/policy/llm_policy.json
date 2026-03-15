@@ -3,10 +3,10 @@
   "defaults": {
     "allowPaid": false,
     "preferLocal": true,
-    "maxTokensPerRequest": 32768,
-    "local_context_max_tokens_assistant": 32768,
+    "maxTokensPerRequest": 8192,
+    "local_context_max_tokens_assistant": 8192,
     "local_context_max_tokens_coder": 32768,
-    "local_context_soft_limit_tokens": 24576,
+    "local_context_soft_limit_tokens": 6144,
     "local_context_overflow_policy": "compress",
     "remoteRoutingEnabled": false,
     "remoteAllowlistTaskClasses": [
@@ -29,8 +29,8 @@
   "budgets": {
     "intents": {
       "itc_classify": {
-        "dailyTokenBudget": 25000,
-        "dailyCallBudget": 200,
+        "dailyTokenBudget": 2000000,
+        "dailyCallBudget": 5000,
         "maxCallsPerRun": 80,
         "actionClassCaps": { "D": 3, "C": 5 }
       },
@@ -78,13 +78,13 @@
       "baseUrl": "http://127.0.0.1:8001/v1",
       "model": "local-assistant",
       "capabilities": {
-        "context_window_tokens": 32768,
+        "context_window_tokens": 8192,
         "context_window_env": "LOCAL_ASSISTANT_CONTEXT_WINDOW_TOKENS"
       },
       "models": [
         {
           "id": "local-assistant",
-          "maxInputChars": 131072,
+          "maxInputChars": 32768,
           "tier": "large"
         }
       ]
@@ -328,9 +328,11 @@
     "intents": {
       "itc_classify": {
         "order": [
-          "free"
+          "local_vllm_assistant",
+          "ollama"
         ],
         "fallback": "rules",
+        "allowCapabilityRouter": false,
         "preferLocalForShort": true,
         "shortMessageChars": 240
       },

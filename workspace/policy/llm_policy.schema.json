@@ -37,6 +37,30 @@
           "type": "integer",
           "minimum": 1
         },
+        "local_context_max_tokens_assistant": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "local_context_max_tokens_coder": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "local_context_soft_limit_tokens": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "local_context_overflow_policy": {
+          "type": "string"
+        },
+        "remoteRoutingEnabled": {
+          "type": "boolean"
+        },
+        "remoteAllowlistTaskClasses": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
         "circuitBreaker": {
           "type": "object",
           "required": [
@@ -101,6 +125,13 @@
               "maxCallsPerRun": {
                 "type": "integer",
                 "minimum": 1
+              },
+              "actionClassCaps": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "integer",
+                  "minimum": 1
+                }
               }
             }
           }
@@ -159,11 +190,29 @@
           "apiKeyEnv": {
             "type": "string"
           },
+          "provider_id": {
+            "type": "string"
+          },
+          "model": {
+            "type": "string"
+          },
           "readyEnv": {
             "type": "string"
           },
           "auth": {
-            "type": "string"
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "object",
+                "additionalProperties": true
+              }
+            ]
+          },
+          "capabilities": {
+            "type": "object",
+            "additionalProperties": true
           },
           "models": {
             "type": "array",

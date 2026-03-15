@@ -1,0 +1,15 @@
+[Unit]
+Description=OpenClaw Dali fallback sentiment refresh
+After=network-online.target openclaw-vllm.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/src/clawd
+ExecStart=/usr/bin/env bash %h/src/clawd/workspace/scripts/run_dali_sentiment_fallback.sh
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=openclaw-dali-sentiment-fallback
+
+[Install]
+WantedBy=default.target

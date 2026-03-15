@@ -186,6 +186,7 @@ def build_discord_memory_context(
         return []
 
     target_author = str(author_name or "").strip().lower()
+    target_channel_id = int(channel_id)
     selected: list[str] = []
     seen: set[str] = set()
     for raw in reversed(rows):
@@ -200,21 +201,31 @@ def build_discord_memory_context(
             continue
         if exclude_message_id is not None and str(row.get("message_id", "")) == str(exclude_message_id):
             continue
-        if str(row.get("role") or "") != "user":
+        role = str(row.get("role") or "").strip().lower()
+        if role not in {"user", "assistant"}:
             continue
         row_channel_id = int(row.get("channel_id", 0) or 0)
         row_author = str(row.get("author_name") or "").strip().lower()
-        if row_channel_id != int(channel_id) and row_author != target_author:
-            continue
+        # Keep same-channel exchanges for shared-beings coordination, and retain
+        # same-author user recall across channels for continuity.
+        if row_channel_id != target_channel_id:
+            if role != "user" or row_author != target_author:
+                continue
+        agent_id = str(row.get("agent_id") or "").strip()
+        speaker = str(row.get("author_name") or "unknown").strip() or "unknown"
+        if role == "assistant" and agent_id:
+            speaker = agent_id
+        elif role == "assistant":
+            speaker = f"{speaker} [assistant]"
         text = _compact(str(row.get("content") or ""))
         if not text:
             continue
-        key = text.lower()
+        key = f"{speaker}:{text}".lower()
         if key in seen:
             continue
         seen.add(key)
         selected.append(
-            f"- {str(row.get('created_at') or '')[:10]} #{row.get('channel_name', 'unknown')}: {text}"
+            f"- {str(row.get('created_at') or '')[:10]} #{row.get('channel_name', 'unknown')} {speaker}: {text}"
         )
         if len(selected) >= max(1, int(limit)):
             break

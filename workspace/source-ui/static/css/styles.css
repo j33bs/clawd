@@ -948,6 +948,37 @@ input, select, textarea {
     color: rgba(255, 194, 163, 0.92);
 }
 
+.task-card-badge-experiment {
+    background: rgba(245, 158, 11, 0.14);
+    border-color: rgba(245, 158, 11, 0.24);
+    color: rgba(255, 215, 153, 0.96);
+}
+
+.task-source-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+.task-source-link {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 9px;
+    border-radius: 999px;
+    border: 1px solid rgba(103, 163, 255, 0.18);
+    background: rgba(103, 163, 255, 0.1);
+    color: var(--text-secondary);
+    font-size: 0.72rem;
+    font-family: var(--font-mono);
+    text-decoration: none;
+}
+
+.task-source-link:hover {
+    border-color: rgba(103, 163, 255, 0.3);
+    color: var(--text-primary);
+}
+
 .task-card-actions {
     display: flex;
     gap: 8px;
@@ -2462,6 +2493,67 @@ input, select, textarea {
     gap: 10px;
 }
 
+.memory-panel-section {
+    padding: 12px 14px;
+    border-radius: 16px;
+    border: 1px solid rgba(103, 163, 255, 0.1);
+    background: rgba(6, 14, 28, 0.5);
+}
+
+.boundary-state {
+    margin-top: 10px;
+}
+
+.boundary-pill-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.boundary-pill {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 8px;
+    border-radius: 999px;
+    font-size: 0.72rem;
+    font-family: var(--font-mono);
+    letter-spacing: 0.01em;
+    border: 1px solid rgba(148, 163, 184, 0.18);
+    background: rgba(148, 163, 184, 0.12);
+    color: var(--text-secondary);
+}
+
+.boundary-healthy {
+    color: var(--success);
+    border-color: rgba(16, 185, 129, 0.35);
+    background: rgba(16, 185, 129, 0.12);
+}
+
+.boundary-warning {
+    color: var(--warning);
+    border-color: rgba(245, 158, 11, 0.35);
+    background: rgba(245, 158, 11, 0.12);
+}
+
+.boundary-error {
+    color: var(--danger);
+    border-color: rgba(239, 68, 68, 0.35);
+    background: rgba(239, 68, 68, 0.12);
+}
+
+.boundary-neutral {
+    color: var(--text-secondary);
+    border-color: rgba(148, 163, 184, 0.18);
+    background: rgba(148, 163, 184, 0.12);
+}
+
+.boundary-detail {
+    margin-top: 8px;
+    font-size: 0.78rem;
+    line-height: 1.45;
+    color: var(--text-tertiary);
+}
+
 .topic-pill {
     display: inline-flex;
     margin: 0 8px 8px 0;
@@ -2523,6 +2615,12 @@ input, select, textarea {
     color: var(--danger);
     background: rgba(239, 68, 68, 0.12);
     border-color: rgba(239, 68, 68, 0.2);
+}
+
+.meta-growth {
+    color: rgba(120, 244, 171, 0.95);
+    background: rgba(92, 209, 138, 0.12);
+    border-color: rgba(92, 209, 138, 0.24);
 }
 
 .sim-card.sim-error {
@@ -3126,6 +3224,38 @@ body::after {
     margin-top: 16px;
 }
 
+.display-mode-panel {
+    display: grid;
+    gap: 14px;
+    margin-top: 16px;
+}
+
+.display-mode-top {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.display-mode-current {
+    font-size: 1rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+}
+
+.display-mode-subtitle {
+    margin-top: 4px;
+    color: var(--text-secondary);
+    font-size: 0.88rem;
+    line-height: 1.45;
+}
+
+.display-mode-metrics {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
 .quick-command-card {
     display: grid;
     gap: 6px;
@@ -3147,6 +3277,10 @@ body::after {
 
 .quick-command-critical {
     border-color: rgba(255, 108, 108, 0.22);
+}
+
+.display-mode-toggle {
+    width: 100%;
 }
 
 .quick-command-label {
@@ -3252,6 +3386,7 @@ body::after {
 
 .command-history-meta {
     display: flex;
+    flex-wrap: wrap;
     gap: 10px;
     margin-top: 10px;
 }
@@ -3449,3 +3584,71 @@ body::after {
     color: var(--warn, #f59e0b);
     opacity: 1;
 }
+
+/* ── Symbiote phase filter ─────────────────────────────────────────── */
+.sym-phase-filter {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+}
+.sym-filter-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 10px;
+    font-size: 11px;
+    font-family: var(--font-mono);
+    font-weight: 600;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-full);
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.15s;
+    letter-spacing: 0.3px;
+}
+.sym-filter-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+.sym-filter-btn.active {
+    background: var(--accent-primary);
+    border-color: var(--accent-primary);
+    color: #fff;
+}
+
+/* ── operational status badge ──────────────────────────────────────── */
+.sym-status-operational { background: rgba(16,185,129,0.12); color: #10b981; }
+.sym-exp-lbl-operational { background: rgba(16,185,129,0.12); color: #10b981; }
+.sym-exp-operational .sym-exp-icon { color: #10b981; }
+
+/* ── coord-feed collapsible ────────────────────────────────────────── */
+.source-intelligence-feed-header { user-select: none; }
+.coord-collapse-toggle { transition: transform 0.2s; }
+
+/* ── Symbiote meta strip (compact hero replacement) ───────────────── */
+.symbiote-meta-strip {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 0 12px;
+    border-bottom: 1px solid var(--border-subtle);
+    margin-bottom: var(--space-md);
+}
+.symbiote-meta-strip-label {
+    font-size: 12px;
+    color: var(--text-tertiary);
+    font-style: italic;
+    flex: 1;
+}
+.symbiote-meta-strip-pills {
+    display: flex;
+    gap: 6px;
+}
+.symbiote-meta-pill {
+    font-size: 11px;
+    font-family: var(--font-mono);
+    padding: 2px 8px;
+    border-radius: var(--radius-full);
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-subtle);
+    color: var(--text-secondary);
+}
+

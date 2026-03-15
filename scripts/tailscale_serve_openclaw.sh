@@ -25,7 +25,13 @@ case "$SERVE_PATH" in
 esac
 
 PROXY_URL="http://127.0.0.1:${GATEWAY_PORT}"
-cmd=("$TAILSCALE_BIN" serve --yes --bg "--https=${HTTPS_PORT}" "$SERVE_PATH" "$PROXY_URL")
+cmd=("$TAILSCALE_BIN" serve --yes --bg "--https=${HTTPS_PORT}")
+
+if [[ "$SERVE_PATH" != "/" ]]; then
+  cmd+=("--set-path=${SERVE_PATH}")
+fi
+
+cmd+=("$PROXY_URL")
 
 if [[ "$DRYRUN" == "1" ]]; then
   printf 'OPENCLAW_TAILSCALE_SERVE_DRYRUN_COMMAND='

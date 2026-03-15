@@ -1,0 +1,10 @@
+[Unit]
+Description=OpenClaw Source backlog ingest
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/src/clawd
+ExecStartPre=/usr/bin/mkdir -p %h/.local/state/openclaw
+ExecStart=/usr/bin/env python3 %h/src/clawd/workspace/scripts/source_backlog_ingest.py --json
+StandardOutput=append:%h/.local/state/openclaw/source-backlog-ingest.log
+StandardError=append:%h/.local/state/openclaw/source-backlog-ingest.log

@@ -1,0 +1,23 @@
+[Unit]
+Description=OpenClaw Telegram compatibility lane
+After=network-online.target openclaw-gateway.service
+Wants=network-online.target openclaw-gateway.service
+PartOf=openclaw-gateway.service
+
+[Service]
+Type=simple
+WorkingDirectory=%h/src/clawd
+Environment=PYTHONUNBUFFERED=1
+EnvironmentFile=-%h/.config/openclaw/telegram.env
+EnvironmentFile=-%h/.config/openclaw/itc-telegram.env
+ExecStartPre=/usr/bin/mkdir -p %h/.local/state/openclaw
+ExecStart=/usr/bin/env bash %h/src/clawd/scripts/openclaw_telegram_watchdog.sh
+Restart=on-failure
+RestartSec=10
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+NoNewPrivileges=true
+StandardOutput=append:%h/.local/state/openclaw/telegram-watchdog.log
+StandardError=append:%h/.local/state/openclaw/telegram-watchdog.log
+
+[Install]
+WantedBy=default.target

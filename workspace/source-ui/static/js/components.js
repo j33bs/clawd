@@ -94,7 +94,10 @@ const Components = {
         const readOnly = Boolean(task.read_only);
         const project = task.project ? `<span class="task-card-project">${task.project}</span>` : '';
         const description = task.description ? `<div class="task-card-desc">${task.description}</div>` : '';
+        const taskKind = String(task.task_kind || 'task').toLowerCase();
+        const sourceLinks = Array.isArray(task.source_links) ? task.source_links.filter(link => link && (link.href || link.ref || link.label)) : [];
         const sourceBadges = [
+            taskKind === 'experiment' ? `<span class="task-card-badge task-card-badge-experiment">experiment</span>` : '',
             task.node_label ? `<span class="task-card-badge">${task.node_label}</span>` : '',
             task.runtime_source_label ? `<span class="task-card-badge">${task.runtime_source_label}</span>` : '',
             readOnly ? `<span class="task-card-badge task-card-badge-readonly">read-only</span>` : ''
@@ -104,8 +107,13 @@ const Components = {
             : (task.status === 'in_progress' ? 'Review' : (task.status === 'review' ? 'Done' : 'Reopen'));
         const reviewBadge = task.status === 'review'
             ? `<span class="task-card-badge task-card-badge-review">⏳ awaiting review</span>` : '';
-        const assigneeBadge = task.status === 'review' && task.assignee
-            ? `<span class="task-card-badge task-card-badge-reviewer">reviewer: ${task.assignee}</span>` : '';
+        const reviewOwner = task.reviewer || task.assignee;
+        const assigneeBadge = task.status === 'review' && reviewOwner
+            ? `<span class="task-card-badge task-card-badge-reviewer">reviewer: ${reviewOwner}</span>` : '';
+        const reviewReason = task.status === 'review' && (task.review_status_reason || task.status_reason)
+            ? `<div class="task-card-desc">${task.review_status_reason || task.status_reason}</div>` : '';
+        const fixInstructions = task.status !== 'done' && task.fix_instructions
+            ? `<div class="task-card-desc">${task.fix_instructions}</div>` : '';
         const archiveBtn = (task.status === 'done' || task.status === 'review')
             ? `<button class="task-action-btn task-action-btn-archive" type="button" onclick="taskQuickAction('${task.id}', 'archive')" title="Archive this task">Archive</button>` : '';
         const actionMarkup = readOnly ? `
@@ -126,9 +134,14 @@ const Components = {
                 <div class="task-priority priority-${task.priority}"></div>
                 <div class="task-card-title">${task.title}</div>
                 ${description}
+                ${reviewReason}
+                ${fixInstructions}
                 <div class="task-card-meta">${task.assignee || 'Unassigned'} ${project}</div>
                 ${sourceBadges ? `<div class="task-card-badges">${sourceBadges}</div>` : ''}
                 ${(reviewBadge || assigneeBadge) ? `<div class="task-card-badges">${reviewBadge}${assigneeBadge}</div>` : ''}
+                ${sourceLinks.length ? `<div class="task-source-links">${sourceLinks.slice(0, 3).map(link => link.href
+                    ? `<a class="task-source-link" href="${escapeHtml(link.href)}" target="_blank" rel="noreferrer">${escapeHtml(link.label || link.ref || 'source')}</a>`
+                    : `<span class="task-source-link">${escapeHtml(link.label || link.ref || 'source')}</span>`).join('')}</div>` : ''}
                 ${actionMarkup}
             </div>
         `;

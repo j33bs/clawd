@@ -67,6 +67,14 @@ class APIClient {
         return this.request('/api/portfolio');
     }
 
+    async getDisplayMode() {
+        return this.request('/api/display-mode');
+    }
+
+    async toggleDisplayMode() {
+        return this.request('/api/display-mode/toggle', { method: 'POST' });
+    }
+
     async runCommand(payload) {
         return this.request('/api/commands', {
             method: 'POST',
@@ -99,6 +107,10 @@ class APIClient {
     async getTasks() {
         return this.request('/api/tasks');
     }
+
+    async getUserInferences() {
+        return this.request('/api/user-inferences');
+    }
     
     async createTask(task) {
         return this.request('/api/tasks', {
@@ -106,9 +118,23 @@ class APIClient {
             body: JSON.stringify(task)
         });
     }
+
+    async promoteResearchItem(payload) {
+        return this.request('/api/research/promote', {
+            method: 'POST',
+            body: JSON.stringify(payload)
+        });
+    }
     
     async updateTask(id, updates) {
         return this.request(`/api/tasks/${id}`, {
+            method: 'PATCH',
+            body: JSON.stringify(updates)
+        });
+    }
+
+    async updateUserInference(id, updates) {
+        return this.request(`/api/user-inferences/${id}`, {
             method: 'PATCH',
             body: JSON.stringify(updates)
         });

@@ -1,0 +1,222 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ENV_FILE="$HOME/.config/openclaw/dali-fishtank.env"
+SERVICE_NAME="dali-fishtank.service"
+
+usage() {
+  echo "usage: $0 {fishtank|work} {on|off|auto|status} [--wait-visible|--wait-hidden] [--wait-timeout SEC]" >&2
+  exit 1
+}
+
+MODE_TARGET="${1:-}"
+[[ -n "$MODE_TARGET" ]] || usage
+case "$MODE_TARGET" in
+  fishtank|work) ;;
+  *) usage ;;
+esac
+shift || true
+
+ACTION="${1:-status}"
+case "$ACTION" in
+  on|off|auto|status) ;;
+  *) usage ;;
+esac
+shift || true
+
+apply_profile() {
+  local profile="$1"
+  mkdir -p "$(dirname "$ENV_FILE")"
+  touch "$ENV_FILE"
+  python3 - "$ENV_FILE" "$profile" <<'PY'
+from pathlib import Path
+import sys
+
+path = Path(sys.argv[1])
+profile = sys.argv[2]
+lines = path.read_text(encoding="utf-8").splitlines() if path.exists() else []
+settings = {
+    "fishtank": {
+        "DALI_FISHTANK_MODE_PROFILE": "fishtank",
+        "DALI_FISHTANK_FRONTEND": "python",
+        "DALI_FISHTANK_RENDERER_GPU_BACKEND": "1",
+        "DALI_FISHTANK_PRESET": "cathedral_soft",
+        "DALI_FISHTANK_ALLOW_PYTHON_VISIBLE_ATTACH": "0",
+        "DALI_FISHTANK_REQUIRE_GPU": "1",
+        "DALI_FISHTANK_HEADLESS": "0",
+        "DALI_FISHTANK_TELEGRAM_ENABLED": "0",
+        "DALI_FISHTANK_FULLSCREEN": "1",
+        "DALI_FISHTANK_UE5_RESX": "3840",
+        "DALI_FISHTANK_UE5_RESY": "2160",
+        "DALI_FISHTANK_UE5_MODE": "fantasy_landscape_v2",
+        "DALI_FISHTANK_AGENT_COUNT": "120000",
+        "DALI_FISHTANK_PARTICLES_TARGET": "180000",
+        "DALI_FISHTANK_RD_ENABLED": "1",
+        "DALI_FISHTANK_VOL_ENABLED": "1",
+        "DALI_FISHTANK_TEMPORAL_ENABLED": "1",
+        "DALI_FISHTANK_RD_RES": "768",
+        "DALI_FISHTANK_VOL_STEPS": "48",
+        "DALI_FISHTANK_TEMPORAL_ALPHA": "0.92",
+        "DALI_FISHTANK_UE5_EXTRA_ARGS": "",
+        "DALI_FISHTANK_IDLE_ENABLE": "1",
+        "DALI_FISHTANK_IDLE_SECONDS": "120",
+        "DALI_FISHTANK_IDLE_TRIGGER_SOURCE": "gnome",
+        "DALI_FISHTANK_ABORT_IF_FULLSCREEN_ACTIVE": "1",
+        "DALI_FISHTANK_QUIESCE_UNITS": "openclaw-dali-heavy-node.service",
+    },
+    "work": {
+        "DALI_FISHTANK_MODE_PROFILE": "work",
+        "DALI_FISHTANK_FRONTEND": "python",
+        "DALI_FISHTANK_RENDERER_GPU_BACKEND": "0",
+        "DALI_FISHTANK_PRESET": "work_mode_consciousness_mirror",
+        "DALI_FISHTANK_ALLOW_PYTHON_VISIBLE_ATTACH": "1",
+        "DALI_FISHTANK_REQUIRE_GPU": "1",
+        "DALI_FISHTANK_HEADLESS": "0",
+        "DALI_FISHTANK_HEADLESS_CONSUMER": "",
+        "DALI_FISHTANK_TELEGRAM_ENABLED": "0",
+        "DALI_FISHTANK_BLOOM": "1",
+        "DALI_FISHTANK_BLOOM_STRENGTH": "0.006",
+        "DALI_FISHTANK_BLOOM_THRESHOLD": "0.88",
+        "DALI_FISHTANK_BLOOM_KNEE": "0.03",
+        "DALI_FISHTANK_IDLE_ENABLE": "1",
+        "DALI_FISHTANK_IDLE_SECONDS": "120",
+        "DALI_FISHTANK_IDLE_TRIGGER_SOURCE": "gnome",
+        "DALI_FISHTANK_FULLSCREEN": "1",
+        "DALI_FISHTANK_UE5_RESX": "3840",
+        "DALI_FISHTANK_UE5_RESY": "2160",
+        "DALI_FISHTANK_UE5_MODE": "fantasy_landscape",
+        "DALI_FISHTANK_UE5_EXTRA_ARGS": "",
+        "DALI_FISHTANK_WORK_WINDOW_FILL": "1.0",
+        "DALI_FISHTANK_WORK_GRID_WIDTH": "960",
+        "DALI_FISHTANK_WORK_GRID_HEIGHT": "540",
+        "DALI_FISHTANK_WORK_PARTICLE_CAP": "65536",
+        "DALI_FISHTANK_WORK_CA_DENSITY": "0.00025",
+        "DALI_FISHTANK_WORK_GROWTH_TICKS": "180000",
+        "DALI_FISHTANK_WORK_SEED_CLUSTERS": "1",
+        "DALI_FISHTANK_WORK_TARGET_ALIVE_RATIO": "0.006",
+        "DALI_FISHTANK_WORK_STEP_INTERVAL_S": "5.0",
+        "DALI_FISHTANK_WORK_VISUAL_TIME_SCALE": "0.01",
+        "DALI_FISHTANK_WORK_SCENE": "therapeutic_bilateral",
+        "DALI_FISHTANK_WORK_SCENE_TIME_SCALE": "0.28",
+        "DALI_FISHTANK_WORK_BACKGROUND_DOTS": "0",
+        "DALI_FISHTANK_WORK_STARFIELD_DENSITY": "0.0",
+        "DALI_FISHTANK_WORK_PULSE_LIMIT": "2",
+        "DALI_FISHTANK_WORK_CORE_AGE_THRESHOLD": "1.6",
+        "DALI_FISHTANK_WORK_LOCAL_GROWTH_RADIUS": "4",
+        "DALI_FISHTANK_WORK_BRANCH_LENGTH": "18",
+        "DALI_FISHTANK_WORK_BRANCH_PERSISTENCE": "0.94",
+        "DALI_FISHTANK_WORK_BRANCH_THICKNESS_PROB": "0.015",
+        "DALI_FISHTANK_WORK_BRANCH_TURN_STD": "0.06",
+        "DALI_FISHTANK_WORK_NOVEL_BRANCH_RATE": "0.045",
+        "DALI_FISHTANK_WORK_RENDER_SMOOTHING": "0.05",
+        "DALI_FISHTANK_WORK_RENDER_NODES": "0",
+        "DALI_FISHTANK_WORK_JUNCTION_GLOW": "1",
+        "DALI_FISHTANK_WORK_PULSES_ENABLED": "0",
+        "DALI_FISHTANK_AGENT_COUNT": "16384",
+        "DALI_FISHTANK_PARTICLES_TARGET": "16384",
+        "DALI_FISHTANK_THERAPEUTIC_SWEEP_SECONDS": "7.5",
+        "DALI_FISHTANK_THERAPEUTIC_SETTLE_SECONDS": "4.0",
+        "DALI_FISHTANK_THERAPEUTIC_BREATH_SECONDS": "10.0",
+        "DALI_FISHTANK_THERAPEUTIC_PROMPT_INTERVAL_S": "24.0",
+        "DALI_FISHTANK_THERAPEUTIC_MOTION_GAIN": "0.72",
+        "DALI_FISHTANK_THERAPEUTIC_DRIFT_SECONDS": "180.0",
+        "DALI_FISHTANK_THERAPEUTIC_DRIFT_RATIO": "0.01",
+        "DALI_FISHTANK_THERAPEUTIC_GROUNDING_ENABLED": "1",
+        "DALI_FISHTANK_RD_ENABLED": "0",
+        "DALI_FISHTANK_VOL_ENABLED": "0",
+        "DALI_FISHTANK_TEMPORAL_ENABLED": "0",
+        "DALI_FISHTANK_RD_RES": "256",
+        "DALI_FISHTANK_VOL_STEPS": "12",
+        "DALI_FISHTANK_TEMPORAL_ALPHA": "0.70",
+        "DALI_FISHTANK_ABORT_IF_FULLSCREEN_ACTIVE": "1",
+        "DALI_FISHTANK_QUIESCE_UNITS": "openclaw-dali-heavy-node.service",
+    },
+}[profile]
+
+out = []
+seen = set()
+for line in lines:
+    if "=" not in line or line.lstrip().startswith("#"):
+        out.append(line)
+        continue
+    key, _ = line.split("=", 1)
+    if key in settings:
+        out.append(f"{key}={settings[key]}")
+        seen.add(key)
+    else:
+        out.append(line)
+for key, value in settings.items():
+    if key not in seen:
+        out.append(f"{key}={value}")
+path.write_text("\n".join(out) + "\n", encoding="utf-8")
+PY
+}
+
+augment_status() {
+  local target="$1"
+  python3 -c '
+from pathlib import Path
+import json
+import sys
+
+env_path = Path(sys.argv[1])
+target = sys.argv[2]
+payload = json.load(sys.stdin)
+current_profile = "unknown"
+if env_path.exists():
+    for line in env_path.read_text(encoding="utf-8").splitlines():
+        if line.startswith("DALI_FISHTANK_MODE_PROFILE="):
+            current_profile = line.split("=", 1)[1].strip() or "unknown"
+            break
+payload["profile_target"] = target
+payload["profile_current"] = current_profile
+print(json.dumps(payload, ensure_ascii=True, sort_keys=True))
+' "$ENV_FILE" "$target"
+}
+
+EXTRA_ARGS=()
+HAS_WAIT_FLAG=0
+HAS_WAIT_TIMEOUT=0
+for arg in "$@"; do
+  case "$arg" in
+    --wait-visible|--wait-hidden|--no-wait)
+      HAS_WAIT_FLAG=1
+      ;;
+    --wait-timeout)
+      HAS_WAIT_TIMEOUT=1
+      ;;
+  esac
+done
+if [[ "$ACTION" != "status" && "$HAS_WAIT_TIMEOUT" -eq 0 ]]; then
+  EXTRA_ARGS+=(--wait-timeout 12)
+fi
+if [[ "$ACTION" == "on" && "$HAS_WAIT_FLAG" -eq 0 ]]; then
+  if [[ "$MODE_TARGET" == "fishtank" ]]; then
+    EXTRA_ARGS+=(--wait-visible)
+  fi
+fi
+if [[ "$ACTION" == "off" && "$HAS_WAIT_FLAG" -eq 0 ]]; then
+  EXTRA_ARGS+=(--wait-hidden)
+fi
+
+if [[ "$ACTION" != "status" ]]; then
+  apply_profile "$MODE_TARGET"
+  systemctl --user restart "$SERVICE_NAME"
+  systemctl --user is-active --quiet "$SERVICE_NAME"
+fi
+
+if [[ -f "$ENV_FILE" ]]; then
+  set -a
+  # shellcheck disable=SC1090
+  source "$ENV_FILE"
+  set +a
+fi
+
+export PYTHONPATH="$ROOT_DIR/workspace${PYTHONPATH:+:$PYTHONPATH}"
+set +e
+status_json="$(python3 -m cathedral.control_api "$ACTION" --source agent "${EXTRA_ARGS[@]}" "$@")"
+status_rc=$?
+set -e
+printf '%s\n' "$status_json" | augment_status "$MODE_TARGET"
+exit "$status_rc"

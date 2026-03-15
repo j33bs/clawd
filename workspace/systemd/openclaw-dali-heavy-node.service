@@ -1,0 +1,19 @@
+[Unit]
+Description=OpenClaw DALI heavy cognition compatibility lane
+After=network-online.target
+Wants=network-online.target
+ConditionPathExists=%h/src/clawd/scripts/dali_heavy_node_start.sh
+
+[Service]
+Type=simple
+WorkingDirectory=%h/src/clawd
+EnvironmentFile=-%h/.config/openclaw/dali-heavy-node.env
+ExecStart=%h/src/clawd/scripts/dali_heavy_node_start.sh run
+Restart=no
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+NoNewPrivileges=true
+StandardOutput=append:%h/.local/state/openclaw/dali-heavy-node.log
+StandardError=append:%h/.local/state/openclaw/dali-heavy-node.log
+
+[Install]
+WantedBy=default.target

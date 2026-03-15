@@ -1,0 +1,18 @@
+[Unit]
+Description=OpenClaw Telegram personal memory listener
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/src/clawd
+EnvironmentFile=-%h/.config/openclaw/telegram-memory.env
+ExecStartPre=/usr/bin/mkdir -p %h/.local/state/openclaw
+ExecStart=/usr/bin/env bash %h/src/clawd/workspace/scripts/run_telegram_memory_service.sh
+Restart=on-failure
+RestartSec=10
+StandardOutput=append:%h/.local/state/openclaw/telegram-memory.log
+StandardError=append:%h/.local/state/openclaw/telegram-memory.log
+
+[Install]
+WantedBy=default.target

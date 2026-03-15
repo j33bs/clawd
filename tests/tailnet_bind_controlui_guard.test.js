@@ -3,6 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
+const os = require('node:os');
 const path = require('node:path');
 const { spawn, spawnSync } = require('node:child_process');
 
@@ -132,7 +133,7 @@ test('allowlist non-dryrun test guard creates 0600 minimal overlay and cleans it
   assert.equal(statPerm(overlayPath), '600');
   const overlay = JSON.parse(fs.readFileSync(overlayPath, 'utf8'));
   assert.deepEqual(Object.keys(overlay), ['gateway']);
-  assert.deepEqual(Object.keys(overlay.gateway), ['controlUi']);
+  assert.deepEqual(Object.keys(overlay.gateway).sort(), ['controlUi']);
   assert.deepEqual(Object.keys(overlay.gateway.controlUi).sort(), ['allowedOrigins', 'enabled']);
   assert.equal(overlay.gateway.controlUi.enabled, true);
   assert.deepEqual(overlay.gateway.controlUi.allowedOrigins, ['http://100.64.0.1:18789']);
@@ -143,4 +144,121 @@ test('allowlist non-dryrun test guard creates 0600 minimal overlay and cleans it
   });
   assert.equal(exitCode, 0, output);
   assert.equal(fs.existsSync(overlayPath), false, 'overlay should be removed by exit trap');
+});
+
+test('allowlist overlay built from explicit base config strips channels and bindings for tailnet ui instance', async () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'openclaw-tailnet-base-'));
+  const baseConfigPath = path.join(tempDir, 'openclaw.json');
+  fs.writeFileSync(
+    baseConfigPath,
+    JSON.stringify(
+      {
+        gateway: {
+          mode: 'local',
+          controlUi: {
+            enabled: true,
+            allowedOrigins: ['http://127.0.0.1:18789'],
+          },
+        },
+        plugins: {
+          allow: ['telegram', 'acpx'],
+          entries: {
+            telegram: {
+              enabled: true,
+            },
+            acpx: {
+              enabled: true,
+            },
+          },
+        },
+        channels: {
+          telegram: {
+            enabled: true,
+            botToken: 'example-token',
+          },
+          discord: {
+            enabled: true,
+          },
+        },
+        bindings: [
+          {
+            agentId: 'main',
+            match: {
+              channel: 'telegram',
+            },
+          },
+        ],
+      },
+      null,
+      2
+    ) + '\n'
+  );
+
+  const env = {
+    ...process.env,
+    OPENCLAW_GATEWAY_BIND: 'tailnet',
+    OPENCLAW_TAILNET_CONTROL_UI: 'allowlist',
+    OPENCLAW_TAILNET_ALLOWED_ORIGINS: 'http://100.64.0.1:18789',
+    OPENCLAW_TAILSCALE_IP_OVERRIDE: '100.64.0.1',
+    OPENCLAW_GATEWAY_BASE_CONFIG_PATH: baseConfigPath,
+    OPENCLAW_WRAPPER_DRYRUN: '0',
+    OPENCLAW_WRAPPER_EXIT_AFTER_OVERLAY: '1',
+    OPENCLAW_WRAPPER_TESTING: '1',
+    NODE_ENV: 'test',
+  };
+  const child = spawn('bash', [WRAPPER_PATH], {
+    cwd: REPO_ROOT,
+    env,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+
+  let output = '';
+  child.stdout.setEncoding('utf8');
+  child.stderr.setEncoding('utf8');
+  child.stdout.on('data', (chunk) => {
+    output += chunk;
+  });
+  child.stderr.on('data', (chunk) => {
+    output += chunk;
+  });
+
+  const overlayPath = await new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => reject(new Error(`timed out waiting for overlay path\n${output}`)), 5000);
+    const check = () => {
+      const found = extractOverlayPath(output);
+      if (!found) return;
+      clearTimeout(timeout);
+      resolve(found);
+    };
+    child.stdout.on('data', check);
+    child.stderr.on('data', check);
+    child.on('error', (err) => {
+      clearTimeout(timeout);
+      reject(err);
+    });
+    child.on('exit', (code) => {
+      if (extractOverlayPath(output)) return;
+      clearTimeout(timeout);
+      reject(new Error(`wrapper exited before printing overlay path (code=${code})\n${output}`));
+    });
+  });
+
+  assert.ok(fs.existsSync(overlayPath), `expected overlay to exist during run: ${overlayPath}`);
+  const overlay = JSON.parse(fs.readFileSync(overlayPath, 'utf8'));
+  assert.equal(overlay.gateway.mode, 'local');
+  assert.equal(overlay.gateway.controlUi.enabled, true);
+  assert.deepEqual(overlay.gateway.controlUi.allowedOrigins, ['http://100.64.0.1:18789']);
+  assert.deepEqual(overlay.channels, { telegram: { enabled: false } });
+  assert.deepEqual(overlay.bindings, []);
+  assert.deepEqual(overlay.plugins.allow, ['acpx']);
+  assert.deepEqual(overlay.plugins.entries.telegram, { enabled: false });
+  assert.deepEqual(overlay.plugins.entries.acpx, { enabled: true });
+
+  const exitCode = await new Promise((resolve, reject) => {
+    child.on('close', resolve);
+    child.on('error', reject);
+  });
+  assert.equal(exitCode, 0, output);
+  assert.equal(fs.existsSync(overlayPath), false, 'overlay should be removed by exit trap');
+  fs.rmSync(tempDir, { recursive: true, force: true });
 });

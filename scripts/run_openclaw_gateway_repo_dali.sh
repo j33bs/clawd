@@ -84,6 +84,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if [[ -z "${REPO_ROOT}" ]]; then
   REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 fi
+RUNTIME_SYNC_SCRIPT="${OPENCLAW_RUNTIME_SYNC_SCRIPT:-$REPO_ROOT/workspace/scripts/sync_openclaw_runtime.sh}"
 
 if [[ -z "${OPENCLAW_QUIESCE:-}" ]]; then
   if [[ "${NODE_ENV:-}" == "test" ]]; then
@@ -98,6 +99,9 @@ if [[ -z "${OPENCLAW_PROVIDER_ALLOWLIST:-}" ]]; then
 fi
 if [[ -z "${OPENCLAW_DEFAULT_PROVIDER:-}" ]]; then
   export OPENCLAW_DEFAULT_PROVIDER="local_vllm"
+fi
+if [[ -z "${TELEGRAM_REPLY_MODE:-}" ]]; then
+  export TELEGRAM_REPLY_MODE="auto"
 fi
 
 OPENCLAW_BIN="${OPENCLAW_BIN:-$(command -v openclaw || true)}"
@@ -160,6 +164,11 @@ if [[ -z "${OPENCLAW_BIN}" || ! -x "${OPENCLAW_BIN}" ]]; then
   echo "gateway_repo_runner: missing openclaw binary at ${OPENCLAW_BIN}" >&2
   exit 1
 fi
+
+if [[ -x "${RUNTIME_SYNC_SCRIPT}" ]]; then
+  "${RUNTIME_SYNC_SCRIPT}"
+fi
+
 if is_truthy "${OPENCLAW_GATEWAY_REQUIRE_REPO_RUNTIME:-1}"; then
   if [[ ! -f "${REPO_ROOT}/.runtime/openclaw/openclaw.mjs" ]]; then
     echo "gateway_repo_runner: missing repo runtime at ${REPO_ROOT}/.runtime/openclaw/openclaw.mjs" >&2

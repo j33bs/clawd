@@ -39,6 +39,11 @@ ALLOWED_ORIGINS_COUNT=0
 ALLOWED_ORIGINS_JSON="[]"
 OVERLAY_CONFIG_PATH=""
 OVERLAY_MECHANISM=""
+BASE_CONFIG_PATH="${OPENCLAW_GATEWAY_BASE_CONFIG_PATH:-${OPENCLAW_CONFIG_PATH:-${HOME}/.openclaw/openclaw.json}}"
+BASE_CONFIG_PATH_EXPLICIT=0
+if [[ -n "${OPENCLAW_GATEWAY_BASE_CONFIG_PATH:-}" ]]; then
+  BASE_CONFIG_PATH_EXPLICIT=1
+fi
 
 cleanup_overlay() {
   if [[ -n "${OVERLAY_CONFIG_PATH:-}" ]]; then
@@ -159,12 +164,30 @@ fi
 
 if [[ -n "$OVERLAY_MECHANISM" ]]; then
   OVERLAY_CONFIG_PATH="$(mktemp "${TMPDIR:-/tmp}/openclaw-gateway-config.XXXXXX")"
-  OVERLAY_CONFIG_PATH="$OVERLAY_CONFIG_PATH" CONTROL_UI_MODE="$CONTROL_UI_MODE" ALLOWED_ORIGINS_JSON="$ALLOWED_ORIGINS_JSON" node -e '
+  OVERLAY_CONFIG_PATH="$OVERLAY_CONFIG_PATH" CONTROL_UI_MODE="$CONTROL_UI_MODE" ALLOWED_ORIGINS_JSON="$ALLOWED_ORIGINS_JSON" BASE_CONFIG_PATH="$BASE_CONFIG_PATH" BASE_CONFIG_PATH_EXPLICIT="$BASE_CONFIG_PATH_EXPLICIT" OPENCLAW_WRAPPER_TESTING="${OPENCLAW_WRAPPER_TESTING:-0}" NODE_ENV="${NODE_ENV:-}" node -e '
 const fs = require("node:fs");
 const path = process.env.OVERLAY_CONFIG_PATH;
 const mode = process.env.CONTROL_UI_MODE;
 const origins = JSON.parse(process.env.ALLOWED_ORIGINS_JSON || "[]");
-const cfg = { gateway: { controlUi: {} } };
+const isTest = process.env.NODE_ENV === "test" || process.env.OPENCLAW_WRAPPER_TESTING === "1";
+const basePath = process.env.BASE_CONFIG_PATH;
+const explicitBasePath = process.env.BASE_CONFIG_PATH_EXPLICIT === "1";
+let cfg = { gateway: { controlUi: {} } };
+let loadedBaseConfig = false;
+if (basePath && fs.existsSync(basePath) && (!isTest || explicitBasePath)) {
+  cfg = JSON.parse(fs.readFileSync(basePath, "utf8"));
+  if (typeof cfg !== "object" || cfg === null || Array.isArray(cfg)) {
+    console.error(`FATAL: base config must be a JSON object: ${basePath}`);
+    process.exit(2);
+  }
+  if (typeof cfg.gateway !== "object" || cfg.gateway === null || Array.isArray(cfg.gateway)) {
+    cfg.gateway = {};
+  }
+  if (typeof cfg.gateway.controlUi !== "object" || cfg.gateway.controlUi === null || Array.isArray(cfg.gateway.controlUi)) {
+    cfg.gateway.controlUi = {};
+  }
+  loadedBaseConfig = true;
+}
 if (mode === "off") {
   cfg.gateway.controlUi.enabled = false;
 } else if (mode === "allowlist") {
@@ -173,6 +196,25 @@ if (mode === "off") {
 } else {
   console.error(`FATAL: unsupported overlay control ui mode: ${mode}`);
   process.exit(2);
+}
+if (loadedBaseConfig) {
+  // Tailnet control-ui instances must not own chat channels or bindings.
+  cfg.channels = {};
+  cfg.channels.telegram = { enabled: false };
+  cfg.bindings = [];
+  if (typeof cfg.plugins !== "object" || cfg.plugins === null || Array.isArray(cfg.plugins)) {
+    cfg.plugins = {};
+  }
+  if (Array.isArray(cfg.plugins.allow)) {
+    cfg.plugins.allow = cfg.plugins.allow.filter((entry) => String(entry).trim().toLowerCase() !== "telegram");
+  }
+  if (typeof cfg.plugins.entries !== "object" || cfg.plugins.entries === null || Array.isArray(cfg.plugins.entries)) {
+    cfg.plugins.entries = {};
+  }
+  const telegramPlugin = cfg.plugins.entries.telegram;
+  cfg.plugins.entries.telegram = typeof telegramPlugin === "object" && telegramPlugin !== null && !Array.isArray(telegramPlugin)
+    ? { ...telegramPlugin, enabled: false }
+    : { enabled: false };
 }
 fs.writeFileSync(path, `${JSON.stringify(cfg, null, 2)}\n`);
 ' >/dev/null
