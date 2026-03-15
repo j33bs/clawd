@@ -111,6 +111,7 @@ class MessageHandlerKernelProvenanceTests(unittest.TestCase):
             self.assertEqual(rows[0]["uncertainties"], [])
             self.assertIn("route=openai_gpt54_chat/gpt-5.4", rows[0]["operator_visible_summary"])
             self.assertEqual(result["reply_provenance"]["reply_id"], "1")
+            self.assertRegex(rows[0]["created_at"], r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
 
     def test_handler_provenance_includes_recall_metadata_when_present(self):
         with tempfile.TemporaryDirectory() as td:
@@ -162,6 +163,37 @@ class MessageHandlerKernelProvenanceTests(unittest.TestCase):
             self.assertEqual(rows[0]["files_touched"], fake_recall["files_touched"])
             self.assertEqual(rows[0]["uncertainties"], [])
             self.assertEqual(result["reply_provenance"]["memory_blocks"], fake_recall["memory_blocks"])
+
+    def test_build_reply_provenance_envelope_normalizes_schema_fields(self):
+        envelope = self.mod.build_reply_provenance_envelope(
+            route_provenance={
+                "surface": "telegram",
+                "policy_profile": "surface:telegram",
+                "reason_code": "success",
+                "selected_provider": "openai_gpt54_chat",
+                "selected_model": "gpt-5.4",
+                "memory_blocks": [{"kind": "semantic_recall"}, "skip-me", 3],
+                "files_touched": ["/tmp/one", "", None, "/tmp/two"],
+                "tests_run": "not-a-list",
+                "uncertainties": ["recall_truncated", None, ""],
+                "kernel_id": "c_lawd:surface:telegram",
+                "kernel_hash": "a" * 64,
+                "surface_overlay": "surface:telegram|mode:conversation|memory:on",
+            },
+            result={"provider": "fallback-provider", "model": "fallback-model"},
+            reply_id="reply-1",
+            chat_id="chat-a",
+            message_id="message-1",
+        )
+
+        self.assertEqual(envelope["memory_blocks"], [{"kind": "semantic_recall"}])
+        self.assertEqual(envelope["files_touched"], ["/tmp/one", "/tmp/two"])
+        self.assertEqual(envelope["tests_run"], [])
+        self.assertEqual(envelope["uncertainties"], ["recall_truncated"])
+        self.assertEqual(envelope["provider"], "openai_gpt54_chat")
+        self.assertEqual(envelope["model"], "gpt-5.4")
+        self.assertEqual(envelope["reply_id"], "reply-1")
+        self.assertRegex(envelope["created_at"], r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
 
 
 if __name__ == "__main__":

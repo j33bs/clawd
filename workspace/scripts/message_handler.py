@@ -13,6 +13,7 @@ Integrates the policy router with OpenClaw gateway for:
 import os
 import json
 import asyncio
+from datetime import datetime, timezone
 from typing import Optional
 from agent_orchestration import build_default_orchestrator
 from c_lawd_conversation_kernel import (
@@ -46,6 +47,83 @@ PROVENANCE_PATH = Path(
         str(Path(__file__).resolve().parents[1] / "state_runtime" / "telegram_reply_provenance.jsonl"),
     )
 )
+
+
+def _utc_now_iso() -> str:
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def _normalize_string_list(value) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    normalized: list[str] = []
+    for item in value:
+        text = str(item or "").strip()
+        if text:
+            normalized.append(text)
+    return normalized
+
+
+def _normalize_memory_blocks(value) -> list[dict]:
+    if not isinstance(value, list):
+        return []
+    normalized: list[dict] = []
+    for item in value:
+        if isinstance(item, dict):
+            normalized.append(dict(item))
+    return normalized
+
+
+def _build_operator_visible_summary(*, provider: str, model: str, memory_blocks: list[dict], files_touched: list[str], tests_run: list[str], uncertainties: list[str]) -> str:
+    return (
+        f"route={provider or 'unknown'}/{model or 'unknown'} "
+        f"memory={len(memory_blocks)} "
+        f"files={len(files_touched)} "
+        f"tests={len(tests_run)} "
+        f"uncertainties={len(uncertainties)}"
+    )
+
+
+def build_reply_provenance_envelope(
+    *,
+    route_provenance: dict,
+    result: dict,
+    reply_id: str,
+    chat_id: str,
+    message_id: str,
+) -> dict:
+    provider = str(route_provenance.get("selected_provider") or result.get("provider") or "").strip()
+    model = str(route_provenance.get("selected_model") or result.get("model") or "").strip()
+    memory_blocks = _normalize_memory_blocks(route_provenance.get("memory_blocks"))
+    files_touched = _normalize_string_list(route_provenance.get("files_touched"))
+    tests_run = _normalize_string_list(route_provenance.get("tests_run"))
+    uncertainties = _normalize_string_list(route_provenance.get("uncertainties"))
+    return {
+        "reply_id": str(reply_id or "").strip(),
+        "surface": str(route_provenance.get("surface") or "telegram").strip() or "telegram",
+        "policy_profile": str(route_provenance.get("policy_profile") or "").strip(),
+        "reason_code": str(route_provenance.get("reason_code") or "").strip(),
+        "provider": provider,
+        "model": model,
+        "memory_blocks": memory_blocks,
+        "files_touched": files_touched,
+        "tests_run": tests_run,
+        "uncertainties": uncertainties,
+        "operator_visible_summary": _build_operator_visible_summary(
+            provider=provider,
+            model=model,
+            memory_blocks=memory_blocks,
+            files_touched=files_touched,
+            tests_run=tests_run,
+            uncertainties=uncertainties,
+        ),
+        "chat_id": str(chat_id or "").strip(),
+        "message_id": str(message_id or "").strip(),
+        "kernel_id": str(route_provenance.get("kernel_id") or "").strip(),
+        "kernel_hash": str(route_provenance.get("kernel_hash") or "").strip(),
+        "surface_overlay": str(route_provenance.get("surface_overlay") or "").strip(),
+        "created_at": _utc_now_iso(),
+    }
 
 
 class MessageHandler:
@@ -398,33 +476,13 @@ async def handle_incoming_message(message: dict, handler: MessageHandler) -> dic
             or (send_result.get("kwargs") or {}).get("message_id")
         )
 
-    provenance_envelope = {
-        "reply_id": str(reply_id or message_id or ""),
-        "surface": "telegram",
-        "policy_profile": route_provenance.get("policy_profile"),
-        "reason_code": route_provenance.get("reason_code"),
-        "provider": route_provenance.get("selected_provider") or result.get("provider"),
-        "model": route_provenance.get("selected_model") or result.get("model"),
-        "memory_blocks": list(route_provenance.get("memory_blocks") or []),
-        "files_touched": list(route_provenance.get("files_touched") or []),
-        "tests_run": list(route_provenance.get("tests_run") or []),
-        "uncertainties": list(route_provenance.get("uncertainties") or []),
-        "operator_visible_summary": (
-            "route="
-            f"{route_provenance.get('selected_provider') or result.get('provider') or 'unknown'}"
-            "/"
-            f"{route_provenance.get('selected_model') or result.get('model') or 'unknown'} "
-            f"memory={len(route_provenance.get('memory_blocks') or [])} "
-            f"files={len(route_provenance.get('files_touched') or [])} "
-            f"tests={len(route_provenance.get('tests_run') or [])} "
-            f"uncertainties={len(route_provenance.get('uncertainties') or [])}"
-        ),
-        "chat_id": str(chat_id) if chat_id is not None else "",
-        "message_id": str(message_id) if message_id is not None else "",
-        "kernel_id": route_provenance.get("kernel_id"),
-        "kernel_hash": route_provenance.get("kernel_hash"),
-        "surface_overlay": route_provenance.get("surface_overlay"),
-    }
+    provenance_envelope = build_reply_provenance_envelope(
+        route_provenance=route_provenance,
+        result=result,
+        reply_id=str(reply_id or message_id or ""),
+        chat_id=str(chat_id) if chat_id is not None else "",
+        message_id=str(message_id) if message_id is not None else "",
+    )
     handler.append_reply_provenance(provenance_envelope)
 
     return {
