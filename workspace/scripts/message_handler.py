@@ -39,6 +39,12 @@ HISTORY_PATH = Path(
         str(Path(__file__).resolve().parents[1] / "state_runtime" / "telegram_message_handler_history.json"),
     )
 )
+PROVENANCE_PATH = Path(
+    os.environ.get(
+        "OPENCLAW_TELEGRAM_REPLY_PROVENANCE_PATH",
+        str(Path(__file__).resolve().parents[1] / "state_runtime" / "telegram_reply_provenance.jsonl"),
+    )
+)
 
 
 class MessageHandler:
@@ -52,6 +58,11 @@ class MessageHandler:
         self.router = router or PolicyRouter()
         self.history_path = Path(history_path) if history_path else HISTORY_PATH
         self.message_history_by_chat = self._load_histories()
+
+    def append_reply_provenance(self, envelope: dict) -> None:
+        PROVENANCE_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with PROVENANCE_PATH.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(envelope, ensure_ascii=True) + "\n")
 
     def _load_histories(self) -> dict[str, list[dict]]:
         if not self.history_path.exists():
@@ -342,9 +353,11 @@ async def handle_incoming_message(message: dict, handler: MessageHandler) -> dic
         reason = str(result.get("reason_code") or "router_error")
         reply_text = f"I couldn't complete the Telegram routing path cleanly. Blocker: {reason}."
     
+    send_result = None
+
     # Send reply with threading (replyTo)
     if chat_id and message_id:
-        await send_telegram_reply(
+        send_result = await send_telegram_reply(
             chat_id=str(chat_id),
             message_id=str(message_id),
             text=reply_text,
@@ -366,6 +379,42 @@ async def handle_incoming_message(message: dict, handler: MessageHandler) -> dic
     route_provenance.setdefault("kernel_hash", kernel_packet.kernel_hash)
     route_provenance.setdefault("surface_overlay", kernel_packet.surface_overlay)
 
+    reply_id = None
+    if isinstance(send_result, dict):
+        reply_id = (
+            send_result.get("message_id")
+            or send_result.get("id")
+            or (send_result.get("result") or {}).get("message_id")
+            or (send_result.get("kwargs") or {}).get("message_id")
+        )
+
+    provenance_envelope = {
+        "reply_id": str(reply_id or message_id or ""),
+        "surface": "telegram",
+        "provider": route_provenance.get("selected_provider") or result.get("provider"),
+        "model": route_provenance.get("selected_model") or result.get("model"),
+        "memory_blocks": list(route_provenance.get("memory_blocks") or []),
+        "files_touched": list(route_provenance.get("files_touched") or []),
+        "tests_run": list(route_provenance.get("tests_run") or []),
+        "uncertainties": list(route_provenance.get("uncertainties") or []),
+        "operator_visible_summary": (
+            "route="
+            f"{route_provenance.get('selected_provider') or result.get('provider') or 'unknown'}"
+            "/"
+            f"{route_provenance.get('selected_model') or result.get('model') or 'unknown'} "
+            f"memory={len(route_provenance.get('memory_blocks') or [])} "
+            f"files={len(route_provenance.get('files_touched') or [])} "
+            f"tests={len(route_provenance.get('tests_run') or [])} "
+            f"uncertainties={len(route_provenance.get('uncertainties') or [])}"
+        ),
+        "chat_id": str(chat_id) if chat_id is not None else "",
+        "message_id": str(message_id) if message_id is not None else "",
+        "kernel_id": route_provenance.get("kernel_id"),
+        "kernel_hash": route_provenance.get("kernel_hash"),
+        "surface_overlay": route_provenance.get("surface_overlay"),
+    }
+    handler.append_reply_provenance(provenance_envelope)
+
     return {
         "success": True,
         "route": route["route"],
@@ -373,6 +422,7 @@ async def handle_incoming_message(message: dict, handler: MessageHandler) -> dic
         "provider": result.get("provider"),
         "model": result.get("model"),
         "route_provenance": route_provenance,
+        "reply_provenance": provenance_envelope,
     }
 
 
