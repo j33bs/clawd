@@ -220,8 +220,12 @@ class TestCathedralIdlePaletteContract(unittest.TestCase):
         self.assertIn('"DALI_FISHTANK_ALLOW_PYTHON_VISIBLE_ATTACH": "1"', script)
         self.assertIn('"DALI_FISHTANK_WORK_SCENE": "therapeutic_bilateral"', script)
         self.assertIn('"DALI_FISHTANK_THERAPEUTIC_GROUNDING_ENABLED": "1"', script)
+        self.assertIn('"DALI_FISHTANK_THERAPEUTIC_INHALE_SECONDS": "4.0"', script)
+        self.assertIn('"DALI_FISHTANK_THERAPEUTIC_HOLD_SECONDS": "2.0"', script)
+        self.assertIn('"DALI_FISHTANK_THERAPEUTIC_EXHALE_SECONDS": "5.0"', script)
         self.assertIn('"DALI_FISHTANK_THERAPEUTIC_DRIFT_SECONDS": "180.0"', script)
         self.assertIn('"DALI_FISHTANK_THERAPEUTIC_DRIFT_RATIO": "0.01"', script)
+        self.assertIn('"DALI_FISHTANK_THERAPEUTIC_TEXT_TIMEOUT_S": "60.0"', script)
 
     def test_present_compare_script_exists_and_probes_swap_modes(self):
         script = (REPO_ROOT / "scripts" / "dali_present_path_compare.sh").read_text(encoding="utf-8")

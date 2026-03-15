@@ -274,10 +274,19 @@ class FishTankRenderer:
             2.0,
             min(20.0, safe_float(os.environ.get("DALI_FISHTANK_THERAPEUTIC_SETTLE_SECONDS", 4.0), 4.0)),
         )
-        self._therapeutic_breath_seconds = max(
-            4.0,
-            min(18.0, safe_float(os.environ.get("DALI_FISHTANK_THERAPEUTIC_BREATH_SECONDS", 10.0), 10.0)),
+        self._therapeutic_inhale_seconds = max(
+            1.0,
+            min(12.0, safe_float(os.environ.get("DALI_FISHTANK_THERAPEUTIC_INHALE_SECONDS", 4.0), 4.0)),
         )
+        self._therapeutic_hold_seconds = max(
+            0.0,
+            min(8.0, safe_float(os.environ.get("DALI_FISHTANK_THERAPEUTIC_HOLD_SECONDS", 2.0), 2.0)),
+        )
+        self._therapeutic_exhale_seconds = max(
+            1.0,
+            min(16.0, safe_float(os.environ.get("DALI_FISHTANK_THERAPEUTIC_EXHALE_SECONDS", 5.0), 5.0)),
+        )
+        self._therapeutic_breath_seconds = self._therapeutic_inhale_seconds + self._therapeutic_hold_seconds + self._therapeutic_exhale_seconds
         self._therapeutic_prompt_interval_s = max(
             8.0,
             min(90.0, safe_float(os.environ.get("DALI_FISHTANK_THERAPEUTIC_PROMPT_INTERVAL_S", 24.0), 24.0)),
@@ -293,6 +302,10 @@ class FishTankRenderer:
         self._therapeutic_drift_ratio = max(
             0.002,
             min(0.03, safe_float(os.environ.get("DALI_FISHTANK_THERAPEUTIC_DRIFT_RATIO", 0.01), 0.01)),
+        )
+        self._therapeutic_text_timeout_s = max(
+            0.0,
+            min(900.0, safe_float(os.environ.get("DALI_FISHTANK_THERAPEUTIC_TEXT_TIMEOUT_S", 60.0), 60.0)),
         )
         self._therapeutic_grounding_enabled = _env_truthy("DALI_FISHTANK_THERAPEUTIC_GROUNDING_ENABLED", "1")
         self.active_renderer_name = "cathedral_fishtank"
@@ -1486,13 +1499,17 @@ class FishTankRenderer:
         growth_memory = float(getattr(self, "_work_growth_memory", 0.0) or 0.0)
         curiosity = float(getattr(self, "control_values", {}).get("curiosity_impulse", 0.0) or 0.0)
         gpu_util = clamp01(float(getattr(self.signals, "gpu_util", 0.0) or 0.0))
-        breath_seconds = max(4.0, float(getattr(self, "_therapeutic_breath_seconds", 10.0) or 10.0))
+        inhale_seconds = max(1.0, float(getattr(self, "_therapeutic_inhale_seconds", 4.0) or 4.0))
+        hold_seconds = max(0.0, float(getattr(self, "_therapeutic_hold_seconds", 2.0) or 2.0))
+        exhale_seconds = max(1.0, float(getattr(self, "_therapeutic_exhale_seconds", 5.0) or 5.0))
+        breath_seconds = max(1.0, inhale_seconds + hold_seconds + exhale_seconds)
         sweep_seconds = max(4.0, float(getattr(self, "_therapeutic_sweep_seconds", 7.5) or 7.5))
         settle_seconds = max(2.0, float(getattr(self, "_therapeutic_settle_seconds", 4.0) or 4.0))
         total_cycle = sweep_seconds + settle_seconds
         motion_gain = clamp01(float(getattr(self, "_therapeutic_motion_gain", 0.7) or 0.7))
         drift_seconds = max(45.0, float(getattr(self, "_therapeutic_drift_seconds", 180.0) or 180.0))
         drift_ratio = max(0.002, float(getattr(self, "_therapeutic_drift_ratio", 0.01) or 0.01))
+        text_timeout_s = max(0.0, float(getattr(self, "_therapeutic_text_timeout_s", 60.0) or 60.0))
         grounding_enabled = bool(getattr(self, "_therapeutic_grounding_enabled", True))
         prompt_interval_s = max(8.0, float(getattr(self, "_therapeutic_prompt_interval_s", 24.0) or 24.0))
 
@@ -1503,17 +1520,17 @@ class FishTankRenderer:
             b = int(start[2] + ((end[2] - start[2]) * ratio))
             return f"#{r:02x}{g:02x}{b:02x}"
 
-        def breath_state(progress: float) -> tuple[float, str]:
-            progress = progress % 1.0
-            if progress < 0.36:
-                local = progress / 0.36
+        def breath_state(elapsed: float) -> tuple[float, str]:
+            elapsed = elapsed % breath_seconds
+            if elapsed < inhale_seconds:
+                local = elapsed / max(0.001, inhale_seconds)
                 return 0.2 + (0.8 * local), "inhale"
-            if progress < 0.5:
+            elapsed -= inhale_seconds
+            if elapsed < hold_seconds:
                 return 1.0, "hold"
-            if progress < 0.88:
-                local = (progress - 0.5) / 0.38
-                return 1.0 - (0.78 * local), "exhale"
-            return 0.22, "settle"
+            elapsed -= hold_seconds
+            local = elapsed / max(0.001, exhale_seconds)
+            return 1.0 - (0.8 * local), "exhale"
 
         def ease_in_out(value: float) -> float:
             value = clamp01(value)
@@ -1601,8 +1618,9 @@ class FishTankRenderer:
                 glow = radius * 4.2
                 canvas.create_line(px - glow, py, px + glow, py, fill="#86b9c6", width=1, tags="atmo")
 
-        breath_progress = (scene_age % breath_seconds) / max(0.001, breath_seconds)
-        breath_strength, breath_label = breath_state(breath_progress)
+        breath_elapsed = scene_age % breath_seconds
+        breath_progress = breath_elapsed / max(0.001, breath_seconds)
+        breath_strength, breath_label = breath_state(breath_elapsed)
         center_x = (width * 0.5) + drift_x
         center_y = (height * 0.56) + drift_y
         base_radius = min(width, height) * 0.09
@@ -1661,7 +1679,8 @@ class FishTankRenderer:
         cue_visible = False
         cue_anchor_x = center_x
         cue_anchor_y = (height * 0.79) + (drift_y * 0.34)
-        if grounding_enabled and cues:
+        text_enabled = text_timeout_s <= 0.0 or scene_age < text_timeout_s
+        if text_enabled and grounding_enabled and cues:
             cue_index = int(scene_age / prompt_interval_s) % len(cues)
             cue_primary, cue_secondary = cues[cue_index]
             cue_anchor_x = center_x + (math.sin(text_orbit_phase + (cue_index * 1.17)) * width * 0.072)
@@ -1686,21 +1705,21 @@ class FishTankRenderer:
                     tags="text",
                 )
 
-        breath_caption = "inhale 4  |  hold 2  |  exhale 4"
-        if breath_label == "settle":
-            breath_caption = "let the breath return on its own"
+        breath_caption = "inhale 4  |  hold 2  |  exhale 5"
         breath_anchor_x = center_x + (math.sin(text_orbit_phase + 2.1) * width * 0.058)
         breath_anchor_y = (height * 0.195) + (math.cos((text_orbit_phase * 0.77) + 1.4) * height * 0.03) + (drift_y * 0.24)
         breath_anchor_x, breath_anchor_y = clamp_anchor(breath_anchor_x, breath_anchor_y, width * 0.12, height * 0.1)
-        breath_caption_visible = breath_progress < 0.62
-        canvas.create_text(
-            breath_anchor_x,
-            breath_anchor_y,
-            text=breath_label.upper(),
-            fill="#88b4b6",
-            font=("Helvetica", max(12, int(height * 0.018)), "bold"),
-            tags="text",
-        )
+        breath_label_visible = text_enabled
+        breath_caption_visible = text_enabled and breath_progress < 0.55
+        if breath_label_visible:
+            canvas.create_text(
+                breath_anchor_x,
+                breath_anchor_y,
+                text=breath_label.upper(),
+                fill="#88b4b6",
+                font=("Helvetica", max(12, int(height * 0.018)), "bold"),
+                tags="text",
+            )
         if breath_caption_visible:
             canvas.create_text(
                 breath_anchor_x,
@@ -1716,7 +1735,7 @@ class FishTankRenderer:
         footer_anchor_x = center_x + (math.sin(text_orbit_phase + 4.2) * width * 0.082)
         footer_anchor_y = (height * 0.93) + (math.cos((text_orbit_phase * 0.63) + 0.5) * height * 0.016) + (drift_y * 0.16)
         footer_anchor_x, footer_anchor_y = clamp_anchor(footer_anchor_x, footer_anchor_y, width * 0.14, height * 0.06)
-        footer_visible = cycle_elapsed < min(3.2, total_cycle * 0.28)
+        footer_visible = text_enabled and cycle_elapsed < min(3.2, total_cycle * 0.28)
         if footer_visible:
             canvas.create_text(
                 footer_anchor_x,
@@ -1730,8 +1749,10 @@ class FishTankRenderer:
         state["current_phase"] = motion_label
         state["current_direction"] = direction_label
         state["current_breath"] = breath_label
+        state["text_enabled"] = text_enabled
         state["cue_text_visible"] = cue_visible
         state["footer_text_visible"] = footer_visible
+        state["breath_label_visible"] = breath_label_visible
         state["breath_caption_visible"] = breath_caption_visible
         state["drift_x_px"] = round(float(drift_x), 3)
         state["drift_y_px"] = round(float(drift_y), 3)
@@ -4096,17 +4117,23 @@ class FishTankRenderer:
                 "current_phase": str(therapeutic_state.get("current_phase", "") or ""),
                 "current_direction": str(therapeutic_state.get("current_direction", "") or ""),
                 "current_breath": str(therapeutic_state.get("current_breath", "") or ""),
+                "text_enabled": bool(therapeutic_state.get("text_enabled", False)),
                 "cue_text_visible": bool(therapeutic_state.get("cue_text_visible", False)),
                 "footer_text_visible": bool(therapeutic_state.get("footer_text_visible", False)),
+                "breath_label_visible": bool(therapeutic_state.get("breath_label_visible", False)),
                 "breath_caption_visible": bool(therapeutic_state.get("breath_caption_visible", False)),
                 "drift_x_px": round(float(therapeutic_state.get("drift_x_px", 0.0) or 0.0), 3),
                 "drift_y_px": round(float(therapeutic_state.get("drift_y_px", 0.0) or 0.0), 3),
                 "grounding_enabled": bool(getattr(self, "_therapeutic_grounding_enabled", True)),
+                "inhale_seconds": round(float(getattr(self, "_therapeutic_inhale_seconds", 4.0) or 4.0), 6),
+                "hold_seconds": round(float(getattr(self, "_therapeutic_hold_seconds", 2.0) or 2.0), 6),
+                "exhale_seconds": round(float(getattr(self, "_therapeutic_exhale_seconds", 5.0) or 5.0), 6),
                 "sweep_seconds": round(float(getattr(self, "_therapeutic_sweep_seconds", 7.5) or 7.5), 6),
                 "settle_seconds": round(float(getattr(self, "_therapeutic_settle_seconds", 4.0) or 4.0), 6),
-                "breath_seconds": round(float(getattr(self, "_therapeutic_breath_seconds", 10.0) or 10.0), 6),
+                "breath_seconds": round(float(getattr(self, "_therapeutic_breath_seconds", 11.0) or 11.0), 6),
                 "drift_seconds": round(float(getattr(self, "_therapeutic_drift_seconds", 180.0) or 180.0), 6),
                 "drift_ratio": round(float(getattr(self, "_therapeutic_drift_ratio", 0.01) or 0.01), 6),
+                "text_timeout_seconds": round(float(getattr(self, "_therapeutic_text_timeout_s", 60.0) or 60.0), 6),
             }
         for key, value in ecosystem.items():
             if isinstance(value, (int, float)):

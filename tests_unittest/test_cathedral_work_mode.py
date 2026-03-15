@@ -297,13 +297,17 @@ class TestCathedralWorkMode(unittest.TestCase):
         renderer._therapeutic_scene_dimensions = (0, 0)
         renderer._therapeutic_scene_started_ts = 0.0
         renderer._work_scene_time_scale = 0.28
-        renderer._therapeutic_breath_seconds = 10.0
+        renderer._therapeutic_inhale_seconds = 4.0
+        renderer._therapeutic_hold_seconds = 2.0
+        renderer._therapeutic_exhale_seconds = 5.0
+        renderer._therapeutic_breath_seconds = 11.0
         renderer._therapeutic_sweep_seconds = 7.5
         renderer._therapeutic_settle_seconds = 4.0
         renderer._therapeutic_prompt_interval_s = 24.0
         renderer._therapeutic_motion_gain = 0.7
         renderer._therapeutic_drift_seconds = 180.0
         renderer._therapeutic_drift_ratio = 0.01
+        renderer._therapeutic_text_timeout_s = 60.0
         renderer._therapeutic_grounding_enabled = True
         renderer._work_growth_memory = 0.01
         renderer.control_values = {"curiosity_impulse": 0.2}
@@ -323,10 +327,12 @@ class TestCathedralWorkMode(unittest.TestCase):
         self.assertEqual(len(renderer._therapeutic_scene_state.get("ribbons", [])), 4)
         self.assertEqual(len(renderer._therapeutic_scene_state.get("grounding_cues", [])), 5)
         self.assertEqual(renderer._therapeutic_scene_state.get("current_direction"), "right_edge")
-        self.assertIn(renderer._therapeutic_scene_state.get("current_breath"), {"inhale", "hold", "exhale", "settle"})
+        self.assertEqual(renderer._therapeutic_scene_state.get("current_breath"), "exhale")
+        self.assertTrue(renderer._therapeutic_scene_state.get("text_enabled"))
         self.assertFalse(renderer._therapeutic_scene_state.get("cue_text_visible"))
         self.assertFalse(renderer._therapeutic_scene_state.get("footer_text_visible"))
-        self.assertTrue(renderer._therapeutic_scene_state.get("breath_caption_visible"))
+        self.assertTrue(renderer._therapeutic_scene_state.get("breath_label_visible"))
+        self.assertFalse(renderer._therapeutic_scene_state.get("breath_caption_visible"))
         self.assertLessEqual(abs(float(renderer._therapeutic_scene_state.get("drift_x_px", 0.0) or 0.0)), 12.8)
         self.assertLessEqual(abs(float(renderer._therapeutic_scene_state.get("drift_y_px", 0.0) or 0.0)), 7.2)
 
@@ -336,13 +342,17 @@ class TestCathedralWorkMode(unittest.TestCase):
         renderer._therapeutic_scene_dimensions = (0, 0)
         renderer._therapeutic_scene_started_ts = 0.0
         renderer._work_scene_time_scale = 0.28
-        renderer._therapeutic_breath_seconds = 10.0
+        renderer._therapeutic_inhale_seconds = 4.0
+        renderer._therapeutic_hold_seconds = 2.0
+        renderer._therapeutic_exhale_seconds = 5.0
+        renderer._therapeutic_breath_seconds = 11.0
         renderer._therapeutic_sweep_seconds = 7.5
         renderer._therapeutic_settle_seconds = 4.0
         renderer._therapeutic_prompt_interval_s = 24.0
         renderer._therapeutic_motion_gain = 0.7
         renderer._therapeutic_drift_seconds = 180.0
         renderer._therapeutic_drift_ratio = 0.01
+        renderer._therapeutic_text_timeout_s = 60.0
         renderer._therapeutic_grounding_enabled = True
         renderer._work_growth_memory = 0.01
         renderer.control_values = {"curiosity_impulse": 0.2}
@@ -362,6 +372,39 @@ class TestCathedralWorkMode(unittest.TestCase):
         self.assertEqual(renderer._therapeutic_scene_state.get("current_direction"), "right_to_left")
         self.assertFalse(renderer._therapeutic_scene_state.get("cue_text_visible"))
         self.assertTrue(renderer._therapeutic_scene_state.get("footer_text_visible"))
+
+    def test_work_mode_therapeutic_bilateral_hides_all_text_after_timeout(self):
+        renderer = FishTankRenderer.__new__(FishTankRenderer)
+        renderer._therapeutic_scene_state = {}
+        renderer._therapeutic_scene_dimensions = (0, 0)
+        renderer._therapeutic_scene_started_ts = 0.0
+        renderer._work_scene_time_scale = 0.28
+        renderer._therapeutic_inhale_seconds = 4.0
+        renderer._therapeutic_hold_seconds = 2.0
+        renderer._therapeutic_exhale_seconds = 5.0
+        renderer._therapeutic_breath_seconds = 11.0
+        renderer._therapeutic_sweep_seconds = 7.5
+        renderer._therapeutic_settle_seconds = 4.0
+        renderer._therapeutic_prompt_interval_s = 24.0
+        renderer._therapeutic_motion_gain = 0.7
+        renderer._therapeutic_drift_seconds = 180.0
+        renderer._therapeutic_drift_ratio = 0.01
+        renderer._therapeutic_text_timeout_s = 60.0
+        renderer._therapeutic_grounding_enabled = True
+        renderer._work_growth_memory = 0.01
+        renderer.control_values = {"curiosity_impulse": 0.2}
+        renderer.signals = mock.Mock(gpu_util=0.08)
+        canvas = mock.Mock()
+
+        FishTankRenderer._ensure_therapeutic_bilateral_state(renderer, 1280, 720)
+        renderer._therapeutic_scene_started_ts = 0.5
+        FishTankRenderer._render_therapeutic_bilateral_scene(renderer, canvas, 1280, 720, 61.0)
+
+        self.assertFalse(renderer._therapeutic_scene_state.get("text_enabled"))
+        self.assertFalse(renderer._therapeutic_scene_state.get("cue_text_visible"))
+        self.assertFalse(renderer._therapeutic_scene_state.get("footer_text_visible"))
+        self.assertFalse(renderer._therapeutic_scene_state.get("breath_label_visible"))
+        self.assertFalse(renderer._therapeutic_scene_state.get("breath_caption_visible"))
 
 
 if __name__ == "__main__":
