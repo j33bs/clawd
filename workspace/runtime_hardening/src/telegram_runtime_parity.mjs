@@ -45,6 +45,23 @@ function collectRuntimeProviders(runtimeConfig) {
   return runtimeConfig?.models?.providers || {};
 }
 
+function collectRuntimeAgentModels(runtimeConfig) {
+  const models = runtimeConfig?.agents?.defaults?.models || {};
+  if (!models || typeof models !== 'object' || Array.isArray(models)) {
+    return [];
+  }
+  const entries = [];
+  for (const rawKey of Object.keys(models)) {
+    const normalized = typeof rawKey === 'string' ? rawKey.trim() : '';
+    if (!normalized || !normalized.includes('/')) continue;
+    const [provider, ...rest] = normalized.split('/');
+    const model = rest.join('/').trim();
+    if (!provider || !model) continue;
+    entries.push({ provider: provider.trim(), model });
+  }
+  return entries;
+}
+
 function collectEnabledRuntimePlugins(runtimeConfig) {
   const plugins = runtimeConfig?.plugins || {};
   const enabled = new Set();
@@ -87,6 +104,7 @@ function normalizeModelId(value) {
 function compareTelegramRuntimeParity({ policy, runtimeConfig }) {
   const targets = collectTelegramPolicyTargets(policy);
   const runtimeProviders = collectRuntimeProviders(runtimeConfig);
+  const runtimeAgentModels = collectRuntimeAgentModels(runtimeConfig);
   const enabledPlugins = collectEnabledRuntimePlugins(runtimeConfig);
   const runtimeModelIndex = new Map();
 
@@ -104,6 +122,18 @@ function compareTelegramRuntimeParity({ policy, runtimeConfig }) {
         model: rawModelId
       });
     }
+  }
+
+  for (const entry of runtimeAgentModels) {
+    const normalizedModelId = normalizeModelId(entry.model);
+    if (!normalizedModelId) continue;
+    if (!runtimeModelIndex.has(normalizedModelId)) {
+      runtimeModelIndex.set(normalizedModelId, []);
+    }
+    runtimeModelIndex.get(normalizedModelId).push({
+      provider: entry.provider,
+      model: entry.model
+    });
   }
 
   const providers = targets.map((target) => {
@@ -158,9 +188,15 @@ function compareTelegramRuntimeParity({ policy, runtimeConfig }) {
 }
 
 function resolveDefaultPaths(repoRoot) {
+  const envConfigPath = typeof process.env.OPENCLAW_CONFIG_PATH === 'string' ? process.env.OPENCLAW_CONFIG_PATH.trim() : '';
+  const envStateDir = typeof process.env.OPENCLAW_STATE_DIR === 'string' ? process.env.OPENCLAW_STATE_DIR.trim() : '';
+  const repoStatePath = path.join(repoRoot, '.openclaw', 'openclaw.json');
   return {
     policyPath: path.join(repoRoot, 'workspace', 'policy', 'llm_policy.json'),
-    runtimeConfigPath: path.join(process.env.HOME || '~', '.openclaw', 'openclaw.json')
+    runtimeConfigPath:
+      envConfigPath ||
+      (envStateDir ? path.join(envStateDir, 'openclaw.json') : '') ||
+      (fs.existsSync(repoStatePath) ? repoStatePath : path.join(process.env.HOME || '~', '.openclaw', 'openclaw.json'))
   };
 }
 

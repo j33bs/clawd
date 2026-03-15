@@ -7,6 +7,7 @@ import path from 'node:path';
 import {
   collectEnabledRuntimePlugins,
   compareTelegramRuntimeParity,
+  resolveDefaultPaths,
   verifyTelegramRuntimeParity
 } from '../src/telegram_runtime_parity.mjs';
 
@@ -181,4 +182,55 @@ test('collectEnabledRuntimePlugins includes enabled entries and linked load path
   });
 
   assert.deepEqual(result, ['custom_plugin', 'openclaw_surface_router_plugin']);
+});
+
+test('compareTelegramRuntimeParity accepts agent-default model exposure for openai-codex gpt-5.4', () => {
+  const result = compareTelegramRuntimeParity({
+    policy: {
+      providers: {
+        openai_gpt54_chat: {
+          models: [{ id: 'gpt-5.4' }]
+        }
+      },
+      routing: {
+        surface_profiles: {
+          telegram: {
+            intents: {
+              conversation: {
+                order: ['openai_gpt54_chat']
+              }
+            }
+          }
+        }
+      }
+    },
+    runtimeConfig: {
+      plugins: {
+        entries: {
+          openclaw_surface_router_plugin: { enabled: true }
+        }
+      },
+      agents: {
+        defaults: {
+          models: {
+            'openai-codex/gpt-5.4': {}
+          }
+        }
+      },
+      models: {
+        providers: {}
+      }
+    }
+  });
+
+  assert.equal(result.status, 'ok');
+  assert.equal(result.mismatches.length, 0);
+  assert.deepEqual(result.providers[0].runtime_matching_providers, ['openai-codex']);
+});
+
+test('resolveDefaultPaths prefers repo-local state dir when present', () => {
+  const root = makeTempDir();
+  writeJson(path.join(root, '.openclaw', 'openclaw.json'), { ok: true });
+  const paths = resolveDefaultPaths(root);
+  assert.equal(paths.runtimeConfigPath, path.join(root, '.openclaw', 'openclaw.json'));
 });
