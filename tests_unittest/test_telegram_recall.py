@@ -171,6 +171,29 @@ class TelegramRecallTests(unittest.TestCase):
             self.assertIn("Codex-direct", block)
             self.assertNotIn("TELEGRAM_RECALL:", block)
 
+    def test_recall_context_reports_memory_blocks_and_files(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            store_dir = root / "store"
+            normalized = root / "normalized.jsonl"
+            self._seed_store(store_dir, normalized)
+
+            ctx = self.recall_mod.build_recall_context(
+                "remember what we discussed",
+                env={
+                    "OPENCLAW_TELEGRAM_RECALL": "1",
+                    "OPENCLAW_TELEGRAM_RECALL_TOPK": "2",
+                    "OPENCLAW_TELEGRAM_RECALL_MAX_CHARS": "500",
+                    "OPENCLAW_USER_MEMORY_DB_PATH": str(root / "workspace" / "profile" / "user_memory.db"),
+                },
+                chat_id="111",
+                store_dir=store_dir,
+            )
+            self.assertTrue(ctx["block"].startswith("TELEGRAM_RECALL:"))
+            self.assertGreaterEqual(len(ctx["memory_blocks"]), 1)
+            self.assertEqual(ctx["memory_blocks"][0]["kind"], "semantic_recall")
+            self.assertIn(str(store_dir), ctx["files_touched"])
+
 
 if __name__ == "__main__":
     unittest.main()

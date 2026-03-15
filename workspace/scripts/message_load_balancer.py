@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-Message Load Balancer - Routes messages between MiniMax and ChatGPT based on load.
+Message Load Balancer - Routes messages between primary and OpenAI fallback based on load.
 
-When MiniMax is overwhelmed (too many concurrent messages or high latency),
-automatically falls back to spawning a ChatGPT subagent to handle overflow.
+When the primary lane is overwhelmed (too many concurrent messages or high latency),
+automatically falls back to spawning an OpenAI subagent to handle overflow.
 """
 
 import os
@@ -41,7 +41,7 @@ class Message:
 
 
 class LoadBalancer:
-    """Routes messages between MiniMax and ChatGPT based on load."""
+    """Routes messages between primary and OpenAI fallback lanes based on load."""
     
     def __init__(self):
         self.metrics = LoadMetrics()
@@ -174,7 +174,7 @@ def route_message(message: dict) -> dict:
 
 def spawn_chatgpt_subagent(task: str, context: dict = None) -> dict:
     """
-    Spawn a ChatGPT subagent to handle overflow.
+    Spawn an OpenAI subagent to handle overflow.
     
     This uses OpenClaw's sessions_spawn internally. In production,
     you'd call this when route_message() returns route: "chatgpt".
@@ -186,7 +186,7 @@ def spawn_chatgpt_subagent(task: str, context: dict = None) -> dict:
     return {
         "action": "spawn",
         "agentId": "main",
-        "model": "openai/gpt-5.3-codex",
+        "model": "openai-codex/gpt-5.4",
         "task": task,
         "context": context or {},
         "note": "Spawned due to MiniMax overload",

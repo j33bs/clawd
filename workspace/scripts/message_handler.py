@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """
-Message Handler with Load Balancing and Efficiency Optimizations
+Message Handler with router-backed Telegram response handling.
 
-Integrates message_load_balancer with OpenClaw gateway for:
-- Multi-chat response with ChatGPT fallback
+Integrates the policy router with OpenClaw gateway for:
+- Multi-chat response with OpenAI escalation when needed
 - Reply-to-message threading
 - Prompt caching
 - Context summarization
+- Reply provenance capture
 """
 
 import os
@@ -19,7 +20,7 @@ from c_lawd_conversation_kernel import (
     build_c_lawd_surface_kernel_packet,
 )
 from policy_router import PolicyRouter, build_chat_payload
-from telegram_recall import inject_telegram_recall_context
+from telegram_recall import build_recall_context
 from pathlib import Path
 
 try:
@@ -48,7 +49,7 @@ PROVENANCE_PATH = Path(
 
 
 class MessageHandler:
-    """Handles messages with load balancing and efficiency optimizations."""
+    """Handles Telegram messages with router-backed prompt assembly and provenance."""
     
     def __init__(self, gateway_url: str, token: str, *, router: Optional[PolicyRouter] = None, history_path: Path | None = None):
         self.gateway_url = gateway_url
@@ -236,7 +237,7 @@ async def send_telegram_reply(chat_id: str, message_id: str, text: str, gateway_
 
 
 async def spawn_chatgpt_subagent(task: str, context: dict, gateway_url: str, token: str):
-    """Spawn a ChatGPT subagent to handle a message.
+    """Spawn an OpenAI subagent to handle a message.
     
     Uses OpenClaw's sessions_spawn internally.
     """
@@ -250,7 +251,7 @@ async def spawn_chatgpt_subagent(task: str, context: dict, gateway_url: str, tok
         context=context or {},
         priority=(context or {}).get("priority", "normal"),
         specialization_tags=(context or {}).get("specialization_tags"),
-        providers=["openai/gpt-5.3-codex"],
+        providers=["openai-codex/gpt-5.4"],
         enqueue_if_busy=False,
     )
 
@@ -304,7 +305,7 @@ async def spawn_chatgpt_subagent(task: str, context: dict, gateway_url: str, tok
 
 
 async def handle_incoming_message(message: dict, handler: MessageHandler) -> dict:
-    """Process an incoming message with load balancing."""
+    """Process an incoming Telegram message through the router-backed path."""
     
     # Route message
     route = await handler.route_message(message)
@@ -316,11 +317,16 @@ async def handle_incoming_message(message: dict, handler: MessageHandler) -> dic
     session_start = bool(message.get("session_start", False))
 
     # Optional semantic recall hook from Telegram vector store (disabled by default).
-    content_with_recall = inject_telegram_recall_context(
+    recall_context = build_recall_context(
         str(content),
         env=os.environ,
         session_start=session_start,
         chat_id=str(chat_id) if chat_id is not None else None,
+    )
+    content_with_recall = (
+        f"{recall_context['block']}\n\n{content}"
+        if recall_context.get("block")
+        else str(content)
     )
     
     # Get conversation context
@@ -378,6 +384,10 @@ async def handle_incoming_message(message: dict, handler: MessageHandler) -> dic
     route_provenance.setdefault("kernel_id", kernel_packet.kernel_id)
     route_provenance.setdefault("kernel_hash", kernel_packet.kernel_hash)
     route_provenance.setdefault("surface_overlay", kernel_packet.surface_overlay)
+    route_provenance.setdefault("memory_blocks", list(recall_context.get("memory_blocks") or []))
+    route_provenance.setdefault("files_touched", list(recall_context.get("files_touched") or []))
+    route_provenance.setdefault("tests_run", [])
+    route_provenance.setdefault("uncertainties", list(recall_context.get("uncertainties") or []))
 
     reply_id = None
     if isinstance(send_result, dict):

@@ -110,6 +110,57 @@ class MessageHandlerKernelProvenanceTests(unittest.TestCase):
             self.assertIn("route=openai_gpt54_chat/gpt-5.4", rows[0]["operator_visible_summary"])
             self.assertEqual(result["reply_provenance"]["reply_id"], "1")
 
+    def test_handler_provenance_includes_recall_metadata_when_present(self):
+        with tempfile.TemporaryDirectory() as td:
+            history_path = Path(td) / "telegram_history.json"
+            provenance_path = Path(td) / "telegram_reply_provenance.jsonl"
+            handler = self.mod.MessageHandler(
+                "http://127.0.0.1:18789",
+                "",
+                router=_FakeRouter(),
+                history_path=history_path,
+            )
+
+            async def _fake_send(**kwargs):
+                return {"ok": True, "kwargs": kwargs}
+
+            fake_recall = {
+                "block": "TELEGRAM_MEMORY:\n- Jeebs wants Codex-direct Telegram replies.",
+                "memory_blocks": [
+                    {
+                        "kind": "admitted_memory",
+                        "chat_id": "chat-a",
+                        "fact_text": "Jeebs wants Codex-direct Telegram replies.",
+                        "source_message_ids": ["1"],
+                        "evidence": [{"ref": "telegram:chat-a:1"}],
+                    }
+                ],
+                "files_touched": ["/tmp/fake_memory.db"],
+                "uncertainties": [],
+            }
+
+            with (
+                mock.patch.object(self.mod, "send_telegram_reply", side_effect=_fake_send),
+                mock.patch.object(self.mod, "PROVENANCE_PATH", provenance_path),
+                mock.patch.object(self.mod, "build_recall_context", return_value=fake_recall),
+            ):
+                result = asyncio.run(
+                    self.mod.handle_incoming_message(
+                        {"message_id": "1", "chat_id": "chat-a", "content": "Need help with the repo"},
+                        handler,
+                    )
+                )
+
+            rows = [
+                json.loads(line)
+                for line in provenance_path.read_text(encoding="utf-8").splitlines()
+                if line.strip()
+            ]
+            self.assertEqual(rows[0]["memory_blocks"], fake_recall["memory_blocks"])
+            self.assertEqual(rows[0]["files_touched"], fake_recall["files_touched"])
+            self.assertEqual(rows[0]["uncertainties"], [])
+            self.assertEqual(result["reply_provenance"]["memory_blocks"], fake_recall["memory_blocks"])
+
 
 if __name__ == "__main__":
     unittest.main()

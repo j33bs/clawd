@@ -217,5 +217,12 @@ class TestLoadBalancerGetStatus(unittest.TestCase):
         self.assertTrue(status["overloaded"])
 
 
+class TestSpawnChatgptSubagent(unittest.TestCase):
+    def test_spawn_uses_openai_54_default_model(self):
+        result = _MOD.spawn_chatgpt_subagent("fix the route", {"priority": "normal"})
+        self.assertEqual(result["model"], "openai-codex/gpt-5.4")
+        self.assertEqual(result["action"], "spawn")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -21,6 +21,7 @@ from user_memory_db import default_db_path, query_telegram_memory
 DEFAULT_TOPK = 6
 DEFAULT_MAX_CHARS = 6000
 DEFAULT_MEMORY_TOPK = 4
+REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 def parse_bool(value: str | None, default: bool = False) -> bool:
@@ -112,15 +113,38 @@ def build_recall_block(
     chat_id: str | None = None,
     store_dir: Path = DEFAULT_STORE_DIR,
 ) -> str:
+    return build_recall_context(
+        prompt,
+        env=env,
+        session_start=session_start,
+        chat_id=chat_id,
+        store_dir=store_dir,
+    )["block"]
+
+
+def build_recall_context(
+    prompt: str,
+    *,
+    env: Mapping[str, str] | None = None,
+    session_start: bool = False,
+    chat_id: str | None = None,
+    store_dir: Path = DEFAULT_STORE_DIR,
+) -> dict:
     env_map = env if env is not None else os.environ
     if not should_trigger_recall(prompt, session_start=session_start, env=env_map):
-        return ""
+        return {
+            "block": "",
+            "memory_blocks": [],
+            "files_touched": [],
+            "uncertainties": [],
+        }
 
     topk = parse_positive_int(env_map.get("OPENCLAW_TELEGRAM_RECALL_TOPK"), DEFAULT_TOPK)
     max_chars = parse_positive_int(env_map.get("OPENCLAW_TELEGRAM_RECALL_MAX_CHARS"), DEFAULT_MAX_CHARS)
     memory_topk = parse_positive_int(env_map.get("OPENCLAW_TELEGRAM_MEMORY_TOPK"), DEFAULT_MEMORY_TOPK)
     chat_filter = str(chat_id).strip() if chat_id is not None else env_map.get("OPENCLAW_TELEGRAM_RECALL_CHAT_ID")
     db_path = Path(env_map.get("OPENCLAW_USER_MEMORY_DB_PATH", str(default_db_path(Path(__file__).resolve().parents[2]))))
+    files_touched = [str(db_path), str(Path(store_dir))]
 
     admitted = []
     if chat_filter:
@@ -133,14 +157,29 @@ def build_recall_block(
     if admitted:
         lines = ["TELEGRAM_MEMORY:"]
         total = len(lines[0]) + 1
+        memory_blocks = []
         for row in admitted:
             line = _memory_row_to_line(row)
             if total + len(line) + 1 > max_chars:
                 break
             lines.append(line)
             total += len(line) + 1
+            memory_blocks.append(
+                {
+                    "kind": "admitted_memory",
+                    "chat_id": row.get("chat_id"),
+                    "fact_text": row.get("fact_text"),
+                    "source_message_ids": list(row.get("source_message_ids") or []),
+                    "evidence": list(row.get("evidence") or []),
+                }
+            )
         if len(lines) > 1:
-            return "\n".join(lines)
+            return {
+                "block": "\n".join(lines),
+                "memory_blocks": memory_blocks,
+                "files_touched": files_touched,
+                "uncertainties": [],
+            }
 
     rows = search_store(prompt, topk=topk, chat_id=chat_filter or None, store_dir=Path(store_dir))
     for phrase in extract_keyphrases(prompt):
@@ -157,20 +196,45 @@ def build_recall_block(
 
     ordered = sorted(deduped.values(), key=lambda item: str(item.get("timestamp", "")), reverse=True)[:topk]
     if not ordered:
-        return ""
+        return {
+            "block": "",
+            "memory_blocks": [],
+            "files_touched": files_touched,
+            "uncertainties": ["no_memory_match"],
+        }
 
     lines = ["TELEGRAM_RECALL:"]
     total = len(lines[0]) + 1
+    memory_blocks = []
     for row in ordered:
         line = _row_to_line(row)
         if total + len(line) + 1 > max_chars:
             break
         lines.append(line)
         total += len(line) + 1
+        memory_blocks.append(
+            {
+                "kind": "semantic_recall",
+                "chat_id": str(row.get("chat_id") or ""),
+                "message_id": str(row.get("message_id") or ""),
+                "timestamp": str(row.get("timestamp") or ""),
+                "sender_name": str(row.get("sender_name") or ""),
+            }
+        )
 
     if len(lines) == 1:
-        return ""
-    return "\n".join(lines)
+        return {
+            "block": "",
+            "memory_blocks": [],
+            "files_touched": files_touched,
+            "uncertainties": ["recall_truncated"],
+        }
+    return {
+        "block": "\n".join(lines),
+        "memory_blocks": memory_blocks,
+        "files_touched": files_touched,
+        "uncertainties": [],
+    }
 
 
 def inject_telegram_recall_context(
@@ -181,7 +245,7 @@ def inject_telegram_recall_context(
     chat_id: str | None = None,
     store_dir: Path = DEFAULT_STORE_DIR,
 ) -> str:
-    recall = build_recall_block(prompt, env=env, session_start=session_start, chat_id=chat_id, store_dir=store_dir)
-    if not recall:
+    recall = build_recall_context(prompt, env=env, session_start=session_start, chat_id=chat_id, store_dir=store_dir)
+    if not recall["block"]:
         return prompt
-    return f"{recall}\n\n{prompt}"
+    return f"{recall['block']}\n\n{prompt}"
