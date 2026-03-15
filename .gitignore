@@ -89,9 +89,6 @@ venv/
 .agent_workspace/
 .openclaw/
 $OUT/
-REPLACE_ME
-"*
-{path:workspace*
 
 # Intent failure reports (generated)
 workspace/handoffs/intent_failures_*.md

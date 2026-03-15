@@ -1325,10 +1325,16 @@ class PolicyRouter:
         provider = self._provider_cfg(name)
         models = provider.get("models", [])
         override = (context or {}).get("override_model")
-        if override and name == "ollama":
-            return override
         if not models:
             return None
+        if override:
+            normalized_override = str(override).strip()
+            if normalized_override:
+                for model in models:
+                    if str(model.get("id") or "").strip() == normalized_override:
+                        return normalized_override
+                if name == "ollama":
+                    return normalized_override
         if name == "ollama":
             short_chars = int(intent_cfg.get("shortMessageChars", 240))
             prefer_local_short = bool(intent_cfg.get("preferLocalForShort", False))
@@ -1550,6 +1556,14 @@ class PolicyRouter:
 
     def _capability_decision(self, context_metadata, payload_text=""):
         context_metadata = context_metadata or {}
+        direct_provider = normalize_provider_id(context_metadata.get("preferred_provider"))
+        if direct_provider:
+            return {
+                "trigger": "context_metadata",
+                "matched": "preferred_provider",
+                "provider": direct_provider,
+                "reason": "request metadata preferred provider",
+            }
         ai_payload = context_metadata.get("active_inference")
         if isinstance(ai_payload, dict):
             ai_provider = normalize_provider_id(ai_payload.get("preferred_provider"))

@@ -42,6 +42,89 @@ def _compact(text: str, *, limit: int = 600) -> str:
     return value[: limit - 1].rstrip() + "…"
 
 
+def _load_rows(path: Path | None = None) -> list[dict[str, Any]]:
+    target_path = path or TELEGRAM_MEMORY_PATH
+    if not target_path.exists():
+        return []
+    try:
+        raw_rows = target_path.read_text(encoding="utf-8").splitlines()
+    except Exception:
+        return []
+
+    rows: list[dict[str, Any]] = []
+    for raw in raw_rows:
+        raw = raw.strip()
+        if not raw:
+            continue
+        try:
+            row = json.loads(raw)
+        except Exception:
+            continue
+        if isinstance(row, dict):
+            rows.append(row)
+    return rows
+
+
+def _row_meta(row: dict[str, Any]) -> dict[str, Any]:
+    meta = row.get("meta")
+    return dict(meta) if isinstance(meta, dict) else {}
+
+
+def _reply_to_message_id(row: dict[str, Any]) -> str:
+    meta = _row_meta(row)
+    return str(
+        meta.get("reply_to_message_id")
+        or row.get("reply_to_message_id")
+        or ""
+    ).strip()
+
+
+def _looks_like_commitment(text: str) -> bool:
+    lowered = str(text or "").strip().lower()
+    if not lowered:
+        return False
+    markers = (
+        "i will ",
+        "i'll ",
+        "i can ",
+        "i can do",
+        "i've updated",
+        "i updated",
+        "i fixed",
+        "next i",
+        "i am going to",
+    )
+    return any(marker in lowered for marker in markers)
+
+
+def _memory_line(row: dict[str, Any]) -> str:
+    text = _compact(str(row.get("content") or ""))
+    if not text:
+        return ""
+    created_at = str(row.get("created_at") or "")[:10]
+    role = str(row.get("role") or "participant").strip().lower() or "participant"
+    meta = _row_meta(row)
+    markers: list[str] = []
+    if role == "assistant" and _looks_like_commitment(text):
+        markers.append("commitment")
+    reply_to = _reply_to_message_id(row)
+    if reply_to:
+        markers.append(f"reply-to {reply_to}")
+    exec_tags = meta.get("exec_tags")
+    if isinstance(exec_tags, list):
+        normalized_tags = [str(item).strip() for item in exec_tags if str(item).strip()]
+        if normalized_tags:
+            markers.append(f"tags {', '.join(normalized_tags[:3])}")
+    trust_epoch = str(meta.get("trust_epoch") or "").strip()
+    if trust_epoch:
+        markers.append(f"trust {trust_epoch}")
+
+    prefix = f"{created_at} {role}".strip()
+    if markers:
+        prefix = f"{prefix} [{' | '.join(markers)}]"
+    return f"- {prefix}: {text}"
+
+
 def _load_state(path: Path) -> set[str]:
     if not path.exists():
         return set()
@@ -173,45 +256,55 @@ def build_telegram_memory_context(
     author_name: str,
     limit: int = 4,
     exclude_message_id: int | str | None = None,
+    thread_message_id: int | str | None = None,
+    include_roles: tuple[str, ...] = ("user", "assistant"),
 ) -> list[str]:
-    if not TELEGRAM_MEMORY_PATH.exists():
-        return []
-    try:
-        rows = TELEGRAM_MEMORY_PATH.read_text(encoding="utf-8").splitlines()
-    except Exception:
-        return []
-
+    rows = _load_rows()
     target_author = str(author_name or "").strip().lower()
-    selected: list[str] = []
+    normalized_chat_id = str(chat_id)
+    normalized_exclude = str(exclude_message_id) if exclude_message_id is not None else ""
+    normalized_thread = str(thread_message_id) if thread_message_id is not None else ""
+    selected_thread: list[str] = []
+    selected_general: list[str] = []
     seen: set[str] = set()
-    for raw in reversed(rows):
-        raw = raw.strip()
-        if not raw:
+    allowed_roles = {str(role).strip().lower() for role in include_roles if str(role).strip()}
+    if not allowed_roles:
+        allowed_roles = {"user", "assistant"}
+
+    for row in reversed(rows):
+        row_message_id = str(row.get("message_id", "")).strip()
+        if normalized_exclude and row_message_id == normalized_exclude:
             continue
-        try:
-            row = json.loads(raw)
-        except Exception:
-            continue
-        if not isinstance(row, dict):
-            continue
-        if exclude_message_id is not None and str(row.get("message_id", "")) == str(exclude_message_id):
-            continue
-        if str(row.get("role") or "") != "user":
+        row_role = str(row.get("role") or "").strip().lower()
+        if row_role not in allowed_roles:
             continue
         row_chat_id = str(row.get("chat_id") or "")
         row_author = str(row.get("author_name") or "").strip().lower()
-        if row_chat_id != str(chat_id) and row_author != target_author:
+        same_chat = row_chat_id == normalized_chat_id
+        same_author = bool(target_author) and row_author == target_author
+        if not same_chat and not same_author:
             continue
-        text = _compact(str(row.get("content") or ""))
-        if not text:
+        line = _memory_line(row)
+        if not line:
             continue
-        key = text.lower()
+        key = f"{row_role}|{str(row.get('content') or '').strip().lower()}"
         if key in seen:
             continue
         seen.add(key)
-        selected.append(
-            f"- {str(row.get('created_at') or '')[:10]} {row.get('chat_title', 'unknown')}: {text}"
+
+        reply_to = _reply_to_message_id(row)
+        is_thread_local = bool(normalized_thread) and (
+            row_message_id == normalized_thread or reply_to == normalized_thread
         )
-        if len(selected) >= max(1, int(limit)):
+        if is_thread_local:
+            selected_thread.append(line)
+        else:
+            selected_general.append(line)
+
+        if len(selected_thread) + len(selected_general) >= max(1, int(limit)) * 3:
             break
-    return list(reversed(selected))
+
+    merged = selected_thread[: max(1, int(limit))]
+    if len(merged) < max(1, int(limit)):
+        merged.extend(selected_general[: max(1, int(limit)) - len(merged)])
+    return list(reversed(merged[: max(1, int(limit))]))

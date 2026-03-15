@@ -59,6 +59,65 @@ class TestTelegramMemory(unittest.TestCase):
             self.assertEqual(len(rows), 1)
             self.assertEqual(rows[0]["chat_title"], "jeebs")
 
+    def test_build_telegram_memory_context_prioritizes_thread_and_assistant_turns(self):
+        with tempfile.TemporaryDirectory() as td:
+            data_dir = Path(td) / "knowledge_base" / "data"
+            jsonl_path = data_dir / "telegram_messages.jsonl"
+            rows = [
+                {
+                    "chat_id": "8159253715",
+                    "chat_title": "jeebs",
+                    "message_id": "100",
+                    "author_name": "jeebs",
+                    "role": "user",
+                    "created_at": "2026-03-15T01:00:00Z",
+                    "content": "Can you rewire Telegram routing?",
+                    "meta": {},
+                },
+                {
+                    "chat_id": "8159253715",
+                    "chat_title": "jeebs",
+                    "message_id": "101",
+                    "author_name": "Dali",
+                    "role": "assistant",
+                    "created_at": "2026-03-15T01:01:00Z",
+                    "content": "I'll move Telegram onto the shared router path.",
+                    "meta": {
+                        "reply_to_message_id": "100",
+                        "exec_tags": ["decision", "binding"],
+                        "trust_epoch": "epoch-7",
+                    },
+                },
+                {
+                    "chat_id": "8159253715",
+                    "chat_title": "jeebs",
+                    "message_id": "102",
+                    "author_name": "jeebs",
+                    "role": "user",
+                    "created_at": "2026-03-15T01:02:00Z",
+                    "content": "What about the context packet?",
+                    "meta": {},
+                },
+            ]
+            jsonl_path.parent.mkdir(parents=True, exist_ok=True)
+            jsonl_path.write_text("".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8")
+
+            with mock.patch.object(telegram_memory, "TELEGRAM_MEMORY_PATH", jsonl_path):
+                context = telegram_memory.build_telegram_memory_context(
+                    chat_id="8159253715",
+                    author_name="jeebs",
+                    exclude_message_id="102",
+                    thread_message_id="100",
+                    limit=2,
+                )
+
+            self.assertEqual(len(context), 2)
+            self.assertIn("assistant", context[-1])
+            self.assertIn("commitment", context[-1])
+            self.assertIn("reply-to 100", context[-1])
+            self.assertIn("decision", context[-1])
+            self.assertIn("trust epoch-7", context[-1])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -49,6 +49,33 @@ def handle_model_intent(text: str) -> Optional[dict]:
     return None
 
 
+def route_metadata_for_text(text: str) -> Optional[dict]:
+    intent = handle_model_intent(text)
+    if not intent:
+        return None
+    primary = str(intent.get("primary") or "").strip()
+    reason = str(intent.get("reason") or "").strip()
+    if not primary:
+        return None
+
+    if primary == GROK_FAST:
+        return {
+            "preferred_provider": "grok_api",
+            "override_model": GROK_FAST,
+            "route_reason": reason,
+        }
+    if primary == MINIMAX:
+        return {
+            "preferred_provider": "minimax_m25",
+            "override_model": MINIMAX,
+            "route_reason": reason,
+        }
+    return {
+        "override_model": primary,
+        "route_reason": reason,
+    }
+
+
 def maybe_apply_model_intent(text: str) -> Optional[dict]:
     intent = handle_model_intent(text)
     if not intent:
@@ -70,4 +97,4 @@ def maybe_apply_model_intent(text: str) -> Optional[dict]:
     return intent
 
 
-__all__ = ["handle_model_intent", "maybe_apply_model_intent"]
+__all__ = ["handle_model_intent", "maybe_apply_model_intent", "route_metadata_for_text"]

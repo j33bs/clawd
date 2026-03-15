@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from .discord_memory import build_discord_memory_context
+from .telegram_memory import build_telegram_memory_context
 from .relational_state import build_relational_prompt_lines
 from .user_inference import build_user_context_packet, query_preference_graph
 from .portfolio import portfolio_payload
@@ -81,6 +82,9 @@ def prompt_harness_for_agent(agent_id: str | None) -> dict[str, Any]:
         "preference_heading": "Stable user preferences:",
         "memory_heading": "Relevant prior context:",
         "attachment_heading": "Attachments:",
+        "source_heading": "Current Source context:",
+        "thread_heading": "Thread-local context:",
+        "recall_heading": "Semantic recall:",
         "relational_heading": "Current relational state:",
         "relational_modes": {},
     }
@@ -160,6 +164,59 @@ def build_discord_chat_prompt(
     return "\n".join(lines)
 
 
+def build_telegram_chat_prompt(
+    *,
+    agent_id: str | None = None,
+    author_name: str,
+    chat_title: str,
+    content: str,
+    memory_context: list[str] | None = None,
+    user_context: list[str] | None = None,
+    source_context: list[str] | None = None,
+    thread_context: list[str] | None = None,
+    recall_context: str | None = None,
+) -> str:
+    harness = prompt_harness_for_agent(agent_id)
+    intro_lines = [
+        str(line).strip()
+        for line in list(harness.get("intro_lines") or [])
+        if str(line).strip()
+    ]
+    if not intro_lines:
+        intro_lines = [
+            "You are replying inside a Telegram chat.",
+            "Respond directly to the latest user message.",
+            "Keep the answer concise unless depth is requested.",
+        ]
+    lines = [
+        *intro_lines,
+        f"Harness: {harness.get('name', 'default')}",
+        "Surface: telegram",
+        f"Chat: {chat_title or 'unknown'}",
+        f"Author: {author_name or 'unknown'}",
+        "",
+        "Latest message:",
+        content.strip() or "[no text content]",
+    ]
+    if source_context is None:
+        source_context = source_context_packet_text(limit=6)
+    if source_context:
+        lines.extend(["", str(harness.get("source_heading") or "Current Source context:").strip(), *source_context[:6]])
+    relational_context = build_relational_prompt_lines(harness=harness, limit=5)
+    if relational_context:
+        lines.extend(["", str(harness.get("relational_heading") or "Current relational state:").strip(), *relational_context])
+    if user_context:
+        lines.extend(["", str(harness.get("preference_heading") or "Stable user preferences:").strip(), *user_context[:6]])
+    if thread_context:
+        lines.extend(["", str(harness.get("thread_heading") or "Thread-local context:").strip(), *thread_context[:4]])
+    if memory_context:
+        lines.extend(["", str(harness.get("memory_heading") or "Relevant prior context:").strip(), *memory_context[:6]])
+    normalized_recall = str(recall_context or "").strip()
+    if normalized_recall:
+        lines.extend(["", str(harness.get("recall_heading") or "Semantic recall:").strip(), normalized_recall])
+    return "\n".join(lines)
+
+
 def discord_memory_context_text(
     *,
     channel_id: int,
@@ -171,6 +228,23 @@ def discord_memory_context_text(
         channel_id=channel_id,
         author_name=author_name,
         exclude_message_id=exclude_message_id,
+        limit=limit,
+    )
+
+
+def telegram_memory_context_text(
+    *,
+    chat_id: int | str,
+    author_name: str,
+    exclude_message_id: int | str | None = None,
+    thread_message_id: int | str | None = None,
+    limit: int = 4,
+) -> list[str]:
+    return build_telegram_memory_context(
+        chat_id=chat_id,
+        author_name=author_name,
+        exclude_message_id=exclude_message_id,
+        thread_message_id=thread_message_id,
         limit=limit,
     )
 
@@ -191,7 +265,7 @@ def user_context_packet_text(
         profile_sections.extend(["research", "verification", "tooling"])
     if normalized_agent in {"discord-clawd", "c_lawd"}:
         profile_sections.extend(["communication", "notifications", "reporting"])
-    elif normalized_agent in {"discord-orchestrator", "dali"}:
+    elif normalized_agent in {"discord-orchestrator", "dali", "telegram-dali"}:
         profile_sections.extend(["verification", "tooling", "research"])
     packet = query_preference_graph(
         context=context,

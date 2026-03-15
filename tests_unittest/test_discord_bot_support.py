@@ -12,6 +12,7 @@ if str(SOURCE_UI_ROOT) not in sys.path:
 
 from api.discord_bot_support import (  # noqa: E402
     build_discord_chat_prompt,
+    build_telegram_chat_prompt,
     discord_memory_context_text,
     extract_agent_reply_text,
     extract_last_json_object,
@@ -64,6 +65,30 @@ class TestDiscordBotSupport(unittest.TestCase):
         self.assertIn("Current relational state:", prompt)
         self.assertIn("Mode: repair.", prompt)
         self.assertIn("Acknowledge friction before redirecting.", prompt)
+
+    def test_build_telegram_chat_prompt_includes_shared_context_packets(self):
+        with mock.patch(
+            "api.discord_bot_support.build_relational_prompt_lines",
+            return_value=["- Mode: close_loops.", "- Close outstanding commitments first."],
+        ):
+            prompt = build_telegram_chat_prompt(
+                agent_id="telegram-dali",
+                author_name="Heath",
+                chat_title="jeebs",
+                content="What's the current state?",
+                user_context=["- Prefer concise, direct operational responses by default."],
+                memory_context=["- 2026-03-15 assistant [commitment]: I'll align Telegram with the shared router."],
+                thread_context=["- 2026-03-15 assistant [reply-to 2001]: I'll align Telegram with the shared router."],
+                source_context=["- Open work: Telegram transport alignment"],
+                recall_context="TELEGRAM_RECALL:\n- prior semantic note",
+            )
+        self.assertIn("private Telegram chat", prompt)
+        self.assertIn("Surface: telegram", prompt)
+        self.assertIn("Current Source context:", prompt)
+        self.assertIn("Thread-local context:", prompt)
+        self.assertIn("Relevant remembered context:", prompt)
+        self.assertIn("Current relational state:", prompt)
+        self.assertIn("Secondary semantic recall:", prompt)
 
     def test_prompt_harness_for_agent_uses_codex_profile(self):
         harness = prompt_harness_for_agent("discord-codex53")

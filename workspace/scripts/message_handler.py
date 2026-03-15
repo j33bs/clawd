@@ -13,18 +13,25 @@ import os
 import sys
 import json
 import asyncio
-import aiohttp
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
-from agent_orchestration import build_default_orchestrator
-from telegram_recall import inject_telegram_recall_context
+
+try:
+    import aiohttp
+except Exception:  # pragma: no cover
+    aiohttp = None
 
 # CEL tool imports are optional to preserve backward compatibility.
 REPO_ROOT = Path(__file__).resolve().parents[2]
 TOOLS_DIR = REPO_ROOT / "tools"
+SOURCE_UI_ROOT = REPO_ROOT / "workspace" / "source-ui"
 if str(TOOLS_DIR) not in sys.path:
     sys.path.insert(0, str(TOOLS_DIR))
+if str(SOURCE_UI_ROOT) not in sys.path:
+    sys.path.insert(0, str(SOURCE_UI_ROOT))
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 try:
     from codex_prepare_prompt import build_prepared_prompt_payload, write_prepared_prompt_file
     from codex_spawn_session import spawn_codex_session
@@ -36,30 +43,47 @@ except Exception:  # pragma: no cover
 SCRIPTS_DIR = REPO_ROOT / "workspace" / "scripts"
 if str(SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPTS_DIR))
+from agent_orchestration import build_default_orchestrator
+from telegram_recall import build_recall_block
 try:
-    from model_intent_router import maybe_apply_model_intent
+    from model_intent_router import route_metadata_for_text
 except Exception:  # pragma: no cover
-    maybe_apply_model_intent = None
+    route_metadata_for_text = None
+
+from api.discord_bot_support import (  # type: ignore
+    build_telegram_chat_prompt,
+    source_context_packet_text,
+    telegram_memory_context_text,
+    user_context_packet_text,
+)
+from api.telegram_memory import ingest_telegram_exchange  # type: ignore
+from policy_router import PolicyRouter, build_chat_payload  # type: ignore
 
 # Configuration
 GATEWAY_URL = os.environ.get("GATEWAY_URL", "http://127.0.0.1:18789")
 GATEWAY_TOKEN = os.environ.get("GATEWAY_TOKEN", "")  # Set your token
 MAX_QUEUE_DEPTH = int(os.environ.get("MAX_QUEUE_DEPTH", "5"))
 MAX_LATENCY_MS = int(os.environ.get("MAX_LATENCY_MS", "30000"))
+TELEGRAM_AGENT_ID = os.environ.get("OPENCLAW_TELEGRAM_AGENT_ID", "telegram-dali").strip() or "telegram-dali"
+TELEGRAM_MAX_TOKENS = max(256, int(os.environ.get("OPENCLAW_TELEGRAM_MAX_TOKENS", "1200") or "1200"))
+TELEGRAM_TEMPERATURE = float(os.environ.get("OPENCLAW_TELEGRAM_TEMPERATURE", "0.2") or "0.2")
 
 
 class MessageHandler:
     """Handles messages with load balancing and efficiency optimizations."""
     
-    def __init__(self, gateway_url: str, token: str):
+    def __init__(self, gateway_url: str, token: str, router: PolicyRouter | None = None):
         self.gateway_url = gateway_url
         self.token = token
+        self.router = router or PolicyRouter()
         self.queue_depth = 0
         self.avg_latency = 0
         self.message_history = []  # For context summarization
         
     async def check_load(self) -> dict:
         """Check current system load."""
+        if aiohttp is None:
+            return {"overloaded": False, "queue_depth": 0, "latency": 0}
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.get(
@@ -171,6 +195,8 @@ class MessageHandler:
 
 async def send_telegram_reply(chat_id: str, message_id: str, text: str, gateway_url: str, token: str):
     """Send a Telegram reply to a specific message."""
+    if aiohttp is None:
+        raise RuntimeError("aiohttp is required to send Telegram replies")
     headers = {"Authorization": f"Bearer {token}"} if token else {}
     
     payload = {
@@ -188,6 +214,106 @@ async def send_telegram_reply(chat_id: str, message_id: str, text: str, gateway_
             headers=headers
         ) as resp:
             return await resp.json()
+
+
+def _message_text(message: dict[str, Any]) -> str:
+    return str(message.get("content", "") or "").strip()
+
+
+def _message_author_name(message: dict[str, Any]) -> str:
+    for key in ("author_name", "sender_name", "from_name", "author"):
+        value = str(message.get(key, "") or "").strip()
+        if value:
+            return value
+    return "unknown"
+
+
+def _message_chat_title(message: dict[str, Any]) -> str:
+    for key in ("chat_title", "chat_name", "chat_label"):
+        value = str(message.get(key, "") or "").strip()
+        if value:
+            return value
+    return "telegram"
+
+
+def _message_thread_id(message: dict[str, Any]) -> str:
+    for key in ("reply_to_message_id", "thread_message_id", "replyTo"):
+        value = str(message.get(key, "") or "").strip()
+        if value:
+            return value
+    meta = message.get("meta")
+    if isinstance(meta, dict):
+        for key in ("reply_to_message_id", "thread_message_id"):
+            value = str(meta.get(key, "") or "").strip()
+            if value:
+                return value
+    return ""
+
+
+def _route_metadata(message_text: str) -> dict[str, Any]:
+    if not callable(route_metadata_for_text):
+        return {}
+    try:
+        payload = route_metadata_for_text(message_text)
+    except Exception:
+        return {}
+    return dict(payload or {})
+
+
+def _build_telegram_runtime_request(message: dict[str, Any]) -> tuple[str, dict[str, Any]]:
+    content = _message_text(message)
+    message_id = str(message.get("message_id") or "").strip()
+    chat_id = str(message.get("chat_id") or "").strip()
+    chat_title = _message_chat_title(message)
+    author_name = _message_author_name(message)
+    thread_message_id = _message_thread_id(message)
+    session_start = bool(message.get("session_start", False))
+
+    memory_context = telegram_memory_context_text(
+        chat_id=chat_id,
+        author_name=author_name,
+        exclude_message_id=message_id or None,
+        thread_message_id=thread_message_id or None,
+        limit=6,
+    )
+    thread_context = [line for line in memory_context if "reply-to" in line][:3]
+    user_context = user_context_packet_text(
+        limit=4,
+        context=f"telegram\n{content}",
+        agent_id=TELEGRAM_AGENT_ID,
+        channel_name="telegram",
+    )
+    source_context = source_context_packet_text(limit=6)
+    recall_block = build_recall_block(
+        content,
+        env=os.environ,
+        session_start=session_start,
+    )
+    prompt = build_telegram_chat_prompt(
+        agent_id=TELEGRAM_AGENT_ID,
+        author_name=author_name,
+        chat_title=chat_title,
+        content=content,
+        memory_context=memory_context,
+        thread_context=thread_context,
+        user_context=user_context,
+        source_context=source_context,
+        recall_context=recall_block,
+    )
+
+    route_meta = _route_metadata(content)
+    context_metadata: dict[str, Any] = {
+        "input_text": content,
+        "surface": "telegram",
+        "agent_id": TELEGRAM_AGENT_ID,
+        "author_name": author_name,
+        "chat_id": chat_id,
+        "chat_title": chat_title,
+        "thread_message_id": thread_message_id or None,
+        "session_start": session_start,
+    }
+    context_metadata.update({k: v for k, v in route_meta.items() if v})
+    return prompt, context_metadata
 
 
 async def spawn_chatgpt_subagent(task: str, context: dict, gateway_url: str, token: str):
@@ -296,6 +422,8 @@ async def spawn_chatgpt_subagent(task: str, context: dict, gateway_url: str, tok
             return wrapped
 
         # Fallback path: direct gateway spawn to preserve legacy behavior.
+        if aiohttp is None:
+            raise RuntimeError("aiohttp is required for direct gateway spawn")
         async with aiohttp.ClientSession() as session:
             async with session.post(
                 f"{gateway_url}/api/agents/spawn",
@@ -318,77 +446,80 @@ async def spawn_chatgpt_subagent(task: str, context: dict, gateway_url: str, tok
 
 
 async def handle_incoming_message(message: dict, handler: MessageHandler) -> dict:
-    """Process an incoming message with load balancing."""
-    content = message.get("content", "")
-    try:
-        if callable(maybe_apply_model_intent):
-            maybe_apply_model_intent(str(content))
-    except Exception:
-        pass
+    """Process an incoming Telegram message through the shared router/context stack."""
+    content = _message_text(message)
+    if not content:
+        return {"success": False, "reason": "empty_content"}
 
-    # Route message
-    route = await handler.route_message(message)
-    
-    # Get message content
-    message_id = message.get("message_id")
-    chat_id = message.get("chat_id")
-    session_start = bool(message.get("session_start", False))
-
-    # Optional semantic recall hook from Telegram vector store (disabled by default).
-    content_with_recall = inject_telegram_recall_context(
-        str(content),
-        env=os.environ,
-        session_start=session_start,
+    message_id = str(message.get("message_id") or "").strip()
+    chat_id = str(message.get("chat_id") or "").strip()
+    prompt, context_metadata = _build_telegram_runtime_request(message)
+    payload = build_chat_payload(
+        prompt,
+        temperature=TELEGRAM_TEMPERATURE,
+        max_tokens=TELEGRAM_MAX_TOKENS,
     )
-    
-    # Apply prompt caching
-    cached_prompt = handler.cache_prompt(content_with_recall)
-    
-    # Get conversation context
-    history = handler.message_history[-10:]  # Last 10 messages
-    context = handler.summarize_context(history)
-    
-    # Build full prompt
-    full_prompt = context + f"\n\nUser: {content_with_recall}" if context else content_with_recall
-    
-    if route["route"] == "chatgpt":
-        # Spawn ChatGPT subagent
-        result = await spawn_chatgpt_subagent(
-            task=full_prompt,
-            context={"original_message": message},
-            gateway_url=GATEWAY_URL,
-            token=GATEWAY_TOKEN
-        )
-        
-        reply_text = result.get("response", "Sorry, I couldn't process your request.")
+    result = handler.router.execute_with_escalation(
+        "conversation",
+        payload,
+        context_metadata=context_metadata,
+    )
+
+    if result.get("ok"):
+        reply_text = str(result.get("text") or "").strip()
+    elif result.get("deferred"):
+        reply_text = "Local inference is paused while fishtank mode is active. Switch back to work mode to resume Telegram replies."
     else:
-        # Use MiniMax (normal flow) - would integrate with gateway here
-        reply_text = f"[Would route to MiniMax] {content[:100]}..."
-    
-    # Send reply with threading (replyTo)
+        reason = str(result.get("reason_code") or "provider_error").strip()
+        reply_text = f"I couldn't complete that request cleanly just now ({reason})."
+
+    send_result: dict[str, Any] = {}
     if chat_id and message_id:
-        await send_telegram_reply(
-            chat_id=str(chat_id),
-            message_id=str(message_id),
+        send_result = await send_telegram_reply(
+            chat_id=chat_id,
+            message_id=message_id,
             text=reply_text,
-            gateway_url=GATEWAY_URL,
-            token=GATEWAY_TOKEN
+            gateway_url=handler.gateway_url,
+            token=handler.token,
         )
-    
-    # Update history
-    handler.message_history.append({
-        "role": "user",
-        "content": content
-    })
-    handler.message_history.append({
-        "role": "assistant", 
-        "content": reply_text
-    })
-    
+        synthetic_reply_id = (
+            str(send_result.get("message_id") or "").strip()
+            or str(send_result.get("messageId") or "").strip()
+            or f"assistant-reply-{message_id}"
+        )
+        try:
+            ingest_telegram_exchange(
+                chat_id=chat_id,
+                chat_title=_message_chat_title(message),
+                message_id=synthetic_reply_id,
+                author_id=TELEGRAM_AGENT_ID,
+                author_name="Dali",
+                role="assistant",
+                content=reply_text,
+                created_at=datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+                agent_scope="main",
+                source="telegram_gateway_reply",
+                meta={
+                    "reply_to_message_id": message_id,
+                    "router_provider": result.get("provider"),
+                    "router_model": result.get("model"),
+                    "reason_code": result.get("reason_code"),
+                    "synthetic_message_id": synthetic_reply_id.startswith("assistant-reply-"),
+                },
+            )
+        except Exception:
+            pass
+
+    handler.message_history.append({"role": "user", "content": content})
+    handler.message_history.append({"role": "assistant", "content": reply_text})
+
     return {
         "success": True,
-        "route": route["route"],
-        "reason": route["reason"]
+        "route": result.get("provider") or "unavailable",
+        "model": result.get("model"),
+        "reason": result.get("reason_code") or "success",
+        "request_id": result.get("request_id"),
+        "message_sent": bool(send_result) if chat_id and message_id else False,
     }
 
 
