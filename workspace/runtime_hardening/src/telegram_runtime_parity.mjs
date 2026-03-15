@@ -2,6 +2,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
+const TELEGRAM_SURFACE_ROUTER_PLUGIN_ID = 'openclaw_surface_router_plugin';
+
 function readJson(filePath) {
   return JSON.parse(fs.readFileSync(filePath, 'utf8'));
 }
@@ -43,6 +45,36 @@ function collectRuntimeProviders(runtimeConfig) {
   return runtimeConfig?.models?.providers || {};
 }
 
+function collectEnabledRuntimePlugins(runtimeConfig) {
+  const plugins = runtimeConfig?.plugins || {};
+  const enabled = new Set();
+
+  const entries = plugins?.entries;
+  if (entries && typeof entries === 'object' && !Array.isArray(entries)) {
+    for (const [pluginId, entry] of Object.entries(entries)) {
+      const normalizedId = typeof pluginId === 'string' ? pluginId.trim() : '';
+      if (!normalizedId) continue;
+      const isEnabled =
+        entry === true ||
+        (entry && typeof entry === 'object' && entry.enabled !== false);
+      if (isEnabled) {
+        enabled.add(normalizedId);
+      }
+    }
+  }
+
+  const loadPaths = plugins?.load?.paths;
+  if (Array.isArray(loadPaths)) {
+    for (const rawPath of loadPaths) {
+      const normalizedPath = typeof rawPath === 'string' ? rawPath.trim() : '';
+      if (!normalizedPath) continue;
+      enabled.add(path.basename(normalizedPath, path.extname(normalizedPath)));
+    }
+  }
+
+  return Array.from(enabled).sort();
+}
+
 function normalizeModelId(value) {
   const raw = typeof value === 'string' ? value.trim() : '';
   if (!raw) return '';
@@ -55,6 +87,7 @@ function normalizeModelId(value) {
 function compareTelegramRuntimeParity({ policy, runtimeConfig }) {
   const targets = collectTelegramPolicyTargets(policy);
   const runtimeProviders = collectRuntimeProviders(runtimeConfig);
+  const enabledPlugins = collectEnabledRuntimePlugins(runtimeConfig);
   const runtimeModelIndex = new Map();
 
   for (const [providerName, providerCfg] of Object.entries(runtimeProviders)) {
@@ -107,12 +140,20 @@ function compareTelegramRuntimeParity({ policy, runtimeConfig }) {
   });
 
   const mismatches = providers.filter((provider) => provider.status !== 'ok');
+  const plugin = {
+    required_plugin: TELEGRAM_SURFACE_ROUTER_PLUGIN_ID,
+    enabled_plugins: enabledPlugins,
+    status: enabledPlugins.includes(TELEGRAM_SURFACE_ROUTER_PLUGIN_ID)
+      ? 'ok'
+      : 'missing_plugin'
+  };
   return {
     surface: 'telegram',
     policy_profile: 'surface:telegram',
-    status: mismatches.length === 0 ? 'ok' : 'mismatch',
+    status: mismatches.length === 0 && plugin.status === 'ok' ? 'ok' : 'mismatch',
+    plugin,
     providers,
-    mismatches
+    mismatches: plugin.status === 'ok' ? mismatches : [...mismatches, plugin]
   };
 }
 
@@ -151,6 +192,7 @@ if (invokedPath && import.meta.url === invokedPath) {
 }
 
 export {
+  collectEnabledRuntimePlugins,
   collectRuntimeProviders,
   collectTelegramPolicyTargets,
   compareTelegramRuntimeParity,

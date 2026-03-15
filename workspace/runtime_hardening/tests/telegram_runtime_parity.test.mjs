@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import {
+  collectEnabledRuntimePlugins,
   compareTelegramRuntimeParity,
   verifyTelegramRuntimeParity
 } from '../src/telegram_runtime_parity.mjs';
@@ -53,9 +54,11 @@ test('compareTelegramRuntimeParity reports mismatch when telegram policy provide
   });
 
   assert.equal(result.status, 'mismatch');
-  assert.equal(result.mismatches.length, 1);
+  assert.equal(result.mismatches.length, 2);
   assert.equal(result.mismatches[0].provider, 'openai_gpt54_chat');
   assert.equal(result.mismatches[0].status, 'missing_provider');
+  assert.equal(result.mismatches[1].required_plugin, 'openclaw_surface_router_plugin');
+  assert.equal(result.mismatches[1].status, 'missing_plugin');
 });
 
 test('verifyTelegramRuntimeParity passes when runtime config exposes telegram policy providers and models', () => {
@@ -92,6 +95,13 @@ test('verifyTelegramRuntimeParity passes when runtime config exposes telegram po
     }
   });
   writeJson(runtimeConfigPath, {
+    plugins: {
+      entries: {
+        openclaw_surface_router_plugin: {
+          enabled: true
+        }
+      }
+    },
     models: {
       providers: {
         openai_gpt54_chat: {
@@ -113,6 +123,7 @@ test('verifyTelegramRuntimeParity passes when runtime config exposes telegram po
   assert.equal(result.status, 'ok');
   assert.equal(result.mismatches.length, 0);
   assert.equal(result.providers.length, 2);
+  assert.equal(result.plugin.status, 'ok');
 });
 
 test('compareTelegramRuntimeParity accepts runtime model matches from differently named providers', () => {
@@ -136,6 +147,11 @@ test('compareTelegramRuntimeParity accepts runtime model matches from differentl
       }
     },
     runtimeConfig: {
+      plugins: {
+        load: {
+          paths: ['/tmp/openclaw_surface_router_plugin']
+        }
+      },
       models: {
         providers: {
           'minimax-portal': {
@@ -149,4 +165,20 @@ test('compareTelegramRuntimeParity accepts runtime model matches from differentl
   assert.equal(result.status, 'ok');
   assert.equal(result.mismatches.length, 0);
   assert.deepEqual(result.providers[0].runtime_matching_providers, ['minimax-portal']);
+});
+
+test('collectEnabledRuntimePlugins includes enabled entries and linked load paths', () => {
+  const result = collectEnabledRuntimePlugins({
+    plugins: {
+      entries: {
+        openclaw_surface_router_plugin: { enabled: true },
+        disabled_plugin: { enabled: false }
+      },
+      load: {
+        paths: ['/tmp/custom_plugin.js']
+      }
+    }
+  });
+
+  assert.deepEqual(result, ['custom_plugin', 'openclaw_surface_router_plugin']);
 });
