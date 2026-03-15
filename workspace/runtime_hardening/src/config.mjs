@@ -13,7 +13,9 @@ const DEFAULTS = Object.freeze({
   logLevel: 'info',
   fsAllowOutsideWorkspace: false,
   telegramReplyMode: 'never',
-  actionAuditLogPath: null // resolved at runtime relative to workspaceRoot
+  actionAuditLogPath: null, // resolved at runtime relative to workspaceRoot
+  sourceUiTasksUrl: 'http://100.113.160.1:18990/api/tasks',
+  telegramRouteProvenanceLogPath: null // resolved at runtime relative to workspaceRoot
 });
 
 let configCache = null;
@@ -91,7 +93,9 @@ function validateConfig(env = process.env) {
     );
   }
 
-  const workspaceRoot = resolveWorkspacePath(env.WORKSPACE_ROOT || process.cwd(), process.cwd());
+  const workspaceBase =
+    typeof env.OPENCLAW_HOME === 'string' && env.OPENCLAW_HOME.trim() ? env.OPENCLAW_HOME.trim() : process.cwd();
+  const workspaceRoot = resolveWorkspacePath(env.WORKSPACE_ROOT || workspaceBase, workspaceBase);
   const fsAllowOutsideWorkspace = parseBoolean(env.FS_ALLOW_OUTSIDE_WORKSPACE, DEFAULTS.fsAllowOutsideWorkspace);
   const agentWorkspaceRoot = resolveWorkspacePath(
     env.AGENT_WORKSPACE_ROOT || path.join(workspaceRoot, '.agent_workspace'),
@@ -134,6 +138,13 @@ function validateConfig(env = process.env) {
   const actionAuditLogPath = env.ACTION_AUDIT_LOG_PATH
     ? resolveWorkspacePath(env.ACTION_AUDIT_LOG_PATH, workspaceRoot)
     : path.join(workspaceRoot, 'workspace', 'audit', 'agent_actions.jsonl');
+  const sourceUiTasksUrl =
+    typeof env.OPENCLAW_SOURCE_UI_TASKS_URL === 'string' && env.OPENCLAW_SOURCE_UI_TASKS_URL.trim()
+      ? env.OPENCLAW_SOURCE_UI_TASKS_URL.trim()
+      : DEFAULTS.sourceUiTasksUrl;
+  const telegramRouteProvenanceLogPath = env.OPENCLAW_TELEGRAM_ROUTE_PROVENANCE_LOG_PATH
+    ? resolveWorkspacePath(env.OPENCLAW_TELEGRAM_ROUTE_PROVENANCE_LOG_PATH, workspaceRoot)
+    : path.join(workspaceRoot, 'workspace', 'audit', 'telegram_route_provenance.jsonl');
 
   return {
     anthropicEnabled,
@@ -149,7 +160,9 @@ function validateConfig(env = process.env) {
     logLevel: typeof env.LOG_LEVEL === 'string' && env.LOG_LEVEL.trim() ? env.LOG_LEVEL.trim() : DEFAULTS.logLevel,
     fsAllowOutsideWorkspace,
     telegramReplyMode,
-    actionAuditLogPath
+    actionAuditLogPath,
+    sourceUiTasksUrl,
+    telegramRouteProvenanceLogPath
   };
 }
 

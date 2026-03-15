@@ -90,6 +90,22 @@ test('config validation returns normalized defaults', () => {
       assert.equal(cfg.agentWorkspaceRoot.endsWith('.agent_workspace'), true);
       assert.equal(cfg.skillsRoot.endsWith('skills'), true);
       assert.equal(cfg.telegramReplyMode, 'never');
+      assert.equal(cfg.telegramRouteProvenanceLogPath.endsWith('workspace/audit/telegram_route_provenance.jsonl'), true);
+    }
+  );
+});
+
+test('config validation uses OPENCLAW_HOME when WORKSPACE_ROOT is unset', () => {
+  withEnv(
+    {
+      ANTHROPIC_API_KEY: 'abc123',
+      NODE_ENV: 'test',
+      OPENCLAW_HOME: process.cwd(),
+      WORKSPACE_ROOT: undefined
+    },
+    () => {
+      const cfg = validateConfig(process.env);
+      assert.equal(cfg.workspaceRoot, process.cwd());
     }
   );
 });

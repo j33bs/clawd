@@ -18,6 +18,23 @@ export {
 export { ensureWorkspaceDirectories, resolveWorkspacePaths } from './paths.mjs';
 export { retryWithBackoff } from './retry_backoff.mjs';
 export { SessionManager } from './session.mjs';
+export {
+  DEFAULT_SOURCE_UI_TASKS_URL,
+  QUEUE_FAILURE_TEXT,
+  SOURCE_UI_TASK_TAG_RE,
+  UNVERIFIED_QUEUE_CLAIM_RE,
+  applySourceUiTaskDirectiveToText,
+  downgradeUnverifiedQueueClaim,
+  extractSourceUiTaskDirective,
+  formatSourceUiReceipt,
+  hasSourceUiReceipt,
+  queueSourceUiTask
+} from './source_ui_queue.mjs';
+export {
+  auditTelegramRouteProvenance,
+  buildTelegramRouteProvenance,
+  resolveStateDir as resolveTelegramRouteStateDir
+} from './telegram_route_provenance.mjs';
 export { buildUnknownPortHint, checkVllmHealth, probePortOwner } from './status_hint.mjs';
 export {
   sanitizeOutboundText as sanitizeTelegramOutboundText,

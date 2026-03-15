@@ -1,0 +1,11 @@
+{
+  "name": "openclaw_surface_router_plugin",
+  "private": true,
+  "version": "0.0.0",
+  "main": "./index.js",
+  "openclaw": {
+    "extensions": [
+      "./index.js"
+    ]
+  }
+}

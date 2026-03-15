@@ -1,0 +1,10 @@
+{
+  "id": "openclaw_surface_router_plugin",
+  "name": "Telegram Surface Router",
+  "description": "Align Telegram turns with the repo Telegram surface policy and c_lawd kernel.",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {}
+  }
+}

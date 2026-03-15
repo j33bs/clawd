@@ -13,7 +13,9 @@ import {
   sanitizeToolInvocationOrThrow,
   retryWithBackoff,
   sanitizeOutboundPayload,
-  buildTelegramSendPayload
+  buildTelegramSendPayload,
+  applySourceUiTaskDirectiveToText,
+  auditTelegramRouteProvenance
 } from '../src/index.mjs';
 import { installHttpIngressContractSignal } from '../src/http_ingress_contract_signal.mjs';
 
@@ -71,6 +73,33 @@ function extractGatewayChannelFromBody(body) {
   if (body instanceof URLSearchParams) return normalizeGatewayChannel(body.get('channel'));
   if (typeof FormData !== 'undefined' && body instanceof FormData) return normalizeGatewayChannel(body.get('channel'));
   return null;
+}
+
+function extractTelegramResponseMessageId(payload) {
+  if (!payload || typeof payload !== 'object') return null;
+  const messageId = payload?.result?.message_id;
+  if (typeof messageId === 'number' || typeof messageId === 'string') return String(messageId);
+  return null;
+}
+
+async function extractTelegramResponseMessageIdFromResponse(response) {
+  try {
+    const clone = response.clone();
+    const contentType = String(clone.headers?.get?.('content-type') || '').toLowerCase();
+    if (!contentType.includes('application/json')) return null;
+    const payload = await clone.json();
+    return extractTelegramResponseMessageId(payload);
+  } catch {
+    return null;
+  }
+}
+
+function extractTelegramChatIdFromPayload(payload) {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return null;
+  const value = payload.chat_id ?? payload.chatId;
+  if (value == null) return null;
+  const raw = String(value).trim();
+  return raw || null;
 }
 
 function classifyOutboundChannel(url, payloadChannel = null) {
@@ -164,28 +193,75 @@ function applyOutboundPolicy(payload, context) {
   };
 }
 
-function rewriteOutboundJsonBody(bodyText, context) {
+async function applyTelegramQueuePolicy(payload, context) {
+  if (context.channel !== 'telegram' || !payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    return { payload, changed: false };
+  }
+
+  let nextPayload = payload;
+  let changed = false;
+  for (const field of ['text', 'caption', 'message']) {
+    if (typeof nextPayload[field] !== 'string') continue;
+    const result = await applySourceUiTaskDirectiveToText({
+      text: nextPayload[field],
+      fetchImpl: globalThis.fetch,
+      tasksUrl: context.config.sourceUiTasksUrl
+    });
+    if (!result.changed) continue;
+    nextPayload = {
+      ...nextPayload,
+      [field]: result.text
+    };
+    changed = true;
+    if (result.queued && result.receipt) {
+      context.logger.info('source_ui_task_queued', {
+        channel: context.channel,
+        field,
+        task_id: result.receipt.id,
+        task_title: result.receipt.title,
+        task_status: result.receipt.status
+      });
+    } else if (result.error) {
+      context.logger.warn('source_ui_task_queue_failed', {
+        channel: context.channel,
+        field,
+        error: result.error.message
+      });
+    } else {
+      context.logger.warn('source_ui_unverified_queue_claim_downgraded', {
+        channel: context.channel,
+        field
+      });
+    }
+  }
+
+  return { payload: nextPayload, changed };
+}
+
+async function rewriteOutboundJsonBody(bodyText, context) {
   try {
     const parsed = JSON.parse(bodyText);
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
       return { changed: false, body: bodyText };
     }
     const rewritten = applyOutboundPolicy(parsed, context);
-    if (!rewritten.changed) return { changed: false, body: bodyText };
-    return { changed: true, body: JSON.stringify(rewritten.payload) };
+    const queueAdjusted = await applyTelegramQueuePolicy(rewritten.payload, context);
+    if (!rewritten.changed && !queueAdjusted.changed) return { changed: false, body: bodyText };
+    return { changed: true, body: JSON.stringify(queueAdjusted.payload) };
   } catch {
     return { changed: false, body: bodyText };
   }
 }
 
-function rewriteOutboundUrlEncodedBody(bodyText, context) {
+async function rewriteOutboundUrlEncodedBody(bodyText, context) {
   try {
     const params = new URLSearchParams(bodyText);
     const record = Object.fromEntries(params.entries());
     const rewritten = applyOutboundPolicy(record, context);
-    if (!rewritten.changed) return { changed: false, body: bodyText };
+    const queueAdjusted = await applyTelegramQueuePolicy(rewritten.payload, context);
+    if (!rewritten.changed && !queueAdjusted.changed) return { changed: false, body: bodyText };
     const nextParams = new URLSearchParams();
-    for (const [key, value] of Object.entries(rewritten.payload)) {
+    for (const [key, value] of Object.entries(queueAdjusted.payload)) {
       if (value == null) continue;
       nextParams.set(key, stringifyValue(value));
     }
@@ -195,16 +271,17 @@ function rewriteOutboundUrlEncodedBody(bodyText, context) {
   }
 }
 
-function rewriteOutboundFormDataBody(form, context) {
+async function rewriteOutboundFormDataBody(form, context) {
   try {
     const stringValues = {};
     for (const [key, value] of form.entries()) {
       if (typeof value === 'string') stringValues[key] = value;
     }
     const rewritten = applyOutboundPolicy(stringValues, context);
-    if (!rewritten.changed) return { changed: false, body: form };
+    const queueAdjusted = await applyTelegramQueuePolicy(rewritten.payload, context);
+    if (!rewritten.changed && !queueAdjusted.changed) return { changed: false, body: form };
     const flatValues = {};
-    for (const [key, value] of Object.entries(rewritten.payload)) {
+    for (const [key, value] of Object.entries(queueAdjusted.payload)) {
       if (value == null) continue;
       flatValues[key] = stringifyValue(value);
     }
@@ -231,21 +308,75 @@ function rewriteOutboundFormDataBody(form, context) {
   }
 }
 
-function rewriteOutboundFetchBody(body, context) {
+async function rewriteOutboundFetchBody(body, context) {
   if (typeof body === 'string') {
     const trimmed = body.trim();
     if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
-      return rewriteOutboundJsonBody(body, context);
+      return await rewriteOutboundJsonBody(body, context);
     }
-    return rewriteOutboundUrlEncodedBody(body, context);
+    return await rewriteOutboundUrlEncodedBody(body, context);
   }
   if (body instanceof URLSearchParams) {
-    return rewriteOutboundUrlEncodedBody(body.toString(), context);
+    return await rewriteOutboundUrlEncodedBody(body.toString(), context);
   }
   if (typeof FormData !== 'undefined' && body instanceof FormData) {
-    return rewriteOutboundFormDataBody(body, context);
+    return await rewriteOutboundFormDataBody(body, context);
   }
   return { changed: false, body };
+}
+
+async function readNormalizedPayloadBody(body) {
+  if (typeof body === 'string') {
+    const trimmed = body.trim();
+    if (!trimmed) return null;
+    if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+      try {
+        return JSON.parse(trimmed);
+      } catch {
+        return null;
+      }
+    }
+    try {
+      return Object.fromEntries(new URLSearchParams(body).entries());
+    } catch {
+      return null;
+    }
+  }
+  if (body instanceof URLSearchParams) {
+    return Object.fromEntries(body.entries());
+  }
+  if (typeof FormData !== 'undefined' && body instanceof FormData) {
+    const out = {};
+    for (const [key, value] of body.entries()) {
+      if (typeof value === 'string') out[key] = value;
+    }
+    return out;
+  }
+  return null;
+}
+
+async function auditTelegramRouteForSend({ requestUrl, requestBody, response, context }) {
+  if (!/api\.telegram\.org/i.test(String(requestUrl || ''))) return;
+  const requestPayload = await readNormalizedPayloadBody(requestBody);
+  const chatId = extractTelegramChatIdFromPayload(requestPayload);
+  if (!chatId) return;
+  const responseMessageId = await extractTelegramResponseMessageIdFromResponse(response);
+  const record = auditTelegramRouteProvenance({
+    chatId,
+    responseMessageId,
+    workspaceRoot: context.config.workspaceRoot,
+    logPath: context.config.telegramRouteProvenanceLogPath
+  });
+  if (!record) return;
+  context.logger.info('telegram_route_provenance_recorded', {
+    chat_id: record.chat_id,
+    response_message_id: record.response_message_id,
+    session_key: record.session_key,
+    provider: record.provider,
+    model: record.model,
+    api: record.api,
+    route_source: record.route_source
+  });
 }
 
 function cloneRequestWithBody(request, body) {
@@ -305,11 +436,20 @@ function installOutboundFetchSanitizer(runtimeLogger, config) {
 
     try {
       if (init && Object.hasOwn(init, 'body')) {
-        const rewritten = rewriteOutboundFetchBody(init.body, context);
+        const rewritten = await rewriteOutboundFetchBody(init.body, context);
+        const requestBody = rewritten.changed ? rewritten.body : init.body;
         if (rewritten.changed) {
-          return originalFetch.call(this, input, { ...init, body: rewritten.body });
+          const response = await originalFetch.call(this, input, { ...init, body: rewritten.body });
+          if (channel === 'telegram') {
+            await auditTelegramRouteForSend({ requestUrl, requestBody, response, context });
+          }
+          return response;
         }
-        return originalFetch.call(this, input, init);
+        const response = await originalFetch.call(this, input, init);
+        if (channel === 'telegram') {
+          await auditTelegramRouteForSend({ requestUrl, requestBody, response, context });
+        }
+        return response;
       }
 
       if (input && typeof input === 'object' && typeof input.clone === 'function') {
@@ -318,16 +458,34 @@ function installOutboundFetchSanitizer(runtimeLogger, config) {
         const contentType = String(clone.headers?.get?.('content-type') || '').toLowerCase();
         if (contentType.includes('application/json') || contentType.includes('application/x-www-form-urlencoded')) {
           const bodyText = await clone.text();
-          const rewritten = rewriteOutboundFetchBody(bodyText, context);
+          const rewritten = await rewriteOutboundFetchBody(bodyText, context);
           if (rewritten.changed) {
-            return originalFetch.call(this, cloneRequestWithBody(request, rewritten.body));
+            const response = await originalFetch.call(this, cloneRequestWithBody(request, rewritten.body));
+            if (channel === 'telegram') {
+              await auditTelegramRouteForSend({ requestUrl, requestBody: rewritten.body, response, context });
+            }
+            return response;
           }
+          const response = await originalFetch.call(this, input, init);
+          if (channel === 'telegram') {
+            await auditTelegramRouteForSend({ requestUrl, requestBody: bodyText, response, context });
+          }
+          return response;
         } else if (contentType.includes('multipart/form-data') && typeof clone.formData === 'function') {
           const form = await clone.formData();
-          const rewritten = rewriteOutboundFetchBody(form, context);
+          const rewritten = await rewriteOutboundFetchBody(form, context);
           if (rewritten.changed) {
-            return originalFetch.call(this, cloneRequestWithBody(request, rewritten.body));
+            const response = await originalFetch.call(this, cloneRequestWithBody(request, rewritten.body));
+            if (channel === 'telegram') {
+              await auditTelegramRouteForSend({ requestUrl, requestBody: rewritten.body, response, context });
+            }
+            return response;
           }
+          const response = await originalFetch.call(this, input, init);
+          if (channel === 'telegram') {
+            await auditTelegramRouteForSend({ requestUrl, requestBody: form, response, context });
+          }
+          return response;
         }
       }
     } catch (error) {
