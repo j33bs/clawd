@@ -56,10 +56,14 @@ workspace/store/lancedb_data/** merge=ours
 MEMORY.md export-ignore
 TOOLS.md export-ignore
 USER.md export-ignore
+memory export-ignore
 memory/** export-ignore
 PREFERENCE_PACKET.md export-ignore
+workspace/source-ui/state export-ignore
 workspace/source-ui/state/** export-ignore
+workspace/state export-ignore
 workspace/state/** export-ignore
+workspace/artifacts export-ignore
 workspace/knowledge_base/data/discord_messages.jsonl export-ignore
 workspace/knowledge_base/data/discord_research_messages.jsonl export-ignore
 workspace/knowledge_base/data/telegram_messages.jsonl export-ignore

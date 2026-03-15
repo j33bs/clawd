@@ -1519,6 +1519,12 @@ class FishTankRenderer:
             value = clamp01(value)
             return 0.5 - (0.5 * math.cos(value * math.pi))
 
+        def clamp_anchor(px: float, py: float, margin_x: float, margin_y: float) -> tuple[float, float]:
+            return (
+                max(margin_x, min(width - margin_x, px)),
+                max(margin_y, min(height - margin_y, py)),
+            )
+
         canvas.delete("bg")
         canvas.delete("scene")
         canvas.delete("atmo")
@@ -1528,6 +1534,7 @@ class FishTankRenderer:
         drift_x = math.sin(drift_phase) * width * drift_ratio
         drift_y = math.sin((drift_phase * 0.73) + 1.1) * height * drift_ratio * 0.62
         gradient_shift_y = drift_y * 0.32
+        text_orbit_phase = (scene_age / max(36.0, prompt_interval_s * 2.0)) * math.tau
 
         top_color = (4, 9, 20)
         mid_color = (9, 20, 38)
@@ -1609,6 +1616,7 @@ class FishTankRenderer:
 
         cycle_index = int(scene_age / max(0.001, total_cycle))
         cycle_elapsed = scene_age % total_cycle
+        prompt_elapsed = scene_age % prompt_interval_s
         orb_y = center_y
         sweep_amp = width * (0.28 + (0.05 * motion_gain))
         if cycle_elapsed < sweep_seconds:
@@ -1650,25 +1658,81 @@ class FishTankRenderer:
         cues = state.get("grounding_cues", [])
         cue_primary = ""
         cue_secondary = ""
+        cue_visible = False
+        cue_anchor_x = center_x
+        cue_anchor_y = (height * 0.79) + (drift_y * 0.34)
         if grounding_enabled and cues:
             cue_index = int(scene_age / prompt_interval_s) % len(cues)
             cue_primary, cue_secondary = cues[cue_index]
-            canvas.create_text(center_x, (height * 0.77) + (drift_y * 0.34), text=cue_primary, fill="#d7ece9", font=("Helvetica", max(16, int(height * 0.026)), "bold"), tags="text")
-            canvas.create_text(center_x, (height * 0.815) + (drift_y * 0.34), text=cue_secondary, fill="#90b8ba", font=("Helvetica", max(12, int(height * 0.019))), tags="text")
+            cue_anchor_x = center_x + (math.sin(text_orbit_phase + (cue_index * 1.17)) * width * 0.072)
+            cue_anchor_y = (height * 0.79) + (math.cos((text_orbit_phase * 0.81) + (cue_index * 0.91)) * height * 0.04) + (drift_y * 0.34)
+            cue_anchor_x, cue_anchor_y = clamp_anchor(cue_anchor_x, cue_anchor_y, width * 0.12, height * 0.12)
+            cue_visible = prompt_elapsed < min(10.0, prompt_interval_s * 0.42)
+            if cue_visible:
+                canvas.create_text(
+                    cue_anchor_x,
+                    cue_anchor_y - (height * 0.022),
+                    text=cue_primary,
+                    fill="#c6dfdc",
+                    font=("Helvetica", max(16, int(height * 0.026)), "bold"),
+                    tags="text",
+                )
+                canvas.create_text(
+                    cue_anchor_x,
+                    cue_anchor_y + (height * 0.02),
+                    text=cue_secondary,
+                    fill="#789da0",
+                    font=("Helvetica", max(12, int(height * 0.019))),
+                    tags="text",
+                )
 
         breath_caption = "inhale 4  |  hold 2  |  exhale 4"
         if breath_label == "settle":
             breath_caption = "let the breath return on its own"
-        canvas.create_text(center_x, (height * 0.18) + (drift_y * 0.26), text=breath_label.upper(), fill="#9ecbcc", font=("Helvetica", max(12, int(height * 0.018)), "bold"), tags="text")
-        canvas.create_text(center_x, (height * 0.215) + (drift_y * 0.26), text=breath_caption, fill="#6f989b", font=("Helvetica", max(11, int(height * 0.016))), tags="text")
+        breath_anchor_x = center_x + (math.sin(text_orbit_phase + 2.1) * width * 0.058)
+        breath_anchor_y = (height * 0.195) + (math.cos((text_orbit_phase * 0.77) + 1.4) * height * 0.03) + (drift_y * 0.24)
+        breath_anchor_x, breath_anchor_y = clamp_anchor(breath_anchor_x, breath_anchor_y, width * 0.12, height * 0.1)
+        breath_caption_visible = breath_progress < 0.62
+        canvas.create_text(
+            breath_anchor_x,
+            breath_anchor_y,
+            text=breath_label.upper(),
+            fill="#88b4b6",
+            font=("Helvetica", max(12, int(height * 0.018)), "bold"),
+            tags="text",
+        )
+        if breath_caption_visible:
+            canvas.create_text(
+                breath_anchor_x,
+                breath_anchor_y + (height * 0.028),
+                text=breath_caption,
+                fill="#597e81",
+                font=("Helvetica", max(11, int(height * 0.016))),
+                tags="text",
+            )
 
         phase_text = "bilateral settling" if motion_label == "settle" else f"bilateral sweep {direction_label.replace('_', ' ')}"
         footer = phase_text if not grounding_enabled else f"{phase_text}  |  regulation only"
-        canvas.create_text(center_x, (height * 0.93) + (drift_y * 0.16), text=footer, fill="#507173", font=("Helvetica", max(10, int(height * 0.015))), tags="text")
+        footer_anchor_x = center_x + (math.sin(text_orbit_phase + 4.2) * width * 0.082)
+        footer_anchor_y = (height * 0.93) + (math.cos((text_orbit_phase * 0.63) + 0.5) * height * 0.016) + (drift_y * 0.16)
+        footer_anchor_x, footer_anchor_y = clamp_anchor(footer_anchor_x, footer_anchor_y, width * 0.14, height * 0.06)
+        footer_visible = cycle_elapsed < min(3.2, total_cycle * 0.28)
+        if footer_visible:
+            canvas.create_text(
+                footer_anchor_x,
+                footer_anchor_y,
+                text=footer,
+                fill="#3f5e60",
+                font=("Helvetica", max(10, int(height * 0.015))),
+                tags="text",
+            )
         state["current_cue"] = cue_primary
         state["current_phase"] = motion_label
         state["current_direction"] = direction_label
         state["current_breath"] = breath_label
+        state["cue_text_visible"] = cue_visible
+        state["footer_text_visible"] = footer_visible
+        state["breath_caption_visible"] = breath_caption_visible
         state["drift_x_px"] = round(float(drift_x), 3)
         state["drift_y_px"] = round(float(drift_y), 3)
 
@@ -4032,6 +4096,9 @@ class FishTankRenderer:
                 "current_phase": str(therapeutic_state.get("current_phase", "") or ""),
                 "current_direction": str(therapeutic_state.get("current_direction", "") or ""),
                 "current_breath": str(therapeutic_state.get("current_breath", "") or ""),
+                "cue_text_visible": bool(therapeutic_state.get("cue_text_visible", False)),
+                "footer_text_visible": bool(therapeutic_state.get("footer_text_visible", False)),
+                "breath_caption_visible": bool(therapeutic_state.get("breath_caption_visible", False)),
                 "drift_x_px": round(float(therapeutic_state.get("drift_x_px", 0.0) or 0.0), 3),
                 "drift_y_px": round(float(therapeutic_state.get("drift_y_px", 0.0) or 0.0), 3),
                 "grounding_enabled": bool(getattr(self, "_therapeutic_grounding_enabled", True)),

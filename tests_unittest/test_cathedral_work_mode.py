@@ -324,6 +324,9 @@ class TestCathedralWorkMode(unittest.TestCase):
         self.assertEqual(len(renderer._therapeutic_scene_state.get("grounding_cues", [])), 5)
         self.assertEqual(renderer._therapeutic_scene_state.get("current_direction"), "right_edge")
         self.assertIn(renderer._therapeutic_scene_state.get("current_breath"), {"inhale", "hold", "exhale", "settle"})
+        self.assertFalse(renderer._therapeutic_scene_state.get("cue_text_visible"))
+        self.assertFalse(renderer._therapeutic_scene_state.get("footer_text_visible"))
+        self.assertTrue(renderer._therapeutic_scene_state.get("breath_caption_visible"))
         self.assertLessEqual(abs(float(renderer._therapeutic_scene_state.get("drift_x_px", 0.0) or 0.0)), 12.8)
         self.assertLessEqual(abs(float(renderer._therapeutic_scene_state.get("drift_y_px", 0.0) or 0.0)), 7.2)
 
@@ -351,10 +354,14 @@ class TestCathedralWorkMode(unittest.TestCase):
         FishTankRenderer._render_therapeutic_bilateral_scene(renderer, canvas, 1280, 720, 3.5)
         self.assertEqual(renderer._therapeutic_scene_state.get("current_phase"), "sweep")
         self.assertEqual(renderer._therapeutic_scene_state.get("current_direction"), "left_to_right")
+        self.assertTrue(renderer._therapeutic_scene_state.get("cue_text_visible"))
+        self.assertTrue(renderer._therapeutic_scene_state.get("footer_text_visible"))
 
         FishTankRenderer._render_therapeutic_bilateral_scene(renderer, canvas, 1280, 720, 13.5)
         self.assertEqual(renderer._therapeutic_scene_state.get("current_phase"), "sweep")
         self.assertEqual(renderer._therapeutic_scene_state.get("current_direction"), "right_to_left")
+        self.assertFalse(renderer._therapeutic_scene_state.get("cue_text_visible"))
+        self.assertTrue(renderer._therapeutic_scene_state.get("footer_text_visible"))
 
 
 if __name__ == "__main__":
