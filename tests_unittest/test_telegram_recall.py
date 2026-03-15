@@ -9,6 +9,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 STORE_MODULE_PATH = REPO_ROOT / "workspace" / "scripts" / "telegram_vector_store.py"
 RECALL_MODULE_PATH = REPO_ROOT / "workspace" / "scripts" / "telegram_recall.py"
+MEMORY_DB_MODULE_PATH = REPO_ROOT / "workspace" / "profile" / "user_memory_db.py"
 
 
 def load_module(name: str, path: Path):
@@ -27,6 +28,7 @@ class TelegramRecallTests(unittest.TestCase):
     def setUp(self):
         self.store_mod = load_module("telegram_vector_store", STORE_MODULE_PATH)
         self.recall_mod = load_module("telegram_recall", RECALL_MODULE_PATH)
+        self.memory_mod = load_module("user_memory_db", MEMORY_DB_MODULE_PATH)
 
     def _seed_store(self, store_dir: Path, normalized_path: Path) -> None:
         rows = [
@@ -136,6 +138,38 @@ class TelegramRecallTests(unittest.TestCase):
             )
             self.assertIn("semantic search should load historical context", block)
             self.assertNotIn("dinner plans", block)
+
+    def test_recall_prefers_admitted_governed_memory_for_chat(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            store_dir = root / "store"
+            normalized = root / "normalized.jsonl"
+            self._seed_store(store_dir, normalized)
+
+            db_path = root / "workspace" / "profile" / "user_memory.db"
+            candidate = self.memory_mod.propose_telegram_memory_fact(
+                chat_id="111",
+                fact_text="Jeebs wants Telegram replies to feel like Codex-direct.",
+                evidence=[{"ref": "telegram:111:1", "quote": "Codex-direct"}],
+            )
+            record = self.memory_mod.admit_telegram_memory_fact(db_path, candidate)
+            self.assertEqual(record["status"], "admitted")
+
+            block = self.recall_mod.build_recall_block(
+                "remember Codex-direct Telegram preferences",
+                env={
+                    "OPENCLAW_TELEGRAM_RECALL": "1",
+                    "OPENCLAW_TELEGRAM_RECALL_TOPK": "4",
+                    "OPENCLAW_TELEGRAM_MEMORY_TOPK": "2",
+                    "OPENCLAW_TELEGRAM_RECALL_MAX_CHARS": "500",
+                    "OPENCLAW_USER_MEMORY_DB_PATH": str(db_path),
+                },
+                chat_id="111",
+                store_dir=store_dir,
+            )
+            self.assertIn("TELEGRAM_MEMORY:", block)
+            self.assertIn("Codex-direct", block)
+            self.assertNotIn("TELEGRAM_RECALL:", block)
 
 
 if __name__ == "__main__":

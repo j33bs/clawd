@@ -6,13 +6,21 @@ from __future__ import annotations
 import os
 import re
 from pathlib import Path
+import sys
 from typing import Mapping
 
 from telegram_vector_store import DEFAULT_STORE_DIR, search_store
 
+PROFILE_DIR = Path(__file__).resolve().parents[1] / "profile"
+if str(PROFILE_DIR) not in sys.path:
+    sys.path.insert(0, str(PROFILE_DIR))
+
+from user_memory_db import default_db_path, query_telegram_memory
+
 
 DEFAULT_TOPK = 6
 DEFAULT_MAX_CHARS = 6000
+DEFAULT_MEMORY_TOPK = 4
 
 
 def parse_bool(value: str | None, default: bool = False) -> bool:
@@ -82,6 +90,20 @@ def _row_to_line(row: dict, per_line_limit: int = 1000) -> str:
     return f"- [{ts}] {sender}: {text}"
 
 
+def _memory_row_to_line(row: dict, per_line_limit: int = 1000) -> str:
+    text = str(row.get("fact_text", "")).strip().replace("\n", " ")
+    if len(text) > per_line_limit:
+        text = text[: per_line_limit - 1] + "…"
+    evidence = row.get("evidence") or []
+    evidence_refs = []
+    for item in evidence[:2]:
+        ref = str(item.get("ref") or item.get("message_id") or "").strip()
+        if ref:
+            evidence_refs.append(ref)
+    suffix = f" (evidence: {', '.join(evidence_refs)})" if evidence_refs else ""
+    return f"- {text}{suffix}"
+
+
 def build_recall_block(
     prompt: str,
     *,
@@ -96,7 +118,29 @@ def build_recall_block(
 
     topk = parse_positive_int(env_map.get("OPENCLAW_TELEGRAM_RECALL_TOPK"), DEFAULT_TOPK)
     max_chars = parse_positive_int(env_map.get("OPENCLAW_TELEGRAM_RECALL_MAX_CHARS"), DEFAULT_MAX_CHARS)
+    memory_topk = parse_positive_int(env_map.get("OPENCLAW_TELEGRAM_MEMORY_TOPK"), DEFAULT_MEMORY_TOPK)
     chat_filter = str(chat_id).strip() if chat_id is not None else env_map.get("OPENCLAW_TELEGRAM_RECALL_CHAT_ID")
+    db_path = Path(env_map.get("OPENCLAW_USER_MEMORY_DB_PATH", str(default_db_path(Path(__file__).resolve().parents[2]))))
+
+    admitted = []
+    if chat_filter:
+        admitted = query_telegram_memory(db_path, chat_id=chat_filter, q=prompt, limit=memory_topk)
+        if not admitted:
+            for phrase in extract_keyphrases(prompt):
+                admitted = query_telegram_memory(db_path, chat_id=chat_filter, q=phrase, limit=memory_topk)
+                if admitted:
+                    break
+    if admitted:
+        lines = ["TELEGRAM_MEMORY:"]
+        total = len(lines[0]) + 1
+        for row in admitted:
+            line = _memory_row_to_line(row)
+            if total + len(line) + 1 > max_chars:
+                break
+            lines.append(line)
+            total += len(line) + 1
+        if len(lines) > 1:
+            return "\n".join(lines)
 
     rows = search_store(prompt, topk=topk, chat_id=chat_filter or None, store_dir=Path(store_dir))
     for phrase in extract_keyphrases(prompt):

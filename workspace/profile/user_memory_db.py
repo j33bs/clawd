@@ -8,6 +8,7 @@ import json
 import sqlite3
 from pathlib import Path
 import re
+from typing import Any
 
 
 HEADING_RE = re.compile(r"^(#{1,6})\s+(.+?)\s*$")
@@ -295,8 +296,260 @@ def ensure_schema(conn: sqlite3.Connection) -> None:
         CREATE INDEX IF NOT EXISTS idx_user_memory_ts ON user_memory_entries(ts);
         CREATE INDEX IF NOT EXISTS idx_user_memory_category ON user_memory_entries(category);
         CREATE INDEX IF NOT EXISTS idx_user_memory_contributor ON user_memory_entries(contributor);
+        CREATE TABLE IF NOT EXISTS telegram_memory_facts (
+            id TEXT PRIMARY KEY,
+            chat_id TEXT NOT NULL,
+            fact_key TEXT NOT NULL,
+            fact_text TEXT NOT NULL,
+            status TEXT NOT NULL,
+            contradiction_state TEXT NOT NULL,
+            privacy_scope TEXT NOT NULL,
+            agency_state TEXT NOT NULL,
+            evidence_json TEXT NOT NULL,
+            source_message_ids_json TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            admitted_at TEXT,
+            operator_notes TEXT NOT NULL DEFAULT ''
+        );
+        CREATE INDEX IF NOT EXISTS idx_tgmf_chat_status ON telegram_memory_facts(chat_id, status);
+        CREATE INDEX IF NOT EXISTS idx_tgmf_chat_fact_key ON telegram_memory_facts(chat_id, fact_key);
         """
     )
+
+
+def normalize_chat_id(value: str | None) -> str | None:
+    text = str(value or "").strip()
+    return text or None
+
+
+def normalize_fact_key(text: str) -> str:
+    normalized = re.sub(r"[^a-z0-9]+", " ", text.lower()).strip()
+    return re.sub(r"\s+", " ", normalized)[:160]
+
+
+def normalize_privacy_scope(value: str | None) -> str:
+    text = str(value or "chat").strip().lower()
+    return text if text in {"chat", "global"} else "chat"
+
+
+def _json_dumps(value: Any) -> str:
+    return json.dumps(value, ensure_ascii=True, sort_keys=True)
+
+
+def propose_telegram_memory_fact(
+    *,
+    chat_id: str,
+    fact_text: str,
+    evidence: list[dict[str, Any]] | None = None,
+    source_message_ids: list[str] | None = None,
+    privacy_scope: str = "chat",
+    operator_approved: bool = False,
+    now_iso: str | None = None,
+) -> dict[str, Any]:
+    normalized_chat_id = normalize_chat_id(chat_id)
+    cleaned_text = str(fact_text or "").strip()
+    if not normalized_chat_id:
+        raise ValueError("chat_id is required")
+    if not cleaned_text:
+        raise ValueError("fact_text is required")
+    return {
+        "id": hashlib.sha256(f"{normalized_chat_id}:{cleaned_text}".encode("utf-8")).hexdigest(),
+        "chat_id": normalized_chat_id,
+        "fact_key": normalize_fact_key(cleaned_text),
+        "fact_text": cleaned_text,
+        "privacy_scope": normalize_privacy_scope(privacy_scope),
+        "operator_approved": bool(operator_approved),
+        "evidence": [item for item in (evidence or []) if isinstance(item, dict)],
+        "source_message_ids": [str(item).strip() for item in (source_message_ids or []) if str(item).strip()],
+        "created_at": now_iso or utc_now_iso(),
+    }
+
+
+def _memory_candidate_requires_review(candidate: dict[str, Any]) -> bool:
+    lowered = candidate["fact_text"].lower()
+    return any(token in lowered for token in ("password", "api key", "token", "secret", "private key"))
+
+
+def _conflicts_with_existing_fact(existing_text: str, candidate_text: str) -> bool:
+    existing_tokens = re.findall(r"[a-z0-9]+", existing_text.lower())
+    candidate_tokens = re.findall(r"[a-z0-9]+", candidate_text.lower())
+    if len(existing_tokens) < 2 or len(candidate_tokens) < 2:
+        return False
+    shared_prefix = existing_tokens[:2] == candidate_tokens[:2]
+    return shared_prefix and existing_text.strip() != candidate_text.strip()
+
+
+def admit_telegram_memory_fact(db_path: Path, candidate: dict[str, Any]) -> dict[str, Any]:
+    db_path = db_path.resolve()
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(str(db_path))
+    try:
+        ensure_schema(conn)
+        with conn:
+            existing = conn.execute(
+                """
+                SELECT id, fact_text, status, contradiction_state, evidence_json, source_message_ids_json
+                FROM telegram_memory_facts
+                WHERE chat_id = ? AND fact_key = ?
+                ORDER BY updated_at DESC
+                LIMIT 1
+                """,
+                (candidate["chat_id"], candidate["fact_key"]),
+            ).fetchone()
+            existing_chat_facts = conn.execute(
+                """
+                SELECT fact_text
+                FROM telegram_memory_facts
+                WHERE chat_id = ? AND status = 'admitted'
+                ORDER BY updated_at DESC
+                LIMIT 25
+                """,
+                (candidate["chat_id"],),
+            ).fetchall()
+
+            status = "admitted"
+            contradiction_state = "none"
+            agency_state = "auto"
+            operator_notes = ""
+
+            if not candidate["evidence"]:
+                status = "rejected"
+                contradiction_state = "insufficient_evidence"
+                operator_notes = "Rejected: missing evidence."
+            elif candidate["privacy_scope"] != "chat" and not candidate["operator_approved"]:
+                status = "needs_review"
+                contradiction_state = "privacy_review"
+                agency_state = "operator_review"
+                operator_notes = "Needs review: cross-chat memory requires explicit approval."
+            elif _memory_candidate_requires_review(candidate):
+                status = "needs_review"
+                contradiction_state = "privacy_review"
+                agency_state = "operator_review"
+                operator_notes = "Needs review: sensitive memory candidate."
+            elif any(_conflicts_with_existing_fact(str(row[0]), candidate["fact_text"]) for row in existing_chat_facts):
+                status = "needs_review"
+                contradiction_state = "conflicted"
+                agency_state = "operator_review"
+                operator_notes = "Needs review: contradicts existing admitted memory."
+
+            created_at = str(candidate.get("created_at") or utc_now_iso())
+            updated_at = utc_now_iso()
+            admitted_at = updated_at if status == "admitted" else None
+            record = {
+                "id": candidate["id"],
+                "chat_id": candidate["chat_id"],
+                "fact_key": candidate["fact_key"],
+                "fact_text": candidate["fact_text"],
+                "status": status,
+                "contradiction_state": contradiction_state,
+                "privacy_scope": candidate["privacy_scope"],
+                "agency_state": agency_state,
+                "evidence": candidate["evidence"],
+                "source_message_ids": candidate["source_message_ids"],
+                "created_at": created_at,
+                "updated_at": updated_at,
+                "admitted_at": admitted_at,
+                "operator_notes": operator_notes,
+            }
+            conn.execute(
+                """
+                INSERT INTO telegram_memory_facts (
+                    id, chat_id, fact_key, fact_text, status, contradiction_state,
+                    privacy_scope, agency_state, evidence_json, source_message_ids_json,
+                    created_at, updated_at, admitted_at, operator_notes
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    fact_text = excluded.fact_text,
+                    status = excluded.status,
+                    contradiction_state = excluded.contradiction_state,
+                    privacy_scope = excluded.privacy_scope,
+                    agency_state = excluded.agency_state,
+                    evidence_json = excluded.evidence_json,
+                    source_message_ids_json = excluded.source_message_ids_json,
+                    updated_at = excluded.updated_at,
+                    admitted_at = excluded.admitted_at,
+                    operator_notes = excluded.operator_notes
+                """,
+                (
+                    record["id"],
+                    record["chat_id"],
+                    record["fact_key"],
+                    record["fact_text"],
+                    record["status"],
+                    record["contradiction_state"],
+                    record["privacy_scope"],
+                    record["agency_state"],
+                    _json_dumps(record["evidence"]),
+                    _json_dumps(record["source_message_ids"]),
+                    record["created_at"],
+                    record["updated_at"],
+                    record["admitted_at"],
+                    record["operator_notes"],
+                ),
+            )
+    finally:
+        conn.close()
+    return record
+
+
+def query_telegram_memory(
+    db_path: Path,
+    *,
+    chat_id: str,
+    q: str = "",
+    limit: int = 10,
+    include_review: bool = False,
+) -> list[dict[str, Any]]:
+    db_path = db_path.resolve()
+    normalized_chat_id = normalize_chat_id(chat_id)
+    if not normalized_chat_id or not db_path.is_file():
+        return []
+    conn = sqlite3.connect(str(db_path))
+    clauses = ["chat_id = ?"]
+    params: list[Any] = [normalized_chat_id]
+    if include_review:
+        clauses.append("status IN ('admitted', 'needs_review')")
+    else:
+        clauses.append("status = 'admitted'")
+    clauses.append("contradiction_state = 'none'")
+    if q.strip():
+        clauses.append("LOWER(fact_text) LIKE ?")
+        params.append(f"%{q.strip().lower()}%")
+    sql = f"""
+        SELECT id, chat_id, fact_key, fact_text, status, contradiction_state,
+               privacy_scope, agency_state, evidence_json, source_message_ids_json,
+               created_at, updated_at, admitted_at, operator_notes
+        FROM telegram_memory_facts
+        WHERE {' AND '.join(clauses)}
+        ORDER BY COALESCE(admitted_at, updated_at, created_at) DESC
+        LIMIT ?
+    """
+    params.append(max(1, int(limit)))
+    try:
+        ensure_schema(conn)
+        rows = conn.execute(sql, params).fetchall()
+    finally:
+        conn.close()
+    return [
+        {
+            "id": row[0],
+            "chat_id": row[1],
+            "fact_key": row[2],
+            "fact_text": row[3],
+            "status": row[4],
+            "contradiction_state": row[5],
+            "privacy_scope": row[6],
+            "agency_state": row[7],
+            "evidence": json.loads(row[8]),
+            "source_message_ids": json.loads(row[9]),
+            "created_at": row[10],
+            "updated_at": row[11],
+            "admitted_at": row[12],
+            "operator_notes": row[13],
+        }
+        for row in rows
+    ]
 
 
 def sync_user_memory(

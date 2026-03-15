@@ -176,6 +176,64 @@ class TestUserMemoryDb(unittest.TestCase):
             self.assertEqual(len(rows), 1)
             self.assertEqual(rows[0]["category"], "preference")
 
+    def test_telegram_memory_fact_requires_evidence_and_stays_chat_scoped(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            db_path = root / "workspace" / "profile" / "user_memory.db"
+
+            candidate = mod.propose_telegram_memory_fact(
+                chat_id="chat-1",
+                fact_text="Jeebs prefers evidence-backed replies.",
+                evidence=[],
+            )
+            record = mod.admit_telegram_memory_fact(db_path, candidate)
+            self.assertEqual(record["status"], "rejected")
+            self.assertEqual(record["contradiction_state"], "insufficient_evidence")
+
+            approved = mod.propose_telegram_memory_fact(
+                chat_id="chat-1",
+                fact_text="Jeebs prefers evidence-backed replies.",
+                evidence=[{"ref": "telegram:chat-1:42", "quote": "evidence-backed replies"}],
+            )
+            admitted = mod.admit_telegram_memory_fact(db_path, approved)
+            self.assertEqual(admitted["status"], "admitted")
+            rows = mod.query_telegram_memory(db_path, chat_id="chat-1", q="evidence-backed", limit=5)
+            self.assertEqual(len(rows), 1)
+            self.assertEqual(rows[0]["fact_text"], "Jeebs prefers evidence-backed replies.")
+            self.assertEqual(mod.query_telegram_memory(db_path, chat_id="chat-2", q="evidence-backed", limit=5), [])
+
+    def test_telegram_memory_fact_flags_contradictions_and_global_scope(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            db_path = root / "workspace" / "profile" / "user_memory.db"
+
+            first = mod.propose_telegram_memory_fact(
+                chat_id="chat-1",
+                fact_text="Jeebs prefers concise replies.",
+                evidence=[{"ref": "telegram:chat-1:1"}],
+            )
+            admitted = mod.admit_telegram_memory_fact(db_path, first)
+            self.assertEqual(admitted["status"], "admitted")
+
+            conflicting = mod.propose_telegram_memory_fact(
+                chat_id="chat-1",
+                fact_text="Jeebs prefers very long replies.",
+                evidence=[{"ref": "telegram:chat-1:2"}],
+            )
+            reviewed = mod.admit_telegram_memory_fact(db_path, conflicting)
+            self.assertEqual(reviewed["status"], "needs_review")
+            self.assertEqual(reviewed["contradiction_state"], "conflicted")
+
+            global_candidate = mod.propose_telegram_memory_fact(
+                chat_id="chat-1",
+                fact_text="Share this preference across all chats.",
+                evidence=[{"ref": "telegram:chat-1:3"}],
+                privacy_scope="global",
+            )
+            global_result = mod.admit_telegram_memory_fact(db_path, global_candidate)
+            self.assertEqual(global_result["status"], "needs_review")
+            self.assertEqual(global_result["agency_state"], "operator_review")
+
 
 if __name__ == "__main__":
     unittest.main()
