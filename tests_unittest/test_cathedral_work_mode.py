@@ -326,10 +326,12 @@ class TestCathedralWorkMode(unittest.TestCase):
         self.assertEqual(len(renderer._therapeutic_scene_state.get("stars", [])), 42)
         self.assertEqual(len(renderer._therapeutic_scene_state.get("ribbons", [])), 4)
         self.assertEqual(len(renderer._therapeutic_scene_state.get("grounding_cues", [])), 5)
-        self.assertEqual(renderer._therapeutic_scene_state.get("current_direction"), "right_edge")
+        self.assertEqual(renderer._therapeutic_scene_state.get("current_direction"), "left_to_right")
+        self.assertEqual(renderer._therapeutic_scene_state.get("current_phase"), "sweep")
         self.assertEqual(renderer._therapeutic_scene_state.get("current_breath"), "exhale")
         self.assertGreater(float(renderer._therapeutic_scene_state.get("breath_elapsed_seconds", 0.0) or 0.0), 9.0)
         self.assertLess(float(renderer._therapeutic_scene_state.get("breath_phase_progress", 1.0) or 1.0), 1.0)
+        self.assertGreater(float(renderer._therapeutic_scene_state.get("orb_offset_ratio", 0.0) or 0.0), 0.85)
         self.assertTrue(renderer._therapeutic_scene_state.get("text_enabled"))
         self.assertFalse(renderer._therapeutic_scene_state.get("cue_text_visible"))
         self.assertFalse(renderer._therapeutic_scene_state.get("footer_text_visible"))
@@ -374,7 +376,46 @@ class TestCathedralWorkMode(unittest.TestCase):
         self.assertEqual(renderer._therapeutic_scene_state.get("current_phase"), "sweep")
         self.assertEqual(renderer._therapeutic_scene_state.get("current_direction"), "right_to_left")
         self.assertFalse(renderer._therapeutic_scene_state.get("cue_text_visible"))
-        self.assertTrue(renderer._therapeutic_scene_state.get("footer_text_visible"))
+        self.assertFalse(renderer._therapeutic_scene_state.get("footer_text_visible"))
+
+    def test_work_mode_therapeutic_bilateral_reverses_without_center_reset(self):
+        renderer = FishTankRenderer.__new__(FishTankRenderer)
+        renderer._therapeutic_scene_state = {}
+        renderer._therapeutic_scene_dimensions = (0, 0)
+        renderer._therapeutic_scene_started_ts = 0.0
+        renderer._work_scene_time_scale = 0.28
+        renderer._therapeutic_inhale_seconds = 4.0
+        renderer._therapeutic_hold_seconds = 2.0
+        renderer._therapeutic_exhale_seconds = 5.0
+        renderer._therapeutic_breath_seconds = 11.0
+        renderer._therapeutic_sweep_seconds = 7.5
+        renderer._therapeutic_settle_seconds = 4.0
+        renderer._therapeutic_prompt_interval_s = 24.0
+        renderer._therapeutic_motion_gain = 0.7
+        renderer._therapeutic_drift_seconds = 180.0
+        renderer._therapeutic_drift_ratio = 0.01
+        renderer._therapeutic_text_timeout_s = 60.0
+        renderer._therapeutic_grounding_enabled = True
+        renderer._work_growth_memory = 0.01
+        renderer.control_values = {"curiosity_impulse": 0.2}
+        renderer.signals = mock.Mock(gpu_util=0.08)
+        canvas = mock.Mock()
+
+        FishTankRenderer._ensure_therapeutic_bilateral_state(renderer, 1280, 720)
+        renderer._therapeutic_scene_started_ts = 0.5
+
+        FishTankRenderer._render_therapeutic_bilateral_scene(renderer, canvas, 1280, 720, 11.9)
+        before_ratio = float(renderer._therapeutic_scene_state.get("orb_offset_ratio", 0.0) or 0.0)
+        before_dir = renderer._therapeutic_scene_state.get("current_direction")
+
+        FishTankRenderer._render_therapeutic_bilateral_scene(renderer, canvas, 1280, 720, 12.1)
+        after_ratio = float(renderer._therapeutic_scene_state.get("orb_offset_ratio", 0.0) or 0.0)
+        after_dir = renderer._therapeutic_scene_state.get("current_direction")
+
+        self.assertGreater(before_ratio, 0.95)
+        self.assertGreater(after_ratio, 0.95)
+        self.assertEqual(before_dir, "left_to_right")
+        self.assertEqual(after_dir, "right_to_left")
 
     def test_work_mode_therapeutic_bilateral_hides_all_text_after_timeout(self):
         renderer = FishTankRenderer.__new__(FishTankRenderer)

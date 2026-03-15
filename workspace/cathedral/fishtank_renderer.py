@@ -1505,7 +1505,8 @@ class FishTankRenderer:
         breath_seconds = max(1.0, inhale_seconds + hold_seconds + exhale_seconds)
         sweep_seconds = max(4.0, float(getattr(self, "_therapeutic_sweep_seconds", 7.5) or 7.5))
         settle_seconds = max(2.0, float(getattr(self, "_therapeutic_settle_seconds", 4.0) or 4.0))
-        total_cycle = sweep_seconds + settle_seconds
+        half_cycle_seconds = sweep_seconds + settle_seconds
+        total_cycle = half_cycle_seconds * 2.0
         motion_gain = clamp01(float(getattr(self, "_therapeutic_motion_gain", 0.7) or 0.7))
         drift_seconds = max(45.0, float(getattr(self, "_therapeutic_drift_seconds", 180.0) or 180.0))
         drift_ratio = max(0.002, float(getattr(self, "_therapeutic_drift_ratio", 0.01) or 0.01))
@@ -1633,33 +1634,24 @@ class FishTankRenderer:
         inner_radius = ring_radius * 0.56
         canvas.create_oval(center_x - inner_radius, center_y - inner_radius, center_x + inner_radius, center_y + inner_radius, fill="#0d1c27", outline="#2c5562", width=1, tags="scene")
 
-        cycle_index = int(scene_age / max(0.001, total_cycle))
         cycle_elapsed = scene_age % total_cycle
         prompt_elapsed = scene_age % prompt_interval_s
         orb_y = center_y
         sweep_amp = width * (0.28 + (0.05 * motion_gain))
-        if cycle_elapsed < sweep_seconds:
-            sweep_progress = cycle_elapsed / max(0.001, sweep_seconds)
-            sweep_wave = math.sin((sweep_progress * math.pi) - (math.pi * 0.5))
-            direction = 1.0 if (cycle_index % 2) == 0 else -1.0
-            orb_x = center_x + (sweep_amp * sweep_wave * direction)
-            motion_label = "sweep"
-            direction_label = "left_to_right" if direction > 0.0 else "right_to_left"
-        else:
-            settle_progress = (cycle_elapsed - sweep_seconds) / max(0.001, settle_seconds)
-            settle_wave = 1.0 - ease_in_out(settle_progress)
-            last_edge = 1.0 if (cycle_index % 2) == 0 else -1.0
-            orb_x = center_x + (sweep_amp * last_edge * settle_wave)
-            motion_label = "settle"
-            direction_label = "right_edge" if last_edge > 0.0 else "left_edge"
+        pendulum_phase = ((cycle_elapsed / max(0.001, half_cycle_seconds)) * math.pi) - (math.pi * 0.5)
+        sweep_wave = math.sin(pendulum_phase)
+        direction_velocity = math.cos(pendulum_phase)
+        orb_x = center_x + (sweep_amp * sweep_wave)
+        direction_label = "left_to_right" if direction_velocity >= 0.0 else "right_to_left"
+        motion_label = "turn" if abs(direction_velocity) < 0.12 else "sweep"
         orb_y += math.sin((t * 0.8) + (breath_progress * math.tau)) * height * 0.008 * motion_gain
 
         trail_color = mix_color((38, 90, 102), (116, 214, 212), 0.5 + ambient_strength * 0.28)
         for idx in range(7):
             trail_ratio = idx / 6.0
             trail_decay = 1.0 - trail_ratio
-            trail_offset = sweep_amp * 0.18 * trail_ratio * (1.0 if motion_label == "sweep" else 0.0)
-            trail_x = orb_x - trail_offset if (cycle_index % 2) == 0 else orb_x + trail_offset
+            trail_offset = sweep_amp * 0.18 * trail_ratio * max(0.35, abs(direction_velocity))
+            trail_x = orb_x - trail_offset if direction_velocity >= 0.0 else orb_x + trail_offset
             trail_y = orb_y + math.sin((t * 0.8) + (trail_ratio * 0.4)) * height * 0.003
             trail_r = max(2.0, ring_radius * (0.1 + trail_decay * 0.08))
             outline = mix_color((24, 58, 66), (92, 178, 186), trail_decay * 0.7)
@@ -1731,7 +1723,7 @@ class FishTankRenderer:
                 tags="text",
             )
 
-        phase_text = "bilateral settling" if motion_label == "settle" else f"bilateral sweep {direction_label.replace('_', ' ')}"
+        phase_text = "bilateral turning" if motion_label == "turn" else f"bilateral sweep {direction_label.replace('_', ' ')}"
         footer = phase_text if not grounding_enabled else f"{phase_text}  |  regulation only"
         footer_anchor_x = center_x + (math.sin(text_orbit_phase + 4.2) * width * 0.082)
         footer_anchor_y = (height * 0.93) + (math.cos((text_orbit_phase * 0.63) + 0.5) * height * 0.016) + (drift_y * 0.16)
@@ -1752,6 +1744,8 @@ class FishTankRenderer:
         state["current_breath"] = breath_label
         state["breath_elapsed_seconds"] = round(float(breath_elapsed), 3)
         state["breath_phase_progress"] = round(float(breath_phase_progress), 6)
+        state["orb_offset_ratio"] = round(float(sweep_wave), 6)
+        state["orb_x_px"] = round(float(orb_x), 3)
         state["ring_radius_px"] = round(float(ring_radius), 3)
         state["text_enabled"] = text_enabled
         state["cue_text_visible"] = cue_visible
@@ -4123,6 +4117,8 @@ class FishTankRenderer:
                 "current_breath": str(therapeutic_state.get("current_breath", "") or ""),
                 "breath_elapsed_seconds": round(float(therapeutic_state.get("breath_elapsed_seconds", 0.0) or 0.0), 3),
                 "breath_phase_progress": round(float(therapeutic_state.get("breath_phase_progress", 0.0) or 0.0), 6),
+                "orb_offset_ratio": round(float(therapeutic_state.get("orb_offset_ratio", 0.0) or 0.0), 6),
+                "orb_x_px": round(float(therapeutic_state.get("orb_x_px", 0.0) or 0.0), 3),
                 "text_enabled": bool(therapeutic_state.get("text_enabled", False)),
                 "cue_text_visible": bool(therapeutic_state.get("cue_text_visible", False)),
                 "footer_text_visible": bool(therapeutic_state.get("footer_text_visible", False)),
