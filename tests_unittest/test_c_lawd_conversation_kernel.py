@@ -47,6 +47,16 @@ class CLawdConversationKernelTests(unittest.TestCase):
         self.assertIn("surface: telegram", text)
         self.assertNotIn("## MEMORY", text)
 
+    def test_surface_kernel_stays_independent_of_workspace_dali_identity_files(self):
+        packet = self.mod.build_c_lawd_surface_kernel_packet(
+            surface="codex",
+            include_memory=False,
+            mode="conversation",
+        )
+        self.assertIn("Being: `c_lawd`, not Dali.", packet.prompt_text)
+        self.assertNotIn("AI Systems Orchestrator with dynamic, contextual capabilities", packet.prompt_text)
+        self.assertNotIn("## Constitutional Reference", packet.prompt_text)
+
 
 if __name__ == "__main__":
     unittest.main()
