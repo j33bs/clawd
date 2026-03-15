@@ -87,6 +87,9 @@ class PolicyRouterSurfaceProfilesTests(unittest.TestCase):
             self.assertEqual(telegram_choice["provider"], "openai_gpt54_chat")
             self.assertEqual(telegram_explain["surface"], "telegram")
             self.assertEqual(telegram_explain["policy_profile"], "surface:telegram")
+            self.assertEqual(telegram_explain["selected_provider"], "openai_gpt54_chat")
+            self.assertEqual(telegram_explain["selected_model"], "gpt-5.4")
+            self.assertEqual(telegram_explain["reason_code"], "route_available")
             self.assertEqual(telegram_explain["chosen"]["provider"], "openai_gpt54_chat")
 
     def test_telegram_surface_profile_overrides_capability_router_lane(self):
