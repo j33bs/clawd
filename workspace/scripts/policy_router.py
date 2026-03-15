@@ -721,6 +721,36 @@ def _auth_profile_records(profile_id):
     return records
 
 
+def _runtime_model_registry(config_path=None):
+    path = Path(config_path or OPENCLAW_CONFIG_FILE).expanduser()
+    if not path.exists():
+        return {"config_path": str(path), "providers": {}, "missing": True}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {"config_path": str(path), "providers": {}, "missing": False, "invalid": True}
+
+    raw_providers = ((data.get("models") or {}).get("providers") or {})
+    providers = {}
+    if isinstance(raw_providers, dict):
+        for provider_name, provider_cfg in raw_providers.items():
+            if not isinstance(provider_cfg, dict):
+                continue
+            normalized_name = normalize_provider_id(provider_name)
+            model_ids = []
+            for model in provider_cfg.get("models", []):
+                if not isinstance(model, dict):
+                    continue
+                model_id = str(model.get("id") or "").strip()
+                if model_id:
+                    model_ids.append(model_id)
+            providers[normalized_name] = {
+                "provider_key": str(provider_name),
+                "model_ids": model_ids,
+            }
+    return {"config_path": str(path), "providers": providers, "missing": False, "invalid": False}
+
+
 def _get_oauth_profile_token(profile_id):
     best_token = None
     best_expiry = 0
@@ -2106,6 +2136,39 @@ class PolicyRouter:
             "local_context_overflow_policy": ctx_defaults.get("overflow_policy"),
             "remote_routing_enabled": self._remote_routing_enabled(),
             "remote_allowlist_task_classes": self._remote_allowlist_task_classes(),
+        }
+
+    def explain_runtime_parity(self, intent, context_metadata=None, payload=None, config_path=None):
+        route = self.explain_route(intent, context_metadata=context_metadata, payload=payload)
+        runtime_registry = _runtime_model_registry(config_path)
+        selected_provider = normalize_provider_id(route.get("selected_provider"))
+        selected_model = str(route.get("selected_model") or "").strip()
+        runtime_provider = runtime_registry["providers"].get(selected_provider or "")
+        runtime_model_ids = list((runtime_provider or {}).get("model_ids") or [])
+        provider_registered = runtime_provider is not None
+        model_registered = bool(selected_model) and selected_model in runtime_model_ids
+        drift_detected = bool(selected_provider) and (not provider_registered or not model_registered)
+        parity_reason = "runtime_match"
+        if runtime_registry.get("missing"):
+            parity_reason = "runtime_config_missing"
+            drift_detected = True
+        elif runtime_registry.get("invalid"):
+            parity_reason = "runtime_config_invalid"
+            drift_detected = True
+        elif not provider_registered:
+            parity_reason = "provider_not_registered"
+        elif not model_registered:
+            parity_reason = "model_not_registered"
+
+        return {
+            **route,
+            "runtime_config_path": runtime_registry["config_path"],
+            "runtime_provider_registered": provider_registered,
+            "runtime_model_registered": model_registered,
+            "runtime_provider_key": (runtime_provider or {}).get("provider_key"),
+            "runtime_model_ids": runtime_model_ids,
+            "runtime_parity_reason": parity_reason,
+            "runtime_drift_detected": drift_detected,
         }
 
     def execute_with_escalation(self, intent, payload, context_metadata=None, validate_fn=None):

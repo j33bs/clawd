@@ -204,6 +204,113 @@ class PolicyRouterSurfaceProfilesTests(unittest.TestCase):
             self.assertEqual(telegram_out["route_provenance"]["policy_profile"], "surface:telegram")
             self.assertEqual(telegram_out["route_provenance"]["selected_model"], "gpt-5.4")
 
+    def test_runtime_parity_reports_registry_match_and_drift(self):
+        policy = {
+            "version": 2,
+            "defaults": {
+                "allowPaid": True,
+                "maxTokensPerRequest": 4096,
+                "circuitBreaker": {"failureThreshold": 3, "cooldownSec": 60, "windowSec": 60, "failOn": []},
+            },
+            "budgets": {
+                "intents": {"conversation": {"dailyTokenBudget": 999999, "dailyCallBudget": 999, "maxCallsPerRun": 20}},
+                "tiers": {
+                    "free": {"dailyTokenBudget": 999999, "dailyCallBudget": 999},
+                    "auth": {"dailyTokenBudget": 999999, "dailyCallBudget": 999},
+                },
+            },
+            "providers": {
+                "local_vllm_assistant": {
+                    "enabled": True,
+                    "paid": False,
+                    "tier": "free",
+                    "type": "mock",
+                    "models": [{"id": "local-assistant"}],
+                },
+                "openai_gpt54_chat": {
+                    "enabled": True,
+                    "paid": False,
+                    "tier": "auth",
+                    "type": "mock",
+                    "models": [{"id": "gpt-5.4"}],
+                },
+            },
+            "routing": {
+                "free_order": ["local_vllm_assistant"],
+                "intents": {
+                    "conversation": {
+                        "order": ["local_vllm_assistant", "openai_gpt54_chat"],
+                        "allowPaid": True,
+                    }
+                },
+                "capability_router": {"enabled": False},
+                "surface_profiles": {
+                    "telegram": {
+                        "intents": {
+                            "conversation": {
+                                "order": ["openai_gpt54_chat", "local_vllm_assistant"],
+                                "allowPaid": True,
+                            }
+                        }
+                    }
+                },
+            },
+        }
+
+        matching_runtime = {
+            "models": {
+                "providers": {
+                    "openai_gpt54_chat": {
+                        "models": [{"id": "gpt-5.4"}],
+                    }
+                }
+            }
+        }
+        drifted_runtime = {
+            "models": {
+                "providers": {
+                    "openai_gpt54_chat": {
+                        "models": [{"id": "gpt-4.1"}],
+                    }
+                }
+            }
+        }
+
+        with tempfile.TemporaryDirectory() as td:
+            tmp = Path(td)
+            policy_path = tmp / "policy.json"
+            runtime_path = tmp / "openclaw.json"
+            policy_path.write_text(json.dumps(policy), encoding="utf-8")
+            router = PolicyRouter(
+                policy_path=policy_path,
+                budget_path=tmp / "budget.json",
+                circuit_path=tmp / "circuit.json",
+                event_log=tmp / "events.jsonl",
+                handlers={},
+            )
+
+            runtime_path.write_text(json.dumps(matching_runtime), encoding="utf-8")
+            parity = router.explain_runtime_parity(
+                "conversation",
+                {"input_text": "hello", "surface": "telegram"},
+                config_path=runtime_path,
+            )
+            self.assertFalse(parity["runtime_drift_detected"])
+            self.assertTrue(parity["runtime_provider_registered"])
+            self.assertTrue(parity["runtime_model_registered"])
+            self.assertEqual(parity["runtime_parity_reason"], "runtime_match")
+
+            runtime_path.write_text(json.dumps(drifted_runtime), encoding="utf-8")
+            drift = router.explain_runtime_parity(
+                "conversation",
+                {"input_text": "hello", "surface": "telegram"},
+                config_path=runtime_path,
+            )
+            self.assertTrue(drift["runtime_drift_detected"])
+            self.assertTrue(drift["runtime_provider_registered"])
+            self.assertFalse(drift["runtime_model_registered"])
+            self.assertEqual(drift["runtime_parity_reason"], "model_not_registered")
+
 
 if __name__ == "__main__":
     unittest.main()
