@@ -142,16 +142,29 @@ def build_recall_context(
     topk = parse_positive_int(env_map.get("OPENCLAW_TELEGRAM_RECALL_TOPK"), DEFAULT_TOPK)
     max_chars = parse_positive_int(env_map.get("OPENCLAW_TELEGRAM_RECALL_MAX_CHARS"), DEFAULT_MAX_CHARS)
     memory_topk = parse_positive_int(env_map.get("OPENCLAW_TELEGRAM_MEMORY_TOPK"), DEFAULT_MEMORY_TOPK)
+    memory_scope = str(env_map.get("OPENCLAW_TELEGRAM_MEMORY_SCOPE") or "chat").strip().lower() or "chat"
     chat_filter = str(chat_id).strip() if chat_id is not None else env_map.get("OPENCLAW_TELEGRAM_RECALL_CHAT_ID")
     db_path = Path(env_map.get("OPENCLAW_USER_MEMORY_DB_PATH", str(default_db_path(Path(__file__).resolve().parents[2]))))
     files_touched = [str(db_path), str(Path(store_dir))]
 
     admitted = []
     if chat_filter:
-        admitted = query_telegram_memory(db_path, chat_id=chat_filter, q=prompt, limit=memory_topk)
+        admitted = query_telegram_memory(
+            db_path,
+            chat_id=chat_filter,
+            q=prompt,
+            limit=memory_topk,
+            scope=memory_scope,
+        )
         if not admitted:
             for phrase in extract_keyphrases(prompt):
-                admitted = query_telegram_memory(db_path, chat_id=chat_filter, q=phrase, limit=memory_topk)
+                admitted = query_telegram_memory(
+                    db_path,
+                    chat_id=chat_filter,
+                    q=phrase,
+                    limit=memory_topk,
+                    scope=memory_scope,
+                )
                 if admitted:
                     break
     if admitted:

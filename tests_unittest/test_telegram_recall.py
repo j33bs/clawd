@@ -194,6 +194,52 @@ class TelegramRecallTests(unittest.TestCase):
             self.assertEqual(ctx["memory_blocks"][0]["kind"], "semantic_recall")
             self.assertIn(str(store_dir), ctx["files_touched"])
 
+    def test_recall_stays_chat_scoped_unless_global_scope_is_explicit(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            store_dir = root / "store"
+            normalized = root / "normalized.jsonl"
+            self._seed_store(store_dir, normalized)
+
+            db_path = root / "workspace" / "profile" / "user_memory.db"
+            global_candidate = self.memory_mod.propose_telegram_memory_fact(
+                chat_id="111",
+                fact_text="Shared global Telegram preference.",
+                evidence=[{"ref": "telegram:111:1", "quote": "Shared global Telegram preference."}],
+                privacy_scope="global",
+                operator_approved=True,
+            )
+            global_record = self.memory_mod.admit_telegram_memory_fact(db_path, global_candidate)
+            self.assertEqual(global_record["status"], "admitted")
+
+            default_scope = self.recall_mod.build_recall_block(
+                "remember shared global Telegram preference",
+                env={
+                    "OPENCLAW_TELEGRAM_RECALL": "1",
+                    "OPENCLAW_TELEGRAM_MEMORY_TOPK": "2",
+                    "OPENCLAW_TELEGRAM_RECALL_MAX_CHARS": "500",
+                    "OPENCLAW_USER_MEMORY_DB_PATH": str(db_path),
+                },
+                chat_id="222",
+                store_dir=store_dir,
+            )
+            self.assertNotIn("TELEGRAM_MEMORY:", default_scope)
+
+            explicit_scope = self.recall_mod.build_recall_block(
+                "remember shared global Telegram preference",
+                env={
+                    "OPENCLAW_TELEGRAM_RECALL": "1",
+                    "OPENCLAW_TELEGRAM_MEMORY_TOPK": "2",
+                    "OPENCLAW_TELEGRAM_MEMORY_SCOPE": "chat+global",
+                    "OPENCLAW_TELEGRAM_RECALL_MAX_CHARS": "500",
+                    "OPENCLAW_USER_MEMORY_DB_PATH": str(db_path),
+                },
+                chat_id="222",
+                store_dir=store_dir,
+            )
+            self.assertIn("TELEGRAM_MEMORY:", explicit_scope)
+            self.assertIn("Shared global Telegram preference.", explicit_scope)
+
 
 if __name__ == "__main__":
     unittest.main()

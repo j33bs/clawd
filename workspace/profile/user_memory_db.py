@@ -333,6 +333,11 @@ def normalize_privacy_scope(value: str | None) -> str:
     return text if text in {"chat", "global"} else "chat"
 
 
+def normalize_memory_query_scope(value: str | None) -> str:
+    text = str(value or "chat").strip().lower()
+    return text if text in {"chat", "chat+global"} else "chat"
+
+
 def _json_dumps(value: Any) -> str:
     return json.dumps(value, ensure_ascii=True, sort_keys=True)
 
@@ -500,13 +505,18 @@ def query_telegram_memory(
     q: str = "",
     limit: int = 10,
     include_review: bool = False,
+    scope: str = "chat",
 ) -> list[dict[str, Any]]:
     db_path = db_path.resolve()
     normalized_chat_id = normalize_chat_id(chat_id)
     if not normalized_chat_id or not db_path.is_file():
         return []
     conn = sqlite3.connect(str(db_path))
-    clauses = ["chat_id = ?"]
+    query_scope = normalize_memory_query_scope(scope)
+    if query_scope == "chat+global":
+        clauses = ["(chat_id = ? OR privacy_scope = 'global')"]
+    else:
+        clauses = ["chat_id = ?"]
     params: list[Any] = [normalized_chat_id]
     if include_review:
         clauses.append("status IN ('admitted', 'needs_review')")

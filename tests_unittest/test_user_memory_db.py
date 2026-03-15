@@ -234,6 +234,37 @@ class TestUserMemoryDb(unittest.TestCase):
             self.assertEqual(global_result["status"], "needs_review")
             self.assertEqual(global_result["agency_state"], "operator_review")
 
+    def test_query_telegram_memory_requires_explicit_scope_for_global_facts(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            db_path = root / "workspace" / "profile" / "user_memory.db"
+
+            global_candidate = mod.propose_telegram_memory_fact(
+                chat_id="chat-1",
+                fact_text="Shared preference approved for all chats.",
+                evidence=[{"ref": "telegram:chat-1:3"}],
+                privacy_scope="global",
+                operator_approved=True,
+            )
+            global_result = mod.admit_telegram_memory_fact(db_path, global_candidate)
+            self.assertEqual(global_result["status"], "admitted")
+            self.assertEqual(global_result["privacy_scope"], "global")
+
+            self.assertEqual(
+                mod.query_telegram_memory(db_path, chat_id="chat-2", q="shared preference", limit=5),
+                [],
+            )
+
+            rows = mod.query_telegram_memory(
+                db_path,
+                chat_id="chat-2",
+                q="shared preference",
+                limit=5,
+                scope="chat+global",
+            )
+            self.assertEqual(len(rows), 1)
+            self.assertEqual(rows[0]["fact_text"], "Shared preference approved for all chats.")
+
 
 if __name__ == "__main__":
     unittest.main()
