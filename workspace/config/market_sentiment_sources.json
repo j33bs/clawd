@@ -2,8 +2,8 @@
   "schema_version": 1,
   "producer": "c_lawd",
   "poll": {
-    "recommended_interval_seconds": 900,
-    "stale_after_seconds": 2700
+    "recommended_interval_seconds": 3600,
+    "stale_after_seconds": 10800
   },
   "model": {
     "provider": "ollama",

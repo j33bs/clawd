@@ -15,7 +15,25 @@ stop_models() {
 }
 
 idle_seconds() {
-  ioreg -c IOHIDSystem | awk -F'= ' '/HIDIdleTime/ && $2 ~ /^[0-9]+$/ { print int($2 / 1000000000); exit }'
+  /usr/bin/python3 - <<'PY'
+import re
+import subprocess
+
+proc = subprocess.run(
+    ["ioreg", "-c", "IOHIDSystem"],
+    capture_output=True,
+    text=True,
+    check=False,
+)
+if proc.returncode != 0:
+    raise SystemExit(1)
+
+match = re.search(r'HIDIdleTime"?\s*=\s*(\d+)', proc.stdout)
+if not match:
+    raise SystemExit(1)
+
+print(int(int(match.group(1)) / 1_000_000_000))
+PY
 }
 
 recommended_interval() {
