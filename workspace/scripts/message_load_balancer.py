@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """
-Message Load Balancer - Routes messages between primary and OpenAI fallback based on load.
+Legacy message load balancer retained only as a load telemetry helper.
 
-When the primary lane is overwhelmed (too many concurrent messages or high latency),
-automatically falls back to spawning an OpenAI subagent to handle overflow.
+The policy router is the sole authority for provider/model selection. This module
+may report overload conditions, but it must not directly route traffic or spawn
+provider-specific fallback agents.
 """
 
 import os
@@ -41,7 +42,7 @@ class Message:
 
 
 class LoadBalancer:
-    """Routes messages between primary and OpenAI fallback lanes based on load."""
+    """Tracks load signals for operator visibility and router advisory use."""
     
     def __init__(self):
         self.metrics = LoadMetrics()
@@ -71,18 +72,20 @@ class LoadBalancer:
             return self._check_overload_locked()
     
     def should_route_to_chatgpt(self) -> bool:
-        """Determine if new messages should go to ChatGPT instead of MiniMax."""
+        """Legacy helper name retained for compatibility; returns advisory overload state."""
         return self.check_overload()
     
     def route_message(self, message: Message) -> dict[str, Any]:
-        """Route a message to the appropriate agent."""
+        """Return advisory load state; the policy router still owns the actual route."""
         route_to_chatgpt = self.should_route_to_chatgpt()
         
         decision = {
             "message_id": message.id,
-            "route": "chatgpt" if route_to_chatgpt else "minimax",
+            "route": "router_policy",
             "reason": self._get_route_reason(route_to_chatgpt),
             "timestamp": datetime.now(timezone.utc).isoformat(),
+            "advisory_only": True,
+            "fallback_recommended": route_to_chatgpt,
             "metrics": {
                 "queue_depth": self.metrics.queue_depth,
                 "avg_latency_ms": self.metrics.avg_latency_ms,
@@ -98,7 +101,7 @@ class LoadBalancer:
     def _get_route_reason(self, route_to_chatgpt: bool) -> str:
         """Get human-readable reason for routing decision."""
         if not route_to_chatgpt:
-            return "Normal load - MiniMax available"
+            return "Normal load - defer to router policy"
         
         reasons = []
         if self.metrics.queue_depth >= MAX_QUEUE_DEPTH:
@@ -109,12 +112,12 @@ class LoadBalancer:
         return "; ".join(reasons) or "Load threshold exceeded"
     
     def _log_fallback(self, message: Message, decision: dict):
-        """Log fallback event for auditing."""
+        """Log overload advisories for auditing."""
         self.fallback_log.append({
             "message_id": message.id,
             "timestamp": decision["timestamp"],
             "reason": decision["reason"],
-            "routed_to": decision["route"],
+            "routed_to": "router_policy",
             "sender": message.sender,
         })
         
@@ -138,6 +141,7 @@ class LoadBalancer:
                     "max_queue_depth": MAX_QUEUE_DEPTH,
                     "max_latency_ms": MAX_LATENCY_MS,
                 },
+                "advisory_only": True,
                 "fallback_count": len(self.fallback_log),
                 "recent_fallbacks": self.fallback_log[-10:] if self.fallback_log else [],
             }
@@ -174,22 +178,15 @@ def route_message(message: dict) -> dict:
 
 def spawn_chatgpt_subagent(task: str, context: dict = None) -> dict:
     """
-    Spawn an OpenAI subagent to handle overflow.
-    
-    This uses OpenClaw's sessions_spawn internally. In production,
-    you'd call this when route_message() returns route: "chatgpt".
-    
-    Returns spawn result with session_key.
+    Legacy shim retained so old callers fail closed into the router-owned path.
     """
-    # This would integrate with OpenClaw's API
-    # For now, returns the parameters you'd need
     return {
-        "action": "spawn",
+        "action": "defer_to_router",
         "agentId": "main",
-        "model": "openai-codex/gpt-5.4",
+        "model": None,
         "task": task,
         "context": context or {},
-        "note": "Spawned due to MiniMax overload",
+        "note": "Legacy load balancer cannot spawn providers; use policy_router instead.",
     }
 
 

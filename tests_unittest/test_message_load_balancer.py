@@ -140,19 +140,23 @@ class TestLoadBalancerRouteMessage(unittest.TestCase):
         for key in ("message_id", "route", "reason", "timestamp"):
             self.assertIn(key, result)
 
-    def test_no_overload_routes_to_minimax(self):
+    def test_no_overload_defers_to_router_policy(self):
         lb = LoadBalancer()
         lb.update_metrics(0, 0.0, 0)
         with patch.object(_MOD, "ENABLE_FALLBACK", False):
             result = lb.route_message(self._msg())
-        self.assertEqual(result["route"], "minimax")
+        self.assertEqual(result["route"], "router_policy")
+        self.assertTrue(result["advisory_only"])
+        self.assertFalse(result["fallback_recommended"])
 
-    def test_overload_routes_to_chatgpt(self):
+    def test_overload_sets_fallback_recommendation_without_routing(self):
         lb = LoadBalancer()
         lb.update_metrics(_MOD.MAX_QUEUE_DEPTH, 0.0, 0)
         with patch.object(_MOD, "ENABLE_FALLBACK", True):
             result = lb.route_message(self._msg())
-        self.assertEqual(result["route"], "chatgpt")
+        self.assertEqual(result["route"], "router_policy")
+        self.assertTrue(result["advisory_only"])
+        self.assertTrue(result["fallback_recommended"])
 
     def test_message_id_echoed(self):
         lb = LoadBalancer()
@@ -160,13 +164,14 @@ class TestLoadBalancerRouteMessage(unittest.TestCase):
             result = lb.route_message(self._msg("msg-99"))
         self.assertEqual(result["message_id"], "msg-99")
 
-    def test_fallback_log_updated_on_chatgpt_route(self):
+    def test_fallback_log_updated_on_overload_advisory(self):
         lb = LoadBalancer()
         lb.update_metrics(_MOD.MAX_QUEUE_DEPTH, 0.0, 0)
         with patch.object(_MOD, "ENABLE_FALLBACK", True):
             lb.route_message(self._msg("fb-1"))
         self.assertEqual(len(lb.fallback_log), 1)
         self.assertEqual(lb.fallback_log[0]["message_id"], "fb-1")
+        self.assertEqual(lb.fallback_log[0]["routed_to"], "router_policy")
 
 
 class TestLoadBalancerGetStatus(unittest.TestCase):
@@ -188,6 +193,7 @@ class TestLoadBalancerGetStatus(unittest.TestCase):
         with patch.object(_MOD, "ENABLE_FALLBACK", True):
             status = lb.get_status()
         self.assertIn("config", status)
+        self.assertTrue(status["advisory_only"])
 
     def test_fallback_count_zero_initially(self):
         lb = LoadBalancer()
@@ -218,10 +224,10 @@ class TestLoadBalancerGetStatus(unittest.TestCase):
 
 
 class TestSpawnChatgptSubagent(unittest.TestCase):
-    def test_spawn_uses_openai_54_default_model(self):
+    def test_spawn_defers_to_router_owned_path(self):
         result = _MOD.spawn_chatgpt_subagent("fix the route", {"priority": "normal"})
-        self.assertEqual(result["model"], "openai-codex/gpt-5.4")
-        self.assertEqual(result["action"], "spawn")
+        self.assertIsNone(result["model"])
+        self.assertEqual(result["action"], "defer_to_router")
 
 
 if __name__ == "__main__":
