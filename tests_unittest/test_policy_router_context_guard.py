@@ -45,21 +45,21 @@ def _base_policy(overflow_policy: str = "compress", remote_enabled: bool = False
                 "type": "mock",
                 "models": [{"id": "local-assistant", "maxInputChars": 200000}],
             },
-            "openai_gpt52_chat": {
+            "openai_gpt54_chat": {
                 "enabled": True,
                 "paid": False,
                 "tier": "auth",
                 "type": "mock",
-                "models": [{"id": "gpt-5.2-chat-latest", "maxInputChars": 30000}],
+                "models": [{"id": "gpt-5.4", "maxInputChars": 30000}],
             },
         },
         "routing": {
-            "free_order": ["local_vllm_assistant", "openai_gpt52_chat"],
-            "intents": {"conversation": {"order": ["local_vllm_assistant", "openai_gpt52_chat"], "allowPaid": True}},
+            "free_order": ["local_vllm_assistant", "openai_gpt54_chat"],
+            "intents": {"conversation": {"order": ["local_vllm_assistant", "openai_gpt54_chat"], "allowPaid": True}},
             "capability_router": {
                 "enabled": True,
                 "mechanicalProvider": "local_vllm_assistant",
-                "planningProvider": "openai_gpt52_chat",
+                "planningProvider": "openai_gpt54_chat",
                 "subagentProvider": "local_vllm_assistant",
                 "codeProvider": "local_vllm_assistant",
                 "smallCodeProvider": "local_vllm_assistant",
@@ -80,7 +80,7 @@ class PolicyRouterContextGuardTests(unittest.TestCase):
             event_log=tmp / "events.jsonl",
             handlers={
                 "local_vllm_assistant": lambda payload, model_id, context: captured.update({"payload": payload}) or {"ok": True, "text": "local"},
-                "openai_gpt52_chat": lambda payload, model_id, context: {"ok": True, "text": "remote"},
+                "openai_gpt54_chat": lambda payload, model_id, context: {"ok": True, "text": "remote"},
             },
         )
 

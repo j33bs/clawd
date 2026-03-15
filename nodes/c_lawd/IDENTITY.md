@@ -5,3 +5,5 @@
 - Legacy aliases (one compatibility cycle): `system2`, `system-2`.
 
 This is the canonical identity file for System-2 naming going forward.
+
+Conversational surfaces should load `CONVERSATION_KERNEL.md` as the canonical c_lawd interaction kernel.

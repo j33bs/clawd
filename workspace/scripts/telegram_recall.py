@@ -87,6 +87,7 @@ def build_recall_block(
     *,
     env: Mapping[str, str] | None = None,
     session_start: bool = False,
+    chat_id: str | None = None,
     store_dir: Path = DEFAULT_STORE_DIR,
 ) -> str:
     env_map = env if env is not None else os.environ
@@ -95,7 +96,7 @@ def build_recall_block(
 
     topk = parse_positive_int(env_map.get("OPENCLAW_TELEGRAM_RECALL_TOPK"), DEFAULT_TOPK)
     max_chars = parse_positive_int(env_map.get("OPENCLAW_TELEGRAM_RECALL_MAX_CHARS"), DEFAULT_MAX_CHARS)
-    chat_filter = env_map.get("OPENCLAW_TELEGRAM_RECALL_CHAT_ID")
+    chat_filter = str(chat_id).strip() if chat_id is not None else env_map.get("OPENCLAW_TELEGRAM_RECALL_CHAT_ID")
 
     rows = search_store(prompt, topk=topk, chat_id=chat_filter or None, store_dir=Path(store_dir))
     for phrase in extract_keyphrases(prompt):
@@ -133,10 +134,10 @@ def inject_telegram_recall_context(
     *,
     env: Mapping[str, str] | None = None,
     session_start: bool = False,
+    chat_id: str | None = None,
     store_dir: Path = DEFAULT_STORE_DIR,
 ) -> str:
-    recall = build_recall_block(prompt, env=env, session_start=session_start, store_dir=store_dir)
+    recall = build_recall_block(prompt, env=env, session_start=session_start, chat_id=chat_id, store_dir=store_dir)
     if not recall:
         return prompt
     return f"{recall}\n\n{prompt}"
-

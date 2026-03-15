@@ -45,22 +45,22 @@ def _policy(*, remote_enabled: bool, auth_daily_tokens: int = 999999):
                 "type": "mock",
                 "models": [{"id": "local-assistant", "maxInputChars": 200000}],
             },
-            "openai_gpt52_chat": {
+            "openai_gpt54_chat": {
                 "enabled": True,
                 "paid": False,
                 "tier": "auth",
                 "type": "mock",
-                "models": [{"id": "gpt-5.2-chat-latest", "maxInputChars": 500000}],
+                "models": [{"id": "gpt-5.4", "maxInputChars": 500000}],
             },
         },
         "routing": {
-            "free_order": ["local_vllm_assistant", "openai_gpt52_chat"],
-            "intents": {"conversation": {"order": ["local_vllm_assistant", "openai_gpt52_chat"], "allowPaid": True}},
+            "free_order": ["local_vllm_assistant", "openai_gpt54_chat"],
+            "intents": {"conversation": {"order": ["local_vllm_assistant", "openai_gpt54_chat"], "allowPaid": True}},
             "capability_router": {
                 "enabled": True,
                 "mechanicalProvider": "local_vllm_assistant",
-                "planningProvider": "openai_gpt52_chat",
-                "reasoningProvider": "openai_gpt52_chat",
+                "planningProvider": "openai_gpt54_chat",
+                "reasoningProvider": "openai_gpt54_chat",
                 "subagentProvider": "local_vllm_assistant",
                 "codeProvider": "local_vllm_assistant",
                 "smallCodeProvider": "local_vllm_assistant",
@@ -81,7 +81,7 @@ class PolicyRouterTaskRouterTests(unittest.TestCase):
             event_log=tmp / "events.jsonl",
             handlers={
                 "local_vllm_assistant": lambda payload, model_id, context: {"ok": True, "text": "local"},
-                "openai_gpt52_chat": lambda payload, model_id, context: {"ok": True, "text": "remote"},
+                "openai_gpt54_chat": lambda payload, model_id, context: {"ok": True, "text": "remote"},
             },
         )
 
@@ -96,15 +96,19 @@ class PolicyRouterTaskRouterTests(unittest.TestCase):
             self.assertTrue(out["ok"], out)
             self.assertEqual(out["provider"], "local_vllm_assistant")
             self.assertEqual(out["capability_class"], "mechanical_execution")
+            self.assertEqual(out["route_provenance"]["selected_provider"], "local_vllm_assistant")
+            self.assertEqual(out["route_provenance"]["reason_code"], "success")
 
-    def test_long_planning_within_limit_stays_local(self):
+    def test_long_planning_within_limit_prefers_openai_oauth_54(self):
         with tempfile.TemporaryDirectory() as td:
             router = self._build_router(Path(td), _policy(remote_enabled=True))
             prompt = "plan architecture and evaluate trade-offs.\n" + ("- option\n" * 2500)
             out = router.execute_with_escalation("conversation", {"prompt": prompt}, {"input_text": prompt})
             self.assertTrue(out["ok"], out)
-            self.assertEqual(out["provider"], "local_vllm_assistant")
+            self.assertEqual(out["provider"], "openai_gpt54_chat")
             self.assertEqual(out["capability_class"], "planning_synthesis")
+            self.assertEqual(out["route_provenance"]["selected_model"], "gpt-5.4")
+            self.assertEqual(out["route_provenance"]["policy_profile"], "default")
 
     def test_overflow_uses_remote_only_when_enabled_and_budget_allows(self):
         with tempfile.TemporaryDirectory() as td:
@@ -123,7 +127,7 @@ class PolicyRouterTaskRouterTests(unittest.TestCase):
             ):
                 out = router.execute_with_escalation("conversation", {"prompt": prompt}, {"input_text": prompt})
             self.assertTrue(out["ok"], out)
-            self.assertEqual(out["provider"], "openai_gpt52_chat")
+            self.assertEqual(out["provider"], "openai_gpt54_chat")
 
         with tempfile.TemporaryDirectory() as td:
             router = self._build_router(Path(td), _policy(remote_enabled=True, auth_daily_tokens=5))

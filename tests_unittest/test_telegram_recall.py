@@ -50,6 +50,16 @@ class TelegramRecallTests(unittest.TestCase):
                 "text": "Yes, semantic search should load historical context at session start.",
                 "reply_to_message_id": "1",
             },
+            {
+                "hash": "recall-c",
+                "chat_id": "222",
+                "chat_title": "other chat",
+                "message_id": "3",
+                "timestamp": "2026-02-20T10:02:00Z",
+                "sender_name": "someone-else",
+                "text": "Remember a completely different thread about dinner plans.",
+                "reply_to_message_id": None,
+            },
         ]
         normalized_path.parent.mkdir(parents=True, exist_ok=True)
         with normalized_path.open("w", encoding="utf-8") as fh:
@@ -106,6 +116,26 @@ class TelegramRecallTests(unittest.TestCase):
                 store_dir=store_dir,
             )
             self.assertLessEqual(len(block), 120)
+
+    def test_recall_can_scope_to_explicit_chat_id(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            store_dir = root / "store"
+            normalized = root / "normalized.jsonl"
+            self._seed_store(store_dir, normalized)
+
+            block = self.recall_mod.build_recall_block(
+                "remember what we discussed",
+                env={
+                    "OPENCLAW_TELEGRAM_RECALL": "1",
+                    "OPENCLAW_TELEGRAM_RECALL_TOPK": "4",
+                    "OPENCLAW_TELEGRAM_RECALL_MAX_CHARS": "500",
+                },
+                chat_id="111",
+                store_dir=store_dir,
+            )
+            self.assertIn("semantic search should load historical context", block)
+            self.assertNotIn("dinner plans", block)
 
 
 if __name__ == "__main__":

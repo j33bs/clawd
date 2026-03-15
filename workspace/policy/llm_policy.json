@@ -40,6 +40,18 @@
         "maxCallsPerRun": 50,
         "actionClassCaps": { "D": 3, "C": 5 }
       },
+      "hint_shepherding": {
+        "dailyTokenBudget": 12000,
+        "dailyCallBudget": 200,
+        "maxCallsPerRun": 80,
+        "actionClassCaps": { "D": 3, "C": 5 }
+      },
+      "completion_fallback": {
+        "dailyTokenBudget": 25000,
+        "dailyCallBudget": 80,
+        "maxCallsPerRun": 20,
+        "actionClassCaps": { "D": 3, "C": 5 }
+      },
       "governance": {
         "dailyTokenBudget": 20000,
         "dailyCallBudget": 100,
@@ -123,25 +135,48 @@
     },
     "openai_gpt52_chat": {
       "enabled": true,
-      "paid": true,
-      "tier": "paid",
+      "paid": false,
+      "tier": "auth",
       "type": "openai_compatible",
       "baseUrl": "https://api.openai.com/v1",
-      "apiKeyEnv": "OPENAI_API_KEY",
+      "auth": {
+        "type": "oauth_profile",
+        "profile": "openai-codex:default"
+      },
       "models": [
         {
-          "id": "gpt-5.2-chat-latest",
+          "id": "gpt-5.4",
+          "maxInputChars": 6000
+        }
+      ]
+    },
+    "openai_gpt54_chat": {
+      "enabled": true,
+      "paid": false,
+      "tier": "auth",
+      "type": "openai_compatible",
+      "baseUrl": "https://api.openai.com/v1",
+      "auth": {
+        "type": "oauth_profile",
+        "profile": "openai-codex:default"
+      },
+      "models": [
+        {
+          "id": "gpt-5.4",
           "maxInputChars": 6000
         }
       ]
     },
     "openai_gpt53_codex": {
       "enabled": true,
-      "paid": true,
-      "tier": "paid",
+      "paid": false,
+      "tier": "auth",
       "type": "openai_compatible",
       "baseUrl": "https://api.openai.com/v1",
-      "apiKeyEnv": "OPENAI_API_KEY",
+      "auth": {
+        "type": "oauth_profile",
+        "profile": "openai-codex:default"
+      },
       "models": [
         {
           "id": "gpt-5.3-codex",
@@ -171,12 +206,15 @@
       ]
     },
     "openai_gpt53_codex_spark": {
-      "enabled": true,
-      "paid": true,
-      "tier": "paid",
+      "enabled": false,
+      "paid": false,
+      "tier": "auth",
       "type": "openai_compatible",
       "baseUrl": "https://api.openai.com/v1",
-      "apiKeyEnv": "OPENAI_API_KEY",
+      "auth": {
+        "type": "oauth_profile",
+        "profile": "openai-codex:default"
+      },
       "models": [
         {
           "id": "gpt-5.3-codex-spark",
@@ -271,11 +309,17 @@
       "tier": "paid",
       "type": "openai_compatible",
       "baseUrl": "https://api.x.ai/v1",
-      "apiKeyEnv": "GROK_API_KEY",
+      "apiKeyEnv": "XAI_API_KEY",
       "models": [
         {
-          "id": "grok-2",
-          "maxInputChars": 6000
+          "id": "grok-4-fast-non-reasoning",
+          "maxInputChars": 12000,
+          "tier": "chat"
+        },
+        {
+          "id": "grok-4-1-fast",
+          "maxInputChars": 24000,
+          "tier": "reasoning"
         }
       ]
     },
@@ -338,14 +382,40 @@
         "order": [
           "local_vllm_coder",
           "local_vllm_assistant",
+          "grok_api",
           "free",
           "openai_auth",
           "claude_auth",
-          "grok_api",
           "openai_api",
           "claude_api"
         ],
         "allowPaid": true
+      },
+      "hint_shepherding": {
+        "order": [
+          "minimax_m25_lightning",
+          "minimax_m25",
+          "local_vllm_assistant",
+          "openai_gpt54_chat",
+          "groq",
+          "claude_api"
+        ],
+        "allowPaid": true,
+        "maxTokensPerRequest": 256
+      },
+      "completion_fallback": {
+        "order": [
+          "grok_api",
+          "minimax_m25",
+          "minimax_m25_lightning",
+          "local_vllm_assistant",
+          "groq",
+          "openai_gpt53_codex",
+          "openai_gpt54_chat",
+          "claude_api"
+        ],
+        "allowPaid": true,
+        "maxTokensPerRequest": 4096
       },
       "governance": {
         "order": [
@@ -378,10 +448,11 @@
       },
       "conversation": {
         "order": [
+          "local_vllm_assistant",
+          "grok_api",
           "minimax_m25",
           "minimax_m25_lightning",
-          "local_vllm_assistant",
-          "openai_gpt52_chat",
+          "openai_gpt54_chat",
           "openai_gpt53_codex",
           "openai_gpt53_codex_spark"
         ],
@@ -392,14 +463,40 @@
       "enabled": true,
       "structureComplexityMinBullets": 3,
       "structureComplexityMinPaths": 2,
+      "localChatMaxChars": 320,
+      "reasoningEscalationTokens": 1400,
       "explicitTriggers": {
-        "use chatgpt": "openai-codex",
+        "use chatgpt": "openai_gpt54_chat",
         "use codex": "openai_gpt53_codex"
       },
       "subagentProvider": "local_vllm_assistant",
-      "reasoningProvider": "openai_gpt52_chat",
-      "codeProvider": "local_vllm_coder",
-      "smallCodeProvider": "local_vllm_assistant"
+      "chatProvider": "grok_api",
+      "planningProvider": "grok_api",
+      "reasoningProvider": "grok_api",
+      "codeProvider": "grok_api",
+      "smallCodeProvider": "openai_gpt53_codex"
+    },
+    "surface_profiles": {
+      "telegram": {
+        "intents": {
+          "conversation": {
+            "order": [
+              "openai_gpt54_chat",
+              "local_vllm_assistant",
+              "minimax_m25",
+              "minimax_m25_lightning"
+            ],
+            "allowPaid": true
+          }
+        },
+        "capability_router": {
+          "chatProvider": "openai_gpt54_chat",
+          "planningProvider": "openai_gpt54_chat",
+          "reasoningProvider": "openai_gpt54_chat",
+          "codeProvider": "openai_gpt54_chat",
+          "smallCodeProvider": "openai_gpt54_chat"
+        }
+      }
     }
   }
 }

@@ -38,15 +38,15 @@ class TestPolicyRouterTactiNovel10(unittest.TestCase):
                         "tiers": {"free": {"dailyTokenBudget": 100000, "dailyCallBudget": 1000}, "auth": {"dailyTokenBudget": 100000, "dailyCallBudget": 1000}},
                     },
                     "providers": {
-                        "openai_gpt52_chat": {"enabled": True, "paid": False, "tier": "auth", "type": "mock", "models": [{"id": "gpt-5.2-chat-latest"}]},
+                        "openai_gpt54_chat": {"enabled": True, "paid": False, "tier": "auth", "type": "mock", "models": [{"id": "gpt-5.4"}]},
                         "local_vllm_assistant": {"enabled": True, "paid": False, "tier": "free", "type": "mock", "models": [{"id": "vllm/local-assistant"}]},
                     },
                     "routing": {
                         "free_order": ["local_vllm_assistant"],
-                        "intents": {"coding": {"order": ["openai_gpt52_chat", "local_vllm_assistant"], "allowPaid": True}},
+                        "intents": {"coding": {"order": ["openai_gpt54_chat", "local_vllm_assistant"], "allowPaid": True}},
                         "capability_router": {
                             "enabled": True,
-                            "explicitTriggers": {"use chatgpt": "openai_gpt52_chat"},
+                            "explicitTriggers": {"use chatgpt": "openai_gpt54_chat"},
                         },
                     },
                     "tacti_cr": {"flags": {"expression_router": True}},
@@ -59,7 +59,7 @@ class TestPolicyRouterTactiNovel10(unittest.TestCase):
                     budget_path=tmp / "budget.json",
                     circuit_path=tmp / "circuit.json",
                     event_log=tmp / "events.jsonl",
-                    handlers={"openai_gpt52_chat": lambda p, m, c: {"ok": True, "text": "ok"}, "local_vllm_assistant": lambda p, m, c: {"ok": True, "text": "ok"}},
+                    handlers={"openai_gpt54_chat": lambda p, m, c: {"ok": True, "text": "ok"}, "local_vllm_assistant": lambda p, m, c: {"ok": True, "text": "ok"}},
                 )
                 result = router.execute_with_escalation(
                     "coding",

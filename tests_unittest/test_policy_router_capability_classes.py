@@ -43,26 +43,26 @@ class TestPolicyRouterCapabilityClasses(unittest.TestCase):
                     "type": "mock",
                     "models": [{"id": "vllm/local-assistant", "maxInputChars": 4000}],
                 },
-                "openai_gpt52_chat": {
+                "openai_gpt54_chat": {
                     "enabled": True,
                     "paid": False,
                     "tier": "auth",
                     "type": "mock",
-                    "models": [{"id": "gpt-5.2-chat-latest", "maxInputChars": 4000}],
+                    "models": [{"id": "gpt-5.4", "maxInputChars": 4000}],
                 },
             },
             "routing": {
-                "free_order": ["local_vllm_assistant", "openai_gpt52_chat"],
+                "free_order": ["local_vllm_assistant", "openai_gpt54_chat"],
                 "intents": {
                     "conversation": {
-                        "order": ["local_vllm_assistant", "openai_gpt52_chat"],
+                        "order": ["local_vllm_assistant", "openai_gpt54_chat"],
                         "allowPaid": True,
                     }
                 },
                 "capability_router": {
                     "enabled": True,
                     "mechanicalProvider": "local_vllm_assistant",
-                    "planningProvider": "openai_gpt52_chat",
+                    "planningProvider": "openai_gpt54_chat",
                     "subagentProvider": "local_vllm_assistant",
                     "explicitTriggers": {},
                 },
@@ -77,7 +77,7 @@ class TestPolicyRouterCapabilityClasses(unittest.TestCase):
             event_log=tmp / "events.jsonl",
             handlers={
                 "local_vllm_assistant": lambda payload, model_id, context: {"ok": True, "text": "local"},
-                "openai_gpt52_chat": lambda payload, model_id, context: {"ok": True, "text": "cloud"},
+                "openai_gpt54_chat": lambda payload, model_id, context: {"ok": True, "text": "cloud"},
             },
         )
 

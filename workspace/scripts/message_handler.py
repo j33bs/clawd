@@ -10,34 +10,99 @@ Integrates message_load_balancer with OpenClaw gateway for:
 """
 
 import os
-import sys
 import json
 import asyncio
-import aiohttp
-from datetime import datetime
 from typing import Optional
 from agent_orchestration import build_default_orchestrator
+from c_lawd_conversation_kernel import (
+    build_c_lawd_surface_kernel,
+    build_c_lawd_surface_kernel_packet,
+)
+from policy_router import PolicyRouter, build_chat_payload
 from telegram_recall import inject_telegram_recall_context
+from pathlib import Path
+
+try:
+    import aiohttp
+except Exception:  # pragma: no cover - optional dependency in tests/light runtimes
+    aiohttp = None
 
 # Configuration
 GATEWAY_URL = os.environ.get("GATEWAY_URL", "http://127.0.0.1:18789")
 GATEWAY_TOKEN = os.environ.get("GATEWAY_TOKEN", "")  # Set your token
 MAX_QUEUE_DEPTH = int(os.environ.get("MAX_QUEUE_DEPTH", "5"))
 MAX_LATENCY_MS = int(os.environ.get("MAX_LATENCY_MS", "30000"))
+MAX_HISTORY_MESSAGES = int(os.environ.get("OPENCLAW_TELEGRAM_HISTORY_MESSAGES", "24"))
+HISTORY_PATH = Path(
+    os.environ.get(
+        "OPENCLAW_TELEGRAM_HISTORY_PATH",
+        str(Path(__file__).resolve().parents[1] / "state_runtime" / "telegram_message_handler_history.json"),
+    )
+)
 
 
 class MessageHandler:
     """Handles messages with load balancing and efficiency optimizations."""
     
-    def __init__(self, gateway_url: str, token: str):
+    def __init__(self, gateway_url: str, token: str, *, router: Optional[PolicyRouter] = None, history_path: Path | None = None):
         self.gateway_url = gateway_url
         self.token = token
         self.queue_depth = 0
         self.avg_latency = 0
-        self.message_history = []  # For context summarization
+        self.router = router or PolicyRouter()
+        self.history_path = Path(history_path) if history_path else HISTORY_PATH
+        self.message_history_by_chat = self._load_histories()
+
+    def _load_histories(self) -> dict[str, list[dict]]:
+        if not self.history_path.exists():
+            return {}
+        try:
+            data = json.loads(self.history_path.read_text(encoding="utf-8"))
+        except Exception:
+            return {}
+        if not isinstance(data, dict):
+            return {}
+        histories: dict[str, list[dict]] = {}
+        for chat_id, rows in data.items():
+            if not isinstance(rows, list):
+                continue
+            cleaned = []
+            for row in rows:
+                if not isinstance(row, dict):
+                    continue
+                role = str(row.get("role", "")).strip()
+                content = str(row.get("content", "")).strip()
+                if role and content:
+                    cleaned.append({"role": role, "content": content})
+            if cleaned:
+                histories[str(chat_id)] = cleaned[-MAX_HISTORY_MESSAGES:]
+        return histories
+
+    def _save_histories(self) -> None:
+        self.history_path.parent.mkdir(parents=True, exist_ok=True)
+        self.history_path.write_text(
+            json.dumps(self.message_history_by_chat, ensure_ascii=True, indent=2),
+            encoding="utf-8",
+        )
+
+    def _history_for_chat(self, chat_id: str | None) -> list[dict]:
+        if chat_id is None:
+            return []
+        return list(self.message_history_by_chat.get(str(chat_id), []))
+
+    def _append_history(self, chat_id: str | None, *, role: str, content: str) -> None:
+        if chat_id is None:
+            return
+        key = str(chat_id)
+        rows = list(self.message_history_by_chat.get(key, []))
+        rows.append({"role": role, "content": content})
+        self.message_history_by_chat[key] = rows[-MAX_HISTORY_MESSAGES:]
+        self._save_histories()
         
     async def check_load(self) -> dict:
         """Check current system load."""
+        if aiohttp is None:
+            return {"overloaded": False, "queue_depth": 0, "latency": 0}
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.get(
@@ -62,20 +127,28 @@ class MessageHandler:
     async def route_message(self, message: dict) -> dict:
         """Route message to appropriate agent."""
         load = await self.check_load()
-        
-        # Determine routing
-        if load["overloaded"]:
-            route = "chatgpt"
-            reason = f"Queue depth {load['queue_depth']} >= {MAX_QUEUE_DEPTH}"
-        else:
-            route = "minimax"
-            reason = "Normal load"
-        
+        content = str(message.get("content", ""))
+        payload = build_chat_payload(content, temperature=0.0, max_tokens=512)
+        context = {
+            "input_text": content,
+            "surface": "telegram",
+            "channel": "telegram",
+            "chat_id": str(message.get("chat_id", "")),
+        }
+        route = self.router.explain_route("conversation", context_metadata=context, payload=payload)
+        chosen = route.get("chosen") or {}
+
         return {
-            "route": route,
-            "reason": reason,
+            "route": chosen.get("provider") or "unavailable",
+            "reason": route.get("reason") or "default conversation routing",
             "message_id": message.get("message_id"),
-            "chat_id": message.get("chat_id")
+            "chat_id": message.get("chat_id"),
+            "surface": route.get("surface") or "telegram",
+            "policy_profile": route.get("policy_profile") or "default",
+            "selected_provider": chosen.get("provider"),
+            "selected_model": chosen.get("model"),
+            "route_explain": route,
+            "load": load,
         }
     
     def _auth_headers(self) -> dict:
@@ -84,15 +157,16 @@ class MessageHandler:
             return {"Authorization": f"Bearer {self.token}"}
         return {}
     
-    def cache_prompt(self, prompt: str) -> str:
-        """Add caching hints to prompt for API optimization.
-        
-        Put static context at the top - APIs cache the first portion.
-        """
-        # Static instructions that don't change
-        static_context = """You are a helpful AI assistant. Be concise and accurate.
-"""
-        return static_context + prompt
+    def cache_prompt(self, prompt: str, *, context: str = "", surface: str = "telegram") -> str:
+        """Build a stable, surface-specific prompt prefix for better caching and routing."""
+        static_context = build_c_lawd_surface_kernel(
+            surface=surface,
+            include_memory=True,
+            mode="conversation",
+        )
+        if context:
+            return f"{static_context}\n\n## Recent chat context\n\n{context}\n\n## User message\n\n{prompt}"
+        return f"{static_context}\n\n## User message\n\n{prompt}"
     
     def summarize_context(self, history: list, max_tokens: int = 2000) -> str:
         """Summarize conversation history to save tokens.
@@ -129,6 +203,8 @@ class MessageHandler:
 
 async def send_telegram_reply(chat_id: str, message_id: str, text: str, gateway_url: str, token: str):
     """Send a Telegram reply to a specific message."""
+    if aiohttp is None:
+        raise RuntimeError("aiohttp is required to send Telegram replies")
     headers = {"Authorization": f"Bearer {token}"} if token else {}
     
     payload = {
@@ -153,6 +229,8 @@ async def spawn_chatgpt_subagent(task: str, context: dict, gateway_url: str, tok
     
     Uses OpenClaw's sessions_spawn internally.
     """
+    if aiohttp is None:
+        raise RuntimeError("aiohttp is required to spawn gateway subagents")
     headers = {"Authorization": f"Bearer {token}"} if token else {}
     
     orchestrator = build_default_orchestrator()
@@ -161,7 +239,7 @@ async def spawn_chatgpt_subagent(task: str, context: dict, gateway_url: str, tok
         context=context or {},
         priority=(context or {}).get("priority", "normal"),
         specialization_tags=(context or {}).get("specialization_tags"),
-        providers=["openai-codex/gpt-5.3-codex"],
+        providers=["openai/gpt-5.3-codex"],
         enqueue_if_busy=False,
     )
 
@@ -231,31 +309,38 @@ async def handle_incoming_message(message: dict, handler: MessageHandler) -> dic
         str(content),
         env=os.environ,
         session_start=session_start,
+        chat_id=str(chat_id) if chat_id is not None else None,
     )
     
-    # Apply prompt caching
-    cached_prompt = handler.cache_prompt(content_with_recall)
-    
     # Get conversation context
-    history = handler.message_history[-10:]  # Last 10 messages
+    history = handler._history_for_chat(str(chat_id) if chat_id is not None else None)[-10:]
     context = handler.summarize_context(history)
-    
-    # Build full prompt
-    full_prompt = context + f"\n\nUser: {content_with_recall}" if context else content_with_recall
-    
-    if route["route"] == "chatgpt":
-        # Spawn ChatGPT subagent
-        result = await spawn_chatgpt_subagent(
-            task=full_prompt,
-            context={"original_message": message},
-            gateway_url=GATEWAY_URL,
-            token=GATEWAY_TOKEN
-        )
-        
-        reply_text = result.get("response", "Sorry, I couldn't process your request.")
+    kernel_packet = build_c_lawd_surface_kernel_packet(
+        surface="telegram",
+        include_memory=True,
+        mode="conversation",
+    )
+    full_prompt = handler.cache_prompt(content_with_recall, context=context, surface="telegram")
+
+    payload = build_chat_payload(full_prompt, temperature=0.0, max_tokens=800)
+    runtime_context = {
+        "input_text": content_with_recall,
+        "surface": "telegram",
+        "channel": "telegram",
+        "chat_id": str(chat_id) if chat_id is not None else "",
+        "message_id": str(message_id) if message_id is not None else "",
+        "queue_depth": route.get("load", {}).get("queue_depth", 0),
+        "overloaded": route.get("load", {}).get("overloaded", False),
+        "kernel_id": kernel_packet.kernel_id,
+        "kernel_hash": kernel_packet.kernel_hash,
+        "surface_overlay": kernel_packet.surface_overlay,
+    }
+    result = handler.router.execute_with_escalation("conversation", payload, context_metadata=runtime_context)
+    if result.get("ok"):
+        reply_text = str(result.get("text") or "").strip() or "I completed the routing path but received an empty reply."
     else:
-        # Use MiniMax (normal flow) - would integrate with gateway here
-        reply_text = f"[Would route to MiniMax] {content[:100]}..."
+        reason = str(result.get("reason_code") or "router_error")
+        reply_text = f"I couldn't complete the Telegram routing path cleanly. Blocker: {reason}."
     
     # Send reply with threading (replyTo)
     if chat_id and message_id:
@@ -268,19 +353,26 @@ async def handle_incoming_message(message: dict, handler: MessageHandler) -> dic
         )
     
     # Update history
-    handler.message_history.append({
-        "role": "user",
-        "content": content
-    })
-    handler.message_history.append({
-        "role": "assistant", 
-        "content": reply_text
-    })
-    
+    handler._append_history(str(chat_id) if chat_id is not None else None, role="user", content=content)
+    handler._append_history(str(chat_id) if chat_id is not None else None, role="assistant", content=reply_text)
+
+    route_provenance = dict(result.get("route_provenance") or {})
+    route_provenance.setdefault("surface", route.get("surface") or "telegram")
+    route_provenance.setdefault("policy_profile", route.get("policy_profile") or "default")
+    route_provenance.setdefault("selected_provider", route.get("selected_provider"))
+    route_provenance.setdefault("selected_model", route.get("selected_model"))
+    route_provenance.setdefault("reason_code", result.get("reason_code") or "router_error")
+    route_provenance.setdefault("kernel_id", kernel_packet.kernel_id)
+    route_provenance.setdefault("kernel_hash", kernel_packet.kernel_hash)
+    route_provenance.setdefault("surface_overlay", kernel_packet.surface_overlay)
+
     return {
         "success": True,
         "route": route["route"],
-        "reason": route["reason"]
+        "reason": route["reason"],
+        "provider": result.get("provider"),
+        "model": result.get("model"),
+        "route_provenance": route_provenance,
     }
 
 

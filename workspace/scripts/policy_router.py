@@ -42,11 +42,15 @@ _env_root = os.environ.get("OPENCLAW_ROOT")
 _file_root = _resolve_repo_root(Path(__file__).resolve())
 _cwd_root = _resolve_repo_root(Path.cwd())
 BASE_DIR = Path(_env_root) if _env_root else (_file_root or _cwd_root or Path("C:/Users/heath/.openclaw"))
+OPENCLAW_STATE_DIR = Path(
+    os.environ.get("OPENCLAW_STATE_DIR", str(Path.home() / ".openclaw"))
+).expanduser()
 POLICY_FILE = BASE_DIR / "workspace" / "policy" / "llm_policy.json"
 BUDGET_FILE = BASE_DIR / "itc" / "llm_budget.json"
 CIRCUIT_FILE = BASE_DIR / "itc" / "llm_circuit.json"
 EVENT_LOG = BASE_DIR / "itc" / "llm_router_events.jsonl"
-QWEN_AUTH_FILE = BASE_DIR / "agents" / "main" / "agent" / "auth-profiles.json"
+AUTH_PROFILES_FILE = OPENCLAW_STATE_DIR / "agents" / "main" / "agent" / "auth-profiles.json"
+OPENCLAW_CONFIG_FILE = OPENCLAW_STATE_DIR / "openclaw.json"
 TACTI_EVENT_LOG = BASE_DIR / "workspace" / "state" / "tacti_cr" / "events.jsonl"
 ACTIVE_INFERENCE_STATE_PATH = BASE_DIR / "workspace" / "state" / "active_inference_state.json"
 WITNESS_LEDGER_PATH = BASE_DIR / "workspace" / "state_runtime" / "teamchat" / "witness_ledger.jsonl"
@@ -174,9 +178,10 @@ DEFAULT_POLICY = {
             "tier": "paid",
             "type": "openai_compatible",
             "baseUrl": "https://api.x.ai/v1",
-            "apiKeyEnv": "GROK_API_KEY",
+            "apiKeyEnv": "XAI_API_KEY",
             "models": [
-                {"id": "grok-2", "maxInputChars": 6000}
+                {"id": "grok-4-fast-non-reasoning", "maxInputChars": 12000, "tier": "chat"},
+                {"id": "grok-4-1-fast", "maxInputChars": 24000, "tier": "reasoning"},
             ],
         },
         "openai_api": {
@@ -235,9 +240,12 @@ DEFAULT_POLICY = {
             "enabled": True,
             "subagentProvider": "local_vllm_assistant",
             "mechanicalProvider": "local_vllm_assistant",
-            "planningProvider": "claude_auth",
-            "reasoningProvider": "claude_auth",
-            "codeProvider": "local_vllm_assistant",
+            "chatProvider": "grok_api",
+            "localChatMaxChars": 320,
+            "reasoningEscalationTokens": 1400,
+            "planningProvider": "grok_api",
+            "reasoningProvider": "grok_api",
+            "codeProvider": "grok_api",
             "smallCodeProvider": "local_vllm_assistant",
             "explicitTriggers": {},
         },
@@ -338,6 +346,12 @@ _SECRET_VALUE_PATTERNS = [
     re.compile(r"\b(sk|gsk|xoxb|xoxp)-[A-Za-z0-9_-]{8,}\b", re.IGNORECASE),
     re.compile(r"((?:api[_-]?key|token|secret|password)\s*[:=]\s*)([^\s,;]+)", re.IGNORECASE),
 ]
+
+_ENV_ALIAS_MAP = {
+    "GROK_API_KEY": ("XAI_API_KEY", "OPENCLAW_XAI_API_KEY"),
+    "XAI_API_KEY": ("GROK_API_KEY", "OPENCLAW_XAI_API_KEY"),
+    "OPENCLAW_XAI_API_KEY": ("XAI_API_KEY", "GROK_API_KEY"),
+}
 
 
 def _redact_text(value):
@@ -626,7 +640,7 @@ def _active_inference_payload(context_metadata):
                     "expected_utility": exploratory_utility,
                     "epistemic_value": 0.8,
                     "complexity": 0.9,
-                    "preferred_provider": "openai_gpt52_chat",
+                    "preferred_provider": "openai_gpt54_chat",
                 },
             ]
             agent = ActiveInferenceAgent(
@@ -667,43 +681,74 @@ def _active_inference_payload(context_metadata):
 
 
 def read_env_or_secrets(key_name):
-    key = os.environ.get(key_name)
-    if key:
-        return key
+    for candidate in (key_name, *_ENV_ALIAS_MAP.get(str(key_name or ""), ())):
+        key = os.environ.get(candidate)
+        if key:
+            return key
     secrets_file = BASE_DIR / "secrets.env"
     if secrets_file.exists():
         try:
+            alias_keys = {str(key_name or ""), *_ENV_ALIAS_MAP.get(str(key_name or ""), ())}
             with open(secrets_file, "r", encoding="utf-8") as f:
                 for line in f:
                     line = line.strip()
                     if line.startswith("#") or "=" not in line:
                         continue
                     k, v = line.split("=", 1)
-                    if k.strip() == key_name and v.strip():
+                    if k.strip() in alias_keys and v.strip():
                         return v.strip()
         except Exception:
             pass
     return None
 
 
-def get_qwen_token():
-    if not QWEN_AUTH_FILE.exists():
-        return None, "qwen_auth_missing"
-    try:
-        auth = json.loads(QWEN_AUTH_FILE.read_text(encoding="utf-8"))
-        profile = auth.get("profiles", {}).get("qwen-portal:default", {})
-        token = profile.get("access")
-        expires = profile.get("expires", 0)
-        now_ms = int(time.time() * 1000)
-        if token and expires > now_ms + 300_000:
-            stats = auth.get("usageStats", {}).get("qwen-portal:default", {})
-            cooldown = stats.get("cooldownUntil", 0)
-            if now_ms < cooldown:
-                return None, "qwen_cooldown"
+def _auth_profile_records(profile_id):
+    records = []
+    for path in (AUTH_PROFILES_FILE, OPENCLAW_CONFIG_FILE):
+        if not path.exists():
+            continue
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        if path == OPENCLAW_CONFIG_FILE:
+            profiles = (data.get("auth") or {}).get("profiles", {})
+        else:
+            profiles = data.get("profiles", {})
+        profile = profiles.get(profile_id)
+        if isinstance(profile, dict):
+            records.append((path, profile))
+    return records
+
+
+def _get_oauth_profile_token(profile_id):
+    best_token = None
+    best_expiry = 0
+    now_ms = int(time.time() * 1000)
+    for _path, profile in _auth_profile_records(profile_id):
+        token = profile.get("access") or profile.get("token") or profile.get("key")
+        if not token:
+            continue
+        expires = int(profile.get("expires", 0) or 0)
+        if expires > now_ms + 300_000:
             return token, None
-    except Exception:
-        return None, "qwen_auth_error"
-    return None, "qwen_no_token"
+        if expires >= best_expiry:
+            best_token = token
+            best_expiry = expires
+    if best_token:
+        return None, "auth_token_expired"
+    return None, "auth_profile_missing"
+
+
+def get_qwen_token():
+    token, err = _get_oauth_profile_token("qwen-portal:default")
+    if token:
+        return token, None
+    if err == "auth_token_expired":
+        return None, "qwen_auth_expired"
+    if err == "auth_profile_missing":
+        return None, "qwen_auth_missing"
+    return None, "qwen_auth_error"
 
 
 def estimate_tokens(text):
@@ -1054,6 +1099,13 @@ def _provider_api_key_env(provider):
     return ""
 
 
+def _provider_auth_profile(provider):
+    auth = provider.get("auth")
+    if isinstance(auth, dict):
+        return auth.get("profile")
+    return ""
+
+
 def _looks_like_jwt(token):
     value = str(token or "").strip()
     if value.count(".") != 2:
@@ -1066,10 +1118,34 @@ def _looks_like_jwt(token):
 
 def _oauth_endpoint_supported(base_url):
     lowered = str(base_url or "").strip().lower()
-    return "chatgpt.com/backend-api" in lowered
+    return "chatgpt.com/backend-api" in lowered or "api.openai.com/v1" in lowered
 
 
-def _call_openai_compatible(base_url, api_key, model_id, payload, timeout=15):
+def resolve_tool_call_capability(provider, model_id):
+    provider = provider if isinstance(provider, dict) else {}
+    models = provider.get("models", []) if isinstance(provider.get("models"), list) else []
+    selected = next((m for m in models if isinstance(m, dict) and m.get("id") == model_id), {})
+    tool_support = str(selected.get("toolSupport") or selected.get("tool_support") or "").strip().lower()
+    return {
+        "tool_support": tool_support or "unknown",
+        "provider_type": str(provider.get("type") or "").strip().lower(),
+    }
+
+
+def _provider_extra_headers(name, context_metadata):
+    headers = {}
+    context_metadata = context_metadata or {}
+    if name == "grok_api":
+        conv_id = context_metadata.get("grok_conversation_id") or context_metadata.get("conversation_id")
+        user_id = context_metadata.get("grok_user_id") or context_metadata.get("user_id")
+        if conv_id:
+            headers["x-grok-conv-id"] = str(conv_id)
+        if user_id:
+            headers["x-grok-user-id"] = str(user_id)
+    return headers
+
+
+def _call_openai_compatible(base_url, api_key, model_id, payload, timeout=15, provider_caps=None, extra_headers=None):
     if requests is None:
         return {"ok": False, "reason_code": "no_requests_lib"}
     if _looks_like_jwt(api_key) and not _oauth_endpoint_supported(base_url):
@@ -1085,7 +1161,12 @@ def _call_openai_compatible(base_url, api_key, model_id, payload, timeout=15):
     headers = {"Content-Type": "application/json"}
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
+    if isinstance(extra_headers, dict):
+        for key, value in extra_headers.items():
+            if key and value:
+                headers[str(key)] = str(value)
     try:
+        _ = provider_caps
         resp = requests.post(url, json={"model": model_id, **payload}, headers=headers, timeout=timeout)
         if resp.status_code == 429:
             return {"ok": False, "reason_code": "request_http_429"}
@@ -1205,6 +1286,22 @@ def _resolve_order(intent_cfg, policy):
     return final
 
 
+def _merge_router_cfg(base, override):
+    if not isinstance(base, dict):
+        base = {}
+    if not isinstance(override, dict):
+        return dict(base)
+    merged = dict(base)
+    for key, value in override.items():
+        if isinstance(value, dict) and isinstance(merged.get(key), dict):
+            nested = dict(merged[key])
+            nested.update(value)
+            merged[key] = nested
+        else:
+            merged[key] = value
+    return merged
+
+
 def _budget_remaining(limit, used):
     if limit <= 0:
         return None
@@ -1239,14 +1336,67 @@ class PolicyRouter:
         self.run_counts = {}
         self._proprio_sampler = ProprioceptiveSampler() if _flag_enabled("OPENCLAW_ROUTER_PROPRIOCEPTION") and ProprioceptiveSampler else None
 
-    def _intent_cfg(self, intent):
+    def _intent_cfg(self, intent, context_metadata=None):
         intent = canonical_intent(intent)
         intents = self.policy.get("routing", {}).get("intents", {})
+        surface_profile = self._surface_profile(context_metadata)
         if isinstance(intent, str) and intent.startswith("teamchat:") and "coding" in intents:
-            return intents.get("coding", {})
+            base = intents.get("coding", {})
+            override = ((surface_profile.get("intents") or {}).get("coding", {})) if surface_profile else {}
+            return _merge_router_cfg(base, override)
         if intent in intents:
-            return intents.get(intent, {})
-        return intents.get("conversation", {})
+            base = intents.get(intent, {})
+        else:
+            base = intents.get("conversation", {})
+        override = ((surface_profile.get("intents") or {}).get(intent, {})) if surface_profile else {}
+        if not override and intent != "conversation":
+            override = ((surface_profile.get("intents") or {}).get("conversation", {})) if surface_profile else {}
+        return _merge_router_cfg(base, override)
+
+    def _surface_profile(self, context_metadata):
+        context_metadata = context_metadata or {}
+        routing = self.policy.get("routing", {}) if isinstance(self.policy, dict) else {}
+        profiles = routing.get("surface_profiles", {})
+        if not isinstance(profiles, dict):
+            return {}
+        key = self._surface_profile_name(context_metadata)
+        if key and isinstance(profiles.get(key), dict):
+            return profiles.get(key, {})
+        return {}
+
+    def _surface_profile_name(self, context_metadata):
+        context_metadata = context_metadata or {}
+        routing = self.policy.get("routing", {}) if isinstance(self.policy, dict) else {}
+        profiles = routing.get("surface_profiles", {})
+        if not isinstance(profiles, dict):
+            return None
+        candidates = [
+            context_metadata.get("surface"),
+            context_metadata.get("channel"),
+            context_metadata.get("surface_profile"),
+        ]
+        for candidate in candidates:
+            key = str(candidate or "").strip().lower()
+            if key and isinstance(profiles.get(key), dict):
+                return key
+        return None
+
+    def _build_route_provenance(self, *, route_explain, context_metadata, selected_provider, selected_model, reason_code, capability_class):
+        provenance = {
+            "surface": route_explain.get("surface", "default"),
+            "policy_profile": route_explain.get("policy_profile", "default"),
+            "selected_provider": selected_provider,
+            "selected_model": selected_model,
+            "reason_code": reason_code,
+            "capability_class": capability_class,
+            "matched_trigger": route_explain.get("matched_trigger", "default"),
+        }
+        context_metadata = context_metadata or {}
+        for key in ("kernel_id", "kernel_hash", "surface_overlay"):
+            value = context_metadata.get(key)
+            if isinstance(value, str) and value.strip():
+                provenance[key] = value.strip()
+        return provenance
 
     def _provider_cfg(self, name):
         providers = self.policy.get("providers", {})
@@ -1270,7 +1420,7 @@ class PolicyRouter:
         provider = self._provider_cfg(name)
         models = provider.get("models", [])
         override = (context or {}).get("override_model")
-        if override and name == "ollama":
+        if override:
             return override
         if not models:
             return None
@@ -1285,6 +1435,38 @@ class PolicyRouter:
             for m in models:
                 if m.get("tier") == "large":
                     return m.get("id")
+        if name == "grok_api":
+            capability_class = str((context or {}).get("capability_class", "")).strip().lower()
+            text = str((context or {}).get("input_text", ""))
+            if not capability_class:
+                capability_class = self._capability_class(context or {}, "")
+            desired_tier = "chat"
+            if capability_class in {"mechanical_execution", "code_generation_large"}:
+                desired_tier = "code"
+            elif capability_class == "research_browse":
+                desired_tier = "reasoning"
+            elif capability_class == "planning_synthesis" and _has_strong_planning_signal(text):
+                desired_tier = "reasoning"
+
+            for env_key in {
+                "chat": ("OPENCLAW_XAI_CHAT_MODEL", "XAI_CHAT_MODEL"),
+                "reasoning": ("OPENCLAW_XAI_REASONING_MODEL", "XAI_REASONING_MODEL"),
+                "code": ("OPENCLAW_XAI_CODE_MODEL", "XAI_CODE_MODEL"),
+            }.get(desired_tier, ()):
+                env_value = str(os.environ.get(env_key, "")).strip()
+                if env_value:
+                    return env_value
+
+            for m in models:
+                if m.get("tier") == desired_tier:
+                    return m.get("id")
+            fallback_order = ("chat", "reasoning", "code")
+            if desired_tier in {"reasoning", "code"}:
+                fallback_order = ("reasoning", "chat", "code")
+            for fallback_tier in fallback_order:
+                for m in models:
+                    if m.get("tier") == fallback_tier:
+                        return m.get("id")
         return models[0].get("id")
 
     def _provider_max_chars(self, name, model_id):
@@ -1484,7 +1666,14 @@ class PolicyRouter:
         }
 
     def _capability_cfg(self):
-        return self.policy.get("routing", {}).get("capability_router", {})
+        return self._capability_cfg_for_context({})
+
+    def _capability_cfg_for_context(self, context_metadata):
+        routing = self.policy.get("routing", {}) if isinstance(self.policy, dict) else {}
+        base = routing.get("capability_router", {})
+        surface_profile = self._surface_profile(context_metadata)
+        override = (surface_profile.get("capability_router", {}) if isinstance(surface_profile, dict) else {})
+        return _merge_router_cfg(base, override)
 
     def _capability_class(self, context_metadata, payload_text=""):
         context_metadata = context_metadata or {}
@@ -1506,7 +1695,7 @@ class PolicyRouter:
                     "reason": "active inference preferred provider",
                 }
 
-        cfg = self._capability_cfg()
+        cfg = self._capability_cfg_for_context(context_metadata)
         if cfg.get("enabled") is False:
             return None
 
@@ -1561,7 +1750,7 @@ class PolicyRouter:
                     "trigger": "capability_class",
                     "matched": capability_class,
                     "provider": provider,
-                    "reason": "mechanical/execution class prefers local vLLM subagent",
+                    "reason": "mechanical/execution class selected the configured code lane",
                     "capability_class": capability_class,
                 }
 
@@ -1572,7 +1761,7 @@ class PolicyRouter:
                     "trigger": "capability_class",
                     "matched": capability_class,
                     "provider": code_provider,
-                    "reason": "large code generation prefers local coder lane first",
+                    "reason": "large code generation selected the configured code lane",
                     "capability_class": capability_class,
                 }
 
@@ -1589,7 +1778,21 @@ class PolicyRouter:
 
         if capability_class == "planning_synthesis":
             local_provider = cfg.get("mechanicalProvider") or cfg.get("subagentProvider") or "local_vllm_assistant"
+            chat_provider = cfg.get("chatProvider")
+            local_chat_max_chars = _coerce_positive_int(cfg.get("localChatMaxChars"), 320)
+            reasoning_escalation_tokens = _coerce_positive_int(cfg.get("reasoningEscalationTokens"), 1400)
+            complexity_min_bullets = _coerce_positive_int(cfg.get("structureComplexityMinBullets"), 3)
+            complexity_min_paths = _coerce_positive_int(cfg.get("structureComplexityMinPaths"), 2)
+            structure_complex = _count_bullets(text) >= complexity_min_bullets or _count_file_paths(text) >= complexity_min_paths
             if not _has_strong_planning_signal(text):
+                if chat_provider and len(text) > local_chat_max_chars:
+                    return {
+                        "trigger": "capability_class",
+                        "matched": capability_class,
+                        "provider": chat_provider,
+                        "reason": "ordinary conversation beyond local chat threshold prefers Grok chat lane",
+                        "capability_class": capability_class,
+                    }
                 if local_provider:
                     return {
                         "trigger": "capability_class",
@@ -1601,6 +1804,15 @@ class PolicyRouter:
                 return None
             est_tokens = estimate_tokens(text)
             local_soft = self._context_defaults().get("soft_limit_tokens", 24576)
+            planning_provider = cfg.get("planningProvider") or cfg.get("reasoningProvider")
+            if planning_provider and (est_tokens >= reasoning_escalation_tokens or structure_complex):
+                return {
+                    "trigger": "capability_class",
+                    "matched": capability_class,
+                    "provider": planning_provider,
+                    "reason": "strong planning signal and structure complexity prefer reasoning lane",
+                    "capability_class": capability_class,
+                }
             if est_tokens <= local_soft and local_provider:
                 return {
                     "trigger": "capability_class",
@@ -1609,7 +1821,6 @@ class PolicyRouter:
                     "reason": "planning synthesis remains local-first while inside local context budget",
                     "capability_class": capability_class,
                 }
-            planning_provider = cfg.get("planningProvider") or cfg.get("reasoningProvider")
             if planning_provider:
                 return {
                     "trigger": "capability_class",
@@ -1656,10 +1867,19 @@ class PolicyRouter:
                     return False, err or "missing_token"
             else:
                 auth_type = _provider_auth_type(provider)
-                api_key_env = _provider_api_key_env(provider)
-                requires_key = bool(api_key_env) or auth_type == "bearer"
-                if requires_key:
-                    api_key = read_env_or_secrets(api_key_env)
+                profile_id = _provider_auth_profile(provider)
+                if auth_type == "oauth_profile" and profile_id:
+                    api_key, err = _get_oauth_profile_token(profile_id)
+                    if not api_key:
+                        return False, err or "missing_token"
+                else:
+                    api_key_env = _provider_api_key_env(provider)
+                    requires_key = bool(api_key_env) or auth_type == "bearer"
+                    if not requires_key:
+                        api_key = None
+                    else:
+                        api_key = read_env_or_secrets(api_key_env)
+                if (auth_type == "bearer" or _provider_api_key_env(provider)) and not api_key:
                     if not api_key:
                         return False, "missing_api_key"
 
@@ -1803,7 +2023,7 @@ class PolicyRouter:
         save_budget_state(self.budget_state, self.budget_path)
 
     def select_model(self, intent, context_metadata=None):
-        intent_cfg = self._intent_cfg(intent)
+        intent_cfg = self._intent_cfg(intent, context_metadata)
         order, _decision = self._ordered_providers(intent_cfg, context_metadata or {})
         for name in order:
             ok, reason = self._provider_available(name, intent_cfg)
@@ -1814,7 +2034,7 @@ class PolicyRouter:
         return None
 
     def intent_status(self, intent):
-        intent_cfg = self._intent_cfg(intent)
+        intent_cfg = self._intent_cfg(intent, {})
         order = _resolve_order(intent_cfg, self.policy)
         available = []
         reasons = {}
@@ -1836,9 +2056,16 @@ class PolicyRouter:
     def explain_route(self, intent, context_metadata=None, payload=None):
         context_metadata = context_metadata or {}
         payload_text = _extract_text_from_payload(payload or {})
-        intent_cfg = self._intent_cfg(intent)
+        intent_cfg = self._intent_cfg(intent, context_metadata)
         base_order = _resolve_order(intent_cfg, self.policy)
         order, decision = self._ordered_providers(intent_cfg, context_metadata, payload_text)
+        surface = str(
+            context_metadata.get("surface")
+            or context_metadata.get("channel")
+            or context_metadata.get("surface_profile")
+            or "default"
+        ).strip().lower()
+        profile_name = self._surface_profile_name(context_metadata)
 
         chosen = None
         unavailable = {}
@@ -1856,6 +2083,9 @@ class PolicyRouter:
         ctx_defaults = self._context_defaults()
         return {
             "intent": intent,
+            "surface": surface or "default",
+            "policy_profile": f"surface:{profile_name}" if profile_name else "default",
+            "policy_path": str(self.policy_path),
             "matched_trigger": (decision or {}).get("trigger") or "default",
             "matched_detail": (decision or {}).get("matched") or "none",
             "reason": (decision or {}).get("reason") or "default intent routing order",
@@ -1876,11 +2106,11 @@ class PolicyRouter:
         }
 
     def execute_with_escalation(self, intent, payload, context_metadata=None, validate_fn=None):
-        intent_cfg = self._intent_cfg(intent)
-        attempts = 0
-        last_reason = None
         context_metadata = context_metadata or {}
         runtime_context = dict(context_metadata)
+        intent_cfg = self._intent_cfg(intent, runtime_context)
+        attempts = 0
+        last_reason = None
         request_id = str(runtime_context.get("request_id") or _new_request_id("rt"))
         runtime_context["request_id"] = request_id
         payload_text = _extract_text_from_payload(payload)
@@ -2068,9 +2298,14 @@ class PolicyRouter:
                         if provider.get("auth") == "qwen_oauth":
                             api_key, _ = get_qwen_token()
                         else:
-                            api_key_env = _provider_api_key_env(provider)
-                            if api_key_env:
-                                api_key = read_env_or_secrets(api_key_env)
+                            auth_type = _provider_auth_type(provider)
+                            profile_id = _provider_auth_profile(provider)
+                            if auth_type == "oauth_profile" and profile_id:
+                                api_key, _ = _get_oauth_profile_token(profile_id)
+                            else:
+                                api_key_env = _provider_api_key_env(provider)
+                                if api_key_env:
+                                    api_key = read_env_or_secrets(api_key_env)
                         provider_caps = resolve_tool_call_capability(provider, model_id)
                         result = _call_openai_compatible(
                             provider.get("baseUrl", ""),
@@ -2078,6 +2313,7 @@ class PolicyRouter:
                             model_id,
                             candidate_payload,
                             provider_caps=provider_caps,
+                            extra_headers=_provider_extra_headers(name, runtime_context),
                         )
                     elif ptype == "anthropic":
                         api_key = read_env_or_secrets(provider.get("apiKeyEnv", ""))
@@ -2235,6 +2471,14 @@ class PolicyRouter:
             }
             if meta is not None:
                 result_payload["meta"] = meta
+            result_payload["route_provenance"] = self._build_route_provenance(
+                route_explain=route_explain,
+                context_metadata=runtime_context,
+                selected_provider=name,
+                selected_model=model_id,
+                reason_code="success",
+                capability_class=capability_class,
+            )
             return result_payload
 
         _emit(
@@ -2264,6 +2508,14 @@ class PolicyRouter:
                 "attempts": attempts,
                 "request_id": request_id,
                 "capability_class": capability_class,
+                "route_provenance": self._build_route_provenance(
+                    route_explain=route_explain,
+                    context_metadata=runtime_context,
+                    selected_provider=(route_explain.get("chosen") or {}).get("provider"),
+                    selected_model=(route_explain.get("chosen") or {}).get("model"),
+                    reason_code="context_too_large",
+                    capability_class=capability_class,
+                ),
                 "error": {
                     "type": "CONTEXT_TOO_LARGE",
                     "tier": "LOCAL",
@@ -2279,4 +2531,12 @@ class PolicyRouter:
             "attempts": attempts,
             "request_id": request_id,
             "capability_class": capability_class,
+            "route_provenance": self._build_route_provenance(
+                route_explain=route_explain,
+                context_metadata=runtime_context,
+                selected_provider=(route_explain.get("chosen") or {}).get("provider"),
+                selected_model=(route_explain.get("chosen") or {}).get("model"),
+                reason_code=last_reason or "no_provider_available",
+                capability_class=capability_class,
+            ),
         }
