@@ -166,6 +166,11 @@ DEFAULT_POLICY = {
             "tier": "auth",
             "type": "openai_auth",
             "readyEnv": "OPENAI_AUTH_READY",
+            "models": [
+                {"id": "openai/gpt-5.4-pro", "maxInputChars": 60000},
+                {"id": "openai/gpt-5.4", "maxInputChars": 60000},
+                {"id": "openai-codex/gpt-5.4", "maxInputChars": 60000},
+            ],
         },
         "claude_auth": {
             "enabled": True,
@@ -1325,16 +1330,18 @@ class PolicyRouter:
         provider = self._provider_cfg(name)
         models = provider.get("models", [])
         override = (context or {}).get("override_model")
-        if not models:
-            return None
         if override:
             normalized_override = str(override).strip()
             if normalized_override:
+                if not models:
+                    return normalized_override
                 for model in models:
                     if str(model.get("id") or "").strip() == normalized_override:
                         return normalized_override
                 if name == "ollama":
                     return normalized_override
+        if not models:
+            return None
         if name == "ollama":
             short_chars = int(intent_cfg.get("shortMessageChars", 240))
             prefer_local_short = bool(intent_cfg.get("preferLocalForShort", False))
@@ -1716,6 +1723,8 @@ class PolicyRouter:
 
         ptype = provider.get("type")
         if ptype == "openai_auth" or ptype == "anthropic_auth":
+            if callable(self.handlers.get(name)):
+                return True, None
             ready_env = provider.get("readyEnv")
             if ready_env and not os.environ.get(ready_env):
                 return False, "auth_login_required"

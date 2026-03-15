@@ -251,6 +251,75 @@ class TestPolicyRouterOpenAICompatibleDispatch(unittest.TestCase):
         self.assertEqual(out.get("model"), "gpt-5.2-chat-preview")
         self.assertEqual(seen.get("model_id"), "gpt-5.2-chat-preview")
 
+    def test_auth_handler_can_run_without_ready_env_and_use_override_model(self):
+        policy_router = _load_policy_router_module()
+
+        seen: dict[str, object] = {}
+
+        def _handler(_payload, model_id, context):
+            seen["model_id"] = model_id
+            seen["exec_agent_id"] = context.get("exec_agent_id")
+            return {"ok": True, "text": "ok"}
+
+        policy = {
+            "version": 2,
+            "defaults": {
+                "allowPaid": True,
+                "maxTokensPerRequest": 4096,
+                "circuitBreaker": {"failureThreshold": 3, "cooldownSec": 60, "windowSec": 60, "failOn": []},
+            },
+            "budgets": {
+                "intents": {"conversation": {"dailyTokenBudget": 999999, "dailyCallBudget": 999, "maxCallsPerRun": 10}},
+                "tiers": {"auth": {"dailyTokenBudget": 999999, "dailyCallBudget": 999}},
+            },
+            "providers": {
+                "openai_auth": {
+                    "enabled": True,
+                    "paid": False,
+                    "tier": "auth",
+                    "type": "openai_auth",
+                    "readyEnv": "OPENAI_AUTH_READY",
+                }
+            },
+            "routing": {
+                "free_order": [],
+                "intents": {
+                    "conversation": {
+                        "order": ["openai_auth"],
+                        "allowPaid": True,
+                    }
+                },
+            },
+        }
+
+        with tempfile.TemporaryDirectory() as td:
+            tmp = Path(td)
+            policy_path = tmp / "policy.json"
+            policy_path.write_text(json.dumps(policy), encoding="utf-8")
+            router = policy_router.PolicyRouter(
+                policy_path=policy_path,
+                budget_path=tmp / "budget.json",
+                circuit_path=tmp / "circuit.json",
+                event_log=tmp / "events.jsonl",
+                handlers={"openai_auth": _handler},
+            )
+            out = router.execute_with_escalation(
+                "conversation",
+                {"prompt": "hi"},
+                {
+                    "input_text": "hi",
+                    "preferred_provider": "openai_auth",
+                    "override_model": "openai/gpt-5.4-pro",
+                    "exec_agent_id": "main",
+                },
+            )
+
+        self.assertTrue(out.get("ok"), out)
+        self.assertEqual(out.get("provider"), "openai_auth")
+        self.assertEqual(out.get("model"), "openai/gpt-5.4-pro")
+        self.assertEqual(seen.get("model_id"), "openai/gpt-5.4-pro")
+        self.assertEqual(seen.get("exec_agent_id"), "main")
+
     def test_itc_classify_can_disable_capability_router_override(self):
         policy_router = _load_policy_router_module()
         policy_router.requests = _DummyRequests

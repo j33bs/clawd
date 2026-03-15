@@ -252,11 +252,25 @@
       ]
     },
     "openai_auth": {
-      "enabled": false,
+      "enabled": true,
       "paid": false,
       "tier": "auth",
       "type": "openai_auth",
-      "readyEnv": "OPENAI_AUTH_READY"
+      "readyEnv": "OPENAI_AUTH_READY",
+      "models": [
+        {
+          "id": "openai/gpt-5.4-pro",
+          "maxInputChars": 60000
+        },
+        {
+          "id": "openai/gpt-5.4",
+          "maxInputChars": 60000
+        },
+        {
+          "id": "openai-codex/gpt-5.4",
+          "maxInputChars": 60000
+        }
+      ]
     },
     "claude_auth": {
       "enabled": true,

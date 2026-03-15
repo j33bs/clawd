@@ -13,6 +13,7 @@ import os
 import sys
 import json
 import asyncio
+import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
@@ -52,6 +53,8 @@ except Exception:  # pragma: no cover
 
 from api.discord_bot_support import (  # type: ignore
     build_telegram_chat_prompt,
+    extract_agent_reply_text,
+    extract_last_json_object,
     source_context_packet_text,
     telegram_memory_context_text,
     user_context_packet_text,
@@ -64,9 +67,113 @@ GATEWAY_URL = os.environ.get("GATEWAY_URL", "http://127.0.0.1:18789")
 GATEWAY_TOKEN = os.environ.get("GATEWAY_TOKEN", "")  # Set your token
 MAX_QUEUE_DEPTH = int(os.environ.get("MAX_QUEUE_DEPTH", "5"))
 MAX_LATENCY_MS = int(os.environ.get("MAX_LATENCY_MS", "30000"))
+OPENCLAW_BIN = os.environ.get(
+    "OPENCLAW_CLI_BIN",
+    str(REPO_ROOT / ".runtime" / "openclaw" / "openclaw.mjs"),
+).strip()
 TELEGRAM_AGENT_ID = os.environ.get("OPENCLAW_TELEGRAM_AGENT_ID", "telegram-dali").strip() or "telegram-dali"
+TELEGRAM_EXEC_AGENT_ID = os.environ.get("OPENCLAW_TELEGRAM_EXEC_AGENT_ID", "main").strip() or "main"
+TELEGRAM_DEFAULT_PROVIDER = os.environ.get("OPENCLAW_TELEGRAM_DEFAULT_PROVIDER", "openai_auth").strip() or "openai_auth"
+TELEGRAM_OAUTH_MODEL = os.environ.get("OPENCLAW_TELEGRAM_OAUTH_MODEL", "openai/gpt-5.4-pro").strip() or "openai/gpt-5.4-pro"
+TELEGRAM_AUTH_THINKING = os.environ.get("OPENCLAW_TELEGRAM_AUTH_THINKING", "medium").strip() or "medium"
+TELEGRAM_AUTH_TIMEOUT_SECONDS = max(
+    30,
+    int(os.environ.get("OPENCLAW_TELEGRAM_AUTH_TIMEOUT_SECONDS", "180") or "180"),
+)
 TELEGRAM_MAX_TOKENS = max(256, int(os.environ.get("OPENCLAW_TELEGRAM_MAX_TOKENS", "1200") or "1200"))
 TELEGRAM_TEMPERATURE = float(os.environ.get("OPENCLAW_TELEGRAM_TEMPERATURE", "0.2") or "0.2")
+
+
+def _payload_prompt_text(payload: dict[str, Any]) -> str:
+    messages = payload.get("messages")
+    if isinstance(messages, list):
+        parts: list[str] = []
+        for item in messages:
+            if not isinstance(item, dict):
+                continue
+            content = item.get("content")
+            if isinstance(content, str) and content.strip():
+                parts.append(content.strip())
+        if parts:
+            return "\n\n".join(parts)
+    for key in ("prompt", "input", "text"):
+        value = payload.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return ""
+
+
+def _auth_reason_code_from_detail(detail: str) -> str:
+    text = str(detail or "").lower()
+    if "429" in text or "rate limit" in text or "quota" in text:
+        return "request_http_429"
+    if "timeout" in text or "timed out" in text:
+        return "request_timeout"
+    if "auth" in text or "login" in text or "no available auth profile" in text or "configure auth" in text:
+        return "auth_login_required"
+    return "auth_cli_failed"
+
+
+def _run_openclaw_auth_prompt(
+    payload: dict[str, Any],
+    model_id: str | None,
+    context: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    prompt = _payload_prompt_text(payload or {})
+    if not prompt:
+        return {"ok": False, "reason_code": "empty_prompt"}
+    runtime_context = dict(context or {})
+    selected_model = str(model_id or runtime_context.get("override_model") or TELEGRAM_OAUTH_MODEL).strip()
+    exec_agent_id = str(runtime_context.get("exec_agent_id") or TELEGRAM_EXEC_AGENT_ID).strip() or TELEGRAM_EXEC_AGENT_ID
+    cmd = [
+        "node",
+        OPENCLAW_BIN,
+        "agent",
+        "--local",
+        "--agent",
+        exec_agent_id,
+        "--json",
+        "--message",
+        prompt,
+        "--model",
+        selected_model,
+        "--thinking",
+        TELEGRAM_AUTH_THINKING,
+        "--timeout",
+        str(TELEGRAM_AUTH_TIMEOUT_SECONDS),
+    ]
+    try:
+        proc = subprocess.run(
+            cmd,
+            cwd=str(REPO_ROOT),
+            capture_output=True,
+            text=True,
+            timeout=TELEGRAM_AUTH_TIMEOUT_SECONDS + 30,
+            check=False,
+        )
+    except subprocess.TimeoutExpired as exc:
+        detail = str(exc)
+        return {"ok": False, "reason_code": _auth_reason_code_from_detail(detail), "error": detail}
+    except Exception as exc:
+        detail = str(exc)
+        return {"ok": False, "reason_code": "auth_cli_failed", "error": detail}
+
+    stdout_text = proc.stdout or ""
+    stderr_text = (proc.stderr or "").strip()
+    if proc.returncode != 0:
+        detail = stderr_text or stdout_text.strip() or f"exit {proc.returncode}"
+        return {"ok": False, "reason_code": _auth_reason_code_from_detail(detail), "error": detail}
+
+    try:
+        response_payload = extract_last_json_object(stdout_text)
+    except Exception as exc:
+        detail = stderr_text or str(exc) or stdout_text.strip()
+        return {"ok": False, "reason_code": "auth_cli_parse_error", "error": detail}
+
+    reply_text = extract_agent_reply_text(response_payload).strip()
+    if not reply_text:
+        return {"ok": False, "reason_code": "response_null", "error": "No response text returned."}
+    return {"ok": True, "text": reply_text}
 
 
 class MessageHandler:
@@ -75,7 +182,7 @@ class MessageHandler:
     def __init__(self, gateway_url: str, token: str, router: PolicyRouter | None = None):
         self.gateway_url = gateway_url
         self.token = token
-        self.router = router or PolicyRouter()
+        self.router = router or PolicyRouter(handlers={"openai_auth": _run_openclaw_auth_prompt})
         self.queue_depth = 0
         self.avg_latency = 0
         self.message_history = []  # For context summarization
@@ -302,10 +409,15 @@ def _build_telegram_runtime_request(message: dict[str, Any]) -> tuple[str, dict[
     )
 
     route_meta = _route_metadata(content)
+    if not route_meta.get("preferred_provider"):
+        route_meta["preferred_provider"] = TELEGRAM_DEFAULT_PROVIDER
+    if route_meta.get("preferred_provider") == "openai_auth" and not route_meta.get("override_model"):
+        route_meta["override_model"] = TELEGRAM_OAUTH_MODEL
     context_metadata: dict[str, Any] = {
         "input_text": content,
         "surface": "telegram",
         "agent_id": TELEGRAM_AGENT_ID,
+        "exec_agent_id": TELEGRAM_EXEC_AGENT_ID,
         "author_name": author_name,
         "chat_id": chat_id,
         "chat_title": chat_title,
