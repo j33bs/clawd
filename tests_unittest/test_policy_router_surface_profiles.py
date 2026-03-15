@@ -14,6 +14,63 @@ from policy_router import PolicyRouter  # noqa: E402
 
 
 class PolicyRouterSurfaceProfilesTests(unittest.TestCase):
+    def test_strict_policy_validation_allows_budget_action_class_caps(self):
+        policy = {
+            "version": 2,
+            "defaults": {
+                "allowPaid": True,
+                "maxTokensPerRequest": 4096,
+                "circuitBreaker": {"failureThreshold": 3, "cooldownSec": 60, "windowSec": 60, "failOn": []},
+            },
+            "budgets": {
+                "intents": {
+                    "conversation": {
+                        "dailyTokenBudget": 999999,
+                        "dailyCallBudget": 999,
+                        "maxCallsPerRun": 20,
+                        "actionClassCaps": {"D": 3, "C": 5},
+                    }
+                },
+                "tiers": {
+                    "free": {"dailyTokenBudget": 999999, "dailyCallBudget": 999},
+                },
+            },
+            "providers": {
+                "local_vllm_assistant": {
+                    "enabled": True,
+                    "paid": False,
+                    "tier": "free",
+                    "type": "mock",
+                    "models": [{"id": "local-assistant"}],
+                },
+            },
+            "routing": {
+                "free_order": ["local_vllm_assistant"],
+                "intents": {
+                    "conversation": {
+                        "order": ["local_vllm_assistant"],
+                    }
+                },
+                "capability_router": {"enabled": False},
+            },
+        }
+
+        with tempfile.TemporaryDirectory() as td:
+            tmp = Path(td)
+            policy_path = tmp / "policy.json"
+            policy_path.write_text(json.dumps(policy), encoding="utf-8")
+
+            router = PolicyRouter(
+                policy_path=policy_path,
+                budget_path=tmp / "budget.json",
+                circuit_path=tmp / "circuit.json",
+                event_log=tmp / "events.jsonl",
+                handlers={},
+            )
+
+            choice = router.select_model("conversation", {"input_text": "hello"})
+            self.assertEqual(choice["provider"], "local_vllm_assistant")
+
     def test_telegram_surface_profile_overrides_global_conversation_order(self):
         policy = {
             "version": 2,

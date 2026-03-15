@@ -414,7 +414,7 @@ def _budget_intent_key(intent):
 
 def _validate_policy_schema(raw):
     errors = []
-    budget_intent_keys = {"dailyTokenBudget", "dailyCallBudget", "maxCallsPerRun"}
+    budget_intent_keys = {"dailyTokenBudget", "dailyCallBudget", "maxCallsPerRun", "actionClassCaps"}
     provider_keys = {
         "enabled",
         "paid",
