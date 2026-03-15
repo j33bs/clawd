@@ -101,6 +101,8 @@ class MessageHandlerKernelProvenanceTests(unittest.TestCase):
             ]
             self.assertEqual(len(rows), 1)
             self.assertEqual(rows[0]["reply_id"], "1")
+            self.assertEqual(rows[0]["policy_profile"], "surface:telegram")
+            self.assertEqual(rows[0]["reason_code"], "success")
             self.assertEqual(rows[0]["provider"], "openai_gpt54_chat")
             self.assertEqual(rows[0]["model"], "gpt-5.4")
             self.assertEqual(rows[0]["memory_blocks"], [])

@@ -401,6 +401,8 @@ async def handle_incoming_message(message: dict, handler: MessageHandler) -> dic
     provenance_envelope = {
         "reply_id": str(reply_id or message_id or ""),
         "surface": "telegram",
+        "policy_profile": route_provenance.get("policy_profile"),
+        "reason_code": route_provenance.get("reason_code"),
         "provider": route_provenance.get("selected_provider") or result.get("provider"),
         "model": route_provenance.get("selected_model") or result.get("model"),
         "memory_blocks": list(route_provenance.get("memory_blocks") or []),
