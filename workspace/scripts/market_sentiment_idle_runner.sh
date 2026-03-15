@@ -6,12 +6,51 @@ IDLE_THRESHOLD_SECONDS="${OPENCLAW_MARKET_SENTIMENT_IDLE_THRESHOLD_SECONDS:-900}
 CONFIG_PATH="${OPENCLAW_MARKET_SENTIMENT_CONFIG:-${ROOT_DIR}/workspace/config/market_sentiment_sources.json}"
 OUTPUT_PATH="${OPENCLAW_MARKET_SENTIMENT_OUTPUT:-${ROOT_DIR}/workspace/state/external/macbook_sentiment.json}"
 OLLAMA_BIN="${OPENCLAW_OLLAMA_BIN:-/opt/homebrew/bin/ollama}"
+SHOULD_STOP_MODELS=0
 
 stop_models() {
-  if [[ -x "${OLLAMA_BIN}" ]]; then
-    "${OLLAMA_BIN}" stop phi4-mini:latest >/dev/null 2>&1 || true
-    "${OLLAMA_BIN}" stop phi3:mini >/dev/null 2>&1 || true
-  fi
+  [[ "${SHOULD_STOP_MODELS}" == "1" ]] || return 0
+  [[ -x "${OLLAMA_BIN}" ]] || return 0
+
+  /usr/bin/python3 - <<'PY' "${OLLAMA_BIN}"
+import subprocess
+import sys
+
+ollama = sys.argv[1]
+models = ("phi4-mini:latest", "phi3:mini")
+
+try:
+    proc = subprocess.run(
+        [ollama, "ps"],
+        capture_output=True,
+        text=True,
+        timeout=5,
+        check=False,
+    )
+except Exception:
+    raise SystemExit(0)
+
+loaded = set()
+for line in proc.stdout.splitlines()[1:]:
+    line = line.strip()
+    if not line:
+        continue
+    loaded.add(line.split()[0])
+
+for model in models:
+    if model not in loaded:
+        continue
+    try:
+        subprocess.run(
+            [ollama, "stop", model],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+    except Exception:
+        pass
+PY
 }
 
 idle_seconds() {
@@ -85,4 +124,5 @@ if [[ "${OPENCLAW_MARKET_SENTIMENT_FORCE:-0}" != "1" ]] && artifact_recent "${in
 fi
 
 export OPENCLAW_MARKET_SENTIMENT_IDLE_OVERRIDE=1
-exec /bin/bash "${ROOT_DIR}/workspace/scripts/run_market_sentiment_feed.sh" --config "${CONFIG_PATH}" --output "${OUTPUT_PATH}"
+SHOULD_STOP_MODELS=1
+/bin/bash "${ROOT_DIR}/workspace/scripts/run_market_sentiment_feed.sh" --config "${CONFIG_PATH}" --output "${OUTPUT_PATH}"

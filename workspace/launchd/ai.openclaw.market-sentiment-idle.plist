@@ -16,7 +16,7 @@
   <true/>
 
   <key>StartInterval</key>
-  <integer>900</integer>
+  <integer>3600</integer>
 
   <key>ProcessType</key>
   <string>Background</string>
