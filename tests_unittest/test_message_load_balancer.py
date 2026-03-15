@@ -1,10 +1,4 @@
-"""Tests for message_load_balancer.py — LoadBalancer pure/stateless logic.
-
-Note: LoadBalancer.get_status() internally calls self.check_overload() while
-already holding self._lock (a non-reentrant Lock), which deadlocks when
-ENABLE_FALLBACK is True.  We always patch _MOD.ENABLE_FALLBACK=False for
-get_status() tests to sidestep the deadlock.
-"""
+"""Tests for message_load_balancer.py — LoadBalancer pure/stateless logic."""
 import importlib.util
 import sys
 import unittest
@@ -176,50 +170,51 @@ class TestLoadBalancerRouteMessage(unittest.TestCase):
 
 
 class TestLoadBalancerGetStatus(unittest.TestCase):
-    """Tests for LoadBalancer.get_status().
-
-    get_status() holds self._lock then calls check_overload(), which also
-    tries to acquire self._lock.  With ENABLE_FALLBACK=False, check_overload()
-    short-circuits before acquiring the lock, so no deadlock occurs.
-    """
+    """Tests for LoadBalancer.get_status()."""
 
     def test_returns_dict(self):
         lb = LoadBalancer()
-        with patch.object(_MOD, "ENABLE_FALLBACK", False):
+        with patch.object(_MOD, "ENABLE_FALLBACK", True):
             self.assertIsInstance(lb.get_status(), dict)
 
     def test_contains_metrics_key(self):
         lb = LoadBalancer()
-        with patch.object(_MOD, "ENABLE_FALLBACK", False):
+        with patch.object(_MOD, "ENABLE_FALLBACK", True):
             status = lb.get_status()
         self.assertIn("metrics", status)
 
     def test_contains_config_key(self):
         lb = LoadBalancer()
-        with patch.object(_MOD, "ENABLE_FALLBACK", False):
+        with patch.object(_MOD, "ENABLE_FALLBACK", True):
             status = lb.get_status()
         self.assertIn("config", status)
 
     def test_fallback_count_zero_initially(self):
         lb = LoadBalancer()
-        with patch.object(_MOD, "ENABLE_FALLBACK", False):
+        with patch.object(_MOD, "ENABLE_FALLBACK", True):
             status = lb.get_status()
         self.assertEqual(status["fallback_count"], 0)
 
     def test_fallback_count_reflected_from_log(self):
         lb = LoadBalancer()
-        # Add a fake entry directly to avoid triggering the deadlock path
         lb.fallback_log.append({"message_id": "x", "timestamp": "t",
                                  "reason": "r", "routed_to": "chatgpt", "sender": "u"})
-        with patch.object(_MOD, "ENABLE_FALLBACK", False):
+        with patch.object(_MOD, "ENABLE_FALLBACK", True):
             status = lb.get_status()
         self.assertEqual(status["fallback_count"], 1)
 
     def test_overloaded_key_present(self):
         lb = LoadBalancer()
-        with patch.object(_MOD, "ENABLE_FALLBACK", False):
+        with patch.object(_MOD, "ENABLE_FALLBACK", True):
             status = lb.get_status()
         self.assertIn("overloaded", status)
+
+    def test_overloaded_reflects_live_metrics_when_enabled(self):
+        lb = LoadBalancer()
+        lb.update_metrics(_MOD.MAX_QUEUE_DEPTH, 0.0, 1)
+        with patch.object(_MOD, "ENABLE_FALLBACK", True):
+            status = lb.get_status()
+        self.assertTrue(status["overloaded"])
 
 
 if __name__ == "__main__":

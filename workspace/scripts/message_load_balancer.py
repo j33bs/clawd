@@ -56,17 +56,19 @@ class LoadBalancer:
             self.metrics.avg_latency_ms = avg_latency_ms
             self.metrics.active_agents = active_agents
             self.metrics.timestamp = datetime.now(timezone.utc).isoformat()
+
+    def _check_overload_locked(self) -> bool:
+        """Check overload using the current locked metrics snapshot."""
+        if not ENABLE_FALLBACK:
+            return False
+        queue_overload = self.metrics.queue_depth >= MAX_QUEUE_DEPTH
+        latency_overload = self.metrics.avg_latency_ms >= MAX_LATENCY_MS
+        return queue_overload or latency_overload
     
     def check_overload(self) -> bool:
         """Check if MiniMax is overwhelmed and needs fallback."""
-        if not ENABLE_FALLBACK:
-            return False
-        
         with self._lock:
-            queue_overload = self.metrics.queue_depth >= MAX_QUEUE_DEPTH
-            latency_overload = self.metrics.avg_latency_ms >= MAX_LATENCY_MS
-        
-        return queue_overload or latency_overload
+            return self._check_overload_locked()
     
     def should_route_to_chatgpt(self) -> bool:
         """Determine if new messages should go to ChatGPT instead of MiniMax."""
@@ -123,9 +125,10 @@ class LoadBalancer:
     def get_status(self) -> dict:
         """Get current load balancer status."""
         with self._lock:
+            overloaded = self._check_overload_locked()
             return {
                 "enabled": ENABLE_FALLBACK,
-                "overloaded": self.check_overload(),
+                "overloaded": overloaded,
                 "metrics": {
                     "queue_depth": self.metrics.queue_depth,
                     "avg_latency_ms": self.metrics.avg_latency_ms,
@@ -183,7 +186,7 @@ def spawn_chatgpt_subagent(task: str, context: dict = None) -> dict:
     return {
         "action": "spawn",
         "agentId": "main",
-        "model": "openai-codex/gpt-5.3-codex",
+        "model": "openai/gpt-5.3-codex",
         "task": task,
         "context": context or {},
         "note": "Spawned due to MiniMax overload",
