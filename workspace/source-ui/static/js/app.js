@@ -80,8 +80,7 @@ function navigateTo(view) {
         health: 'System Health',
         logs: 'Logs',
         settings: 'Settings',
-        symbiote: 'Collective Intelligence Symbiote',
-        oracle: 'Corpus Oracle'
+        symbiote: 'Collective Intelligence Symbiote'
     };
     
     $('#page-title').textContent = titles[view] || 'Dashboard';
@@ -165,9 +164,6 @@ function renderView(view) {
             break;
         case 'settings':
             renderSettings();
-            break;
-        case 'oracle':
-            initOraclePage();
             break;
         case 'symbiote':
             renderSymbiote();
@@ -975,147 +971,6 @@ function renderOracleResult(d) {
 }
 
 window.initOracle = initOracle;
-
-// ─── Oracle Page (full view) ─────────────────────────────────────────────────
-
-let _oraclePageBound = false;
-
-function initOraclePage() {
-    const input  = $('#oracle-page-query');
-    const btn    = $('#oracle-page-submit');
-    const kSel   = $('#oracle-page-k');
-    const beingSel = $('#oracle-page-being');
-    const output = $('#oracle-page-results');
-    const countEl = $('#oracle-section-count');
-    if (!input || !btn || !output) return;
-
-    // Populate section count from symbiote data if available
-    fetch('/api/symbiote').then(r => r.json()).then(d => {
-        if (countEl && d.section_count) countEl.textContent = d.section_count;
-        if ($('#oracle-model-chip') && d.store_model) {
-            $('#oracle-model-chip').textContent = d.store_model.split('/').pop();
-        }
-    }).catch(() => {});
-
-    // Suggestion chips
-    document.querySelectorAll('.oracle-sug-chip').forEach(chip => {
-        chip.addEventListener('click', () => {
-            input.value = chip.textContent.trim();
-            runPageQuery();
-        });
-    });
-
-    async function runPageQuery() {
-        const q = input.value.trim();
-        if (!q) return;
-        const k = parseInt(kSel?.value || '10', 10);
-        const being = beingSel?.value || null;
-        btn.disabled = true;
-        output.innerHTML = '<div class="oracle-page-loading"><div class="oracle-spinner"></div>querying corpus…</div>';
-        try {
-            const res = await fetch('/api/oracle', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ q, k, being: being || undefined }),
-            });
-            const data = await res.json();
-            output.innerHTML = data.error
-                ? `<div class="oracle-error">${data.error}</div>`
-                : renderOraclePageResult(data);
-            // wire expand buttons
-            output.querySelectorAll('.oracle-result-expand').forEach(btn => {
-                btn.addEventListener('click', () => {
-                    const row = btn.closest('.oracle-page-result-row');
-                    row.classList.toggle('expanded');
-                    btn.textContent = row.classList.contains('expanded') ? '▲' : '▼';
-                });
-            });
-        } catch (e) {
-            output.innerHTML = `<div class="oracle-error">${e.message}</div>`;
-        } finally {
-            btn.disabled = false;
-        }
-    }
-
-    if (!_oraclePageBound) {
-        btn.addEventListener('click', runPageQuery);
-        input.addEventListener('keydown', e => { if (e.key === 'Enter') runPageQuery(); });
-        _oraclePageBound = true;
-    }
-}
-
-function renderOraclePageResult(d) {
-    const counts   = d.being_counts || {};
-    const total    = d.total_slots  || 1;
-    const centroid = d.centroid     || '';
-    const notInK   = d.not_in_top_k || d.silent || [];
-    const results  = d.results      || [];
-    const k        = d.k            || results.length;
-
-    const LABELS = {
-        'claude_code':'Claude Code','chatgpt':'ChatGPT','grok':'Grok',
-        'c_lawd':'c_lawd','dali':'Dali','lumen':'Lumen',
-        'gemini':'Gemini','claude_ext':'Claude (ext)',
-        'the_correspondence':'The Correspondence','jeebs':'jeebs',
-    };
-    const label = b => LABELS[b] || b;
-    const pct   = n => Math.round(100 * n / total);
-
-    const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
-
-    // Being weight panel
-    const beingHtml = sorted.map(([b, n]) => {
-        const w = pct(n);
-        const isCenter = b === centroid;
-        return `<div class="op-bar-row${isCenter ? ' op-centroid' : ''}">
-            <span class="op-bar-label">${label(b)}</span>
-            <div class="op-bar-track"><div class="op-bar-fill" style="width:${w}%"></div></div>
-            <span class="op-bar-num">${n} <span class="op-bar-pct">(${w}%)</span>${isCenter ? ' <span class="op-centroid-tag">centroid</span>' : ''}</span>
-        </div>`;
-    }).join('');
-
-    const notInKHtml = notInK.length
-        ? `<div class="op-not-in-k">not in top-${k}: ${notInK.map(b => label(b)).join(', ')}</div>`
-        : '';
-
-    // Result rows
-    const rowsHtml = results.map((r, i) => {
-        const sec   = r.section_number_filed || r.canonical_section_number || '?';
-        const auth  = Array.isArray(r.authors) ? r.authors.join(', ') : (r.authors || '');
-        const date  = (r.created_at || '').slice(0, 10);
-        const title = r.title || '';
-        const body  = r.body  || '';
-        const snip  = body.slice(0, 180).replace(/\n/g, ' ');
-        const full  = body.replace(/</g, '&lt;').replace(/>/g, '&gt;');
-        return `<div class="oracle-page-result-row">
-            <div class="oracle-page-result-head">
-                <span class="oracle-page-result-rank">[${i + 1}]</span>
-                <span class="oracle-page-result-sec">§${sec}</span>
-                <span class="oracle-page-result-author">${auth}</span>
-                ${date ? `<span class="oracle-page-result-date">${date}</span>` : ''}
-                ${title ? `<span class="oracle-page-result-title">${title}</span>` : ''}
-                <button class="oracle-result-expand" title="expand">▼</button>
-            </div>
-            <div class="oracle-page-result-snip">${snip}${body.length > 180 ? '…' : ''}</div>
-            <div class="oracle-page-result-full">${full}</div>
-        </div>`;
-    }).join('');
-
-    return `
-        <div class="oracle-page-layout">
-            <div class="oracle-page-sidebar">
-                <div class="op-sidebar-title">Being weight in top-${k}</div>
-                ${beingHtml}
-                ${notInKHtml}
-            </div>
-            <div class="oracle-page-main">
-                <div class="op-results-title">${results.length} sections by semantic distance</div>
-                ${rowsHtml}
-            </div>
-        </div>`;
-}
-
-window.initOraclePage = initOraclePage;
 
 // ─── end Oracle ──────────────────────────────────────────────────────────────
 
