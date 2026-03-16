@@ -24,11 +24,50 @@ ALLOWED_COMMAND_PATTERNS = [
 ]
 
 PAUSE_SENTINEL = "(pausing — no value to add)"
+_PAUSE_STUCK_THRESHOLD = 4  # N consecutive identical signal tuples → STUCK
+_PAUSE_LOG_PATH: "Path | None" = None  # None = derive from repo_root; tests may override
+
+
+def _detect_pause_stuck(log_path: Path, threshold: int = _PAUSE_STUCK_THRESHOLD) -> bool:
+    """Return True if the last `threshold` pause log entries all share an identical signal tuple.
+
+    Reads the pause log WITHOUT the current (not-yet-written) decision, so this
+    detects an existing stuck run rather than counting the entry about to be logged.
+    A single stuck entry that would push the run to ≥ threshold qualifies.
+    """
+    if not log_path.exists():
+        return False
+    try:
+        lines = [ln.strip() for ln in log_path.read_text(encoding="utf-8").splitlines() if ln.strip()]
+        if len(lines) < threshold:
+            return False
+        recent: list[tuple] = []
+        for line in lines[-threshold:]:
+            try:
+                entry = json.loads(line)
+            except Exception:
+                return False
+            signals = entry.get("signals") or {}
+            recent.append((
+                entry.get("decision", ""),
+                signals.get("fills_space"),
+                signals.get("value_add"),
+                signals.get("silence_ok"),
+            ))
+        return len(set(recent)) == 1
+    except Exception:
+        return False
+
+
+def _resolve_pause_log_path() -> Path:
+    """Return the pause log path, respecting test overrides via _PAUSE_LOG_PATH."""
+    if _PAUSE_LOG_PATH is not None:
+        return _PAUSE_LOG_PATH
+    return Path(__file__).resolve().parents[2] / "workspace" / "state" / "pause_check_log.jsonl"
 
 
 def _append_pause_log(decision: dict[str, Any], *, intent: str) -> None:
-    repo_root = Path(__file__).resolve().parents[2]
-    log_path = repo_root / "workspace" / "state" / "pause_check_log.jsonl"
+    log_path = _resolve_pause_log_path()
     log_path.parent.mkdir(parents=True, exist_ok=True)
     row = {
         "ts": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
@@ -68,6 +107,18 @@ def _pause_gate_text(intent: str, input_text: str, draft_text: str) -> tuple[str
         in {"1", "true", "yes", "on"},
     }
     decision = pause_check(input_text, draft_text, context=context, mode="router_pre_response")
+
+    # STUCK override: if the classifier has been returning identical "silence" signals
+    # for the last N calls, force-escalate to break the loop.
+    if decision.get("decision") == "silence":
+        if _detect_pause_stuck(_resolve_pause_log_path()):
+            decision = {
+                **decision,
+                "decision": "proceed",
+                "rationale": "force-escalate: pause classifier STUCK (consecutive identical signals)",
+                "stuck_override": True,
+            }
+
     _append_pause_log(decision, intent=intent)
     if decision.get("decision") == "silence":
         return PAUSE_SENTINEL, decision
