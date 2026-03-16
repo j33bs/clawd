@@ -78,11 +78,11 @@ const Components = {
                 ` : ''}
                 ${showControl ? `<div class="agent-task-full">Operator control: ${controlState.replaceAll('_', ' ')}</div>` : ''}
                 <div class="agent-actions-full">
-                    <button class="agent-action-btn" onclick="controlAgent('${agent.id}', '${controlState === 'paused' ? 'resume' : 'pause'}')">
-                        ${controlState === 'paused' ? '▶ Resume' : '⏸ Pause'}
+                    <button class="agent-action-btn" disabled title="Agent controls are not wired to a backend yet">
+                        ${agent.status === 'working' ? '⏸ Pause (not wired)' : '▶ Resume (not wired)'}
                     </button>
-                    <button class="agent-action-btn danger" onclick="controlAgent('${agent.id}', 'stop')">
-                        ${controlState === 'stop_requested' ? '⏹ Stop Requested' : '⏹ Stop'}
+                    <button class="agent-action-btn danger" disabled title="Agent controls are not wired to a backend yet">
+                        ⏹ Stop (not wired)
                     </button>
                 </div>
             </div>

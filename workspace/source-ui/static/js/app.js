@@ -203,6 +203,7 @@ function renderView(view) {
 function renderDashboard() {
     const agents = store.get('agents');
     const tasks = store.get('tasks');
+    const truth = store.get('truth') || {};
     const portfolio = store.get('portfolio') || {};
     const components = (portfolio.components && portfolio.components.length) ? portfolio.components : store.get('components');
     const workItems = portfolio.work_items || [];
@@ -223,6 +224,7 @@ function renderDashboard() {
     const modelOps = portfolio.model_ops || {};
     const displayMode = store.get('displayMode') || {};
     const runtimeSources = portfolio.runtime_sources || [];
+    const truthSource = truth.source || (store.get('connected') ? 'source_mission' : 'demo_seed');
     const failedUnits = portfolio.failed_units || [];
     
     renderCommandDeck({ portfolio, tasks, components, commands });
@@ -2519,6 +2521,15 @@ function updateStatusIndicators() {
         gateway.classList.toggle('error', !isHealthy);
         text.textContent = gatewayComponent ? gatewayComponent.details : (isHealthy ? 'Connected' : 'Disconnected');
     }
+}
+
+function renderTruthProvenance(truth = store.get('truth') || {}) {
+    const banner = $('#truth-provenance-banner');
+    if (!banner) return;
+    const source = truth.source || (store.get('connected') ? 'source_mission' : 'demo_seed');
+    const path = truth.source_mission_path || 'n/a';
+    const updatedAt = truth.source_mission_updated_at || 'unknown';
+    banner.textContent = `Truth source: ${source} · Canonical file: ${path} · Updated: ${updatedAt}`;
 }
 
 function buildLiveNotifications(portfolio, tasks, commands) {
