@@ -103,6 +103,20 @@ class RunHarnessTests(unittest.TestCase):
             self.assertEqual(on_disk["status"], "ok")
             self.assertEqual(on_disk["completed_checkpoints"], 1)
 
+    def test_run_memory_step_normalizes_recent_daily_memory_by_default(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            self._make_repo_root(root)
+            target = root / "memory" / "2026-03-09.md"
+            target.write_text("# 2026-03-09\\n\\n## Updates\\n- malformed\\nentry", encoding="utf-8")
+
+            payload = self.mod.run_memory_step(root, env={})
+
+            self.assertIn("normalization", payload)
+            self.assertEqual(payload["normalization"]["normalized_count"], 1)
+            body = target.read_text(encoding="utf-8")
+            self.assertIn("# Daily Memory - 2026-03-09\n", body)
+
 
 if __name__ == "__main__":
     unittest.main()

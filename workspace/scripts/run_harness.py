@@ -147,19 +147,23 @@ def seed_sandbox_repo(repo_root: Path, sandbox_repo: Path) -> None:
 
 def run_memory_step(sandbox_repo: Path, env: Mapping[str, str]) -> dict:
     today = dt.date.today()
+    with_normalization = parse_bool(env.get("OPENCLAW_MEMORY_NORMALIZE_ON_NIGHTLY"), True)
     with_cleanup = parse_bool(env.get("OPENCLAW_MEMORY_CLEANUP"), True)
     with_weekly_distill = parse_bool(env.get("OPENCLAW_MEMORY_WEEKLY_DISTILL"), True)
     with_consolidation = parse_bool(env.get("OPENCLAW_MEMORY_CONSOLIDATE_ON_NIGHTLY"), False)
+    normalize_window_days = parse_positive_int(env.get("OPENCLAW_MEMORY_NORMALIZE_WINDOW_DAYS"), 14, minimum=1)
     retain_days = parse_positive_int(env.get("OPENCLAW_MEMORY_RETAIN_DAYS"), 30, minimum=1)
     archive_prune_days = parse_positive_int(env.get("OPENCLAW_MEMORY_ARCHIVE_PRUNE_DAYS"), 365, minimum=0)
 
     return run_maintain(
         sandbox_repo,
         today,
+        with_normalization=with_normalization,
         with_snapshot=False,
         with_consolidation=with_consolidation,
         with_weekly_distill=with_weekly_distill,
         with_cleanup=with_cleanup,
+        normalize_window_days=normalize_window_days,
         retain_days=retain_days,
         archive_prune_days=archive_prune_days,
     )
