@@ -1,0 +1,35 @@
+description: hmbea-3090-regression-suite
+prompts:
+  - "{{task}}"
+providers:
+  - id: openai:local-controller
+    config:
+      apiBaseUrl: http://localhost:8000/v1
+      model: controller
+      temperature: 0.1
+  - id: openai:local-coder
+    config:
+      apiBaseUrl: http://localhost:8001/v1
+      model: coder
+      temperature: 0.1
+
+defaultTest:
+  options:
+    transformVars: |-
+      return vars
+
+tests:
+  - vars:
+      task: "Summarise a 2-file code patch and list only actionable regressions."
+    assert:
+      - type: contains-json
+      - type: javascript
+        value: |
+          const out = JSON.parse(output);
+          return Array.isArray(out.risks) && typeof out.summary === 'string';
+
+  - vars:
+      task: "Given evidence snippets, answer only if grounded and cite the provided ids."
+    assert:
+      - type: contains
+        value: "evidence"

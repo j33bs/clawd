@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hmbea-3090-blueprint"
+version = "0.1.0"
+description = "Single-3090 multi-role orchestration scaffold"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "langgraph>=0.2",
+  "langchain-core>=0.3",
+  "pydantic>=2.7",
+  "pyyaml>=6.0",
+  "tenacity>=9.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
