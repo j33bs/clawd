@@ -1,0 +1,19 @@
+# HMBEA Tool Policy
+
+tools:
+  read:
+    allowed: true
+    approval: false
+    
+  write:
+    allowed: true
+    approval: true
+    
+  exec:
+    allowed: true
+    approval: true
+    sandbox: true
+    
+  git:
+    allowed: true
+    approval: true

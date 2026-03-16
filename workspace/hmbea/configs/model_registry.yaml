@@ -1,0 +1,21 @@
+# HMBEA Model Registry
+# Uses existing local llama.cpp server (Qwen 3.5 27B)
+
+models:
+  primary:
+    provider: local
+    backend: llama_cpp
+    url: http://localhost:8001/v1
+    model: local-assistant  # qwen3.5-27b-q4_k_m
+
+  # Model capabilities for routing
+  capabilities:
+    general: true
+    code: true
+    reasoning: true
+    creative: true
+
+runtime:
+  single_gpu: true
+  hot_swap: false  # Single model for now
+  context: 262144

@@ -1,0 +1,19 @@
+# HMBEA Escalation Policy
+
+thresholds:
+  accept:
+    confidence_gte: 0.75
+    groundedness_gte: 0.70
+    
+  retry:
+    confidence_between: [0.50, 0.74]
+    max_retries: 1
+    
+  escalate:
+    confidence_lt: 0.50
+
+# No remote fallback yet - escalate means human review
+routing:
+  auto_accept: true
+  auto_retry: true
+  human_review_on_escalate: true
