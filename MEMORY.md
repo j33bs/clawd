@@ -1,6 +1,6 @@
 # MEMORY.md - Long-Term Context
 
-*Last updated: 2026-03-14*
+*Last updated: 2026-03-16*
 
 ## Morning Check-ins
 - Feb 25: Morning check-in. Nothing significant to report — quiet day.
@@ -14,6 +14,9 @@
 - **Timezone:** Australia/Brisbane
 - **GitHub:** @j33bs
 - **Autonomy:** Question less, do more; act first when the risk is low
+- **Style:** Prefer concise, efficient, elegant language; less translation, more signal.
+- **X retrieval:** When lightweight fetch fails on X/Twitter, fall back to browser retrieval before giving up.
+- **Desktop meaning:** When jeebs says "desktop", default to `/Users/jeebs/Desktop`.
 
 ## System Landmarks
 - **Source UI:** Means the local dashboard/service on port `18990`, not public docs or GitHub.
@@ -54,10 +57,10 @@
 - **Heartbeat mode:** Keep heartbeats quiet/minimal unless something actually needs attention.
 
 ## Technical Notes
-- **Runtime:** minimax-portal/MiniMax-M2.5
+- **Runtime:** main model is actively user-switched as needed; current defaults should be treated as operational, not doctrinal.
 - **Modules:** `tacti_core.py`, `relationship_tracker.py`, `arousal_tracker.py` active in `workspace/memory/`.
-- **Dashboard:** `workspace/tacti_dashboard.html` created.
-- **Current runtime note:** QMD MCP on port 8181 has been persistently down and is a recurring ops concern.
+- **Dashboard:** Source UI / Dali tasking surface is active at `http://100.113.160.1:18990` (Tailscale primary).
+- **Current runtime note:** QMD MCP on port 8181 has been a recurring ops concern.
 - **Model status:** GPU pruned; `ollama qwen3.5:2b` retained as active local model.
 
 ## TACTI(C)-R Principles
@@ -136,6 +139,13 @@ Requires manual verification per track - checking what matches between Beatport 
 - **Research:** Wanderer appended stylometry + continual learning question.
 - **Prefs:** Grokipedia only, no Wiki; HB silent.
 - **Status:** GPU pruned, ollama qwen3.5:2b active.
+
+## Updates 2026-03-16
+- **Mission statement:** Canonical wording upgraded to: "Build a cohesive, integrated collective intelligence symbiote that helps beings think, feel, remember, coordinate, and evolve together."
+- **Source UI:** Source mission was threaded into root/workspace READMEs and Source UI; Dali tasking surface is the active front end.
+- **Compaction:** Adaptive compaction work now includes timing gates, task-adhesion scoring, checkpoint-before-compaction, and layered checkpoint structures (`pinned_core`, `active_state`, `archive_digest`).
+- **Truthfulness fix:** Source UI API-created tasks were mislabeled as mission-seed tasks; this was corrected so backlog auto-start behavior better matches actual backend state.
+- **Ops posture:** Repetitive cron chatter was silenced; human-facing reminders retained.
 
 ## Daily Distillations
 ### 2026-03-07 (dream-summary)

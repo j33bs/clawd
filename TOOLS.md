@@ -56,3 +56,11 @@ When jeebs asks for "Source UI" in Telegram or another remote context, give the 
 ---
 
 Add whatever helps you do your job. This is your cheat sheet.
+
+### Source UI
+
+- Live Source UI backlog: `http://100.113.160.1:18990`
+- When asked in direct chat or Telegram to add something to Source UI backlog, use the hidden control tag:
+  `<source-ui-task>{"title":"...","description":"...","priority":"high","project":"source-ui"}</source-ui-task>`
+- Do not claim `queued`, `visible`, `live`, or `flowing` unless the final reply includes a verified line:
+  `Source UI receipt: #<id> <title> (<status>)`
