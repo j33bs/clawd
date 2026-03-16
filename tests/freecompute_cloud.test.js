@@ -1087,6 +1087,190 @@ await testAsync('registry: 400 context-length triggers one compaction retry (no 
   reg.dispose();
 });
 
+await testAsync('registry: compaction gate delays preflight when task adhesion risk is high', async () => {
+  const events = [];
+  const reg = new ProviderRegistry({
+    env: { ENABLE_FREECOMPUTE_CLOUD: '1', OPENCLAW_GROQ_API_KEY: 'x', GROQ_MAX_CHARS: '900' },
+    emitEvent: (t, p) => events.push({ t, p })
+  });
+
+  reg._adapters.set('local_vllm', {
+    async generationProbe() { return { ok: true }; },
+    async call() { throw new Error('local should not be selected when groq is configured'); },
+    async health() { return { ok: true, models: ['stub-model'] }; }
+  });
+
+  let seenShape = null;
+  reg._adapters.set('groq', {
+    async call(params) {
+      seenShape = registryTest.estimateRequestShape(params.messages);
+      return {
+        text: 'ok', raw: {},
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, estimatedCostUsd: 0 }
+      };
+    },
+    async health() { return { ok: true, models: ['stub-model'] }; }
+  });
+
+  const messages = [
+    { role: 'assistant', content: 'I will update files and run checks in order.' },
+    { role: 'user', content: 'Can you finish steps 2 and 3 before sending the patch?' },
+    { role: 'user', content: 'u'.repeat(1400) }
+  ];
+
+  const result = await reg.dispatch({
+    taskClass: 'fast_chat',
+    messages,
+    metadata: { unresolved_asks: 2, open_commitments: 1, pending_tools: 2, plan_externalized: false, multi_step_active: true }
+  });
+
+  assert.ok(result);
+  assert.equal(result.provider_id, 'groq');
+  assert.ok(seenShape && seenShape.char_count_total > 900, 'expected compaction delayed');
+
+  const gate = events.find((e) => e.t === 'freecompute_dispatch_compaction_gate' && e.p.trigger === 'preflight');
+  assert.ok(gate, 'expected gate event');
+  assert.equal(gate.p.allow, false);
+  assert.ok(gate.p.blocked_reasons.includes('high_task_adhesion_risk'));
+  assert.equal(events.some((e) => e.t === 'freecompute_dispatch_compaction_checkpoint'), false);
+  reg.dispose();
+});
+
+await testAsync('registry: boundary moment allows compaction + emits checkpoint layers', async () => {
+  const events = [];
+  const reg = new ProviderRegistry({
+    env: { ENABLE_FREECOMPUTE_CLOUD: '1', OPENCLAW_GROQ_API_KEY: 'x', GROQ_MAX_CHARS: '900' },
+    emitEvent: (t, p) => events.push({ t, p })
+  });
+
+  reg._adapters.set('local_vllm', {
+    async generationProbe() { return { ok: true }; },
+    async call() { throw new Error('local should not be selected when groq is configured'); },
+    async health() { return { ok: true, models: ['stub-model'] }; }
+  });
+
+  let seenShape = null;
+  reg._adapters.set('groq', {
+    async call(params) {
+      seenShape = registryTest.estimateRequestShape(params.messages);
+      return {
+        text: 'ok', raw: {},
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, estimatedCostUsd: 0 }
+      };
+    },
+    async health() { return { ok: true, models: ['stub-model'] }; }
+  });
+
+  const result = await reg.dispatch({
+    taskClass: 'fast_chat',
+    messages: [
+      { role: 'system', content: 's'.repeat(700) },
+      { role: 'user', content: 'u'.repeat(500) }
+    ],
+    metadata: {
+      unresolved_asks: 2,
+      pending_tools: 0,
+      plan_externalized: false,
+      task_completed: true,
+      plan_restated: true,
+      current_goal: 'Ship adaptive compaction safely',
+      next_step: 'Send deliverable with tests and notes'
+    }
+  });
+
+  assert.ok(result);
+  assert.equal(result.provider_id, 'groq');
+  assert.ok(seenShape && seenShape.char_count_total <= 900, `expected compacted <= 900, got ${seenShape && seenShape.char_count_total}`);
+
+  const gate = events.find((e) => e.t === 'freecompute_dispatch_compaction_gate' && e.p.trigger === 'preflight');
+  assert.ok(gate && gate.p.allow === true);
+
+  const checkpoint = events.find((e) => e.t === 'freecompute_dispatch_compaction_checkpoint');
+  assert.ok(checkpoint, 'expected checkpoint event');
+  assert.ok(checkpoint.p.checkpoint && checkpoint.p.checkpoint.layers);
+  assert.ok(checkpoint.p.checkpoint.layers.pinned_core);
+  assert.ok(checkpoint.p.checkpoint.layers.active_state);
+  assert.ok(Array.isArray(checkpoint.p.checkpoint.layers.archive_digest));
+
+  const comp = events.find((e) => e.t === 'freecompute_dispatch_compaction_applied');
+  assert.ok(comp, 'expected compaction applied event');
+  assert.equal(comp.p.checkpoint_included, true);
+  reg.dispose();
+});
+
+test('registry: capCheckpointLayers trims archive first and preserves core fields', () => {
+  const base = registryTest.buildCompactionCheckpoint([
+    { role: 'user', content: 'Please keep the deployment goal and next action intact.' },
+    { role: 'assistant', content: 'I will finish the deploy note and then verify the canary.' },
+    { role: 'user', content: 'Here is a long archive body '.repeat(40) }
+  ], {
+    current_goal: 'Ship the deployment safely',
+    next_step: 'Send the deploy note and verify canary health',
+    success_condition: 'Deploy note sent, canary verified, no open blockers',
+    constraints: Array.from({ length: 10 }, (_, i) => `constraint ${i} `.repeat(10)),
+    open_loops: Array.from({ length: 10 }, (_, i) => `open loop ${i} `.repeat(12))
+  }, 'preflight');
+
+  base.layers.archive_digest = Array.from({ length: 8 }, (_, i) => ({
+    role: 'assistant',
+    text: `archive ${i} ` + 'detail '.repeat(40)
+  }));
+
+  const capped = registryTest.capCheckpointLayers(base, { maxTotalBytes: 900, archiveMaxBytes: 180 });
+  assert.ok(capped.stats.bytes <= 900, `expected <= 900 bytes, got ${capped.stats.bytes}`);
+  assert.ok(capped.checkpoint.layers.pinned_core.goal.includes('Ship the deployment safely'));
+  assert.ok(capped.checkpoint.layers.active_state.next_step.includes('Send the deploy note'));
+  assert.ok(capped.checkpoint.layers.archive_digest.length < base.layers.archive_digest.length, 'expected archive digest to shrink first');
+  assert.ok(capped.stats.archive_bytes <= 180, `expected archive bytes <= 180, got ${capped.stats.archive_bytes}`);
+});
+
+await testAsync('registry: checkpoint event includes bounded checkpoint stats', async () => {
+  const events = [];
+  const reg = new ProviderRegistry({
+    env: { ENABLE_FREECOMPUTE_CLOUD: '1', OPENCLAW_GROQ_API_KEY: 'x', GROQ_MAX_CHARS: '900' },
+    emitEvent: (t, p) => events.push({ t, p })
+  });
+
+  reg._adapters.set('local_vllm', {
+    async generationProbe() { return { ok: true }; },
+    async call() { throw new Error('local should not be selected when groq is configured'); },
+    async health() { return { ok: true, models: ['stub-model'] }; }
+  });
+
+  reg._adapters.set('groq', {
+    async call() {
+      return {
+        text: 'ok', raw: {},
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, estimatedCostUsd: 0 }
+      };
+    },
+    async health() { return { ok: true, models: ['stub-model'] }; }
+  });
+
+  await reg.dispatch({
+    taskClass: 'fast_chat',
+    messages: [
+      { role: 'system', content: 's'.repeat(900) },
+      { role: 'user', content: 'u'.repeat(600) }
+    ],
+    metadata: {
+      task_completed: true,
+      current_goal: 'Preserve current work after compaction',
+      next_step: 'Return concise final answer',
+      open_loops: Array.from({ length: 12 }, (_, i) => `loop ${i} ` + 'x'.repeat(60)),
+      constraints: Array.from({ length: 12 }, (_, i) => `constraint ${i} ` + 'y'.repeat(60))
+    }
+  });
+
+  const checkpoint = events.find((e) => e.t === 'freecompute_dispatch_compaction_checkpoint');
+  assert.ok(checkpoint, 'expected checkpoint event');
+  assert.ok(typeof checkpoint.p.checkpoint_bytes === 'number');
+  assert.ok(typeof checkpoint.p.checkpoint_max_bytes === 'number');
+  assert.ok(checkpoint.p.checkpoint_bytes <= checkpoint.p.checkpoint_max_bytes);
+  assert.ok(checkpoint.p.archive_entries >= 0);
+  reg.dispose();
+});
+
 await testAsync('registry: audit events identify which provider rejects size (groq 400 → local fallback)', async () => {
   const events = [];
   const reg = new ProviderRegistry({
