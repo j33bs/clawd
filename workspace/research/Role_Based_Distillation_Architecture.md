@@ -1,4 +1,6 @@
-# Role-Based Distillation Architecture
+# Hierarchical Multi-Being Evolutionary Architecture
+
+>formerly "Role-Based Distillation Architecture"
 
 ## Vision
 
@@ -43,6 +45,23 @@ Build a self-improving system where frontier models (Codex) generate training da
 ```
 
 ## Core Components
+
+### Shadow Apprenticeship (Preferred over Synthetic Data)
+
+Instead of generating training data, SLMs shadow Codex in real-time:
+
+```
+Codex handles task ──┬──→ Real output
+                     │
+SLM shadows ─────────┤
+                     │
+learns from ────────┘
+```
+
+**Advantages:**
+- Zero extra token cost — SLM watches Codex work
+- Learns from real solutions, not generated data
+- Natural ZPD curriculum — start simple, scale up
 
 ### 1. Role Harnesses
 
