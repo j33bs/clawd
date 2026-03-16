@@ -41,7 +41,7 @@ class _DummyRouter:
 
 
 class TestMessageHandler(unittest.TestCase):
-    def test_build_runtime_request_defaults_telegram_to_openai_auth(self):
+    def test_build_runtime_request_defaults_telegram_to_minimax(self):
         message_handler = _load_message_handler_module()
         message = {
             "message_id": "2002",
@@ -60,9 +60,34 @@ class TestMessageHandler(unittest.TestCase):
                                 prompt, context_metadata = message_handler._build_telegram_runtime_request(message)
 
         self.assertEqual(prompt, "PROMPT")
+        self.assertEqual(context_metadata["preferred_provider"], "minimax_m25")
+        self.assertEqual(context_metadata["override_model"], "minimax-portal/MiniMax-M2.5")
+        self.assertEqual(context_metadata["exec_agent_id"], "main")
+
+    def test_build_runtime_request_backfills_openai_auth_model_when_requested(self):
+        message_handler = _load_message_handler_module()
+        message = {
+            "message_id": "2003",
+            "chat_id": "8159253715",
+            "chat_title": "jeebs",
+            "author_name": "jeebs",
+            "content": "use openai auth for this one",
+        }
+
+        with mock.patch.object(message_handler, "telegram_memory_context_text", return_value=[]):
+            with mock.patch.object(message_handler, "user_context_packet_text", return_value=[]):
+                with mock.patch.object(message_handler, "source_context_packet_text", return_value=[]):
+                    with mock.patch.object(message_handler, "build_recall_block", return_value=""):
+                        with mock.patch.object(
+                            message_handler,
+                            "route_metadata_for_text",
+                            return_value={"preferred_provider": "openai_auth"},
+                        ):
+                            with mock.patch.object(message_handler, "build_telegram_chat_prompt", return_value="PROMPT"):
+                                _, context_metadata = message_handler._build_telegram_runtime_request(message)
+
         self.assertEqual(context_metadata["preferred_provider"], "openai_auth")
         self.assertEqual(context_metadata["override_model"], "openai/gpt-5.4-pro")
-        self.assertEqual(context_metadata["exec_agent_id"], "main")
 
     def test_handle_incoming_message_uses_shared_router_stack(self):
         message_handler = _load_message_handler_module()

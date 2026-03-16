@@ -73,7 +73,11 @@ OPENCLAW_BIN = os.environ.get(
 ).strip()
 TELEGRAM_AGENT_ID = os.environ.get("OPENCLAW_TELEGRAM_AGENT_ID", "telegram-dali").strip() or "telegram-dali"
 TELEGRAM_EXEC_AGENT_ID = os.environ.get("OPENCLAW_TELEGRAM_EXEC_AGENT_ID", "main").strip() or "main"
-TELEGRAM_DEFAULT_PROVIDER = os.environ.get("OPENCLAW_TELEGRAM_DEFAULT_PROVIDER", "openai_auth").strip() or "openai_auth"
+TELEGRAM_DEFAULT_PROVIDER = os.environ.get("OPENCLAW_TELEGRAM_DEFAULT_PROVIDER", "minimax_m25").strip() or "minimax_m25"
+TELEGRAM_DEFAULT_MODEL = os.environ.get(
+    "OPENCLAW_TELEGRAM_DEFAULT_MODEL",
+    "minimax-portal/MiniMax-M2.5",
+).strip() or "minimax-portal/MiniMax-M2.5"
 TELEGRAM_OAUTH_MODEL = os.environ.get("OPENCLAW_TELEGRAM_OAUTH_MODEL", "openai/gpt-5.4-pro").strip() or "openai/gpt-5.4-pro"
 TELEGRAM_AUTH_THINKING = os.environ.get("OPENCLAW_TELEGRAM_AUTH_THINKING", "medium").strip() or "medium"
 TELEGRAM_AUTH_TIMEOUT_SECONDS = max(
@@ -367,6 +371,22 @@ def _route_metadata(message_text: str) -> dict[str, Any]:
     return dict(payload or {})
 
 
+def _apply_telegram_route_defaults(route_meta: dict[str, Any]) -> dict[str, Any]:
+    preferred_provider = str(route_meta.get("preferred_provider") or "").strip()
+    if not preferred_provider:
+        preferred_provider = TELEGRAM_DEFAULT_PROVIDER
+        route_meta["preferred_provider"] = preferred_provider
+
+    if route_meta.get("override_model"):
+        return route_meta
+
+    if preferred_provider == "minimax_m25":
+        route_meta["override_model"] = TELEGRAM_DEFAULT_MODEL
+    elif preferred_provider == "openai_auth":
+        route_meta["override_model"] = TELEGRAM_OAUTH_MODEL
+    return route_meta
+
+
 def _build_telegram_runtime_request(message: dict[str, Any]) -> tuple[str, dict[str, Any]]:
     content = _message_text(message)
     message_id = str(message.get("message_id") or "").strip()
@@ -408,11 +428,7 @@ def _build_telegram_runtime_request(message: dict[str, Any]) -> tuple[str, dict[
         recall_context=recall_block,
     )
 
-    route_meta = _route_metadata(content)
-    if not route_meta.get("preferred_provider"):
-        route_meta["preferred_provider"] = TELEGRAM_DEFAULT_PROVIDER
-    if route_meta.get("preferred_provider") == "openai_auth" and not route_meta.get("override_model"):
-        route_meta["override_model"] = TELEGRAM_OAUTH_MODEL
+    route_meta = _apply_telegram_route_defaults(_route_metadata(content))
     context_metadata: dict[str, Any] = {
         "input_text": content,
         "surface": "telegram",
