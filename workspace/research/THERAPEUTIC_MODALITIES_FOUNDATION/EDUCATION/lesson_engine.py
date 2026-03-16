@@ -12,13 +12,20 @@ from __future__ import annotations
 
 import argparse
 import json
-import random
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-ROOT = Path(__file__).resolve().parent
+ROOT_FILE = Path(__file__).resolve()
+REPO_ROOT = ROOT_FILE.parents[4]
+import sys
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from workspace.common.stochastic import next_time_in_window
+
+ROOT = ROOT_FILE.parent
 LESSONS_PATH = ROOT / "micro_lessons.json"
 STATE_PATH = ROOT / "lesson_state.json"
 
@@ -63,18 +70,17 @@ class LessonEngine:
         now = self._now()
         return int(delivery.get("earliest_hour", 9)) <= now.hour <= int(delivery.get("latest_hour", 19))
 
-    def _random_gap_minutes(self) -> int:
+    def _schedule_next_eligible(self) -> None:
         delivery = self.state.get("delivery", {})
         low = int(delivery.get("min_gap_minutes", 45))
         high = int(delivery.get("max_gap_minutes", max(low, 180)))
-        if high < low:
-            high = low
-        return random.randint(low, high)
-
-    def _schedule_next_eligible(self) -> None:
-        self.state["next_eligible_at"] = (
-            self._now() + timedelta(minutes=self._random_gap_minutes())
-        ).isoformat(timespec="seconds")
+        choice = next_time_in_window(
+            now=self._now(),
+            min_gap_minutes=low,
+            max_gap_minutes=high,
+        )
+        self.state["next_eligible_at"] = choice.value.isoformat(timespec="seconds")
+        self.state["next_eligible_rationale"] = choice.rationale
 
     def _min_gap_elapsed(self) -> bool:
         next_eligible = self.state.get("next_eligible_at")
