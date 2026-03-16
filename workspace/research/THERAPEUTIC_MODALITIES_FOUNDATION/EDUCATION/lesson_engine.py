@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import random
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -62,13 +63,24 @@ class LessonEngine:
         now = self._now()
         return int(delivery.get("earliest_hour", 9)) <= now.hour <= int(delivery.get("latest_hour", 19))
 
-    def _min_gap_elapsed(self) -> bool:
+    def _random_gap_minutes(self) -> int:
         delivery = self.state.get("delivery", {})
-        last = self.state.get("last_delivered_at")
-        if not last:
+        low = int(delivery.get("min_gap_minutes", 45))
+        high = int(delivery.get("max_gap_minutes", max(low, 180)))
+        if high < low:
+            high = low
+        return random.randint(low, high)
+
+    def _schedule_next_eligible(self) -> None:
+        self.state["next_eligible_at"] = (
+            self._now() + timedelta(minutes=self._random_gap_minutes())
+        ).isoformat(timespec="seconds")
+
+    def _min_gap_elapsed(self) -> bool:
+        next_eligible = self.state.get("next_eligible_at")
+        if not next_eligible:
             return True
-        gap = int(delivery.get("min_gap_minutes", 90))
-        return self._now() - datetime.fromisoformat(last) >= timedelta(minutes=gap)
+        return self._now() >= datetime.fromisoformat(next_eligible)
 
     def _daily_capacity_available(self) -> bool:
         self._reset_daily_counter_if_needed()
@@ -148,6 +160,7 @@ class LessonEngine:
         self.state["awaiting_answer"] = True
         self.state["active_lesson_id"] = lesson["id"]
         self.state["last_delivered_at"] = now
+        self._schedule_next_eligible()
         self._reset_daily_counter_if_needed()
         self.state["daily_delivery"]["count"] += 1
         self.save()

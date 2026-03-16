@@ -6,10 +6,12 @@
   "active_lesson_id": null,
   "last_delivered_at": null,
   "last_answered_at": null,
+  "next_eligible_at": null,
   "delivery": {
     "earliest_hour": 9,
     "latest_hour": 19,
-    "min_gap_minutes": 90,
+    "min_gap_minutes": 45,
+    "max_gap_minutes": 180,
     "max_lessons_per_day": 6
   },
   "proficiency": {},

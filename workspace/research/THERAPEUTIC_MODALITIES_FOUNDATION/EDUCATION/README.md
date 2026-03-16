@@ -44,7 +44,7 @@ Recommended: 4–6 lessons per day, spaced across the day.
 Default spacing in `lesson_state.json`:
 - earliest lesson window: 09:00
 - latest lesson window: 19:00
-- minimum gap between lessons: 90 minutes
+- randomized gap between lessons: 45–180 minutes
 
 ## Intended educational outcome
 
