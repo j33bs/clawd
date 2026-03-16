@@ -1,0 +1,35 @@
+# HMBEA Tool Policy
+
+tools:
+  file_read:
+    allowed: true
+    requires_approval: false
+  retrieval:
+    allowed: true
+    requires_approval: false
+  test_runner:
+    allowed: true
+    requires_approval: false
+    sandbox: required
+  file_write:
+    allowed: true
+    requires_approval: true
+    sandbox: required
+  shell_exec:
+    allowed: true
+    requires_approval: true
+    sandbox: required
+    network: denied-by-default
+  git_commit:
+    allowed: true
+    requires_approval: true
+  web_access:
+    allowed: true
+    requires_approval: true
+    note: "Permit only for explicitly scoped research or retrieval."
+
+security:
+  least_privilege: true
+  read_only_mounts_by_default: true
+  ephemeral_workspace_for_untrusted_exec: true
+  secret_redaction_in_traces: true

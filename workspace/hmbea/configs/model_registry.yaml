@@ -1,0 +1,57 @@
+# HMBEA Model Registry
+
+models:
+  controller:
+    provider: local
+    family: dense-generalist
+    backend_preference:
+      - llama_cpp
+      - vllm
+    candidates:
+      - name: qwen3-14b
+        quant: gguf-q4_k_m
+        role_weight: 1.00
+        notes: "Primary controller for local orchestration. Strong structured outputs."
+
+  coder:
+    provider: local
+    family: code-agent
+    backend_preference:
+      - llama_cpp
+      - vllm
+    candidates:
+      - name: qwen3-coder-next
+        quant: gguf-q4_k_m
+        role_weight: 1.00
+        notes: "Primary SWE specialist. Strong code generation."
+
+  critic:
+    provider: local
+    family: fast-reasoner
+    backend_preference:
+      - llama_cpp
+      - vllm
+    candidates:
+      - name: phi-4-mini-flash-reasoning
+        quant: gguf-q4_k_m
+        role_weight: 1.00
+        notes: "Fast critique and triage."
+
+  embeddings:
+    provider: local
+    family: retrieval
+    candidates:
+      - name: qwen3-embedding-0.6b
+        notes: "Local embedding model."
+
+runtime_rules:
+  single_gpu_policy:
+    max_hot_heavy_models: 1
+    target_context_default: 8192
+    target_context_upper_bound: 32768
+    prefer_hot_swap_over_parallel_heavy_models: true
+    preserve_10_percent_vram_headroom: true
+
+  escalation:
+    remote_frontier_allowed: true
+    capture_teacher_outputs_for_training: false
