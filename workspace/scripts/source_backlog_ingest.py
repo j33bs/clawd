@@ -700,6 +700,15 @@ def run(tasks_url: str) -> dict[str, Any]:
             continue
 
         if active_task and staged_task_id and str(active_task.get("id") or "") == staged_task_id:
+            if not state_entry:
+                summary["skipped"].append(
+                    {
+                        "assignee": assignee,
+                        "runtime_agent": runtime_agent,
+                        "reason": "externally-managed-active",
+                    }
+                )
+                continue
             if (now_ts - staged_at) < INGEST_LEASE_SECONDS:
                 next_state[assignee] = state_entry
                 summary["skipped"].append({"assignee": assignee, "runtime_agent": runtime_agent, "reason": "lease-active"})
