@@ -104,7 +104,7 @@ class TestMarketSentimentProducer(unittest.TestCase):
             with mock.patch.object(producer, "_load_config", return_value=config), \
                 mock.patch.object(producer, "_load_openclaw_env_vars"), \
                 mock.patch.object(producer, "build_sources", return_value=[_FakeSource()]), \
-                mock.patch.object(producer, "OllamaMarketClassifier", _FakeClassifier), \
+                mock.patch.object(producer, "build_classifier", return_value=_FakeClassifier()), \
                 mock.patch.object(producer, "utc_now_iso", return_value="2026-03-10T12:00:00Z"), \
                 mock.patch.object(producer, "emit_event"), \
                 mock.patch.object(producer, "persist_raw_artifact", return_value="workspace/artifacts/market_sentiment/raw/2026/03/10/fear_greed_20260310T120000Z_deadbeef.json"), \
@@ -191,7 +191,7 @@ class TestMarketSentimentProducer(unittest.TestCase):
             with mock.patch.object(producer, "_load_config", return_value=config), \
                 mock.patch.object(producer, "_load_openclaw_env_vars"), \
                 mock.patch.object(producer, "build_sources", return_value=[_FakeSource()]), \
-                mock.patch.object(producer, "OllamaMarketClassifier", _BusyClassifier), \
+                mock.patch.object(producer, "build_classifier", return_value=_BusyClassifier()), \
                 mock.patch.object(producer, "utc_now_iso", return_value="2026-03-10T12:00:00Z"), \
                 mock.patch.object(producer, "emit_event"), \
                 mock.patch.object(producer, "persist_raw_artifact", return_value="workspace/artifacts/market_sentiment/raw/2026/03/10/fear_greed_20260310T120000Z_deadbeef.json"), \

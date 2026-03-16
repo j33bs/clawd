@@ -1,7 +1,14 @@
+import os
 import unittest
+from datetime import datetime, timedelta, timezone
 from unittest import mock
 
-from workspace.market_sentiment.classifier import OllamaMarketClassifier, normalize_classification
+from workspace.market_sentiment.classifier import (
+    OpenAICompatibleMarketClassifier,
+    OllamaMarketClassifier,
+    build_classifier,
+    normalize_classification,
+)
 from workspace.market_sentiment.sources import CoinGeckoSource, FearGreedSource, ForexFactorySource
 
 
@@ -33,12 +40,13 @@ class _DummySession:
 
 class TestForexFactorySource(unittest.TestCase):
     def test_parses_xml_feed(self):
-        xml_text = """<?xml version="1.0" encoding="windows-1252"?>
+        event_date = (datetime.now(timezone.utc) + timedelta(days=1)).strftime("%m-%d-%Y")
+        xml_text = f"""<?xml version="1.0" encoding="windows-1252"?>
 <weeklyevents>
   <event>
     <title>CPI m/m</title>
     <country>USD</country>
-    <date><![CDATA[03-10-2026]]></date>
+    <date><![CDATA[{event_date}]]></date>
     <time><![CDATA[8:30am]]></time>
     <impact><![CDATA[High]]></impact>
     <forecast><![CDATA[0.3%]]></forecast>
@@ -238,10 +246,75 @@ class TestOllamaModelResolution(unittest.TestCase):
         with mock.patch.dict("os.environ", {"OPENCLAW_MARKET_SENTIMENT_IDLE_OVERRIDE": "busy"}, clear=False), \
             mock.patch("workspace.market_sentiment.classifier.requests.get", return_value=_DummyResponse(json_data={"models": [{"name": "phi4-mini:latest"}]})):
             runtime = classifier.runtime()
-
         self.assertEqual(runtime.status, "error")
         self.assertEqual(runtime.resolved, "")
         self.assertIn("requested_model_requires_idle", runtime.error)
+
+
+class TestBuildClassifier(unittest.TestCase):
+    def test_build_classifier_returns_openai_compatible_instance(self):
+        classifier = build_classifier(
+            {
+                "provider": "openai_compatible",
+                "base_url": "http://127.0.0.1:1234/v1",
+                "requested": "phi4-mini",
+                "fallbacks": ["phi3:mini"],
+                "api_key_env": "OPENCLAW_LOCAL_ASSISTANT_API_KEY",
+            }
+        )
+        self.assertIsInstance(classifier, OpenAICompatibleMarketClassifier)
+
+
+class TestOpenAICompatibleModelResolution(unittest.TestCase):
+    def test_classify_uses_openai_compatible_chat_endpoint(self):
+        classifier = OpenAICompatibleMarketClassifier(
+            base_url="http://127.0.0.1:1234/v1",
+            requested_model="phi4-mini",
+            fallback_models=["phi3:mini"],
+            timeout_seconds=30,
+            temperature=0.0,
+            num_predict=220,
+            api_key_env="OPENCLAW_LOCAL_ASSISTANT_API_KEY",
+        )
+
+        with mock.patch.dict(
+            os.environ,
+            {
+                "OPENCLAW_MARKET_SENTIMENT_IDLE_OVERRIDE": "idle",
+                "OPENCLAW_LOCAL_ASSISTANT_API_KEY": "demo-key",
+            },
+            clear=False,
+        ), \
+            mock.patch(
+                "workspace.market_sentiment.classifier.requests.get",
+                return_value=_DummyResponse(json_data={"data": [{"id": "phi4-mini:free"}]}),
+            ), \
+            mock.patch(
+                "workspace.market_sentiment.classifier.requests.post",
+                return_value=_DummyResponse(
+                    json_data={
+                        "choices": [
+                            {
+                                "message": {
+                                    "content": "{\"sentiment\":0.15,\"confidence\":0.8,\"risk_on\":0.65,\"risk_off\":0.2,\"regime\":\"risk_on\",\"drivers\":[\"breadth\"]}"
+                                }
+                            }
+                        ]
+                    }
+                ),
+            ) as post_mock:
+            classification, meta = classifier.classify(
+                source_name="fear_greed",
+                summary="Fear & Greed is supportive.",
+                metrics={"fear_greed_value": 70},
+                heuristic={"sentiment": 0.2},
+            )
+
+        self.assertEqual(classification["regime"], "risk_on")
+        self.assertEqual(meta["resolved"], "phi4-mini:free")
+        self.assertEqual(post_mock.call_args.args[0], "http://127.0.0.1:1234/v1/chat/completions")
+        self.assertEqual(post_mock.call_args.kwargs["headers"]["Authorization"], "Bearer demo-key")
+        self.assertEqual(post_mock.call_args.kwargs["json"]["response_format"], {"type": "json_object"})
 
 
 if __name__ == "__main__":

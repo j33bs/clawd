@@ -7,7 +7,7 @@ from typing import Any
 
 import requests
 
-from .classifier import OllamaMarketClassifier
+from .classifier import build_classifier
 from .contract import (
     DEFAULT_ARTIFACT_ROOT,
     emit_event,
@@ -147,17 +147,7 @@ def run_market_sentiment(
     sources = build_sources(config)
     classifier_cfg = config.get("model") or {}
     poll_cfg = config.get("poll") or {}
-    classifier = OllamaMarketClassifier(
-        base_url=str(classifier_cfg.get("base_url") or "http://127.0.0.1:11434"),
-        requested_model=str(classifier_cfg.get("requested") or "phi4"),
-        fallback_models=[str(item) for item in classifier_cfg.get("fallbacks") or []],
-        timeout_seconds=int(classifier_cfg.get("timeout_seconds") or 120),
-        temperature=float(classifier_cfg.get("temperature") or 0.0),
-        num_predict=int(classifier_cfg.get("num_predict") or 220),
-        keep_alive=str(classifier_cfg.get("keep_alive") or "0s"),
-        idle_only_patterns=[str(item) for item in classifier_cfg.get("idle_only_patterns") or []] or None,
-        idle_max_load_per_cpu=classifier_cfg.get("idle_max_load_per_cpu"),
-    )
+    classifier = build_classifier(classifier_cfg)
 
     emit_event("market_sentiment_run_started", {"config_path": str(config_path)}, artifact_root)
     session = requests.Session()
@@ -225,7 +215,7 @@ def run_market_sentiment(
     snapshot = {
         "schema_version": 1,
         "generated_at": generated_at,
-        "producer": "c_lawd",
+        "producer": str(config.get("producer") or "c_lawd"),
         "status": status,
         "poll": {
             "recommended_interval_seconds": int(poll_cfg.get("recommended_interval_seconds") or 900),
