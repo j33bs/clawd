@@ -38,6 +38,7 @@
 - **Implementation:** Novelty, Relationship, Arousal, Pattern modules created.
 - **Roadmap:** `workspace/research/IMPLEMENTATION_ROADMAP.md`
 - **March status:** Alignment sprint active; 10 TACTI implementations started and daily ping cron is live.
+- **Mar 17:** Added `tacti_skill_evolution.py` — implements cognee-skills loop: Observe → Inspect → Amend → Evaluate. Skills can now self-improve when they fail repeatedly.
 
 ### 2. Knowledge Base
 - **Status:** QMD + HiveMind + Graph + Research System active.
