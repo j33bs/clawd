@@ -1,22 +1,22 @@
 {
-  "timestamp": "2026-03-14T06:12:25.970050",
+  "timestamp": "2026-03-16T18:29:32.605996",
   "model": "all-MiniLM-L6-v2",
-  "all_passed": false,
+  "all_passed": true,
   "gates": {
     "3": {
       "gate": 3,
       "passed": true,
-      "elapsed_seconds": 1.043351173400879
+      "elapsed_seconds": 1.175022840499878
     },
     "1": {
       "gate": 1,
-      "passed": false,
+      "passed": true,
       "checks": {
         "section_count": true,
         "temporal_order": true,
         "bodies_non_empty": true,
         "authors_present": true,
-        "store_design_in_tail": false
+        "store_design_in_tail": true
       }
     },
     "2": {
