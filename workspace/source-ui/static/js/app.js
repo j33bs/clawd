@@ -178,15 +178,18 @@ function renderDashboard() {
     const tasks = store.get('tasks');
     const components = store.get('components');
     const notifications = store.get('notifications');
+    const truth = store.get('truth') || {};
     
     // Stats
     const activeAgents = agents.filter(a => a.status === 'working').length;
     const todayTasks = tasks.length;
+    const truthSource = truth.source || (store.get('connected') ? 'live_status' : 'demo_seed');
     
     $('#stat-agents').textContent = activeAgents;
     $('#stat-tasks').textContent = todayTasks;
     $('#stat-schedule').textContent = String(store.get('scheduledJobs').length || 0);
-    $('#stat-uptime').textContent = store.get('connected') ? 'live' : 'demo';
+    $('#stat-uptime').textContent = truthSource;
+    renderTruthProvenance(truth);
     
     // Active agents
     $('#dashboard-agents').innerHTML = agents.slice(0, 3).map(a => Components.agentCardMini(a)).join('');
@@ -694,6 +697,16 @@ function applyStatusPayload(status) {
     store.set('notifications', status.notifications || []);
     store.set('unreadCount', (status.notifications || []).filter(n => !n.read).length);
     store.set('logs', status.logs || []);
+    store.set('truth', status.truth || {});
+}
+
+function renderTruthProvenance(truth = store.get('truth') || {}) {
+    const banner = $('#truth-provenance-banner');
+    if (!banner) return;
+    const source = truth.source || (store.get('connected') ? 'live_status' : 'demo_seed');
+    const path = truth.source_mission_path || 'n/a';
+    const updatedAt = truth.source_mission_updated_at || 'unknown';
+    banner.textContent = `Truth source: ${source} · Canonical file: ${path} · Updated: ${updatedAt}`;
 }
 
 async function loadInitialState() {
