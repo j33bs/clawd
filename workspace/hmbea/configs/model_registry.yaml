@@ -1,5 +1,5 @@
 # HMBEA Model Registry
-# Uses existing local llama.cpp server (Qwen 3.5 27B)
+# Uses existing models + hot-swap ready
 
 models:
   controller:
@@ -10,27 +10,25 @@ models:
       - name: local-assistant
         quant: gguf-q4_k_m
         role_weight: 1.00
-        notes: "Qwen 3.5 27B - primary controller"
+        notes: "Qwen 3.5 27B - current default"
 
   coder:
     provider: local
-    backend: llama_cpp
     candidates:
       - name: local-assistant
-        quant: gguf-q4_k_m
-        role_weight: 1.00
-        notes: "Same as controller for now"
+        notes: "Same for now - hot-swap ready for qwen2.5-coder"
 
   critic:
     provider: local
-    backend: llama_cpp
     candidates:
       - name: local-assistant
-        quant: gguf-q4_k_m
-        role_weight: 1.00
-        notes: "Same as controller for now"
+        notes: "Same for now - hot-swap ready for phi-4-mini"
+
+# Available in cache (ready to convert):
+# - Qwen2.5-14B-Instruct-AWQ
+# - Qwen2.5-Coder-14B-Instruct-AWQ
 
 runtime:
   single_gpu: true
-  hot_swap: false
+  hot_swap: true
   context: 262144
