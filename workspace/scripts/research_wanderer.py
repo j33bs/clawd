@@ -7,6 +7,7 @@ import json
 import math
 import random
 import re
+import subprocess
 import sys
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -182,14 +183,35 @@ def parse_open_questions(path: Path = OPEN_QUESTIONS_FILE, *, days: int = 7, las
     for line in lines:
         if "?" not in line:
             continue
-        date_obj = _extract_date(line)
+        stripped = line.strip()
+        # Skip wanderer-appended blockquote lines (> ...) to prevent nesting spiral.
+        # Proper governance questions appear in section body text, not blockquotes.
+        if stripped.startswith(">"):
+            continue
+        # Skip wanderer timestamp comment lines
+        if stripped.startswith("<!-- wanderer:"):
+            continue
+        date_obj = _extract_date(stripped)
         if date_obj is not None:
             has_dates = True
             if date_obj < cutoff:
                 continue
-        q = line.strip().lstrip("-*0123456789. ")
-        if "?" in q:
-            out.append(q)
+        # Skip markdown headings and bold-inline text (likely not standalone questions)
+        if stripped.startswith("#"):
+            continue
+        q = stripped.lstrip("-*#0123456789. \t")
+        # Strip trailing markdown artifacts (bold/italic markers)
+        q = q.rstrip("*_ ")
+        # Must end with "?" (not mid-sentence fragment) and have ≥ 6 words
+        if not q.rstrip().endswith("?"):
+            continue
+        if len(q.split()) < 6:
+            continue
+        # Skip lines where "?" appears before a lot of remaining text (embedded mid-sentence)
+        q_pos = q.index("?")
+        if q_pos < len(q) * 0.7:
+            continue
+        out.append(q)
     if not has_dates:
         return out[-last_k:]
     return out[-last_k:]
@@ -214,8 +236,18 @@ def evaluate_novelty(candidate: str, recent_questions: list[str]) -> NoveltyDeci
 
 
 def pick_open_loop(oq_path: Path = OPEN_QUESTIONS_FILE) -> str:
-    qs = parse_open_questions(oq_path, days=7, last_k=20)
-    return qs[-1] if qs else "open loop unavailable"
+    """Pick an open loop from recent governance questions.
+
+    Samples randomly from the pool (weighted toward recent entries) rather than
+    always taking the last — prevents the same question being embedded repeatedly
+    and causing a nesting spiral in generated candidates.
+    """
+    qs = parse_open_questions(oq_path, days=14, last_k=30)
+    if not qs:
+        return "What would a null result look like and how would we log it?"
+    # Weight toward recent entries but allow older ones
+    weights = [i + 1 for i in range(len(qs))]
+    return random.choices(qs, weights=weights, k=1)[0]
 
 
 def generate_candidate_question(topic: str, *, seed_topic: str, open_loop: str, random_prompt: str) -> str:
@@ -295,6 +327,92 @@ def append_wander_log(question: str, *, overlap_max: float, similarity_max: floa
         f.write(row)
 
 
+_SECRETISH_TOKEN_RE = re.compile(r"\b[A-Za-z0-9_-]{20,}\b")
+
+
+def _redact_secretish_tokens(text: str) -> str:
+    return _SECRETISH_TOKEN_RE.sub("[REDACTED_TOKEN]", text or "")
+
+
+def _git_commit_short(repo_root: Path) -> str:
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError:
+        return "unknown"
+    if result.returncode != 0:
+        return "unknown"
+    return (result.stdout or "").strip() or "unknown"
+
+
+def _render_open_questions_append(
+    items: list[dict[str, Any]],
+    *,
+    timestamp: str,
+    run_id: str,
+    commit_sha: str,
+) -> str:
+    lines = [f"\n## Research Wanderer Session {timestamp} (run_id={run_id}, commit={commit_sha})"]
+    for index, item in enumerate(items, start=1):
+        question = _redact_secretish_tokens(str(item.get("question", "")).strip())
+        significance = float(item.get("significance", 0.0))
+        lines.append(f"{index}. {question} [significance={significance:.3f}]")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def append_open_questions(
+    input_path: Path,
+    *,
+    open_questions_path: Path = OPEN_QUESTIONS_FILE,
+    run_id: str = "rw-auto",
+    threshold: float = 0.8,
+    dry_run: bool = False,
+) -> dict[str, Any]:
+    payload = json.loads(Path(input_path).read_text(encoding="utf-8"))
+    if not isinstance(payload, list):
+        raise ValueError("input payload must be a JSON list")
+
+    selected = []
+    for item in payload:
+        if not isinstance(item, dict):
+            continue
+        question = str(item.get("question", "")).strip()
+        significance = float(item.get("significance", 0.0))
+        if question and significance >= threshold:
+            selected.append({"question": question, "significance": significance})
+
+    timestamp = iso_utc()
+    repo_root = Path(__file__).resolve().parents[2]
+    commit_sha = _git_commit_short(repo_root)
+    append_preview = _render_open_questions_append(
+        selected,
+        timestamp=timestamp,
+        run_id=run_id,
+        commit_sha=commit_sha,
+    )
+
+    if not dry_run:
+        open_questions_path.parent.mkdir(parents=True, exist_ok=True)
+        with open_questions_path.open("a", encoding="utf-8") as handle:
+            handle.write(append_preview)
+
+    return {
+        "append_preview": append_preview,
+        "commit_sha": commit_sha,
+        "run_id": run_id,
+        "selected_count": len(selected),
+        "status": "dry_run" if dry_run else "appended",
+        "target_path": str(open_questions_path),
+        "threshold": threshold,
+    }
+
+
 def add_topic(topic: str) -> None:
     q = load_queue()
     if topic not in q["topics"] and topic not in q["completed"]:
@@ -324,7 +442,31 @@ def show_status() -> None:
         print(f"   Last wander: {q['last_wander']}")
 
 
-def do_wander(*, seed: int = 17) -> int:
+def _safe_append_to_oq(question: str, *, oq_path: Path = OPEN_QUESTIONS_FILE) -> bool:
+    """
+    Safely append a wanderer question to OPEN_QUESTIONS.md using APPEND mode only.
+    This is the ONLY sanctioned way for the wanderer to touch OPEN_QUESTIONS.md.
+    Never truncates or overwrites. Always appends.
+    Returns True if appended, False if skipped.
+    GOVERNANCE: This function must never open the file in write mode.
+    """
+    if not oq_path.exists():
+        print(f"  [warn] OPEN_QUESTIONS.md not found at {oq_path} — skipping OQ append")
+        return False
+    # Verify file is larger than 1KB — if it's tiny, something is wrong, abort
+    file_size = oq_path.stat().st_size
+    if file_size < 1024:
+        print(f"  [ABORT] OPEN_QUESTIONS.md is suspiciously small ({file_size} bytes). "
+              "Refusing to append — file may already be corrupted. Restore from git first.")
+        return False
+    safe_q = _redact_secretish_tokens(question.strip().replace("\n", " "))
+    entry = f"\n<!-- wanderer:{iso_utc()} -->\n> {safe_q}\n"
+    with oq_path.open("a", encoding="utf-8") as f:  # MUST be "a" (append), never "w"
+        f.write(entry)
+    return True
+
+
+def do_wander(*, seed: int = 17, append_to_oq: bool = False) -> int:
     q = load_queue()
     if not q["topics"]:
         print("No topics to research. Add some!")
@@ -368,6 +510,16 @@ def do_wander(*, seed: int = 17) -> int:
         f"   Novelty: overlap={meta['overlap_max']:.3f}, similarity={meta['similarity_max']:.3f}, "
         f"reason={meta['novelty_reason']}"
     )
+
+    if append_to_oq:
+        appended = _safe_append_to_oq(question)
+        if appended:
+            print(f"   ✅ Appended to OPEN_QUESTIONS.md (append mode, file-size-verified)")
+        else:
+            print(f"   ⚠️  OPEN_QUESTIONS.md append skipped (see warning above)")
+    else:
+        print(f"   Note: question NOT appended to OPEN_QUESTIONS.md. Use 'wander --append-to-oq' to do so.")
+
     return 0
 
 
@@ -375,6 +527,31 @@ def main(argv: list[str] | None = None) -> int:
     args = argv if argv is not None else sys.argv[1:]
     if not args:
         show_status()
+        return 0
+
+    if args[0].startswith("-"):
+        import argparse
+
+        parser = argparse.ArgumentParser(description="Append research wanderer questions to OPEN_QUESTIONS.md")
+        parser.add_argument("--input", required=True, help="Path to JSON payload with question/significance items")
+        parser.add_argument("--open-questions-path", default=str(OPEN_QUESTIONS_FILE))
+        parser.add_argument("--run-id", default="rw-auto")
+        parser.add_argument("--threshold", type=float, default=0.8)
+        parser.add_argument("--dry-run", action="store_true")
+        parser.add_argument("--json", action="store_true")
+        parsed = parser.parse_args(args)
+
+        result = append_open_questions(
+            Path(parsed.input),
+            open_questions_path=Path(parsed.open_questions_path),
+            run_id=parsed.run_id,
+            threshold=parsed.threshold,
+            dry_run=parsed.dry_run,
+        )
+        if parsed.json:
+            print(json.dumps(result, indent=2))
+        else:
+            print(result["append_preview"])
         return 0
 
     cmd = args[0]
@@ -391,7 +568,8 @@ def main(argv: list[str] | None = None) -> int:
         show_status()
         return 0
     if cmd == "wander":
-        return do_wander()
+        append_to_oq = "--append-to-oq" in args
+        return do_wander(append_to_oq=append_to_oq)
     if cmd == "init":
         ensure_topics_file()
         q = load_queue()

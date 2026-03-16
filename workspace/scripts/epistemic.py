@@ -11,7 +11,10 @@ KB_FILE = REPO_ROOT / "workspace" / "knowledge_base" / "data" / "graph.jsonl"
 def get_knowledge_with_confidence(query: str = None):
     """Get knowledge entries with confidence levels."""
     results = []
-    
+
+    if not KB_FILE.exists():
+        return results
+
     with open(KB_FILE) as f:
         for line in f:
             entry = json.loads(line)
@@ -45,6 +48,7 @@ def add_with_confidence(name: str, content: str, topic: str, confidence: float =
         }
     }
     
+    KB_FILE.parent.mkdir(parents=True, exist_ok=True)
     with open(KB_FILE, "a") as f:
         f.write(json.dumps(entry) + "\n")
     
