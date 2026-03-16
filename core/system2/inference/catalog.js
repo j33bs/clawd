@@ -271,6 +271,79 @@ const CATALOG = Object.freeze([
   },
 
   {
+    provider_id: 'xai',
+    kind: 'external',
+    protocol: 'openai_compatible',
+    enabled_default: false,
+    base_url: {
+      default: 'https://api.x.ai/v1',
+      env_override: 'OPENCLAW_XAI_BASE_URL'
+    },
+    auth: {
+      type: 'bearer',
+      env_var: 'OPENCLAW_XAI_API_KEY',
+      alias_env_vars: ['XAI_API_KEY', 'GROK_API_KEY'],
+      redact_in_logs: true
+    },
+    models: [
+      {
+        model_id: 'grok-4-fast-non-reasoning',
+        task_classes: ['fast_chat', 'tool_use'],
+        context_window_hint: 2000000,
+        tool_support: 'via_adapter',
+        notes: 'Primary xAI lane for ordinary chat and low-overhead requests.'
+      },
+      {
+        model_id: 'grok-4-1-fast',
+        task_classes: ['long_context', 'batch', 'tool_use'],
+        context_window_hint: 2000000,
+        tool_support: 'via_adapter',
+        notes: 'Elevated xAI lane for complex planning, long-context synthesis, and research.'
+      },
+      {
+        model_id: 'grok-code-fast-1',
+        task_classes: ['code', 'tool_use'],
+        context_window_hint: 2000000,
+        tool_support: 'via_adapter',
+        notes: 'Specialized xAI lane for larger code edits and repo-level implementation work.'
+      }
+    ],
+    constraints: {
+      quota: {
+        mode: 'standard',
+        rpm_default: 10,
+        tpm_default: 120000,
+        rpd_default: 100,
+        tpd_default: 600000,
+        reset_policy: 'provider_defined',
+        operator_override_required: true
+      },
+      backoff: { strategy: 'bounded_exponential', max_retries: 2, cooldown_seconds: 20 },
+      circuit_breaker: {
+        consecutive_failures_to_open: 3,
+        open_seconds: 120,
+        half_open_probe_interval_seconds: 60
+      }
+    },
+    healthcheck: {
+      type: 'openai_compatible',
+      endpoints: { models: '/models', chat: '/chat/completions' },
+      timeouts_ms: { connect: 1000, read: 9000 },
+      probe_prompt: 'Reply with: OK',
+      probe_max_tokens: 8
+    },
+    routing_tags: { prefers: ['high_capability', 'paid_fallback'], avoids: [] },
+    evidence: [
+      {
+        type: 'doc',
+        title: 'xAI release notes',
+        url: 'https://docs.x.ai/developers/release-notes',
+        retrieved_utc: null
+      }
+    ]
+  },
+
+  {
     provider_id: 'openrouter',
     kind: 'external',
     protocol: 'openai_compatible',
