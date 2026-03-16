@@ -153,6 +153,7 @@ workspace/source-ui/state/*.jsonl
 
 # Local audit scratch (untracked)
 workspace/audit/*.md
+workspace/audit/*.zip
 workspace/audit/_scratch/
 workspace/audit/_evidence/
 workspace/audit/worktree_dirty_snapshot_*.md

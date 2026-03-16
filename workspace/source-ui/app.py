@@ -85,6 +85,30 @@ except Exception:  # pragma: no cover
     load_relational_state = None
 
 try:
+    from api.deliberation_store import (
+        add_contribution as deliberation_add_contribution,
+        add_synthesis as deliberation_add_synthesis,
+        create_deliberation as deliberation_create,
+        get_deliberation as deliberation_get,
+        list_deliberations as deliberation_list,
+    )
+except Exception:  # pragma: no cover
+    deliberation_add_contribution = None
+    deliberation_add_synthesis = None
+    deliberation_create = None
+    deliberation_get = None
+    deliberation_list = None
+
+try:
+    from api.weekly_evolution import (
+        generate_weekly_evolution,
+        load_weekly_evolution_summary,
+    )
+except Exception:  # pragma: no cover
+    generate_weekly_evolution = None
+    load_weekly_evolution_summary = None
+
+try:
     from api.boundary_state import build_command_receipt_boundary
 except Exception:  # pragma: no cover
     build_command_receipt_boundary = None
@@ -116,6 +140,7 @@ def source_contract_payload() -> dict[str, Any]:
         "endpoints": {
             "status": "/api/status",
             "portfolio": "/api/portfolio",
+            "world_better": "/api/world-better",
             "tasks": "/api/tasks",
             "runtime_tasks": "/api/runtime-tasks",
             "command_history": "/api/commands/history",
@@ -416,6 +441,19 @@ class SourceUIHandler(SimpleHTTPRequestHandler):
             self.toggle_display_mode_handler()
         elif parsed.path == '/api/research/promote':
             self.promote_research_handler()
+        elif parsed.path == '/api/deliberations':
+            self.create_deliberation_handler()
+        elif parsed.path.startswith('/api/deliberations/') and parsed.path.endswith('/contributions'):
+            deliberation_id = parsed.path.split('/')[-2]
+            self.add_deliberation_contribution_handler(deliberation_id)
+        elif parsed.path.startswith('/api/deliberations/') and parsed.path.endswith('/synthesis'):
+            deliberation_id = parsed.path.split('/')[-2]
+            self.add_deliberation_synthesis_handler(deliberation_id)
+        elif parsed.path == '/api/evolution/generate':
+            self.generate_weekly_evolution_handler()
+        elif parsed.path.startswith('/api/tasks/') and parsed.path.endswith('/review'):
+            task_id = parsed.path.split('/')[-2]
+            self.review_task_handler(task_id)
         elif parsed.path.startswith('/api/tasks/') and parsed.path.endswith('/archive'):
             task_id = parsed.path.split('/')[-2]
             self.archive_task_handler(task_id)
@@ -496,6 +534,11 @@ class SourceUIHandler(SimpleHTTPRequestHandler):
                 data = {'error': 'portfolio_unavailable'}
             else:
                 data = portfolio_payload()
+        elif path == 'world-better':
+            if portfolio_payload is None:
+                data = {'error': 'portfolio_unavailable'}
+            else:
+                data = (portfolio_payload() or {}).get('world_better', {})
         elif path == 'display-mode':
             data = self.get_display_mode_data()
         elif path == 'research/items':
@@ -511,6 +554,22 @@ class SourceUIHandler(SimpleHTTPRequestHandler):
                 data = {'error': 'user_inference_unavailable'}
             else:
                 data = user_inference_load_all()
+        elif path == 'deliberations':
+            if deliberation_list is None:
+                data = {'error': 'deliberation_unavailable'}
+            else:
+                data = deliberation_list(limit=8)
+        elif path.startswith('deliberations/'):
+            deliberation_id = path.partition('deliberations/')[2]
+            if deliberation_get is None:
+                data = {'error': 'deliberation_unavailable'}
+            else:
+                data = deliberation_get(deliberation_id) or {'error': 'Not found'}
+        elif path == 'evolution/latest':
+            if load_weekly_evolution_summary is None:
+                data = {'error': 'weekly_evolution_unavailable'}
+            else:
+                data = load_weekly_evolution_summary()
         elif path == 'source-contract':
             data = source_contract_payload()
         elif path == 'trails/heatmap':
@@ -542,12 +601,24 @@ class SourceUIHandler(SimpleHTTPRequestHandler):
             data = {'error': 'Not found'}
         
         self.send_json(data)
+
+    def _read_json_body(self) -> dict[str, Any]:
+        try:
+            length = int(self.headers.get('Content-Length', 0))
+        except Exception:
+            length = 0
+        if length <= 0:
+            return {}
+        try:
+            payload = json.loads(self.rfile.read(length))
+        except Exception:
+            return {}
+        return payload if isinstance(payload, dict) else {}
     
     def create_task(self):
         """Create a new task."""
         try:
-            length = int(self.headers.get('Content-Length', 0))
-            data = json.loads(self.rfile.read(length)) if length > 0 else {}
+            data = self._read_json_body()
 
             if task_store_create_task is None:
                 raise RuntimeError('task_store_unavailable')
@@ -605,6 +676,125 @@ class SourceUIHandler(SimpleHTTPRequestHandler):
             return
         self.state.tasks = self._load_tasks()
         self.send_json({'success': True})
+
+    def review_task_handler(self, task_id):
+        """Review a task: verify intent adherence and alignment, then approve or request changes."""
+        if task_store_update_task is None:
+            self.send_json({'error': 'task_store_unavailable'}, status=400)
+            return
+
+        body = self._read_json_body()
+        approved = bool(body.get('approved', False))
+        reviewer_notes = str(body.get('notes', '') or '')
+
+        task = next((row for row in self._load_tasks() if str(row.get('id')) == str(task_id)), None)
+        if task is None:
+            self.send_json({'error': 'Task not found'}, status=404)
+            return
+
+        if str(task.get('status') or '') != 'review':
+            self.send_json({'error': f"Task is not in review status (current: {task.get('status')})"}, status=400)
+            return
+
+        updates = {
+            'status': 'done' if approved else 'in_progress',
+            'reviewer_notes': reviewer_notes,
+            'status_reason': reviewer_notes or (
+                'Intent verified and aligned with Source Mission'
+                if approved
+                else 'Changes requested by operator'
+            ),
+        }
+        if approved:
+            updates['reviewed_by'] = 'operator'
+
+        updated = task_store_update_task(task_id, updates)
+        if updated is None:
+            self.send_json({'error': 'Task not found'}, status=404)
+            return
+        self.state.tasks = self._load_tasks()
+        self.send_json({'success': True, 'task': updated, 'action': 'approved' if approved else 'changes_requested'})
+
+    def create_deliberation_handler(self):
+        if deliberation_create is None:
+            self.send_json({'error': 'deliberation_unavailable'}, status=400)
+            return
+        body = self._read_json_body()
+        try:
+            row = deliberation_create(
+                title=str(body.get('title') or '').strip(),
+                prompt=str(body.get('prompt') or '').strip(),
+                roles=body.get('roles'),
+                participants=body.get('participants'),
+                mission_task_id=str(body.get('mission_task_id') or '').strip() or None,
+                time_horizon=str(body.get('time_horizon') or '').strip() or None,
+                beneficiaries=body.get('beneficiaries'),
+                desired_outcome=str(body.get('desired_outcome') or '').strip() or None,
+                guardrails=body.get('guardrails'),
+                success_metrics=body.get('success_metrics'),
+                risks=body.get('risks'),
+                decision_deadline=str(body.get('decision_deadline') or '').strip() or None,
+            )
+        except Exception as exc:
+            self.send_json({'error': str(exc)}, status=400)
+            return
+        self.send_json(row, status=201)
+
+    def add_deliberation_contribution_handler(self, deliberation_id):
+        if deliberation_add_contribution is None:
+            self.send_json({'error': 'deliberation_unavailable'}, status=400)
+            return
+        body = self._read_json_body()
+        try:
+            row = deliberation_add_contribution(
+                deliberation_id,
+                agent_id=str(body.get('agent_id') or '').strip(),
+                role=str(body.get('role') or '').strip(),
+                content=str(body.get('content') or '').strip(),
+                agrees_with=str(body.get('agrees_with') or '').strip() or None,
+                disagrees_with=str(body.get('disagrees_with') or '').strip() or None,
+                evidence_refs=body.get('evidence_refs'),
+                confidence=body.get('confidence'),
+                uncertainty=str(body.get('uncertainty') or '').strip() or None,
+                proposed_experiment=str(body.get('proposed_experiment') or '').strip() or None,
+            )
+        except Exception as exc:
+            self.send_json({'error': str(exc)}, status=400)
+            return
+        self.send_json(row)
+
+    def add_deliberation_synthesis_handler(self, deliberation_id):
+        if deliberation_add_synthesis is None:
+            self.send_json({'error': 'deliberation_unavailable'}, status=400)
+            return
+        body = self._read_json_body()
+        try:
+            row = deliberation_add_synthesis(
+                deliberation_id,
+                synthesis=str(body.get('synthesis') or '').strip(),
+                dissent_noted=bool(body.get('dissent_noted')),
+                recommended_action=str(body.get('recommended_action') or '').strip() or None,
+                confidence=body.get('confidence'),
+                risks=body.get('risks'),
+                guardrails=body.get('guardrails'),
+                success_metrics=body.get('success_metrics'),
+                next_review_at=str(body.get('next_review_at') or '').strip() or None,
+            )
+        except Exception as exc:
+            self.send_json({'error': str(exc)}, status=400)
+            return
+        self.send_json(row)
+
+    def generate_weekly_evolution_handler(self):
+        if generate_weekly_evolution is None:
+            self.send_json({'error': 'weekly_evolution_unavailable'}, status=400)
+            return
+        try:
+            summary = generate_weekly_evolution()
+        except Exception as exc:
+            self.send_json({'error': str(exc)}, status=400)
+            return
+        self.send_json(summary)
 
     def archive_task_handler(self, task_id):
         """Archive a completed task (moves it to archived_tasks.json)."""

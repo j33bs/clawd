@@ -24,11 +24,14 @@ from .boundary_state import (
     build_preference_packet_boundary,
     build_research_boundary,
 )
+from .deliberation_store import load_deliberation_summary
 from .discord_bridge import bridge_payload as discord_bridge_payload
 from .research_promotions import list_research_items
 from .sim_review import load_or_build_sim_strategy_review
-from .task_store import load_all_tasks
+from .task_store import load_all_tasks, load_runtime_source_health
 from .user_inference import build_user_context_packet
+from .weekly_evolution import load_weekly_evolution_summary
+from .world_better import build_world_better_payload
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 SOURCE_UI_ROOT = REPO_ROOT / "workspace" / "source-ui"
@@ -70,6 +73,32 @@ COMPONENT_UNITS = [
     ("itc_cycle", "ITC Cycle Timer", "openclaw-itc-cycle.timer"),
     ("dali", "DALI Fishtank", "dali-fishtank.service"),
 ]
+FAILED_UNIT_HINTS: dict[str, dict[str, Any]] = {
+    "openclaw-source-backlog-ingest.service": {
+        "label": "Backlog Ingest",
+        "kind": "source-ui",
+        "optional": False,
+        "summary": "Backlog dispatch into runtime lanes needs attention.",
+    },
+    "openclaw-tool-ain-phi.service": {
+        "label": "AIN Phi Tool",
+        "kind": "optional tool",
+        "optional": True,
+        "summary": "Optional ain.phi tool is unconfigured. Set OPENCLAW_TOOL_CMD_AIN_PHI to enable it.",
+    },
+    "openclaw-canary.service": {
+        "label": "Canary Runner",
+        "kind": "opt-in",
+        "optional": True,
+        "summary": "Opt-in canary is degraded and currently failing closed.",
+    },
+    "openclaw-dali-heavy-node.service": {
+        "label": "Heavy Node Lane",
+        "kind": "compatibility",
+        "optional": True,
+        "summary": "Heavy cognition compatibility lane is parked and not configured cleanly.",
+    },
+}
 
 
 def now_iso() -> str:
@@ -619,6 +648,49 @@ def _load_health_metrics() -> dict[str, float]:
     }
 
 
+def _load_failed_units() -> list[dict[str, Any]]:
+    code, stdout, _ = _run_command(
+        ["systemctl", "--user", "--failed", "--no-legend", "--plain", "--full"],
+        timeout=2.0,
+    )
+    if code != 0:
+        return []
+
+    rows: list[dict[str, Any]] = []
+    for raw in stdout.splitlines():
+        line = raw.strip()
+        if not line or "loaded units listed" in line:
+            continue
+        parts = re.split(r"\s+", line, maxsplit=4)
+        unit = parts[0] if parts else ""
+        if not unit:
+            continue
+        show = _systemctl_show(unit)
+        meta = FAILED_UNIT_HINTS.get(unit, {})
+        description = parts[4] if len(parts) >= 5 else unit
+        optional = bool(meta.get("optional", False))
+        status = "warning" if optional else "error"
+        active_state = str(show.get("ActiveState") or "unknown")
+        sub_state = str(show.get("SubState") or "unknown")
+        rows.append(
+            {
+                "id": unit.replace(".", "-"),
+                "unit": unit,
+                "label": str(meta.get("label") or description or unit),
+                "kind": str(meta.get("kind") or "systemd"),
+                "status": status,
+                "optional": optional,
+                "details": str(meta.get("summary") or f"{description}: {active_state}/{sub_state}"),
+                "active_state": active_state,
+                "sub_state": sub_state,
+                "unit_file_state": str(show.get("UnitFileState") or "unknown"),
+            }
+        )
+
+    rows.sort(key=lambda item: (0 if item.get("status") == "error" else 1, str(item.get("label") or "")))
+    return rows
+
+
 def _load_projects() -> list[dict[str, Any]]:
     payload = _read_json(PROJECTS_CONFIG_PATH)
     if not isinstance(payload, list):
@@ -689,6 +761,9 @@ def _load_source_mission(
             "north_star": None,
             "pillars": [],
             "operating_commitments": [],
+            "three_year_outcomes": [],
+            "anti_goals": [],
+            "decision_rules": [],
             "tasks": [],
             "signals": [],
             "summary": "No Source mission config found.",
@@ -729,6 +804,15 @@ def _load_source_mission(
                 "status": str(live_task.get("status", "")),
                 "assignee": str(live_task.get("assignee", "")),
                 "status_reason": str(live_task.get("status_reason") or live_task.get("fix_instructions") or ""),
+                "impact_vector": str(item.get("impact_vector", "")),
+                "time_horizon": str(item.get("time_horizon", "")),
+                "beneficiaries": [str(value).strip() for value in item.get("beneficiaries", []) if str(value).strip()],
+                "public_benefit_hypothesis": str(item.get("public_benefit_hypothesis", "")),
+                "leading_indicators": [str(value).strip() for value in item.get("leading_indicators", []) if str(value).strip()],
+                "guardrails": [str(value).strip() for value in item.get("guardrails", []) if str(value).strip()],
+                "evidence_status": str(item.get("evidence_status", "")),
+                "reversibility": str(item.get("reversibility", "")),
+                "leverage": str(item.get("leverage", "")),
             }
         )
 
@@ -768,6 +852,30 @@ def _load_source_mission(
             "detail": f"{open_tasks} current operator tasks live, {in_progress} in progress",
         },
     ]
+    impact_ready_count = sum(
+        1
+        for row in task_rows
+        if row.get("beneficiaries")
+        and row.get("public_benefit_hypothesis")
+        and row.get("leading_indicators")
+        and row.get("guardrails")
+        and row.get("time_horizon")
+    )
+    guardrail_count = sum(1 for row in task_rows if row.get("guardrails"))
+    signals.extend(
+        [
+            {
+                "label": "Impact-ready Tasks",
+                "value": f"{impact_ready_count}/{len(task_rows)}" if task_rows else "0/0",
+                "detail": "Mission tasks that already specify beneficiaries, hypothesis, metrics, guardrails, and horizon",
+            },
+            {
+                "label": "Guardrail Coverage",
+                "value": f"{guardrail_count}/{len(task_rows)}" if task_rows else "0/0",
+                "detail": "Mission tasks with at least one explicit safeguard",
+            },
+        ]
+    )
 
     return {
         "status": "active" if task_rows else "warning",
@@ -777,6 +885,11 @@ def _load_source_mission(
         "operating_commitments": [
             str(item) for item in payload.get("operating_commitments", []) if str(item).strip()
         ],
+        "three_year_outcomes": [
+            item for item in payload.get("three_year_outcomes", []) if isinstance(item, dict)
+        ],
+        "anti_goals": [str(item) for item in payload.get("anti_goals", []) if str(item).strip()],
+        "decision_rules": [str(item) for item in payload.get("decision_rules", []) if str(item).strip()],
         "pillars": [
             {
                 "id": str(item.get("id", "")),
@@ -789,7 +902,7 @@ def _load_source_mission(
         "tasks": task_rows,
         "signals": signals,
         "context_packet": context_packet,
-        "summary": f"{len(task_rows)} mission tasks across {len(pillar_map)} pillars",
+        "summary": f"{len(task_rows)} mission tasks across {len(pillar_map)} pillars; {impact_ready_count} impact-ready",
         "path": str(SOURCE_MISSION_PATH),
     }
 
@@ -1386,7 +1499,15 @@ def _build_operator_timeline(
             }
         )
     for item in work_items[:6]:
-        tone = "warning" if str(item.get("status", "")).lower() in {"queued", "running"} else "neutral"
+        item_status = str(item.get("status", "")).lower()
+        if item_status in {"error", "failed", "blocked"}:
+            tone = "error"
+        elif item_status in {"queued", "warning", "backlog"}:
+            tone = "warning"
+        elif item_status in {"running", "active", "in_progress"}:
+            tone = "healthy"
+        else:
+            tone = "neutral"
         rows.append(
             {
                 "id": f"work-{item.get('id', item.get('title', 'work'))}",
@@ -1521,6 +1642,20 @@ def _load_finance_brain() -> dict[str, Any]:
     }
 
 
+def _work_item_status(title: str, detail: str) -> str:
+    raw_title = str(title or "").strip().lower()
+    raw_detail = str(detail or "").strip().lower()
+    if "(skipped)" in raw_detail or raw_detail.endswith("skipped"):
+        return "skipped"
+    if raw_title == "sim update":
+        return "monitoring"
+    if raw_detail.startswith("wait_ok "):
+        return "waiting"
+    if raw_detail.startswith("==> "):
+        return "running"
+    return "running"
+
+
 def _extract_itc_work_items() -> list[dict[str, Any]]:
     lines = _tail_lines(ITC_CYCLE_LOG, 120)
     if not lines:
@@ -1535,7 +1670,10 @@ def _extract_itc_work_items() -> list[dict[str, Any]]:
                     {
                         "id": marker.lower().replace(" ", "_").replace(">", "").replace("=", ""),
                         "title": marker.replace("==> ", "").replace("WAIT_OK ", ""),
-                        "status": "running",
+                        "status": _work_item_status(
+                            marker.replace("==> ", "").replace("WAIT_OK ", ""),
+                            line,
+                        ),
                         "detail": line,
                         "source": str(ITC_CYCLE_LOG),
                     }
@@ -1548,7 +1686,7 @@ def _extract_itc_work_items() -> list[dict[str, Any]]:
             {
                 "id": line.strip().split("|", 1)[0].strip(" []"),
                 "title": "Sim update",
-                "status": "running",
+                "status": _work_item_status("Sim update", line.strip()),
                 "detail": line.strip(),
                 "source": str(ITC_CYCLE_LOG),
             }
@@ -1660,6 +1798,8 @@ def _load_teamchat_sessions(limit: int = 4) -> dict[str, Any]:
 
 def portfolio_payload() -> dict[str, Any]:
     tasks = load_all_tasks()
+    runtime_sources = load_runtime_source_health()
+    failed_units = _load_failed_units()
     external_signals = _load_external_signals()
     finance_brain = _load_finance_brain()
     trading_strategy = _load_trading_strategy()
@@ -1671,6 +1811,8 @@ def portfolio_payload() -> dict[str, Any]:
     sim_ops = _load_sim_ops(sims)
     sim_strategy_review = load_or_build_sim_strategy_review(sims, finance_brain, trading_strategy)
     teamchat = _load_teamchat_sessions()
+    deliberations = load_deliberation_summary()
+    weekly_evolution = load_weekly_evolution_summary()
     model_ops = _load_model_ops(
         components=components,
         external_signals=external_signals,
@@ -1693,6 +1835,10 @@ def portfolio_payload() -> dict[str, Any]:
         "sim_ops": sim_ops,
         "sim_strategy_review": sim_strategy_review,
         "tasks": tasks,
+        "runtime_sources": runtime_sources,
+        "failed_units": failed_units,
+        "deliberations": deliberations,
+        "weekly_evolution": weekly_evolution,
         "work_items": work_items,
         "components": components,
         "health_metrics": _load_health_metrics(),
@@ -1708,6 +1854,13 @@ def portfolio_payload() -> dict[str, Any]:
         model_ops=model_ops,
         work_items=work_items,
         teamchat=teamchat,
+        context_packet=context_packet,
+    )
+    payload["world_better"] = build_world_better_payload(
+        source_mission=payload["source_mission"],
+        tasks=tasks,
+        deliberations=deliberations,
+        weekly_evolution=weekly_evolution,
         context_packet=context_packet,
     )
     payload["operator_timeline"] = _build_operator_timeline(

@@ -111,6 +111,39 @@ class APIClient {
     async getUserInferences() {
         return this.request('/api/user-inferences');
     }
+
+    async getDeliberations() {
+        return this.request('/api/deliberations');
+    }
+
+    async createDeliberation(payload) {
+        return this.request('/api/deliberations', {
+            method: 'POST',
+            body: JSON.stringify(payload)
+        });
+    }
+
+    async addDeliberationContribution(id, payload) {
+        return this.request(`/api/deliberations/${id}/contributions`, {
+            method: 'POST',
+            body: JSON.stringify(payload)
+        });
+    }
+
+    async addDeliberationSynthesis(id, payload) {
+        return this.request(`/api/deliberations/${id}/synthesis`, {
+            method: 'POST',
+            body: JSON.stringify(payload)
+        });
+    }
+
+    async getLatestWeeklyEvolution() {
+        return this.request('/api/evolution/latest');
+    }
+
+    async generateWeeklyEvolution() {
+        return this.request('/api/evolution/generate', { method: 'POST' });
+    }
     
     async createTask(task) {
         return this.request('/api/tasks', {

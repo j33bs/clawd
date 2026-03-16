@@ -324,6 +324,37 @@
                         </article>
                     </section>
 
+                    <section class="clarity-grid">
+                        <article class="clarity-panel clarity-panel-primary">
+                            <div class="clarity-summary" id="clarity-summary"></div>
+                            <div class="clarity-metrics" id="clarity-metrics"></div>
+                            <div class="clarity-live-block">
+                                <div class="stack-label">Flowing Now</div>
+                                <div class="dashboard-card-list compact-stack" id="clarity-live-list"></div>
+                            </div>
+                        </article>
+
+                        <article class="clarity-panel">
+                            <div class="section-header">
+                                <div>
+                                    <h2>Need Eyes</h2>
+                                    <span class="section-caption">Real blockers, stale mirrors, and failed lanes</span>
+                                </div>
+                            </div>
+                            <div class="dashboard-card-list compact-stack" id="attention-now-list"></div>
+                        </article>
+
+                        <article class="clarity-panel">
+                            <div class="section-header">
+                                <div>
+                                    <h2>Parked & Closed</h2>
+                                    <span class="section-caption">Skipped, optional, or intentionally quiet surfaces</span>
+                                </div>
+                            </div>
+                            <div class="dashboard-card-list compact-stack" id="dormant-audit-list"></div>
+                        </article>
+                    </section>
+
                     <div class="dashboard-grid dashboard-grid-triple">
                         <div class="dashboard-section">
                             <div class="section-header">
@@ -400,6 +431,30 @@
                                     <div class="compact-list" id="teamchat-list"></div>
                                 </div>
                             </div>
+                        </div>
+                    </div>
+
+                    <div class="dashboard-grid dashboard-grid-double">
+                        <div class="dashboard-section">
+                            <div class="section-header">
+                                <div>
+                                    <h2>Deliberation Cells</h2>
+                                    <span class="section-caption">Launch bounded cells, record contributions, and keep dissent visible</span>
+                                </div>
+                                <button class="btn-text" type="button" onclick="launchDeliberationCell()">Launch cell</button>
+                            </div>
+                            <div class="compact-list" id="deliberation-list"></div>
+                        </div>
+
+                        <div class="dashboard-section">
+                            <div class="section-header">
+                                <div>
+                                    <h2>Weekly Evolution</h2>
+                                    <span class="section-caption">Wins, regressions, and the next three upgrades</span>
+                                </div>
+                                <button class="btn-text" type="button" onclick="generateWeeklyEvolutionNow()">Generate now</button>
+                            </div>
+                            <div class="compact-list" id="weekly-evolution-list"></div>
                         </div>
                     </div>
 

@@ -1,6 +1,7 @@
 import json
 import tempfile
 import unittest
+from contextlib import ExitStack
 from pathlib import Path
 from unittest.mock import patch
 import sys
@@ -14,6 +15,39 @@ from api import portfolio  # noqa: E402
 
 
 class PortfolioPayloadTests(unittest.TestCase):
+    def test_portfolio_payload_includes_runtime_sources_and_failed_units(self):
+        with ExitStack() as stack:
+            stack.enter_context(patch.object(portfolio, "load_all_tasks", return_value=[]))
+            stack.enter_context(
+                patch.object(portfolio, "load_runtime_source_health", return_value=[{"id": "c-lawd", "status": "warning"}])
+            )
+            stack.enter_context(patch.object(portfolio, "_load_failed_units", return_value=[{"id": "backlog", "status": "error"}]))
+            stack.enter_context(patch.object(portfolio, "load_deliberation_summary", return_value={"items": []}))
+            stack.enter_context(patch.object(portfolio, "load_weekly_evolution_summary", return_value={"status": "active"}))
+            stack.enter_context(patch.object(portfolio, "_load_external_signals", return_value=[]))
+            stack.enter_context(patch.object(portfolio, "_load_finance_brain", return_value={"symbols": []}))
+            stack.enter_context(patch.object(portfolio, "_load_trading_strategy", return_value={}))
+            stack.enter_context(patch.object(portfolio, "_load_sims", return_value=[]))
+            stack.enter_context(patch.object(portfolio, "_load_work_items", return_value=[]))
+            stack.enter_context(patch.object(portfolio, "_load_components", return_value=[]))
+            stack.enter_context(patch.object(portfolio, "_load_command_history", return_value=[]))
+            stack.enter_context(patch.object(portfolio, "_load_memory_ops", return_value={"totals": {}, "sources": []}))
+            stack.enter_context(patch.object(portfolio, "_load_sim_ops", return_value={"summary": {}}))
+            stack.enter_context(patch.object(portfolio, "load_or_build_sim_strategy_review", return_value={}))
+            stack.enter_context(patch.object(portfolio, "_load_teamchat_sessions", return_value={"sessions": [], "active_count": 0}))
+            stack.enter_context(patch.object(portfolio, "_load_model_ops", return_value={"summary": {}}))
+            stack.enter_context(patch.object(portfolio, "build_source_context_packet", return_value={"summary_lines": []}))
+            stack.enter_context(patch.object(portfolio, "_load_projects", return_value=[]))
+            stack.enter_context(patch.object(portfolio, "_load_health_metrics", return_value={}))
+            stack.enter_context(patch.object(portfolio, "_load_source_mission", return_value={}))
+            stack.enter_context(patch.object(portfolio, "_build_operator_timeline", return_value=[]))
+            stack.enter_context(patch.object(portfolio, "discord_bridge_payload", return_value={}))
+            payload = portfolio.portfolio_payload()
+
+        self.assertEqual(payload["runtime_sources"][0]["status"], "warning")
+        self.assertEqual(payload["failed_units"][0]["status"], "error")
+        self.assertEqual(payload["weekly_evolution"]["status"], "active")
+
     def test_load_trading_strategy_extracts_report_and_alignment(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)

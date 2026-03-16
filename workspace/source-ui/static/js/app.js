@@ -213,6 +213,8 @@ function renderDashboard() {
     const sims = (portfolio.sims || []).filter(sim => sim.active_book);
     const discordBridge = portfolio.discord_bridge || {};
     const teamchat = portfolio.teamchat || {};
+    const deliberations = portfolio.deliberations || {};
+    const weeklyEvolution = portfolio.weekly_evolution || {};
     const sourceMission = portfolio.source_mission || {};
     const commands = store.get('commands') || [];
     const operatorTimeline = portfolio.operator_timeline || [];
@@ -220,8 +222,21 @@ function renderDashboard() {
     const memoryOps = portfolio.memory_ops || {};
     const modelOps = portfolio.model_ops || {};
     const displayMode = store.get('displayMode') || {};
+    const runtimeSources = portfolio.runtime_sources || [];
+    const failedUnits = portfolio.failed_units || [];
     
     renderCommandDeck({ portfolio, tasks, components, commands });
+    renderClarityDeck({
+        tasks,
+        components,
+        workItems,
+        externalSignals,
+        runtimeSources,
+        failedUnits,
+        projects: portfolio.projects || [],
+        simStrategyReview,
+        teamchat,
+    });
     renderDisplayModeControl(displayMode);
     renderSourceMission(sourceMission);
     renderWorkItems(workItems, tasks);
@@ -230,6 +245,8 @@ function renderDashboard() {
     renderTradingStrategy(tradingStrategy, simStrategyReview);
     renderDiscordBridge(discordBridge);
     renderTeamchat(teamchat);
+    renderDeliberations(deliberations);
+    renderWeeklyEvolution(weeklyEvolution);
     renderOperatorTimeline(operatorTimeline);
     renderSimOps(simOps, sims);
     renderMemoryOps(memoryOps);
@@ -246,6 +263,249 @@ function renderCommandDeck({ portfolio, tasks, components, commands }) {
     renderCommandSuggestions();
     renderCommandHistory(commands);
     renderCommandReceipts(store.get('commandReceipts') || []);
+}
+
+function buildDashboardAudit({
+    tasks = [],
+    components = [],
+    workItems = [],
+    externalSignals = [],
+    runtimeSources = [],
+    failedUnits = [],
+    projects = [],
+    simStrategyReview = {},
+    teamchat = {},
+}) {
+    const attentionRows = [];
+    const dormantRows = [];
+    const liveRows = [];
+    const localTasks = visibleTasks(tasks || []).filter(task => !task.read_only);
+    const dedupeKeys = new Set();
+
+    function pushRow(bucket, row) {
+        const key = `${row.label}::${row.detail}::${row.status}`;
+        if (dedupeKeys.has(`${bucket}:${key}`)) return;
+        dedupeKeys.add(`${bucket}:${key}`);
+        bucket.push(row);
+    }
+
+    (components || []).forEach(component => {
+        const tone = statusTone(component.status);
+        const row = {
+            label: component.name || component.id || 'component',
+            detail: component.details || '',
+            status: component.status || 'unknown',
+            source: 'systemd',
+            tone,
+        };
+        if (tone === 'healthy') {
+            pushRow(liveRows, row);
+        } else {
+            pushRow(attentionRows, row);
+        }
+    });
+
+    (runtimeSources || []).forEach(source => {
+        const status = String(source.status || 'unknown');
+        const tone = statusTone(status);
+        const row = {
+            label: source.label || source.id || 'runtime source',
+            detail: source.details || '',
+            status,
+            source: 'remote runtime',
+            tone,
+        };
+        if (tone === 'healthy') {
+            pushRow(liveRows, row);
+        } else {
+            pushRow(attentionRows, row);
+        }
+    });
+
+    (failedUnits || []).forEach(unit => {
+        const row = {
+            label: unit.label || unit.unit || 'failed unit',
+            detail: unit.details || '',
+            status: unit.status || 'error',
+            source: unit.kind || 'systemd',
+            tone: unit.status === 'error' ? 'error' : 'warning',
+        };
+        if (unit.optional) {
+            pushRow(dormantRows, row);
+        } else {
+            pushRow(attentionRows, row);
+        }
+    });
+
+    (workItems || []).forEach(item => {
+        const status = String(item.status || 'unknown');
+        const row = {
+            label: item.title || item.id || 'work',
+            detail: item.detail || '',
+            status,
+            source: 'runtime',
+            tone: statusTone(status),
+        };
+        if (['running', 'active', 'in_progress'].includes(status)) {
+            pushRow(liveRows, row);
+        } else if (['waiting', 'monitoring', 'skipped', 'idle'].includes(status)) {
+            pushRow(dormantRows, row);
+        } else {
+            pushRow(attentionRows, row);
+        }
+    });
+
+    (externalSignals || []).forEach(signal => {
+        const status = String(signal.status || 'unknown');
+        if (['ok', 'healthy', 'active'].includes(status)) return;
+        pushRow(attentionRows, {
+            label: signal.name || signal.id || 'signal',
+            detail: signal.summary || signal.path || '',
+            status,
+            source: 'signal',
+            tone: statusTone(status),
+        });
+    });
+
+    const reviewRows = Array.isArray(simStrategyReview.recommendations) ? simStrategyReview.recommendations : [];
+    reviewRows.forEach(row => {
+        const recommendation = String(row.recommendation || '').toLowerCase();
+        if (!['retune', 'retire'].includes(recommendation)) return;
+        pushRow(attentionRows, {
+            label: row.display_name || row.id || 'sim review',
+            detail: row.summary || '',
+            status: recommendation,
+            source: 'sim review',
+            tone: recommendation === 'retire' ? 'error' : 'warning',
+        });
+    });
+
+    localTasks.forEach(task => {
+        const status = String(task.status || 'unknown');
+        const row = {
+            label: task.title || `Task ${task.id}`,
+            detail: task.status_reason || task.description || '',
+            status,
+            source: task.project || 'taskboard',
+            tone: statusTone(status),
+        };
+        if (status === 'in_progress') {
+            pushRow(liveRows, row);
+        } else if (['review', 'backlog'].includes(status)) {
+            pushRow(attentionRows, row);
+        } else if (['done', 'closed', 'archived', 'cancelled', 'stopped'].includes(status)) {
+            pushRow(dormantRows, row);
+        }
+    });
+
+    (projects || []).forEach(project => {
+        const status = String(project.status || 'unknown');
+        if (status === 'active') return;
+        pushRow(dormantRows, {
+            label: project.name || project.id || 'project',
+            detail: project.summary || '',
+            status,
+            source: project.kind || 'project',
+            tone: statusTone(status),
+        });
+    });
+
+    const sessions = Array.isArray(teamchat.sessions) ? teamchat.sessions : [];
+    sessions.forEach(session => {
+        const status = String(session.status || 'unknown');
+        const loweredStatus = status.toLowerCase();
+        if (session.live) {
+            pushRow(liveRows, {
+                label: session.id || 'teamchat',
+                detail: session.task || '',
+                status,
+                source: 'teamchat',
+                tone: statusTone(status),
+            });
+            return;
+        }
+        const row = {
+            label: session.id || 'teamchat',
+            detail: session.task || '',
+            status,
+            source: 'teamchat',
+            tone: loweredStatus.includes('repeated_failures') || loweredStatus === 'failed' ? 'error' : 'neutral',
+        };
+        if (loweredStatus.includes('repeated_failures') || loweredStatus === 'failed') {
+            pushRow(attentionRows, row);
+            return;
+        }
+        pushRow(dormantRows, row);
+    });
+
+    const openTaskCount = localTasks.filter(task => !['done', 'closed', 'archived', 'cancelled'].includes(String(task.status || ''))).length;
+    const summary = attentionRows.length
+        ? `${attentionRows.length} surfaces need eyes. ${liveRows.length} are moving cleanly and ${dormantRows.length} are parked out of the way.`
+        : `${liveRows.length} live surfaces are moving cleanly. ${dormantRows.length} parked or completed items are separated below.`;
+    const moodline = attentionRows.length
+        ? 'Bright focus first, history second.'
+        : 'Clear water. Active motion up top, quiet history below.';
+
+    return {
+        summary,
+        moodline,
+        metrics: [
+            { label: 'Live motion', value: liveRows.length, tone: 'healthy' },
+            { label: 'Need eyes', value: attentionRows.length, tone: attentionRows.length ? 'warning' : 'healthy' },
+            { label: 'Parked', value: dormantRows.length, tone: dormantRows.length ? 'neutral' : 'healthy' },
+            { label: 'Open tasks', value: openTaskCount, tone: openTaskCount ? 'warning' : 'neutral' },
+        ],
+        liveRows: liveRows.slice(0, 4),
+        attentionRows: attentionRows.slice(0, 6),
+        dormantRows: dormantRows.slice(0, 6),
+    };
+}
+
+function renderAuditRows(container, rows, emptyText) {
+    if (!container) return;
+    if (!rows.length) {
+        container.innerHTML = `<div class="dashboard-empty">${escapeHtml(emptyText)}</div>`;
+        return;
+    }
+    container.innerHTML = rows.map(row => `
+        <article class="compact-row compact-row-rich clarity-row clarity-row-${escapeHtml(row.tone || 'neutral')}">
+            <div>
+                <div class="compact-row-title">${escapeHtml(row.label || 'item')}</div>
+                <div class="compact-row-subtitle">${escapeHtml(row.detail || '')}</div>
+                <div class="compact-row-metrics">
+                    <span class="meta-pill">${escapeHtml(row.source || 'source')}</span>
+                </div>
+            </div>
+            <div class="compact-row-metrics compact-row-metrics-end">
+                <span class="status-pill status-${escapeHtml(row.tone || 'neutral')}">${escapeHtml(row.status || 'unknown')}</span>
+            </div>
+        </article>
+    `).join('');
+}
+
+function renderClarityDeck(data) {
+    const summaryNode = $('#clarity-summary');
+    const metricsNode = $('#clarity-metrics');
+    const liveNode = $('#clarity-live-list');
+    const attentionNode = $('#attention-now-list');
+    const dormantNode = $('#dormant-audit-list');
+    if (!summaryNode || !metricsNode || !liveNode || !attentionNode || !dormantNode) return;
+
+    const audit = buildDashboardAudit(data);
+    summaryNode.innerHTML = `
+        <div class="clarity-kicker">Clarity Lens</div>
+        <div class="clarity-headline">${escapeHtml(audit.summary)}</div>
+        <div class="clarity-copy">${escapeHtml(audit.moodline)}</div>
+    `;
+    metricsNode.innerHTML = audit.metrics.map(metric => `
+        <article class="clarity-metric clarity-metric-${escapeHtml(metric.tone || 'neutral')}">
+            <div class="clarity-metric-label">${escapeHtml(metric.label)}</div>
+            <div class="clarity-metric-value">${escapeHtml(String(metric.value))}</div>
+        </article>
+    `).join('');
+    renderAuditRows(liveNode, audit.liveRows, 'Nothing is actively moving right now.');
+    renderAuditRows(attentionNode, audit.attentionRows, 'Nothing urgent is blocked or stale right now.');
+    renderAuditRows(dormantNode, audit.dormantRows, 'No parked, skipped, or closed surfaces need explanation right now.');
 }
 
 function renderDisplayModeControl(displayMode) {
@@ -532,8 +792,8 @@ function renderWorkItems(workItems, tasks = []) {
     const container = $('#work-items-list');
     if (!container) return;
     const runtimeTasks = (tasks || [])
-        .filter(task => task.read_only && task.status !== 'done')
-        .slice(0, 6)
+        .filter(task => task.read_only && String(task.status || '') === 'in_progress')
+        .slice(0, 3)
         .map(task => ({
             title: task.title,
             detail: task.description || `${task.assignee || 'runtime'} ${task.runtime_source_label || ''}`.trim(),
@@ -545,13 +805,17 @@ function renderWorkItems(workItems, tasks = []) {
                 task.channel ? `via ${task.channel}` : '',
             ].filter(Boolean),
         }));
-    const liveRows = runtimeTasks.length ? runtimeTasks : workItems.slice(0, 6).map(item => ({
+    const curatedRows = (workItems || []).map(item => ({
         title: item.title || item.id,
         detail: item.detail || '',
         status: item.status || 'idle',
         source: relativePath(item.source || 'runtime'),
-        badges: [],
+        badges: item.status && ['waiting', 'monitoring', 'skipped'].includes(String(item.status || '')) ? [String(item.status)] : [],
     }));
+    const liveRows = [...curatedRows, ...runtimeTasks].filter((item, index, rows) => {
+        const key = `${item.title}::${item.detail}`;
+        return rows.findIndex(candidate => `${candidate.title}::${candidate.detail}` === key) === index;
+    }).slice(0, 6);
     if (!liveRows.length) {
         container.innerHTML = `<div class="dashboard-empty">No active runtime work detected.</div>`;
         return;
@@ -1012,11 +1276,105 @@ function renderTeamchat(teamchat) {
     `).join('');
 }
 
+function renderDeliberations(deliberations) {
+    const container = $('#deliberation-list');
+    if (!container) return;
+    const items = Array.isArray(deliberations.items) ? deliberations.items : [];
+    if (!items.length) {
+        container.innerHTML = `<div class="dashboard-empty">No deliberation cells recorded yet. Launch one to capture attributed reasoning in Source.</div>`;
+        return;
+    }
+    container.innerHTML = items.map(cell => {
+        const participantRows = Object.entries(cell.participants || {}).map(([agent, role]) => `${agent}:${role}`);
+        const latestContribution = Array.isArray(cell.contributions) && cell.contributions.length
+            ? cell.contributions[cell.contributions.length - 1]
+            : null;
+        return `
+            <article class="compact-row compact-row-rich">
+                <div>
+                    <div class="compact-row-title">${escapeHtml(cell.title || cell.id || 'deliberation')}</div>
+                    <div class="compact-row-subtitle">${escapeHtml(cell.prompt_excerpt || '')}</div>
+                    <div class="compact-row-metrics">
+                        <span class="meta-pill">${escapeHtml(`${cell.contribution_count || 0} contributions`)}</span>
+                        <span class="meta-pill">${escapeHtml(`${cell.dissent_count || 0} dissent`)}</span>
+                        ${(cell.roles || []).slice(0, 3).map(role => `<span class="meta-pill">${escapeHtml(role)}</span>`).join('')}
+                    </div>
+                    ${participantRows.length ? `<div class="compact-row-subtitle">${escapeHtml(`Participants: ${participantRows.join(' • ')}`)}</div>` : ''}
+                    ${latestContribution ? `<div class="compact-row-subtitle">${escapeHtml(`Last: ${latestContribution.agent_id} (${latestContribution.role}) • ${latestContribution.content}`)}</div>` : ''}
+                    ${cell.synthesis_excerpt ? `<div class="compact-row-subtitle">${escapeHtml(`Synthesis: ${cell.synthesis_excerpt}`)}</div>` : ''}
+                    <div class="compact-row-metrics">
+                        <button class="task-action-btn" type="button" onclick="addDeliberationContribution('${escapeHtml(cell.id || '')}')">Add note</button>
+                        <button class="task-action-btn" type="button" onclick="addDeliberationSynthesis('${escapeHtml(cell.id || '')}')">Synthesize</button>
+                    </div>
+                </div>
+                <div class="compact-row-metrics compact-row-metrics-end">
+                    <span class="status-pill status-${statusTone(cell.status)}">${escapeHtml(cell.status || 'unknown')}</span>
+                    <span class="meta-pill">${cell.updated_at ? formatRelativeTime(cell.updated_at) : 'no ts'}</span>
+                </div>
+            </article>
+        `;
+    }).join('');
+}
+
+function renderWeeklyEvolution(summary) {
+    const container = $('#weekly-evolution-list');
+    if (!container) return;
+    const wins = Array.isArray(summary.wins) ? summary.wins : [];
+    const regressions = Array.isArray(summary.regressions) ? summary.regressions : [];
+    const upgrades = Array.isArray(summary.upgrades) ? summary.upgrades : [];
+    const latestLabel = summary.week_of || summary.generated_at || 'No report yet';
+    const schedulerLabel = summary.scheduler_configured ? 'timer wired' : 'timer missing';
+    const generatorLabel = summary.generator_configured ? 'generator wired' : 'generator missing';
+
+    if (!summary.latest_report_path) {
+        container.innerHTML = `
+            <article class="compact-row compact-row-rich">
+                <div>
+                    <div class="compact-row-title">No weekly evolution report yet</div>
+                    <div class="compact-row-subtitle">Source can generate one now, and the scheduler wiring is tracked below.</div>
+                    <div class="compact-row-metrics">
+                        <span class="meta-pill">${escapeHtml(schedulerLabel)}</span>
+                        <span class="meta-pill">${escapeHtml(generatorLabel)}</span>
+                    </div>
+                </div>
+                <div class="compact-row-metrics compact-row-metrics-end">
+                    <span class="status-pill status-${statusTone(summary.scheduler_configured ? 'review' : 'backlog')}">${summary.scheduler_configured ? 'configured' : 'backlog'}</span>
+                </div>
+            </article>
+        `;
+        return;
+    }
+
+    container.innerHTML = `
+        <article class="compact-row compact-row-rich">
+            <div>
+                <div class="compact-row-title">${escapeHtml(latestLabel)}</div>
+                <div class="compact-row-subtitle">${escapeHtml(summary.generated_at ? `Generated ${summary.generated_at}` : 'Latest weekly evolution snapshot')}</div>
+                <div class="compact-row-metrics">
+                    <span class="meta-pill">${escapeHtml(schedulerLabel)}</span>
+                    <span class="meta-pill">${escapeHtml(generatorLabel)}</span>
+                    <span class="meta-pill">${escapeHtml(`${wins.length} wins`)}</span>
+                    <span class="meta-pill">${escapeHtml(`${regressions.length} regressions`)}</span>
+                </div>
+                ${wins.length ? `<div class="compact-row-subtitle">${escapeHtml(`Wins: ${wins.join(' • ')}`)}</div>` : ''}
+                ${regressions.length ? `<div class="compact-row-subtitle">${escapeHtml(`Regressions: ${regressions.join(' • ')}`)}</div>` : ''}
+                ${upgrades.length ? `<div class="compact-row-subtitle">${escapeHtml(`Top upgrades: ${upgrades.join(' • ')}`)}</div>` : ''}
+                ${summary.notes_excerpt ? `<div class="compact-row-subtitle">${escapeHtml(summary.notes_excerpt)}</div>` : ''}
+            </div>
+            <div class="compact-row-metrics compact-row-metrics-end">
+                <span class="status-pill status-${statusTone(summary.status)}">${escapeHtml(summary.status || 'unknown')}</span>
+                <span class="meta-pill">${summary.updated_at ? formatRelativeTime(summary.updated_at) : 'no ts'}</span>
+            </div>
+        </article>
+    `;
+}
+
 function statusTone(status) {
     const raw = String(status || '').toLowerCase();
-    if (raw === 'healthy' || raw === 'active' || raw === 'running') return 'healthy';
-    if (raw === 'warning' || raw === 'busy' || raw === 'queued' || raw === 'dry_run' || raw === 'configured' || raw === 'partial' || raw === 'legacy' || raw === 'staged' || raw === 'research_only') return 'warning';
-    if (raw === 'critical' || raw === 'error' || raw === 'failed' || raw === 'misaligned' || raw === 'blocked') return 'error';
+    if (raw === 'healthy' || raw === 'active' || raw === 'running' || raw === 'in_progress' || raw === 'ok') return 'healthy';
+    if (raw === 'warning' || raw === 'busy' || raw === 'queued' || raw === 'dry_run' || raw === 'configured' || raw === 'partial' || raw === 'legacy' || raw === 'staged' || raw === 'research_only' || raw === 'backlog' || raw === 'review' || raw === 'offline' || raw === 'stopped' || raw.startsWith('stopped:')) return 'warning';
+    if (raw === 'critical' || raw === 'error' || raw === 'failed' || raw === 'misaligned' || raw === 'blocked' || raw === 'retire') return 'error';
+    if (raw === 'waiting' || raw === 'monitoring' || raw === 'skipped' || raw === 'idle' || raw === 'done' || raw === 'closed' || raw === 'archived' || raw === 'cancelled') return 'neutral';
     return 'neutral';
 }
 
@@ -2073,6 +2431,79 @@ async function reviewInference(id, reviewState, contradictionState = '') {
     }
 }
 
+async function launchDeliberationCell() {
+    const title = window.prompt('Deliberation title?');
+    if (!title) return;
+    const promptText = window.prompt('Prompt for the cell?');
+    if (!promptText) return;
+    const roles = window.prompt('Roles (comma-separated)', 'synthesist,skeptic,builder') || '';
+    const participants = window.prompt('Participants (agent:role, comma-separated)', 'c_lawd:synthesist,dali:skeptic,codex:builder') || '';
+    try {
+        await api.createDeliberation({ title, prompt: promptText, roles, participants });
+        await refreshAll({ quiet: true });
+        Toast.success('Deliberation cell created');
+    } catch (error) {
+        console.error('Deliberation creation failed', error);
+        Toast.error('Deliberation creation failed');
+    }
+}
+
+async function addDeliberationContribution(deliberationId) {
+    if (!deliberationId) return;
+    const agentId = window.prompt('Agent id?', 'c_lawd');
+    if (!agentId) return;
+    const role = window.prompt('Role?', 'synthesist');
+    if (!role) return;
+    const content = window.prompt('Contribution text?');
+    if (!content) return;
+    const disagreesWith = window.prompt('Disagrees with contribution id? Leave blank if none.', '') || '';
+    try {
+        await api.addDeliberationContribution(deliberationId, {
+            agent_id: agentId,
+            role,
+            content,
+            disagrees_with: disagreesWith || null,
+        });
+        await refreshAll({ quiet: true });
+        Toast.success('Contribution recorded');
+    } catch (error) {
+        console.error('Contribution failed', error);
+        Toast.error('Contribution failed');
+    }
+}
+
+async function addDeliberationSynthesis(deliberationId) {
+    if (!deliberationId) return;
+    const synthesis = window.prompt('Synthesis text?');
+    if (!synthesis) return;
+    const dissentNoted = window.confirm('Should this synthesis explicitly note dissent?');
+    try {
+        await api.addDeliberationSynthesis(deliberationId, {
+            synthesis,
+            dissent_noted: dissentNoted,
+        });
+        await refreshAll({ quiet: true });
+        Toast.success('Synthesis recorded');
+    } catch (error) {
+        console.error('Synthesis failed', error);
+        Toast.error('Synthesis failed');
+    }
+}
+
+async function generateWeeklyEvolutionNow() {
+    try {
+        renderCommandStatus('Generating weekly evolution report…', 'working');
+        await api.generateWeeklyEvolution();
+        await refreshAll({ quiet: true });
+        renderCommandStatus('Weekly evolution report generated.', 'success');
+        Toast.success('Weekly evolution report generated');
+    } catch (error) {
+        console.error('Weekly evolution generation failed', error);
+        renderCommandStatus('Weekly evolution generation failed.', 'error');
+        Toast.error('Weekly evolution generation failed');
+    }
+}
+
 window.taskQuickAction = taskQuickAction;
 
 // Update status indicators
@@ -2180,6 +2611,10 @@ window.runHealthCheck = runHealthCheck;
 window.refreshAll = refreshAll;
 window.controlAgent = controlAgent;
 window.reviewInference = reviewInference;
+window.launchDeliberationCell = launchDeliberationCell;
+window.addDeliberationContribution = addDeliberationContribution;
+window.addDeliberationSynthesis = addDeliberationSynthesis;
+window.generateWeeklyEvolutionNow = generateWeeklyEvolutionNow;
 window.openNewTaskModal = openNewTaskModal;
 window.createTask = createTask;
 window.Modal = Modal;
@@ -2422,8 +2857,23 @@ async function renderSourcePhi() {
         val.textContent = phi.toFixed(3);
         // Phi is 0..1+; normalise display bar at 0..1
         const pct = Math.min(100, phi * 100);
-        if (bar) { bar.style.width = pct + '%'; bar.style.background = phi > 0.5 ? 'var(--accent)' : phi > 0.2 ? '#f59e0b' : '#ef4444'; }
-        if (meta) meta.textContent = `${d.proxy_method} · n=${d.n_samples} · ${(d.timestamp_utc||'').slice(11,19)} UTC`;
+        let barColor = 'var(--accent)';
+        let statusMsg = `${d.proxy_method} · n=${d.n_samples}`;
+        if (phi > 0.8) {
+            barColor = 'var(--accent-cool)';
+            statusMsg += ' · ✨ thriving';
+        } else if (phi > 0.5) {
+            barColor = 'var(--accent-primary)';
+            statusMsg += ' · 🌱 growing';
+        } else if (phi > 0.2) {
+            barColor = '#f59e0b';
+            statusMsg += ' · 💤 resting';
+        } else {
+            barColor = '#ef4444';
+            statusMsg += ' · 🌙 dreaming';
+        }
+        if (bar) { bar.style.width = pct + '%'; bar.style.background = barColor; }
+        if (meta) meta.textContent = statusMsg + ' · ' + ((d.timestamp_utc||'').slice(11,19) || '') + ' UTC';
     } catch(e) {
         const v = document.getElementById('ci-phi-value');
         if (v) v.textContent = 'err';

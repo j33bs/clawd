@@ -22,10 +22,13 @@ SOURCE_MISSION_CONFIG_PATH = SOURCE_UI_ROOT / "config" / "source_mission.json"
 BACKLOG_INGEST_STATE_PATH = SOURCE_UI_ROOT / "state" / "backlog_ingest.json"
 COMMAND_HISTORY_PATH = SOURCE_UI_ROOT / "state" / "command_history.json"
 COMMAND_RECEIPTS_PATH = SOURCE_UI_ROOT / "state" / "command_receipts.json"
+EVOLUTION_PATH = REPO_ROOT / "workspace" / "evolution"
 APP_PY_PATH = SOURCE_UI_ROOT / "app.py"
 PORTFOLIO_API_PATH = SOURCE_UI_ROOT / "api" / "portfolio.py"
 DISCORD_BOT_SUPPORT_PATH = SOURCE_UI_ROOT / "api" / "discord_bot_support.py"
 DISCORD_BRIDGE_API_PATH = SOURCE_UI_ROOT / "api" / "discord_bridge.py"
+DELIBERATION_API_PATH = SOURCE_UI_ROOT / "api" / "deliberation_store.py"
+WEEKLY_EVOLUTION_API_PATH = SOURCE_UI_ROOT / "api" / "weekly_evolution.py"
 BOUNDARY_STATE_API_PATH = SOURCE_UI_ROOT / "api" / "boundary_state.py"
 USER_INFERENCE_API_PATH = SOURCE_UI_ROOT / "api" / "user_inference.py"
 STATIC_APP_JS_PATH = SOURCE_UI_ROOT / "static" / "js" / "app.js"
@@ -35,6 +38,10 @@ STATIC_CSS_PATH = SOURCE_UI_ROOT / "static" / "css" / "styles.css"
 AGENT_INTEGRATION_DOC_PATH = SOURCE_UI_ROOT / "docs" / "AGENT_INTEGRATION.md"
 MODEL_PROMPT_HARNESSES_PATH = SOURCE_UI_ROOT / "config" / "model_prompt_harnesses.json"
 TEAMCHAT_ROOT = REPO_ROOT / "workspace" / "teamchat"
+DELIBERATION_PATH = TEAMCHAT_ROOT / "deliberations"
+WEEKLY_EVOLUTION_SERVICE_PATH = REPO_ROOT / "workspace" / "systemd" / "openclaw-weekly-evolution.service"
+WEEKLY_EVOLUTION_TIMER_PATH = REPO_ROOT / "workspace" / "systemd" / "openclaw-weekly-evolution.timer"
+WEEKLY_EVOLUTION_GENERATOR_PATH = REPO_ROOT / "workspace" / "scripts" / "generate_weekly_evolution.py"
 DISCORD_MESSAGES_PATH = REPO_ROOT / "workspace" / "knowledge_base" / "data" / "discord_messages.jsonl"
 DISCORD_RESEARCH_PATH = REPO_ROOT / "workspace" / "knowledge_base" / "data" / "discord_research_messages.jsonl"
 DISCORD_BOT_SCRIPT_PATH = REPO_ROOT / "workspace" / "scripts" / "discord_bot.py"
@@ -173,6 +180,28 @@ def _trim(text: str, limit: int = 160) -> str:
     return compact[: max(0, limit - 1)].rstrip() + "…"
 
 
+def _clean_runtime_title_candidate(text: str, limit: int = 160) -> str | None:
+    candidate = _trim(text, limit=limit)
+    if not candidate:
+        return None
+    lowered = candidate.lower()
+    noisy_tokens = (
+        "dict[str, any]",
+        '\\"status\\"',
+        '\\"id\\"',
+        '"status":',
+        '"id":',
+        '{"id"',
+        "payload[",
+    )
+    if any(token in lowered for token in noisy_tokens):
+        return None
+    structural_chars = sum(candidate.count(ch) for ch in '{}[]\\')
+    if structural_chars >= 6 or candidate.count('":') >= 2:
+        return None
+    return candidate
+
+
 def _normalize_task_kind(value: Any) -> str:
     raw = str(value or "").strip().lower()
     return "experiment" if raw == "experiment" else "task"
@@ -229,6 +258,54 @@ def _slug(value: str) -> str:
     return compact or "node"
 
 
+def _normalize_small_string_list(value: Any, *, limit: int = 8) -> list[str]:
+    items: list[str] = []
+    if isinstance(value, str):
+        items = [part.strip() for part in value.replace("\n", ",").split(",")]
+    elif isinstance(value, list):
+        items = [str(part or "").strip() for part in value]
+    rows: list[str] = []
+    seen: set[str] = set()
+    for item in items:
+        if not item or item in seen:
+            continue
+        seen.add(item)
+        rows.append(_trim(item, limit=120))
+        if len(rows) >= limit:
+            break
+    return rows
+
+
+_IMPACT_TEXT_FIELDS = (
+    "impact_vector",
+    "time_horizon",
+    "public_benefit_hypothesis",
+    "evidence_status",
+    "reversibility",
+    "leverage",
+)
+_IMPACT_LIST_FIELDS = (
+    "beneficiaries",
+    "leading_indicators",
+    "guardrails",
+)
+
+
+def _apply_impact_fields(target: dict[str, Any], source: dict[str, Any]) -> None:
+    for field in _IMPACT_TEXT_FIELDS:
+        value = str(source.get(field) or "").strip()
+        if value:
+            target[field] = _trim(value, limit=220)
+        else:
+            target.pop(field, None)
+    for field in _IMPACT_LIST_FIELDS:
+        value = _normalize_small_string_list(source.get(field))
+        if value:
+            target[field] = value
+        else:
+            target.pop(field, None)
+
+
 def _local_node_id() -> str:
     env_name = str(os.environ.get("OPENCLAW_NODE_ID") or "").strip()
     if env_name:
@@ -269,17 +346,19 @@ def _extract_message_text(message: dict[str, Any]) -> str:
     return ""
 
 
-def _session_tail_hint(session_log: Path) -> tuple[str | None, str | None]:
+def _session_tail_hint(session_log: Path) -> tuple[str | None, str | None, bool]:
     if not session_log.exists() or not session_log.is_file():
-        return None, None
+        return None, None, False
     try:
         lines = session_log.read_text(encoding="utf-8", errors="ignore").splitlines()[-40:]
     except Exception:
-        return None, None
+        return None, None, False
 
     task_hint: str | None = None
     user_hint: str | None = None
     assistant_hint: str | None = None
+    assistant_title_hint: str | None = None
+    explicit_task_hint = False
 
     for raw in lines:
         try:
@@ -299,13 +378,90 @@ def _session_tail_hint(session_log: Path) -> tuple[str | None, str | None]:
             continue
         task_match = re.search(r"(?:\*\*Task\*\*|Task)\s*:\s*(.+)", text, flags=re.I | re.S)
         if task_match:
-            task_hint = _trim(task_match.group(1))
+            candidate = _clean_runtime_title_candidate(task_match.group(1))
+            if candidate:
+                task_hint = candidate
+                explicit_task_hint = True
         if role == "user" and not user_hint:
-            user_hint = _trim(text)
-        if role == "assistant":
-            assistant_hint = _trim(text)
+            candidate = _clean_runtime_title_candidate(text)
+            if candidate:
+                user_hint = candidate
+        if role == "assistant" and not assistant_hint:
+            assistant_hint = _trim(text, limit=220)
+        if role == "assistant" and not assistant_title_hint:
+            assistant_title_hint = _clean_runtime_title_candidate(text)
 
-    return task_hint or user_hint or assistant_hint, assistant_hint or user_hint
+    return task_hint or user_hint or assistant_title_hint, assistant_hint or user_hint, explicit_task_hint
+
+
+def _runtime_session_is_direct_surface(record: dict[str, Any]) -> bool:
+    chat_type = str(record.get("chatType") or ((record.get("origin") or {}).get("chatType")) or "").strip().lower()
+    surface = str(
+        record.get("channel")
+        or record.get("lastChannel")
+        or ((record.get("origin") or {}).get("surface"))
+        or ((record.get("deliveryContext") or {}).get("surface"))
+        or ""
+    ).strip().lower()
+    if chat_type != "direct":
+        return False
+    return surface in {"telegram", "discord", "slack", "whatsapp", "signal"}
+
+
+def _runtime_source_health_row(
+    source: dict[str, Any],
+    *,
+    status: str,
+    details: str,
+    task_count: int = 0,
+) -> dict[str, Any]:
+    return {
+        "id": str(source.get("id") or ""),
+        "label": str(source.get("label") or source.get("id") or "runtime source"),
+        "url": str(source.get("url") or ""),
+        "status": status,
+        "details": _trim(details, limit=220),
+        "task_count": max(0, int(task_count or 0)),
+        "checked_at": _now_iso(),
+    }
+
+
+def _fetch_remote_runtime_rows(source: dict[str, Any]) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    cache_entry = _REMOTE_TASK_CACHE.get(source["id"])
+    now = time.monotonic()
+    if cache_entry and (now - float(cache_entry.get("ts") or 0.0)) < REMOTE_TASK_CACHE_TTL_S:
+        cached_rows = cache_entry.get("tasks")
+        cached_health = cache_entry.get("health")
+        if isinstance(cached_rows, list) and isinstance(cached_health, dict):
+            return list(cached_rows), dict(cached_health)
+
+    rows: list[dict[str, Any]] = []
+    try:
+        with urllib.request.urlopen(source["url"], timeout=source["timeout_s"]) as response:
+            payload = json.loads(response.read().decode("utf-8", errors="replace"))
+        remote_rows = payload.get("tasks") if isinstance(payload, dict) else payload
+        if isinstance(remote_rows, list):
+            rows = [row for row in remote_rows if isinstance(row, dict)]
+        health = _runtime_source_health_row(
+            source,
+            status="healthy",
+            details=f"Reachable and returning {len(rows)} runtime task{'s' if len(rows) != 1 else ''}.",
+            task_count=len(rows),
+        )
+        _REMOTE_TASK_CACHE[source["id"]] = {"ts": now, "tasks": rows, "health": health}
+        return rows, health
+    except (OSError, TimeoutError, ValueError, json.JSONDecodeError, urllib.error.URLError) as exc:
+        cached_rows = cache_entry.get("tasks") if isinstance(cache_entry, dict) else []
+        if not isinstance(cached_rows, list):
+            cached_rows = []
+        health = _runtime_source_health_row(
+            source,
+            status="warning",
+            details=f"Runtime task source unreachable: {exc}",
+            task_count=len(cached_rows),
+        )
+        _REMOTE_TASK_CACHE[source["id"]] = {"ts": now, "tasks": cached_rows, "health": health}
+        return list(cached_rows), health
 
 
 def _runtime_status(updated_at: datetime, activity_state: str = "") -> str:
@@ -400,32 +556,10 @@ def load_remote_runtime_tasks(
 ) -> list[dict[str, Any]]:
     tasks: list[dict[str, Any]] = []
     seen_ids: set[str] = set()
-    now = time.monotonic()
     for source in _runtime_source_entries(runtime_sources_path):
-        cache_entry = _REMOTE_TASK_CACHE.get(source["id"])
-        if cache_entry and (now - float(cache_entry.get("ts") or 0.0)) < REMOTE_TASK_CACHE_TTL_S:
-            cached_rows = cache_entry.get("tasks")
-            if isinstance(cached_rows, list):
-                rows = cached_rows
-            else:
-                rows = []
-        else:
-            rows = []
-            try:
-                with urllib.request.urlopen(source["url"], timeout=source["timeout_s"]) as response:
-                    payload = json.loads(response.read().decode("utf-8", errors="replace"))
-                if isinstance(payload, dict):
-                    remote_rows = payload.get("tasks")
-                else:
-                    remote_rows = payload
-                if isinstance(remote_rows, list):
-                    rows = [row for row in remote_rows if isinstance(row, dict)]
-                _REMOTE_TASK_CACHE[source["id"]] = {"ts": now, "tasks": rows}
-            except (OSError, TimeoutError, ValueError, json.JSONDecodeError, urllib.error.URLError):
-                if cache_entry and isinstance(cache_entry.get("tasks"), list):
-                    rows = list(cache_entry["tasks"])
-                else:
-                    continue
+        rows, _ = _fetch_remote_runtime_rows(source)
+        if not rows:
+            continue
         for row in rows:
             task = _with_runtime_identity(
                 row,
@@ -453,6 +587,18 @@ def load_remote_runtime_tasks(
             tasks.append(task)
     tasks.sort(key=lambda item: str(item.get("updated_at") or item.get("created_at") or ""), reverse=True)
     return tasks
+
+
+def load_runtime_source_health(
+    *,
+    runtime_sources_path: Path = RUNTIME_SOURCES_PATH,
+) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for source in _runtime_source_entries(runtime_sources_path):
+        _, health = _fetch_remote_runtime_rows(source)
+        rows.append(health)
+    rows.sort(key=lambda item: (str(item.get("status") or ""), str(item.get("label") or "")))
+    return rows
 
 
 def load_runtime_tasks(
@@ -495,11 +641,14 @@ def load_runtime_tasks(
             if updated_at is None:
                 continue
             session_log = sessions_path.parent / f"{session_id}.jsonl"
-            title_hint, detail_hint = _session_tail_hint(session_log)
+            title_hint, detail_hint, explicit_task_hint = _session_tail_hint(session_log)
             activity_state = ""
             if isinstance(record.get("acp"), dict):
                 activity_state = str(record["acp"].get("state", "")).strip().lower()
             status = _runtime_status(updated_at, activity_state)
+
+            if _runtime_session_is_direct_surface(record) and not explicit_task_hint and agent_id not in {"codex", "claude-code"}:
+                continue
 
             if activity_state == "idle" and not title_hint and agent_id not in {"main", "codex", "claude-code"}:
                 continue
@@ -943,6 +1092,7 @@ def _sanitize_task(task: dict[str, Any]) -> dict[str, Any]:
     row = dict(task)
     row["status"] = _normalize_task_status(row.get("status"))
     row["priority"] = _normalize_task_priority(row.get("priority"))
+    _apply_impact_fields(row, row)
     review_gated = _task_requires_review_gate(row)
 
     progress = _coerce_progress(row.get("progress"))
@@ -1082,7 +1232,7 @@ def _source_mission_runtime_claim_signals(
             if _runtime_status(updated_at, activity_state) != "in_progress":
                 continue
             session_log = sessions_path.parent / f"{session_id}.jsonl"
-            title_hint, detail_hint = _session_tail_hint(session_log)
+            title_hint, detail_hint, _ = _session_tail_hint(session_log)
             candidate_texts = [title_hint or "", detail_hint or "", *_session_recent_texts(session_log)]
             normalized_parts = [_match_normalized_text(text) for text in candidate_texts if text]
             if not normalized_parts:
@@ -1251,6 +1401,8 @@ def _source_mission_signals() -> dict[str, Any]:
     task_store_text = _read_text(Path(__file__))
     portfolio_text = _read_text(PORTFOLIO_API_PATH)
     app_text = _read_text(APP_PY_PATH)
+    deliberation_api_text = _read_text(DELIBERATION_API_PATH)
+    weekly_evolution_api_text = _read_text(WEEKLY_EVOLUTION_API_PATH)
     static_js_text = _read_text(STATIC_APP_JS_PATH)
     components_text = _read_text(STATIC_COMPONENTS_JS_PATH)
     static_index_text = _read_text(STATIC_INDEX_PATH)
@@ -1353,6 +1505,21 @@ def _source_mission_signals() -> dict[str, Any]:
         "has_runtime_mirror": bool(_runtime_source_entries()) or "GET /api/runtime-tasks" in agent_integration_text,
         "has_task_create_flow": "task_create_text" in discord_bot_text and "create_task(" in discord_bot_text,
         "has_task_state": TASKS_PATH.exists(),
+        "has_deliberation_module": (TEAMCHAT_ROOT / "deliberation.py").exists(),
+        "has_deliberation_api": "create_deliberation" in deliberation_api_text
+        and "/api/deliberations" in app_text,
+        "has_deliberation_ui": "deliberation-list" in static_index_text
+        and "renderDeliberations" in static_js_text
+        and "launchDeliberationCell" in static_js_text,
+        "has_weekly_evolution_report": EVOLUTION_PATH.exists()
+        and any(path.name != "weekly-template.md" for path in EVOLUTION_PATH.glob("*.md")),
+        "has_weekly_evolution_scheduler": WEEKLY_EVOLUTION_SERVICE_PATH.exists()
+        and WEEKLY_EVOLUTION_TIMER_PATH.exists()
+        and WEEKLY_EVOLUTION_GENERATOR_PATH.exists(),
+        "has_weekly_evolution_ui": "weekly-evolution-list" in static_index_text
+        and "renderWeeklyEvolution" in static_js_text
+        and "generateWeeklyEvolutionNow" in static_js_text
+        and "load_weekly_evolution_summary" in weekly_evolution_api_text,
         "runtime_claims": _source_mission_runtime_claim_signals(),
     }
 
@@ -1425,6 +1592,14 @@ def _source_mission_status(source_id: str, signals: dict[str, Any]) -> tuple[str
             return "backlog", "Relational card wiring exists, but live relational signals are still thin."
         return "backlog", "No live relational-state surface detected."
     if source_id == "source-006":
+        if (
+            signals.get("has_deliberation_module")
+            and signals.get("has_deliberation_api")
+            and signals.get("has_deliberation_ui")
+        ):
+            return "done", "Deliberation cells are implemented with explicit roles, contribution tracking, dissent recording, and synthesis."
+        if signals.get("has_deliberation_module") and signals.get("has_deliberation_api"):
+            return "review", "Deliberation cells are wired in storage and API, but Source UI cannot fully launch and inspect them yet."
         return "backlog", "TeamChat and runtime lanes exist, but there is no explicit deliberation-cell contract with roles, synthesis, and dissent yet."
     if source_id == "source-007":
         if (
@@ -1447,6 +1622,14 @@ def _source_mission_status(source_id: str, signals: dict[str, Any]) -> tuple[str
             return "backlog", "Approval controls exist, but cross-surface provenance is incomplete."
         return "backlog", "No consent/provenance boundary flow detected."
     if source_id == "source-009":
+        if (
+            signals.get("has_weekly_evolution_report")
+            and signals.get("has_weekly_evolution_scheduler")
+            and signals.get("has_weekly_evolution_ui")
+        ):
+            return "done", "Weekly evolution report system is wired with template and scheduler."
+        if signals.get("has_weekly_evolution_scheduler") and signals.get("has_weekly_evolution_report"):
+            return "review", "Weekly evolution artifacts and scheduler wiring exist, but the live Source surface is still incomplete."
         return "backlog", "No weekly evolution report artifact or scheduler-backed review loop is wired yet."
     if source_id == "source-010":
         if (
@@ -1497,7 +1680,7 @@ def _source_mission_task_row(
         now_dt=now_dt,
         ingest_state=ingest_state,
     )
-    if status == "done" and existing_status != "done":
+    if status == "done" and existing_status not in {"done", "archived"}:
         requested_at = _parse_iso_timestamp(existing.get("review_requested_at")) or now_dt
         if existing_status != "review" or (now_dt - requested_at).total_seconds() < AUTO_REVIEW_SETTLE_SECONDS:
             status = "review"
@@ -1521,6 +1704,8 @@ def _source_mission_task_row(
             "progress": SOURCE_MISSION_PROGRESS[status],
         }
     )
+    _apply_impact_fields(row, item)
+    row.pop("archived_at", None)
     for key in ("ingest_runtime_agent", "ingest_stage_kind", "ingest_outcome_kind", "ingest_outcome_text", "ingest_outcome_at"):
         value = str(outcome_meta.get(key) or "").strip()
         if value:
@@ -1578,6 +1763,14 @@ def _merge_source_mission_tasks(tasks: list[dict[str, Any]]) -> tuple[list[dict[
         for task in tasks
         if isinstance(task, dict)
     }
+    
+    archived_tasks = _read_json(ARCHIVED_TASKS_PATH) or []
+    archived_by_id = {
+        str(task.get("id") or ""): task
+        for task in archived_tasks
+        if isinstance(task, dict)
+    }
+    
     signals = _source_mission_signals()
     ingest_state = _source_mission_ingest_state()
     mission_rows: list[dict[str, Any]] = []
@@ -1589,7 +1782,7 @@ def _merge_source_mission_tasks(tasks: list[dict[str, Any]]) -> tuple[list[dict[
             continue
         task_id = _source_mission_task_id(sequence)
         valid_ids.add(task_id)
-        existing = existing_by_id.get(task_id, {})
+        existing = existing_by_id.get(task_id) or archived_by_id.get(task_id, {})
         row = _source_mission_task_row(
             item,
             sequence=sequence,
@@ -1597,6 +1790,10 @@ def _merge_source_mission_tasks(tasks: list[dict[str, Any]]) -> tuple[list[dict[
             signals=signals,
             ingest_state=ingest_state,
         )
+        if task_id in archived_by_id and row.get("status") == "done":
+            if task_id in existing_by_id:
+                changed = True
+            continue
         if row != existing:
             changed = True
         mission_rows.append(row)
@@ -1662,6 +1859,97 @@ def _reconcile_review_tasks(tasks: list[dict[str, Any]]) -> bool:
             task.pop("reviewed_by", None)
             task.pop("reviewed_at", None)
             task.pop("review_requested_at", None)
+
+    return changed
+
+
+# Task workflow: done -> review metadata -> archive
+DONE_TO_REVIEW_GRACE_SECONDS = 10
+DONE_TO_ARCHIVE_SECONDS = 3600
+
+def _reconcile_done_to_review(tasks: list[dict[str, Any]]) -> bool:
+    """Attach review metadata to done tasks after a short settle period."""
+    changed = False
+    now_dt = _now_utc()
+    
+    for task in tasks:
+        current_status = _normalize_task_status(task.get("status"))
+        completed_at = task.get("completed_at")
+        
+        # Only process tasks that are marked done and not yet reviewed
+        if current_status != "done":
+            continue
+        
+        # Skip if already reviewed
+        if task.get("reviewed_by"):
+            continue
+            
+        # Check if grace period has passed
+        if completed_at:
+            try:
+                completed_dt = _parse_iso_timestamp(completed_at)
+                if completed_dt:
+                    age_seconds = (now_dt - completed_dt).total_seconds()
+                    if age_seconds < DONE_TO_REVIEW_GRACE_SECONDS:
+                        continue
+            except Exception:
+                pass
+        
+        task["status"] = "done"
+        task["reviewed_by"] = "auto"
+        task["reviewed_at"] = _now_iso()
+        task["review_status_reason"] = "Auto-verified: work completed"
+        task["updated_at"] = _now_iso()
+        changed = True
+    
+    return changed
+
+
+def _reconcile_done_to_archive(tasks: list[dict[str, Any]]) -> bool:
+    """Archive tasks that have been in done status for more than 1 hour."""
+    changed = False
+    now_dt = _now_utc()
+    to_archive: list[str] = []
+
+    for task in tasks:
+        current_status = _normalize_task_status(task.get("status"))
+        if current_status != "done":
+            continue
+        completed_at = task.get("completed_at")
+        if not completed_at:
+            continue
+        try:
+            completed_dt = _parse_iso_timestamp(completed_at)
+            if completed_dt:
+                age_seconds = (now_dt - completed_dt).total_seconds()
+                if age_seconds > DONE_TO_ARCHIVE_SECONDS:
+                    to_archive.append(str(task.get("id") or ""))
+        except Exception:
+            continue
+
+    if to_archive:
+        archived_tasks = _read_json(ARCHIVED_TASKS_PATH) or []
+        archived_by_id = {
+            str(task.get("id") or ""): index
+            for index, task in enumerate(archived_tasks)
+            if isinstance(task, dict)
+        }
+        for task in tasks:
+            task_id = str(task.get("id") or "")
+            if task_id not in to_archive:
+                continue
+            archived_row = dict(task)
+            archived_row["archived_at"] = _now_iso()
+            archived_row["status"] = "archived"
+            existing_index = archived_by_id.get(task_id)
+            if existing_index is None:
+                archived_tasks.insert(0, archived_row)
+            else:
+                archived_tasks[existing_index] = archived_row
+
+        _write_json_atomic(ARCHIVED_TASKS_PATH, archived_tasks)
+        tasks[:] = [t for t in tasks if str(t.get("id") or "") not in to_archive]
+        changed = True
 
     return changed
 
@@ -1756,6 +2044,12 @@ def _reconcile_local_tasks(tasks: list[dict[str, Any]]) -> tuple[list[dict[str, 
     if _reconcile_auto_review_gate_tasks(normalized):
         changed = True
 
+    if _reconcile_done_to_review(normalized):
+        changed = True
+
+    if _reconcile_done_to_archive(normalized):
+        changed = True
+
     active_assignees = {
         str(task.get("assignee") or "").strip().lower()
         for task in normalized
@@ -1829,6 +2123,8 @@ def load_all_tasks(
 
 def next_task_id(tasks: list[dict[str, Any]]) -> int:
     current = [int(task.get("id", 0)) for task in tasks if str(task.get("id", "")).isdigit()]
+    archived = load_archived_tasks(ARCHIVED_TASKS_PATH)
+    current.extend(int(task.get("id", 0)) for task in archived if str(task.get("id", "")).isdigit())
     return (max(current) if current else 1000) + 1
 
 
@@ -1871,6 +2167,8 @@ def create_task(data: dict[str, Any], path: Path = TASKS_PATH) -> dict[str, Any]
     if source_excerpt:
         task["source_excerpt"] = source_excerpt
 
+    _apply_impact_fields(task, data)
+
     reconciled, _ = _reconcile_local_tasks([*tasks, task])
     save_tasks(reconciled, path)
     return next((row for row in reconciled if str(row.get("id")) == str(task["id"])), task)
@@ -1883,6 +2181,7 @@ def update_task(task_id: str, updates: dict[str, Any], path: Path = TASKS_PATH) 
             continue
         previous_status = _normalize_task_status(task.get("status"))
         task.update({key: value for key, value in updates.items() if value is not None})
+        _apply_impact_fields(task, task)
         next_status = _normalize_task_status(task.get("status"))
         if next_status == "review":
             task["review_requested_at"] = _now_iso()
@@ -1923,12 +2222,31 @@ def delete_task(task_id: str, path: Path = TASKS_PATH) -> bool:
 ARCHIVED_TASKS_PATH = SOURCE_UI_ROOT / "state" / "archived_tasks.json"
 
 
+def _dedupe_task_rows(tasks: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], bool]:
+    deduped: list[dict[str, Any]] = []
+    seen_ids: set[str] = set()
+    changed = False
+    for task in tasks:
+        task_id = str(task.get("id") or "")
+        if task_id and task_id in seen_ids:
+            changed = True
+            continue
+        if task_id:
+            seen_ids.add(task_id)
+        deduped.append(task)
+    return deduped, changed
+
+
 def load_archived_tasks(path: Path = ARCHIVED_TASKS_PATH) -> list[dict[str, Any]]:
     """Return all archived tasks (newest first)."""
     payload = _read_json(path)
     if not isinstance(payload, list):
         return []
-    return [task for task in payload if isinstance(task, dict)]
+    rows = [task for task in payload if isinstance(task, dict)]
+    deduped, changed = _dedupe_task_rows(rows)
+    if changed:
+        _write_json_atomic(path, deduped)
+    return deduped
 
 
 def archive_task(task_id: str, path: Path = TASKS_PATH, archive_path: Path = ARCHIVED_TASKS_PATH) -> dict[str, Any] | None:

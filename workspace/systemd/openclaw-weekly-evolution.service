@@ -1,0 +1,15 @@
+[Unit]
+Description=OpenClaw weekly evolution report
+After=network-online.target openclaw-source-ui-tailnet.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/src/clawd
+ExecStart=/usr/bin/env python3 %h/src/clawd/workspace/scripts/generate_weekly_evolution.py
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=openclaw-weekly-evolution
+
+[Install]
+WantedBy=default.target
