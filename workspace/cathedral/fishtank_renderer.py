@@ -274,6 +274,11 @@ class FishTankRenderer:
             2.0,
             min(20.0, safe_float(os.environ.get("DALI_FISHTANK_THERAPEUTIC_SETTLE_SECONDS", 4.0), 4.0)),
         )
+        self._ain_coherence: float = 0.5
+        self._ain_last_poll_ts: float = 0.0
+        self._ain_poll_interval_s: float = max(
+            2.0, safe_float(os.environ.get("DALI_AIN_POLL_INTERVAL_S", 5.0), 5.0)
+        )
         self._therapeutic_inhale_seconds = max(
             1.0,
             min(12.0, safe_float(os.environ.get("DALI_FISHTANK_THERAPEUTIC_INHALE_SECONDS", 4.0), 4.0)),
@@ -1448,6 +1453,22 @@ class FishTankRenderer:
             canvas.create_oval(px - glow_radius, py - glow_radius, px + glow_radius, py + glow_radius, outline=glow, width=1, tags="atmo")
             canvas.create_oval(px - radius, py - radius, px + radius, py + radius, fill=core, outline="", tags="scene")
 
+    def _poll_ain_coherence(self) -> None:
+        """Poll the AIN phi endpoint and update _ain_coherence. Non-blocking; skips on error."""
+        now = time.monotonic()
+        if now - self._ain_last_poll_ts < self._ain_poll_interval_s:
+            return
+        self._ain_last_poll_ts = now
+        port = int(os.environ.get("DALI_AIN_PORT", 18991))
+        try:
+            url = f"http://localhost:{port}/api/ain/phi"
+            with urllib.request.urlopen(url, timeout=1.0) as resp:
+                data = json.loads(resp.read().decode())
+            phi = clamp01(float(data.get("phi", 0.5) or 0.5))
+            self._ain_coherence = phi
+        except Exception:
+            pass  # Keep previous value on error
+
     def _ensure_therapeutic_bilateral_state(self, width: int, height: int) -> None:
         if width <= 0 or height <= 0:
             return
@@ -1503,7 +1524,11 @@ class FishTankRenderer:
         hold_seconds = max(0.0, float(getattr(self, "_therapeutic_hold_seconds", 2.0) or 2.0))
         exhale_seconds = max(1.0, float(getattr(self, "_therapeutic_exhale_seconds", 5.0) or 5.0))
         breath_seconds = max(1.0, inhale_seconds + hold_seconds + exhale_seconds)
-        sweep_seconds = max(4.0, float(getattr(self, "_therapeutic_sweep_seconds", 7.5) or 7.5))
+        self._poll_ain_coherence()
+        _ain_phi = clamp01(float(getattr(self, "_ain_coherence", 0.5) or 0.5))
+        _base_sweep = max(4.0, float(getattr(self, "_therapeutic_sweep_seconds", 7.5) or 7.5))
+        # phi=0.0 → fast (base-6s), phi=0.5 → base, phi=1.0 → slow (base+6s). Clamped 4–18s.
+        sweep_seconds = max(4.0, min(18.0, _base_sweep + ((_ain_phi - 0.5) * 12.0)))
         settle_seconds = max(2.0, float(getattr(self, "_therapeutic_settle_seconds", 4.0) or 4.0))
         half_cycle_seconds = sweep_seconds + settle_seconds
         total_cycle = half_cycle_seconds * 2.0
