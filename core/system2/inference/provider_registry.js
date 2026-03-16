@@ -18,8 +18,6 @@ const { SecretsBridge } = require('./secrets_bridge');
 const { QuotaLedger } = require('./quota_ledger');
 const { routeRequest, explainRouting } = require('./router');
 const { createIntegrityGuard } = require('../security/integrity_guard');
-const { sanitizeToolOutputsForContext } = require('./tool_output_sanitizer');
-const { TokenUsageLogger, hashHex } = require('./token_usage_logger');
 
 const CB_STATES = Object.freeze({
   CLOSED: 'CLOSED',
@@ -29,10 +27,6 @@ const CB_STATES = Object.freeze({
 
 const COMPACTION_MARKER = '[TRUNCATED FOR SIZE]';
 const COMPACTION_NOTE = '(Context compacted due to provider limits.)';
-const XAI_PROVIDER_ID = 'xai';
-const XAI_FAST_MODEL = 'xai/grok-4-1-fast';
-const MINIMAX_PROVIDER_ID = 'minimax-portal';
-const MINIMAX_MODEL_ID = 'MiniMax-M2.1';
 
 function classifyDispatchError(err) {
   const code = err && err.code;
@@ -47,57 +41,6 @@ function classifyDispatchError(err) {
     return 'http_error';
   }
   return 'unknown';
-}
-
-function sanitizeBodySnippet(value, maxLen = 180) {
-  const text = String(value || '').replace(/\s+/g, ' ').trim();
-  if (text.length <= maxLen) return text;
-  return `${text.slice(0, maxLen)}…`;
-}
-
-function isXaiBillingOrQuotaExhausted(status, bodyText) {
-  const s = Number.isFinite(Number(status)) ? Number(status) : 0;
-  const text = sanitizeBodySnippet(bodyText, 240).toLowerCase();
-
-  if (s === 402) return true;
-
-  if (s === 429) {
-    if (/(insufficient|quota|rate limit|exceeded|credits|credit|billing)/i.test(text)) {
-      return true;
-    }
-  }
-
-  if (s === 403 || s === 401) {
-    if (/(billing|payment|credits|quota|insufficient|account)/i.test(text)) {
-      return true;
-    }
-  }
-
-  return /(insufficient credits|payment required|quota exceeded|exceeded your quota|billing)/i.test(text);
-}
-
-function isProviderUnavailableError(err) {
-  const code = String((err && err.code) || '').toUpperCase();
-  const message = String((err && err.message) || '').toLowerCase();
-  if (
-    code === 'PROVIDER_TIMEOUT' ||
-    code === 'ETIMEDOUT' ||
-    code === 'ECONNREFUSED' ||
-    code === 'ECONNRESET' ||
-    code === 'ENOTFOUND' ||
-    code === 'EAI_AGAIN' ||
-    code === 'EHOSTUNREACH'
-  ) {
-    return true;
-  }
-
-  return /(provider unavailable|connection refused|timed out|timeout|dns|eai_again|enotfound|socket hang up)/i.test(message);
-}
-
-function isXaiFastCandidate(candidate = {}) {
-  const providerId = String(candidate.provider_id || '').toLowerCase();
-  const modelId = String(candidate.model_id || '').toLowerCase();
-  return providerId === XAI_PROVIDER_ID || modelId === XAI_FAST_MODEL;
 }
 
 function hasAuthCredential(auth, env) {
@@ -183,57 +126,6 @@ function flattenMessagesForTiering(messages, maxChars = 4000) {
     total += slice.length;
   }
   return parts.join('\n');
-}
-
-function computePromptHash(messages) {
-  try {
-    return hashHex(JSON.stringify(messages || []));
-  } catch (_) {
-    return null;
-  }
-}
-
-function isLocalTierCandidate(candidate) {
-  const providerId = String(candidate && candidate.provider_id || '').toLowerCase();
-  const modelId = String(candidate && candidate.model_id || '').toLowerCase();
-  return providerId === 'local_vllm' || providerId === 'ollama' || modelId.startsWith('ollama/');
-}
-
-function parseProviderTierOrder(env) {
-  const raw = String((env && env.OPENCLAW_PROVIDER_TIER_ORDER) || '').trim();
-  if (!raw) {
-    return ['local_vllm', 'groq', 'xai', 'minimax-portal'];
-  }
-  return raw
-    .split(',')
-    .map((v) => v.trim().toLowerCase())
-    .filter(Boolean);
-}
-
-function providerTierRank(candidate, order) {
-  const providerId = String(candidate && candidate.provider_id || '').toLowerCase();
-  const idx = order.indexOf(providerId);
-  if (idx >= 0) return idx;
-  // Keep local aliases in tier-0 even if provider IDs differ.
-  if (isLocalTierCandidate(candidate)) return 0;
-  return Number.MAX_SAFE_INTEGER;
-}
-
-function enforceProviderTierOrder(candidates, env) {
-  const flag = String((env && env.OPENCLAW_ENFORCE_PROVIDER_TIER_ORDER) || '1').trim().toLowerCase();
-  if (flag === '0' || flag === 'false' || flag === 'off' || flag === 'no') {
-    return Array.isArray(candidates) ? candidates : [];
-  }
-  if (!Array.isArray(candidates) || candidates.length <= 1) return Array.isArray(candidates) ? candidates : [];
-
-  const order = parseProviderTierOrder(env);
-  return candidates
-    .map((c, i) => ({ c, i, r: providerTierRank(c, order) }))
-    .sort((a, b) => {
-      if (a.r !== b.r) return a.r - b.r;
-      return a.i - b.i;
-    })
-    .map((x) => x.c);
 }
 
 function sanitizeModelIdForEnv(modelId) {
@@ -439,6 +331,239 @@ function compactMessagesForBudget(messages, targetChars) {
   return { messages: out, before, after };
 }
 
+function _truthy(value) {
+  return String(value || '').trim().toLowerCase() === 'true' || String(value || '').trim() === '1';
+}
+
+function _lastRole(messages, role) {
+  if (!Array.isArray(messages)) return null;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i];
+    if (m && m.role === role) return m;
+  }
+  return null;
+}
+
+function _textFromMessage(msg) {
+  if (!msg || typeof msg !== 'object') return '';
+  if (typeof msg.content === 'string') return msg.content;
+  if (!Array.isArray(msg.content)) return '';
+  return msg.content
+    .map((part) => {
+      if (typeof part === 'string') return part;
+      if (part && typeof part === 'object' && typeof part.text === 'string') return part.text;
+      return '';
+    })
+    .join(' ')
+    .trim();
+}
+
+function _extractList(text, re, limit = 8) {
+  const out = [];
+  if (typeof text !== 'string' || !text) return out;
+  const seen = new Set();
+  let m;
+  while ((m = re.exec(text)) && out.length < limit) {
+    const value = String(m[1] || m[0] || '').trim();
+    if (!value || seen.has(value)) continue;
+    seen.add(value);
+    out.push(value);
+  }
+  return out;
+}
+
+function _clipString(value, maxChars) {
+  const text = String(value || '').trim();
+  if (!text || text.length <= maxChars) return text;
+  if (maxChars <= 1) return text.slice(0, Math.max(0, maxChars));
+  return `${text.slice(0, Math.max(0, maxChars - 1)).trimEnd()}…`;
+}
+
+function _byteLength(value) {
+  return Buffer.byteLength(typeof value === 'string' ? value : JSON.stringify(value), 'utf8');
+}
+
+function capCheckpointLayers(checkpoint, options = {}) {
+  const maxTotalBytes = Math.max(512, Number(options.maxTotalBytes) || 1800);
+  const archiveMaxBytes = Math.max(128, Number(options.archiveMaxBytes) || Math.floor(maxTotalBytes * 0.35));
+  const capped = JSON.parse(JSON.stringify(checkpoint || {}));
+  const layers = capped.layers || {};
+  const pinned = layers.pinned_core || {};
+  const active = layers.active_state || {};
+  const archive = Array.isArray(layers.archive_digest) ? layers.archive_digest : [];
+
+  pinned.goal = _clipString(pinned.goal, 220);
+  pinned.why_it_matters = _clipString(pinned.why_it_matters, 220);
+  pinned.success_condition = _clipString(pinned.success_condition, 220);
+  pinned.decisions = (Array.isArray(pinned.decisions) ? pinned.decisions : []).slice(0, 6).map((v) => _clipString(v, 120)).filter(Boolean);
+  pinned.constraints = (Array.isArray(pinned.constraints) ? pinned.constraints : []).slice(0, 6).map((v) => _clipString(v, 120)).filter(Boolean);
+  pinned.tensions = (Array.isArray(pinned.tensions) ? pinned.tensions : []).slice(0, 6).map((v) => _clipString(v, 120)).filter(Boolean);
+  pinned.continuity = pinned.continuity || {};
+  pinned.continuity.named_entities = (Array.isArray(pinned.continuity.named_entities) ? pinned.continuity.named_entities : []).slice(0, 8).map((v) => _clipString(v, 60)).filter(Boolean);
+  pinned.continuity.projects = (Array.isArray(pinned.continuity.projects) ? pinned.continuity.projects : []).slice(0, 6).map((v) => _clipString(v, 80)).filter(Boolean);
+  pinned.continuity.files = (Array.isArray(pinned.continuity.files) ? pinned.continuity.files : []).slice(0, 8).map((v) => _clipString(v, 120)).filter(Boolean);
+
+  active.next_step = _clipString(active.next_step, 220);
+  active.open_loops = (Array.isArray(active.open_loops) ? active.open_loops : []).slice(0, 8).map((v) => _clipString(v, 140)).filter(Boolean);
+
+  layers.archive_digest = archive.slice(0, 8).map((entry) => ({
+    role: entry && entry.role ? String(entry.role) : 'unknown',
+    text: _clipString(entry && entry.text ? entry.text : '', 120)
+  })).filter((entry) => entry.text);
+
+  while (_byteLength(layers.archive_digest) > archiveMaxBytes && layers.archive_digest.length > 1) {
+    layers.archive_digest.pop();
+  }
+  if (_byteLength(layers.archive_digest) > archiveMaxBytes && layers.archive_digest.length === 1) {
+    layers.archive_digest[0].text = _clipString(layers.archive_digest[0].text, 48);
+  }
+
+  while (_byteLength(capped) > maxTotalBytes && layers.archive_digest.length > 0) {
+    layers.archive_digest.pop();
+  }
+  while (_byteLength(capped) > maxTotalBytes && active.open_loops.length > 0) {
+    active.open_loops.pop();
+  }
+  while (_byteLength(capped) > maxTotalBytes && pinned.constraints.length > 0) {
+    pinned.constraints.pop();
+  }
+  while (_byteLength(capped) > maxTotalBytes && pinned.decisions.length > 0) {
+    pinned.decisions.pop();
+  }
+  while (_byteLength(capped) > maxTotalBytes && pinned.tensions.length > 0) {
+    pinned.tensions.pop();
+  }
+
+  return {
+    checkpoint: capped,
+    stats: {
+      bytes: _byteLength(capped),
+      max_bytes: maxTotalBytes,
+      archive_bytes: _byteLength(layers.archive_digest),
+      archive_max_bytes: archiveMaxBytes,
+      archive_entries: layers.archive_digest.length
+    }
+  };
+}
+
+function buildCompactionCheckpoint(messages, metadata = {}, trigger = 'preflight') {
+  const recent = Array.isArray(messages) ? messages.slice(-10) : [];
+  const transcript = recent.map((m) => `${m.role || 'unknown'}: ${_textFromMessage(m)}`).join('\n');
+  const goal = String(metadata.current_goal || metadata.goal || '').trim() || _textFromMessage(_lastRole(messages, 'user')).slice(0, 220);
+  const nextStep = String(metadata.next_step || metadata.nextStep || '').trim() || 'Provide the next concrete action aligned with the latest user ask.';
+  const why = String(metadata.why_it_matters || metadata.why || '').trim() || 'Maintain continuity and complete the active user request without dropping commitments.';
+  const success = String(metadata.success_condition || metadata.done_when || '').trim() || 'User request resolved with explicit deliverable and no unresolved open loops.';
+  const constraints = [];
+  if (Array.isArray(metadata.constraints)) constraints.push(...metadata.constraints.map((v) => String(v).trim()).filter(Boolean));
+  constraints.push(..._extractList(transcript, /\b(must|cannot|can\'t|do not|don't|deadline|limit|only if)\b([^\.\n]{0,120})/gi));
+
+  const openLoops = [];
+  if (Array.isArray(metadata.open_loops)) openLoops.push(...metadata.open_loops.map((v) => String(v).trim()).filter(Boolean));
+  const latestUser = _textFromMessage(_lastRole(messages, 'user'));
+  if (/\?/.test(latestUser)) openLoops.push(`User question unresolved: ${latestUser.slice(0, 160)}`);
+
+  const entities = {
+    files: _extractList(transcript, /((?:\.?\/?[\w.-]+\/)+[\w.-]+\.[A-Za-z0-9]+)/g, 10),
+    projects: _extractList(transcript, /\b(project|repo|service|module)[:\s]+([A-Za-z0-9_./-]{2,60})/gi, 10),
+    names: _extractList(transcript, /\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,2})\b/g, 12)
+  };
+
+  const archiveDigest = recent.slice(0, Math.max(0, recent.length - 4)).map((m) => ({
+    role: m.role || 'unknown',
+    text: _textFromMessage(m).replace(/\s+/g, ' ').slice(0, 140)
+  }));
+
+  return {
+    schema: 1,
+    trigger,
+    created_at: new Date().toISOString(),
+    layers: {
+      pinned_core: {
+        goal,
+        why_it_matters: why,
+        success_condition: success,
+        decisions: _extractList(transcript, /\b(decision|decide|chosen|we will|I will)\b([^\.\n]{0,120})/gi),
+        constraints: constraints.slice(0, 8),
+        tensions: _extractList(transcript, /\b(but|however|trade[- ]?off|vs\.?|tension)\b([^\.\n]{0,120})/gi, 8),
+        continuity: {
+          named_entities: entities.names,
+          projects: entities.projects,
+          files: entities.files
+        }
+      },
+      active_state: {
+        next_step: nextStep,
+        open_loops: openLoops.slice(0, 10),
+        pending_tools: Number(metadata.pending_tools || 0),
+        unresolved_asks: Number(metadata.unresolved_asks || 0),
+        plan_externalized: Boolean(metadata.plan_externalized)
+      },
+      archive_digest: archiveDigest
+    }
+  };
+}
+
+function computeTaskAdhesionRisk(messages, metadata = {}) {
+  const latestUser = _textFromMessage(_lastRole(messages, 'user'));
+  const latestAssistant = _textFromMessage(_lastRole(messages, 'assistant'));
+  const unresolvedAsks = Number(metadata.unresolved_asks || (/\?/.test(latestUser) ? 1 : 0));
+  const openCommitments = Number(metadata.open_commitments || (/\b(i\s+will|i\'ll|let me|next i)\b/i.test(latestAssistant) ? 1 : 0));
+  const pendingTools = Number(metadata.pending_tools || metadata.pendingTools || 0);
+  const planExternalized = Boolean(metadata.plan_externalized || metadata.planExternalized);
+
+  const score = Math.max(0, Math.min(1,
+    (Math.min(unresolvedAsks, 3) * 0.22)
+    + (Math.min(openCommitments, 3) * 0.22)
+    + (Math.min(pendingTools, 4) * 0.2)
+    + (planExternalized ? 0 : 0.2)
+  ));
+
+  return {
+    score,
+    factors: {
+      unresolved_asks: unresolvedAsks,
+      open_commitments: openCommitments,
+      pending_tools: pendingTools,
+      plan_externalized: planExternalized
+    }
+  };
+}
+
+function evaluateCompactionTimingGate({ messages, metadata = {}, trigger = 'preflight' }) {
+  const risk = computeTaskAdhesionRisk(messages, metadata);
+  const latestUser = _textFromMessage(_lastRole(messages, 'user'));
+  const multiStepActive = Boolean(metadata.multi_step_active) || risk.factors.open_commitments > 0 || risk.factors.unresolved_asks > 1;
+  const toolsInFlight = Boolean(metadata.tools_in_flight) || risk.factors.pending_tools > 0;
+  const intentClarifying = Boolean(metadata.intent_clarifying) || (/\?$/.test(latestUser.trim()) && !Boolean(metadata.plan_externalized));
+  const planNotCrystallized = !risk.factors.plan_externalized;
+
+  const boundaryReasons = [];
+  if (metadata.task_completed) boundaryReasons.push('task_completed');
+  if (metadata.deliverable_sent) boundaryReasons.push('deliverable_sent');
+  if (metadata.plan_restated) boundaryReasons.push('plan_restated');
+  if (metadata.branch_closed) boundaryReasons.push('branch_closed');
+  if (metadata.context_switch) boundaryReasons.push('context_switch');
+  if (typeof metadata.compaction_boundary_reason === 'string' && metadata.compaction_boundary_reason.trim()) {
+    boundaryReasons.push(metadata.compaction_boundary_reason.trim());
+  }
+  const boundaryMoment = boundaryReasons.length > 0;
+
+  const blocked = [];
+  if (toolsInFlight) blocked.push('tools_in_flight');
+  if (multiStepActive && !boundaryMoment) blocked.push('multi_step_active');
+  if (intentClarifying && !boundaryMoment) blocked.push('intent_clarifying');
+  if (planNotCrystallized && !boundaryMoment && trigger === 'preflight' && (multiStepActive || toolsInFlight || intentClarifying)) blocked.push('plan_not_crystallized');
+  if (risk.score >= 0.55 && !boundaryMoment) blocked.push('high_task_adhesion_risk');
+
+  return {
+    allow: blocked.length === 0,
+    blocked_reasons: blocked,
+    boundary_moment: boundaryMoment,
+    boundary_reasons: boundaryReasons,
+    risk
+  };
+}
+
 class ProviderRegistry {
   /**
    * @param {object} [options]
@@ -456,7 +581,6 @@ class ProviderRegistry {
     this.config = options.configOverride || loadFreeComputeConfig(this._env);
     this._secretsBridge = null;
     this._integrityGuard = createIntegrityGuard({ env: this._env });
-    this._tokenUsageLogger = new TokenUsageLogger({ env: this._env });
 
     this._adapters = new Map();       // provider_id → ProviderAdapter
     this._health = new Map();         // provider_id → { ok, reason, checkedAt }
@@ -510,22 +634,6 @@ class ProviderRegistry {
     }
 
     this._integrityGuard.enforceRequest(params);
-    const metadata = (params && params.metadata && typeof params.metadata === 'object') ? params.metadata : {};
-    const requestId = metadata.request_id || metadata.requestId || hashHex(`${Date.now()}_${Math.random()}`).slice(0, 16);
-    const reasonTag = metadata.reason_tag || metadata.reasonTag || params.taskClass || null;
-    const agentId = metadata.agent_id || metadata.agentId || null;
-    const channel = metadata.channel || null;
-    const sanitizedTools = sanitizeToolOutputsForContext(params.messages, { env: this._env });
-    const dispatchMessages = sanitizedTools.messages;
-    const promptHash = computePromptHash(dispatchMessages);
-    if (sanitizedTools.sanitized_count > 0) {
-      this._emitEvent('freecompute_tool_output_sanitized', {
-        request_id: requestId,
-        sanitized_count: sanitizedTools.sanitized_count,
-        total_tool_output_chars: sanitizedTools.total_tool_output_chars,
-        run_id: sanitizedTools.run_id
-      });
-    }
 
     // Refresh local vLLM generation probe (deterministic, cached).
     await this._ensureLocalVllmGenerationProbe();
@@ -570,48 +678,30 @@ class ProviderRegistry {
       taskClass: params.taskClass,
       contextLength: params.contextLength,
       latencyTarget: params.latencyTarget,
-      taskInput: flattenMessagesForTiering(dispatchMessages),
+      taskInput: flattenMessagesForTiering(params.messages),
       budget: params.budget,
       providerHealth,
       quotaState,
       config: this.config,
       availableProviderIds: Array.from(this._adapters.keys())
     });
-    const orderedCandidates = enforceProviderTierOrder(candidates, this._env);
 
-    if (orderedCandidates.length === 0) {
+    if (candidates.length === 0) {
       this._emitEvent('freecompute_no_candidates', {
         taskClass: params.taskClass
-      });
-      this._tokenUsageLogger.log({
-        request_id: requestId,
-        agent_id: agentId,
-        channel,
-        provider: null,
-        model: null,
-        reason_tag: reasonTag,
-        prompt_chars: estimateRequestShape(dispatchMessages).char_count_total,
-        tool_output_chars: sanitizedTools.total_tool_output_chars,
-        tokens_in: 0,
-        tokens_out: 0,
-        total_tokens: 0,
-        latency_ms: 0,
-        status: 'no_candidates',
-        prompt_hash: promptHash
       });
       return null;
     }
 
     const attemptSummaries = [];
-    let xaiFailoverAttempted = false;
 
     // Try candidates in order
-    for (const candidate of orderedCandidates) {
+    for (const candidate of candidates) {
       const adapter = this._adapters.get(candidate.provider_id);
       if (!adapter) continue;
 
       const baseCallParams = {
-        messages: dispatchMessages,
+        messages: params.messages,
         metadata: {
           model: candidate.model_id,
           ...(params.metadata || {})
@@ -631,24 +721,58 @@ class ProviderRegistry {
 
       // Preflight compaction only when materially over budget (avoid overcompaction).
       if (preShape.char_count_total > Math.floor(maxChars * 1.05)) {
-        const target = Math.floor(maxChars * 0.9);
-        const compacted = compactMessagesForBudget(baseCallParams.messages, target);
-        callParams = { ...baseCallParams, messages: compacted.messages };
-        compactedOnce = true;
-        this._emitEvent('freecompute_dispatch_compaction_applied', {
+        const gate = evaluateCompactionTimingGate({ messages: baseCallParams.messages, metadata: params.metadata || {}, trigger: 'preflight' });
+        this._emitEvent('freecompute_dispatch_compaction_gate', {
           provider_id: candidate.provider_id,
           model_id: candidate.model_id,
           trigger: 'preflight',
-          before_chars: compacted.before.char_count_total,
-          after_chars: compacted.after.char_count_total,
-          messages_before: compacted.before.messages_count,
-          messages_after: compacted.after.messages_count
+          allow: gate.allow,
+          blocked_reasons: gate.blocked_reasons,
+          boundary_moment: gate.boundary_moment,
+          boundary_reasons: gate.boundary_reasons,
+          task_adhesion_risk: gate.risk
         });
+
+        if (gate.allow) {
+          const checkpoint = buildCompactionCheckpoint(baseCallParams.messages, params.metadata || {}, 'preflight');
+          const cappedCheckpoint = capCheckpointLayers(checkpoint, {
+            maxTotalBytes: Math.min(2400, Math.max(768, Math.floor(maxChars * 0.22))),
+            archiveMaxBytes: Math.min(800, Math.max(192, Math.floor(maxChars * 0.08)))
+          });
+          this._emitEvent('freecompute_dispatch_compaction_checkpoint', {
+            provider_id: candidate.provider_id,
+            model_id: candidate.model_id,
+            trigger: 'preflight',
+            checkpoint: cappedCheckpoint.checkpoint,
+            checkpoint_bytes: cappedCheckpoint.stats.bytes,
+            checkpoint_max_bytes: cappedCheckpoint.stats.max_bytes,
+            archive_entries: cappedCheckpoint.stats.archive_entries
+          });
+          const checkpointMessage = {
+            role: 'system',
+            content: `Compaction checkpoint\n${JSON.stringify(cappedCheckpoint.checkpoint.layers, null, 2)}`
+          };
+          const target = Math.floor(maxChars * 0.9);
+          const compacted = compactMessagesForBudget([checkpointMessage, ...baseCallParams.messages], target);
+          callParams = { ...baseCallParams, messages: compacted.messages };
+          compactedOnce = true;
+          this._emitEvent('freecompute_dispatch_compaction_applied', {
+            provider_id: candidate.provider_id,
+            model_id: candidate.model_id,
+            trigger: 'preflight',
+            before_chars: compacted.before.char_count_total,
+            after_chars: compacted.after.char_count_total,
+            messages_before: compacted.before.messages_count,
+            messages_after: compacted.after.messages_count,
+            checkpoint_included: true,
+            task_adhesion_risk: gate.risk.score
+          });
+        }
       }
 
       let timeoutRetries = 0;
       let sizeRetry = 0;
-      const maxTimeoutRetries = isLocalTierCandidate(candidate) ? 0 : 1;
+      const maxTimeoutRetries = 1;
       const maxSizeRetries = 1;
 
       while (true) {
@@ -680,25 +804,6 @@ class ProviderRegistry {
             tokens_in: result.usage.inputTokens,
             tokens_out: result.usage.outputTokens,
             ok: true
-          });
-          const usage = result.usage || {};
-          this._tokenUsageLogger.log({
-            request_id: requestId,
-            agent_id: agentId,
-            channel,
-            provider: candidate.provider_id,
-            model: resolvedModelId,
-            reason_tag: reasonTag,
-            prompt_chars: shape.char_count_total,
-            tool_output_chars: sanitizedTools.total_tool_output_chars,
-            tokens_in: usage.inputTokens || 0,
-            tokens_out: usage.outputTokens || 0,
-            total_tokens: usage.totalTokens || ((usage.inputTokens || 0) + (usage.outputTokens || 0)),
-            cache_read_tokens: usage.cacheReadTokens || 0,
-            cache_write_tokens: usage.cacheWriteTokens || 0,
-            latency_ms: result.latencyMs || 0,
-            status: 'ok',
-            prompt_hash: promptHash
           });
 
           return {
@@ -744,40 +849,55 @@ class ProviderRegistry {
 
           // Retry once with compacted context for likely "request too large" errors.
           if (sizeRetry < maxSizeRetries && isLikelyRequestTooLargeError(err) && !compactedOnce) {
-            sizeRetry += 1;
-            const target = Math.floor(maxChars * 0.9);
-            const compacted = compactMessagesForBudget(callParams.messages, target);
-            callParams = { ...callParams, messages: compacted.messages };
-            compactedOnce = true;
             const sc = typeof err.statusCode === 'number' ? err.statusCode : 400;
             const trigger = sc === 413 ? 'error_413' : 'error_400';
-            this._emitEvent('freecompute_dispatch_compaction_applied', {
+            const gate = evaluateCompactionTimingGate({ messages: callParams.messages, metadata: params.metadata || {}, trigger });
+            this._emitEvent('freecompute_dispatch_compaction_gate', {
               provider_id: candidate.provider_id,
               model_id: candidate.model_id,
               trigger,
-              before_chars: compacted.before.char_count_total,
-              after_chars: compacted.after.char_count_total,
-              messages_before: compacted.before.messages_count,
-              messages_after: compacted.after.messages_count
+              allow: gate.allow,
+              blocked_reasons: gate.blocked_reasons,
+              boundary_moment: gate.boundary_moment,
+              boundary_reasons: gate.boundary_reasons,
+              task_adhesion_risk: gate.risk
             });
-            continue;
-          }
-
-          if (!xaiFailoverAttempted && isXaiFastCandidate(candidate)) {
-            const bodySnippet = sanitizeBodySnippet(err && (err.bodySnippet || err.message));
-            const statusCode = Number.isFinite(Number(err && err.statusCode))
-              ? Number(err.statusCode)
-              : 0;
-            const isBilling = isXaiBillingOrQuotaExhausted(statusCode, bodySnippet);
-            const isUnavailable = isProviderUnavailableError(err);
-            if (isBilling || isUnavailable) {
-              xaiFailoverAttempted = true;
-              const reason = isBilling ? 'billing_or_quota' : 'provider_unavailable';
-              const failoverResult = await this._attemptMiniMaxFailover({
-                callParams,
-                reason
+            if (gate.allow) {
+              sizeRetry += 1;
+              const checkpoint = buildCompactionCheckpoint(callParams.messages, params.metadata || {}, trigger);
+              const cappedCheckpoint = capCheckpointLayers(checkpoint, {
+                maxTotalBytes: Math.min(2200, Math.max(640, Math.floor(maxChars * 0.18))),
+                archiveMaxBytes: Math.min(700, Math.max(160, Math.floor(maxChars * 0.06)))
               });
-              if (failoverResult) return failoverResult;
+              this._emitEvent('freecompute_dispatch_compaction_checkpoint', {
+                provider_id: candidate.provider_id,
+                model_id: candidate.model_id,
+                trigger,
+                checkpoint: cappedCheckpoint.checkpoint,
+                checkpoint_bytes: cappedCheckpoint.stats.bytes,
+                checkpoint_max_bytes: cappedCheckpoint.stats.max_bytes,
+                archive_entries: cappedCheckpoint.stats.archive_entries
+              });
+              const checkpointMessage = {
+                role: 'system',
+                content: `Compaction checkpoint\n${JSON.stringify(cappedCheckpoint.checkpoint.layers, null, 2)}`
+              };
+              const target = Math.floor(maxChars * 0.85);
+              const compacted = compactMessagesForBudget([checkpointMessage, ...callParams.messages], target);
+              callParams = { ...callParams, messages: compacted.messages };
+              compactedOnce = true;
+              this._emitEvent('freecompute_dispatch_compaction_applied', {
+                provider_id: candidate.provider_id,
+                model_id: candidate.model_id,
+                trigger,
+                before_chars: compacted.before.char_count_total,
+                after_chars: compacted.after.char_count_total,
+                messages_before: compacted.before.messages_count,
+                messages_after: compacted.after.messages_count,
+                checkpoint_included: true,
+                task_adhesion_risk: gate.risk.score
+              });
+              continue;
             }
           }
 
@@ -790,22 +910,6 @@ class ProviderRegistry {
     this._emitEvent('freecompute_all_candidates_failed', {
       taskClass: params.taskClass,
       attempts: attemptSummaries
-    });
-    this._tokenUsageLogger.log({
-      request_id: requestId,
-      agent_id: agentId,
-      channel,
-      provider: null,
-      model: null,
-      reason_tag: reasonTag,
-      prompt_chars: estimateRequestShape(dispatchMessages).char_count_total,
-      tool_output_chars: sanitizedTools.total_tool_output_chars,
-      tokens_in: 0,
-      tokens_out: 0,
-      total_tokens: 0,
-      latency_ms: 0,
-      status: 'failed_all_candidates',
-      prompt_hash: promptHash
     });
 
     return null; // All candidates exhausted
@@ -1020,54 +1124,6 @@ class ProviderRegistry {
       cb.openedAt = Date.now();
     }
   }
-
-  async _attemptMiniMaxFailover({ callParams, reason }) {
-    const fallback = this._adapters.get(MINIMAX_PROVIDER_ID);
-    if (!fallback) return null;
-
-    const fallbackParams = {
-      messages: callParams.messages,
-      metadata: {
-        ...(callParams.metadata || {}),
-        model: MINIMAX_MODEL_ID
-      }
-    };
-
-    try {
-      const result = await fallback.call(fallbackParams);
-      const resolvedModelId = result.model || MINIMAX_MODEL_ID;
-      this.ledger.record(MINIMAX_PROVIDER_ID, {
-        tokensIn: result.usage.inputTokens,
-        tokensOut: result.usage.outputTokens
-      });
-      this._recordCbSuccess(MINIMAX_PROVIDER_ID);
-
-      const logLine = `MODEL_FAILOVER provider=xai reason=${reason} primary=${XAI_FAST_MODEL} fallback=minimax-portal/${MINIMAX_MODEL_ID}`;
-      console.log(logLine);
-      this._emitEvent('freecompute_model_failover', {
-        provider: 'xai',
-        reason,
-        primary: XAI_FAST_MODEL,
-        fallback: `${MINIMAX_PROVIDER_ID}/${MINIMAX_MODEL_ID}`
-      });
-
-      return {
-        ...result,
-        provider_id: MINIMAX_PROVIDER_ID,
-        model_id: resolvedModelId
-      };
-    } catch (err) {
-      const kind = classifyDispatchError(err);
-      this._recordCbFailure(MINIMAX_PROVIDER_ID, kind);
-      this._emitEvent('freecompute_model_failover_error', {
-        provider: 'xai',
-        reason,
-        fallback: `${MINIMAX_PROVIDER_ID}/${MINIMAX_MODEL_ID}`,
-        error: err && err.message ? String(err.message) : 'unknown'
-      });
-      return null;
-    }
-  }
 }
 
 module.exports = {
@@ -1079,8 +1135,9 @@ module.exports = {
     resolveMaxChars,
     compactMessagesForBudget,
     isLikelyRequestTooLargeError,
-    enforceProviderTierOrder,
-    parseProviderTierOrder,
-    isLocalTierCandidate
+    computeTaskAdhesionRisk,
+    evaluateCompactionTimingGate,
+    buildCompactionCheckpoint,
+    capCheckpointLayers
   }
 };
