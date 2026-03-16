@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "curriculum": "therapeutic_modalities_micro_lessons",
+  "learner": "jeebs",
+  "awaiting_answer": false,
+  "active_lesson_id": null,
+  "last_delivered_at": null,
+  "last_answered_at": null,
+  "delivery": {
+    "earliest_hour": 9,
+    "latest_hour": 19,
+    "min_gap_minutes": 90,
+    "max_lessons_per_day": 6
+  },
+  "proficiency": {},
+  "lesson_history": [],
+  "daily_delivery": {
+    "date": null,
+    "count": 0
+  }
+}
