@@ -2,20 +2,35 @@
 # Uses existing local llama.cpp server (Qwen 3.5 27B)
 
 models:
-  primary:
+  controller:
     provider: local
     backend: llama_cpp
     url: http://localhost:8001/v1
-    model: local-assistant  # qwen3.5-27b-q4_k_m
+    candidates:
+      - name: local-assistant
+        quant: gguf-q4_k_m
+        role_weight: 1.00
+        notes: "Qwen 3.5 27B - primary controller"
 
-  # Model capabilities for routing
-  capabilities:
-    general: true
-    code: true
-    reasoning: true
-    creative: true
+  coder:
+    provider: local
+    backend: llama_cpp
+    candidates:
+      - name: local-assistant
+        quant: gguf-q4_k_m
+        role_weight: 1.00
+        notes: "Same as controller for now"
+
+  critic:
+    provider: local
+    backend: llama_cpp
+    candidates:
+      - name: local-assistant
+        quant: gguf-q4_k_m
+        role_weight: 1.00
+        notes: "Same as controller for now"
 
 runtime:
   single_gpu: true
-  hot_swap: false  # Single model for now
+  hot_swap: false
   context: 262144

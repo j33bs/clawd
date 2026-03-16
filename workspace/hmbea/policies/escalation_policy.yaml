@@ -1,19 +1,23 @@
 # HMBEA Escalation Policy
 
 thresholds:
-  accept:
-    confidence_gte: 0.75
-    groundedness_gte: 0.70
-    
-  retry:
-    confidence_between: [0.50, 0.74]
-    max_retries: 1
-    
-  escalate:
-    confidence_lt: 0.50
+  accept_if:
+    schema_valid: true
+    critic_score_gte: 0.50
+    groundedness_gte: 0.30
+    tests_passed: true
 
-# No remote fallback yet - escalate means human review
+  retry_if:
+    critic_score_between: [0.30, 0.49]
+    max_retries: 1
+
+  escalate_if:
+    critic_score_lt: 0.30
+
 routing:
-  auto_accept: true
-  auto_retry: true
-  human_review_on_escalate: true
+  low_difficulty:
+    prefer_local_only: true
+  medium_difficulty:
+    local_then_critic: true
+  high_difficulty:
+    local_attempt_then_escalate: true
