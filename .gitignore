@@ -48,6 +48,8 @@ agents/*/sessions/*.jsonl
 sessions.json
 
 # Daily memory logs (ephemeral - local only)
+memory/*.md
+PREFERENCE_PACKET.md
 workspace/memory/*.md
 workspace/memory/heartbeat-state.json
 
@@ -80,7 +82,13 @@ __pycache__/
 *.pyc
 .venv/
 venv/
+.venv-dali-fishtank/
+.venv-dali-heavy-node/
+.venv-discord-bot/
 .workspace_artifacts/
+.agent_workspace/
+.openclaw/
+$OUT/
 
 # Intent failure reports (generated)
 workspace/handoffs/intent_failures_*.md
@@ -139,9 +147,16 @@ completions/
 # Runtime state/logs (never commit)
 workspace/state/
 workspace/state/**/*.jsonl
+workspace/source-ui/state/*.json
+workspace/source-ui/state/*.jsonl
+!workspace/source-ui/state/tasks.json
 
 # Local audit scratch (untracked)
+workspace/audit/*.md
+workspace/audit/*.zip
 workspace/audit/_scratch/
+workspace/audit/_evidence/
+workspace/audit/worktree_dirty_snapshot_*.md
 
 # TeamChat runtime artifacts (local-only)
 workspace/teamchat/sessions/
@@ -166,10 +181,28 @@ workspace/research/insights.json
 
 # Telegram private exports (must remain local-only)
 workspace/state_runtime/ingest/telegram_exports/
+workspace/knowledge_base/data/discord_messages.jsonl
+workspace/knowledge_base/data/discord_research_messages.jsonl
+workspace/knowledge_base/data/telegram_messages.jsonl
+workspace/knowledge_base/data/telegram_memory_ingest_state.json
+workspace/knowledge_base/data/user_inferences.jsonl
+workspace/knowledge_base/data/preference_profile.json
 
 # --- runtime exhaust (never version) ---
+runtime/
 workspace/state_runtime/
 workspace/state_runtime/**
+workspace/runtime/
+workspace/runtime/**
+workspace/logs/
+workspace/metrics/
+workspace/dali_unreal/
+workspace/memory/dream_states/
+workspace/memory/novelty_archive/
+workspace/artifacts/finance/
+workspace/artifacts/itc/
+workspace/artifacts/market_sentiment/
+workspace/cathedral/*.cpython-*.py
 
 # --- generated ULTRA evidence + markers (keep audit md trackable) ---
 workspace/audit/evidence/

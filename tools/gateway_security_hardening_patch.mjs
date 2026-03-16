@@ -4,13 +4,13 @@ import path from 'node:path';
 import process from 'node:process';
 
 const ORIGIN_BLOCK_RE =
-  /function parseOrigin\(originRaw\) \{[\s\S]*?function checkBrowserOrigin\(params\) \{[\s\S]*?\n\}\n\n\/\/#endregion/;
+  /function parseOrigin\(originRaw\) \{[\s\S]*?function checkBrowserOrigin\(params\) \{[\s\S]*?\n\}\n\/\/#endregion/;
 
 const CONTROL_UI_CONFIG_BLOCK_RE =
-  /const trustedProxies = params\.cfg\.gateway\?\.trustedProxies \?\? \[\];\n\tconst controlUiAllowedOrigins = \(params\.cfg\.gateway\?\.controlUi\?\.allowedOrigins \?\? \[\]\)\.map\(\(value\) => value\.trim\(\)\)\.filter\(Boolean\);\n\tconst dangerouslyAllowHostHeaderOriginFallback = params\.cfg\.gateway\?\.controlUi\?\.dangerouslyAllowHostHeaderOriginFallback === true;/;
+  /const trustedProxies = params\.cfg\.gateway\?\.trustedProxies \?\? \[\];\n\s*const controlUiAllowedOrigins = \(params\.cfg\.gateway\?\.controlUi\?\.allowedOrigins \?\? \[\]\)\.map\(\(value\) => value\.trim\(\)\)\.filter\(Boolean\);\n\s*const dangerouslyAllowHostHeaderOriginFallback = params\.cfg\.gateway\?\.controlUi\?\.dangerouslyAllowHostHeaderOriginFallback === true;/;
 
 const RATE_LIMITER_BLOCK_RE =
-  /function createGatewayAuthRateLimiters\(rateLimitConfig\) \{\n\treturn \{\n\t\trateLimiter: rateLimitConfig \? createAuthRateLimiter\(rateLimitConfig\) : void 0,\n\t\tbrowserRateLimiter: createAuthRateLimiter\(\{\n\t\t\t\.\.\.rateLimitConfig,\n\t\t\texemptLoopback: false\n\t\t\}\)\n\t\};\n\}/;
+  /function createGatewayAuthRateLimiters\(rateLimitConfig\) \{\n\s*return \{\n\s*rateLimiter: rateLimitConfig \? createAuthRateLimiter\(rateLimitConfig\) : void 0,\n\s*browserRateLimiter: createAuthRateLimiter\(\{\n\s*\.\.\.rateLimitConfig,\n\s*exemptLoopback: false\n\s*\}\)\n\s*\};\n\}/;
 
 const ORIGIN_BLOCK_REPLACEMENT = `function parseOrigin(originRaw) {
 \tconst trimmed = (originRaw ?? "").trim();

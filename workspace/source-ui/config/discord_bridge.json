@@ -1,0 +1,43 @@
+{
+  "enabled": true,
+  "dry_run": false,
+  "channels": [
+    {
+      "id": "ops_status",
+      "label": "#ops-status",
+      "title": "Ops Status",
+      "description": "Runtime health, assistant reachability, and active work summaries.",
+      "delivery": "webhook",
+      "enabled": true,
+      "webhook_env": "OPENCLAW_DISCORD_OPS_WEBHOOK",
+      "min_resend_minutes": 0,
+      "schedule_timezone": "Australia/Brisbane",
+      "schedule_local_times": ["09:00"],
+      "report_mode": "scheduled_summary"
+    },
+    {
+      "id": "sim_watch",
+      "label": "#sim-watch",
+      "title": "Sim Watch",
+      "description": "Nightly active-book trades, capital, and P/L summaries.",
+      "delivery": "webhook",
+      "enabled": true,
+      "webhook_env": "OPENCLAW_DISCORD_SIM_WEBHOOK",
+      "min_resend_minutes": 0,
+      "schedule_timezone": "Australia/Brisbane",
+      "schedule_local_times": ["21:00"],
+      "report_mode": "scheduled_summary"
+    },
+    {
+      "id": "project_intake",
+      "label": "#project-intake",
+      "title": "Project Intake",
+      "description": "Open project tasks and taskboard intake notifications.",
+      "delivery": "webhook",
+      "enabled": true,
+      "auto_post": false,
+      "webhook_env": "OPENCLAW_DISCORD_PROJECT_WEBHOOK",
+      "min_resend_minutes": 180
+    }
+  ]
+}

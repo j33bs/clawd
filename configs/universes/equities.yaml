@@ -1,0 +1,15 @@
+single_names:
+  - NVDA
+  - AMD
+  - MSFT
+  - AMZN
+  - META
+  - AAPL
+  - TSLA
+  - COIN
+  - MSTR
+  - HOOD
+
+notes:
+  - Keep the live single-name book narrow and liquid.
+  - Exclude penny stocks, OTC symbols, and halt-prone microcaps.

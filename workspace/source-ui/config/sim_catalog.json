@@ -1,0 +1,143 @@
+{
+  "sims": [
+    {
+      "id": "SIM_A",
+      "display_name": "Legacy Regime Baseline",
+      "bucket": "Legacy",
+      "thesis": "15m trend baseline; no local latency edge",
+      "active_book": false,
+      "status_note": "Demoted from active book"
+    },
+    {
+      "id": "SIM_B",
+      "display_name": "Legacy ITC Tilt",
+      "bucket": "Legacy",
+      "thesis": "15m bar model with ITC sentiment tilt",
+      "active_book": true,
+      "status_note": "Retained as an AU-portable paper control lane while Alpaca/Kraken sleeves are built",
+      "strategy_role": "control",
+      "stage": "paper_live",
+      "report_strategy": "Legacy ITC Tilt",
+      "target_venue": "Kraken paper",
+      "runtime_engine": "itc_sentiment_tilt_long_flat",
+      "continuous_improvement": true,
+      "control_lane": true,
+      "improvement_focus": "Recalibrate ITC tilt thresholds against fee drag and crypto session changes"
+    },
+    {
+      "id": "SIM_C",
+      "display_name": "LOAR Walk-Forward Ensemble",
+      "bucket": "LOAR",
+      "thesis": "Local orderflow-assisted reasoning on bar cadence",
+      "active_book": false,
+      "status_note": "Research only until horizon is shortened"
+    },
+    {
+      "id": "SIM_D",
+      "display_name": "Bleeding Edge Tick Scalper",
+      "bucket": "Bleeding Edge",
+      "thesis": "Pure tick scalp for local execution advantage",
+      "active_book": false,
+      "status_note": "Frozen pending churn and win-rate redesign"
+    },
+    {
+      "id": "SIM_E",
+      "display_name": "CBP Reversion Grid",
+      "bucket": "CBP",
+      "thesis": "Core basis portfolio mean-reversion candidate",
+      "active_book": true,
+      "status_note": "Primary AU paper crypto control lane; keep only if it stays net-effective after fees",
+      "strategy_role": "control",
+      "stage": "paper_live",
+      "report_strategy": "CBP Reversion Grid",
+      "target_venue": "Kraken paper",
+      "runtime_engine": "tick_grid_reversion",
+      "continuous_improvement": true,
+      "control_lane": true,
+      "improvement_focus": "Reduce churn and widen reversion thresholds until the lane remains net-positive after fees"
+    },
+    {
+      "id": "SIM_F",
+      "display_name": "Bleeding Edge Spread Arb",
+      "bucket": "Bleeding Edge",
+      "thesis": "Cross-exchange spread capture with local quote edge",
+      "active_book": false,
+      "status_note": "Frozen pending maker-first redesign"
+    },
+    {
+      "id": "SIM_G",
+      "display_name": "CBP Funding Carry",
+      "bucket": "CBP",
+      "thesis": "Core basis portfolio carry sleeve",
+      "active_book": false,
+      "status_note": "Retired from the AU book; perp/funding carry is not deployable in Australia"
+    },
+    {
+      "id": "SIM_H",
+      "display_name": "LOAR Consensus",
+      "bucket": "LOAR",
+      "thesis": "Local orderflow-assisted reasoning manager/bias layer",
+      "active_book": true,
+      "status_note": "Active as an AU-portable manager/bias control lane for future live sleeves",
+      "strategy_role": "control",
+      "stage": "paper_live",
+      "report_strategy": "LOAR Consensus",
+      "target_venue": "Kraken paper",
+      "runtime_engine": "latency_consensus_long_flat",
+      "continuous_improvement": true,
+      "control_lane": true,
+      "improvement_focus": "Tighten finance-brain thresholds, retrieval quality, and risk gating before live venue cutover"
+    },
+    {
+      "id": "SIM_I",
+      "display_name": "US Equity Event Impulse",
+      "bucket": "5.4 Pro",
+      "thesis": "Alpaca-first event impulse sleeve for liquid US names when catalysts become machine-readable before the tape fully reprices",
+      "active_book": true,
+      "status_note": "Report-aligned candidate lane; now paper-live on public equity bars while Alpaca credentials and richer event/news ingestion are still pending",
+      "strategy_role": "candidate",
+      "stage": "paper_live",
+      "report_strategy": "US Equity Event Impulse (UEEI)",
+      "target_venue": "Alpaca",
+      "runtime_engine": "itc_sentiment_tilt_long_flat",
+      "continuous_improvement": true,
+      "control_lane": false,
+      "data_dependency": "alpaca_equities_news",
+      "improvement_focus": "Event classifier precision, watchlist quality, and Alpaca news-to-order latency"
+    },
+    {
+      "id": "SIM_J",
+      "display_name": "ETF Narrative Spillover",
+      "bucket": "5.4 Pro",
+      "thesis": "Narrative spillover sleeve for liquid ETFs where one market reprices before the rest of the ETF complex catches up",
+      "active_book": true,
+      "status_note": "Report-aligned candidate lane; now paper-live on public ETF bars while Alpaca credentials remain the preferred venue-data upgrade",
+      "strategy_role": "candidate",
+      "stage": "paper_live",
+      "report_strategy": "ETF Narrative Spillover (ETNS)",
+      "target_venue": "Alpaca",
+      "runtime_engine": "ensemble_competing_models_long_flat",
+      "continuous_improvement": true,
+      "control_lane": false,
+      "data_dependency": "alpaca_etf_market_data",
+      "improvement_focus": "Narrative map quality, ETF spillover ranking, and cross-symbol confirmation thresholds"
+    },
+    {
+      "id": "SIM_K",
+      "display_name": "Crypto Sentiment Breakout",
+      "bucket": "5.4 Pro",
+      "thesis": "Sentiment-confirmed crypto impulse sleeve for BTC and ETH while Kraken spot cutover is being wired",
+      "active_book": true,
+      "status_note": "Report-aligned crypto candidate lane; mapped to Kraken spot symbols and ready to grow once the refreshed market stream backfills them",
+      "strategy_role": "candidate",
+      "stage": "paper_live",
+      "report_strategy": "Crypto Sentiment Breakout (CSB)",
+      "target_venue": "Kraken",
+      "runtime_engine": "latency_consensus_long_flat",
+      "continuous_improvement": true,
+      "control_lane": false,
+      "data_dependency": "kraken_spot_market_data",
+      "improvement_focus": "Breakout thresholds, sentiment gating, and trade quality on Kraken spot"
+    }
+  ]
+}

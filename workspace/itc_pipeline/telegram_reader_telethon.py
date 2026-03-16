@@ -16,6 +16,7 @@ Environment Variables:
 Usage:
     # First run - authenticate:
     python telegram_reader_telethon.py --auth
+    # If credentials are missing, you will be prompted for them.
 
     # Run ingestion:
     python telegram_reader_telethon.py --run
@@ -29,15 +30,18 @@ import sys
 import asyncio
 import signal
 import logging
+import importlib
+import getpass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
-# Add parent to path for imports
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
-from telethon import TelegramClient, events
-from telethon.tl.types import User, Chat, Channel
+# Add repo and workspace roots for direct script execution.
+_WORKSPACE_ROOT = Path(__file__).resolve().parents[1]
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+for _path in (str(_REPO_ROOT), str(_WORKSPACE_ROOT)):
+    if _path not in sys.path:
+        sys.path.insert(0, _path)
 
 from itc_pipeline.ingestion_boundary import (
     IngestedMessage,
@@ -48,26 +52,172 @@ from itc_pipeline.ingestion_boundary import (
 from itc_pipeline.allowlist import require_allowlist, AllowlistConfigError, ChatNotAllowedError
 
 logger = logging.getLogger(__name__)
-
-# Configuration from environment
-API_ID = os.environ.get("TG_API_ID")
-API_HASH = os.environ.get("TG_API_HASH")
-SESSION_PATH = os.environ.get(
-    "TG_SESSION_PATH",
-    str(Path(__file__).parent.parent.parent / ".secrets" / "telethon_itc.session")
-)
-PHONE = os.environ.get("TG_PHONE")
+MAX_BACKFILL_MESSAGES = 500
+DEFAULT_SECRETS_ENV_PATH = _REPO_ROOT / "secrets.env"
 
 # Graceful shutdown flag
 _shutdown_requested = False
 
 
-def validate_config():
+def _telethon_defaults() -> tuple[Any, Any, Any, Any, Any, Any]:
+    try:
+        telethon = importlib.import_module("telethon")
+        telethon_errors = importlib.import_module("telethon.errors")
+        telethon_types = importlib.import_module("telethon.tl.types")
+    except ImportError as exc:  # pragma: no cover - depends on optional dependency
+        raise RuntimeError("telethon_not_installed: pip install telethon") from exc
+    return (
+        telethon.TelegramClient,
+        telethon.events,
+        telethon_errors.FloodWaitError,
+        telethon_types.User,
+        telethon_types.Chat,
+        telethon_types.Channel,
+    )
+
+
+def _runtime_config() -> dict[str, str]:
+    return {
+        "api_id": str(os.environ.get("TG_API_ID") or "").strip(),
+        "api_hash": str(os.environ.get("TG_API_HASH") or "").strip(),
+        "session_path": str(
+            os.environ.get(
+                "TG_SESSION_PATH",
+                str(Path(__file__).parent.parent.parent / ".secrets" / "telethon_itc.session"),
+            )
+        ).strip(),
+        "phone": str(os.environ.get("TG_PHONE") or "").strip(),
+    }
+
+
+def _interactive_available() -> bool:
+    return sys.stdin.isatty() and sys.stdout.isatty()
+
+
+def _prompt_value(
+    label: str,
+    default: str = "",
+    secret: bool = False,
+    required: bool = True,
+    show_default: bool = True,
+) -> str:
+    while True:
+        suffix = f" [{default}]" if default and show_default else ""
+        prompt = f"{label}{suffix}: "
+        value = getpass.getpass(prompt) if secret else input(prompt)
+        value = value.strip()
+        if value:
+            return value
+        if default:
+            return default
+        if not required:
+            return ""
+        print(f"{label} is required.")
+
+
+def _persist_runtime_config(config: dict[str, str], path: Path = DEFAULT_SECRETS_ENV_PATH) -> None:
+    managed = {
+        "TG_API_ID": config["api_id"],
+        "TG_API_HASH": config["api_hash"],
+        "TG_PHONE": config["phone"],
+        "TG_SESSION_PATH": config["session_path"],
+    }
+    existing_lines = path.read_text(encoding="utf-8").splitlines() if path.exists() else []
+    written = set()
+    output_lines: list[str] = []
+    for line in existing_lines:
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or "=" not in line:
+            output_lines.append(line)
+            continue
+        key, _ = line.split("=", 1)
+        key = key.strip()
+        if key in managed:
+            output_lines.append(f"{key}={managed[key]}")
+            written.add(key)
+        else:
+            output_lines.append(line)
+
+    for key, value in managed.items():
+        if key not in written:
+            output_lines.append(f"{key}={value}")
+
+    path.write_text("\n".join(output_lines).rstrip() + "\n", encoding="utf-8")
+
+
+def resolve_config(
+    prompt_if_missing: bool = False,
+    require_phone: bool = False,
+    force_prompt: bool = False,
+) -> dict[str, str]:
+    config = _runtime_config()
+    missing = []
+    if not config["api_id"]:
+        missing.append("TG_API_ID")
+    if not config["api_hash"]:
+        missing.append("TG_API_HASH")
+    if require_phone and not config["phone"]:
+        missing.append("TG_PHONE")
+
+    if missing and not prompt_if_missing and not force_prompt:
+        validate_config(config)
+        if require_phone and not config["phone"]:
+            raise ValueError("Missing required Telegram configuration. TG_PHONE is required for authentication.")
+        return config
+
+    prompted = False
+    if missing or force_prompt:
+        if not _interactive_available():
+            validate_config(config)
+            if require_phone and not config["phone"]:
+                raise ValueError("Missing required Telegram configuration. TG_PHONE is required for authentication.")
+            return config
+
+        print("\nTelegram ITC setup")
+        print("=" * 60)
+        print("Enter the Telegram app credentials from https://my.telegram.org/apps")
+        print("Leave session path blank to use the default.")
+        print("=" * 60)
+        config["api_id"] = _prompt_value("Telegram API ID", default=config["api_id"], show_default=True)
+        config["api_hash"] = _prompt_value(
+            "Telegram API hash",
+            default=config["api_hash"],
+            secret=True,
+            show_default=False,
+        )
+        if require_phone or force_prompt:
+            config["phone"] = _prompt_value(
+                "Telegram phone number (+countrycode)",
+                default=config["phone"],
+                show_default=True,
+                required=require_phone,
+            )
+        config["session_path"] = _prompt_value("Session path", default=config["session_path"], required=True)
+        prompted = True
+    elif prompt_if_missing and require_phone and not config["phone"] and _interactive_available():
+        config["phone"] = _prompt_value("Telegram phone number (+countrycode)")
+        prompted = True
+
+    validate_config(config)
+    if require_phone and not config["phone"]:
+        raise ValueError("Missing required Telegram configuration. TG_PHONE is required for authentication.")
+
+    if prompted and _interactive_available():
+        choice = input(f"Save Telegram config to {DEFAULT_SECRETS_ENV_PATH}? [Y/n]: ").strip().lower()
+        if choice in {"", "y", "yes"}:
+            _persist_runtime_config(config)
+            print(f"Saved Telegram config to {DEFAULT_SECRETS_ENV_PATH}")
+
+    return config
+
+
+def validate_config(config: Optional[dict[str, str]] = None):
     """Validate required configuration is present."""
+    config = config or _runtime_config()
     errors = []
-    if not API_ID:
+    if not config["api_id"]:
         errors.append("TG_API_ID environment variable not set")
-    if not API_HASH:
+    if not config["api_hash"]:
         errors.append("TG_API_HASH environment variable not set")
 
     if errors:
@@ -76,32 +226,34 @@ def validate_config():
         raise ValueError("Missing required Telegram configuration. See errors above.")
 
 
-def get_client() -> TelegramClient:
+def get_client(config: Optional[dict[str, str]] = None):
     """Create and return a Telethon client."""
-    validate_config()
+    config = config or _runtime_config()
+    validate_config(config)
+    TelegramClient, _, _, _, _, _ = _telethon_defaults()
 
     # Ensure session directory exists
-    session_dir = Path(SESSION_PATH).parent
+    session_dir = Path(config["session_path"]).parent
     session_dir.mkdir(parents=True, exist_ok=True)
 
-    return TelegramClient(SESSION_PATH, int(API_ID), API_HASH)
+    return TelegramClient(config["session_path"], int(config["api_id"]), config["api_hash"])
 
 
-async def authenticate():
+async def authenticate(force_prompt: bool = False):
     """
     Interactive authentication flow.
     Run this once to create the session file.
     """
-    validate_config()
-    client = get_client()
+    config = resolve_config(prompt_if_missing=True, require_phone=True, force_prompt=force_prompt)
+    client = get_client(config)
 
     print("\n" + "=" * 60)
     print("Telethon Authentication")
     print("=" * 60)
-    print(f"Session will be saved to: {SESSION_PATH}")
+    print(f"Session will be saved to: {config['session_path']}")
     print()
 
-    await client.start(phone=PHONE)
+    await client.start(phone=config["phone"] or None)
 
     me = await client.get_me()
     print(f"\nAuthenticated as: {me.first_name} (@{me.username})")
@@ -112,53 +264,46 @@ async def authenticate():
     await client.disconnect()
 
 
-def normalize_message(event) -> Optional[IngestedMessage]:
-    """
-    Convert a Telethon message event to normalized IngestedMessage.
+async def normalize_message(message: Any, chat: Any = None, chat_id: Optional[int] = None) -> Optional[IngestedMessage]:
+    """Convert a Telethon message object to normalized IngestedMessage."""
+    _, _, _, User, Chat, Channel = _telethon_defaults()
 
-    Args:
-        event: Telethon NewMessage event
-
-    Returns:
-        IngestedMessage or None if message should be skipped
-    """
-    message = event.message
-
-    # Skip non-text messages (for now)
-    if not message.text:
-        logger.debug(f"Skipping non-text message: {message.id}")
+    if not getattr(message, "text", None):
+        logger.debug(f"Skipping non-text message: {getattr(message, 'id', '<unknown>')}")
         return None
 
-    # Get chat info
-    chat = event.chat
-    chat_id = event.chat_id
-    chat_title = None
+    chat = chat or getattr(message, "chat", None)
+    if chat is None and hasattr(message, "get_chat"):
+        chat = await message.get_chat()
+    resolved_chat_id = chat_id if chat_id is not None else getattr(message, "chat_id", None)
+    if resolved_chat_id is None and chat is not None:
+        resolved_chat_id = getattr(chat, "id", None)
 
-    if isinstance(chat, Channel):
-        chat_title = chat.title
-    elif isinstance(chat, Chat):
-        chat_title = chat.title
+    chat_title = None
+    if isinstance(chat, (Channel, Chat)):
+        chat_title = getattr(chat, "title", None)
     elif isinstance(chat, User):
         chat_title = f"DM: {chat.first_name}"
+    elif chat is not None:
+        chat_title = getattr(chat, "title", None) or getattr(chat, "first_name", None)
 
-    # Get sender info
-    sender = message.sender
-    sender_id = None
+    sender = getattr(message, "sender", None)
+    if sender is None and hasattr(message, "get_sender"):
+        sender = await message.get_sender()
+    sender_id = getattr(sender, "id", None) if sender is not None else None
     sender_name = None
+    if isinstance(sender, User):
+        sender_name = f"{sender.first_name or ''} {sender.last_name or ''}".strip()
+        if getattr(sender, "username", None):
+            sender_name += f" (@{sender.username})"
+    elif sender is not None:
+        sender_name = getattr(sender, "title", None) or getattr(sender, "first_name", None)
 
-    if sender:
-        sender_id = sender.id
-        if isinstance(sender, User):
-            sender_name = f"{sender.first_name or ''} {sender.last_name or ''}".strip()
-            if sender.username:
-                sender_name += f" (@{sender.username})"
-
-    # Build normalized message
     return IngestedMessage(
         source="telegram",
-        chat_id=chat_id,
+        chat_id=int(resolved_chat_id),
         message_id=message.id,
-        date=message.date.astimezone(timezone.utc).isoformat(),
+        date=message.date.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         sender_id=sender_id,
         sender_name=sender_name,
         chat_title=chat_title,
@@ -167,20 +312,55 @@ def normalize_message(event) -> Optional[IngestedMessage]:
             "reply_to_msg_id": message.reply_to_msg_id,
             "forwards": message.forwards,
             "views": message.views,
-            "edit_date": message.edit_date.isoformat() if message.edit_date else None,
-        }
+            "edit_date": message.edit_date.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+            if message.edit_date
+            else None,
+        },
     )
 
 
-async def run_ingestion(dry_run: bool = False):
+async def _backfill_allowed_chats(client: Any, allowlist: set[int], dry_run: bool, limit: int) -> int:
+    _, _, FloodWaitError, _, _, _ = _telethon_defaults()
+    capped_limit = max(0, min(int(limit or 0), MAX_BACKFILL_MESSAGES))
+    if capped_limit <= 0:
+        return 0
+
+    ingested = 0
+    for chat_id in sorted(allowlist):
+        try:
+            entity = await client.get_entity(chat_id)
+            logger.info(f"Backfilling chat_id={chat_id} title={getattr(entity, 'title', None)!r} limit={capped_limit}")
+            async for raw_message in client.iter_messages(entity, limit=capped_limit):
+                normalized = await normalize_message(raw_message, chat=entity, chat_id=chat_id)
+                if normalized is None:
+                    continue
+                if ingest_message(normalized, dry_run=dry_run):
+                    ingested += 1
+        except FloodWaitError as exc:  # pragma: no cover - depends on Telegram runtime
+            logger.warning(f"FloodWait while backfilling chat_id={chat_id}; sleeping {exc.seconds}s")
+            await asyncio.sleep(exc.seconds + 1)
+        except ChatNotAllowedError:
+            raise
+        except Exception as exc:
+            logger.error(f"Failed backfill for chat_id={chat_id}: {exc}", exc_info=True)
+    return ingested
+
+
+async def run_ingestion(
+    dry_run: bool = False,
+    backfill_limit: int = 0,
+    exit_after_backfill: bool = False,
+    force_prompt: bool = False,
+):
     """
     Main ingestion loop.
     Subscribes to new messages and forwards allowed ones to the pipeline.
     """
     global _shutdown_requested
 
-    validate_config()
-    client = get_client()
+    config = resolve_config(prompt_if_missing=True, require_phone=False, force_prompt=force_prompt)
+    client = get_client(config)
+    _, events, _, _, _, _ = _telethon_defaults()
 
     # Initialize ingestion boundary (logs allowlist, sets up dedupe)
     initialize_ingestion()
@@ -193,7 +373,7 @@ async def run_ingestion(dry_run: bool = False):
         return
 
     logger.info(f"Starting Telethon ingestion (dry_run={dry_run})")
-    logger.info(f"Session: {SESSION_PATH}")
+    logger.info(f"Session: {config['session_path']}")
 
     @client.on(events.NewMessage(chats=list(allowlist)))
     async def handler(event):
@@ -203,7 +383,7 @@ async def run_ingestion(dry_run: bool = False):
 
         try:
             # Normalize message
-            msg = normalize_message(event)
+            msg = await normalize_message(event.message, chat=event.chat, chat_id=event.chat_id)
             if msg is None:
                 return
             if msg.chat_id not in allowlist:
@@ -216,16 +396,27 @@ async def run_ingestion(dry_run: bool = False):
             logger.error(f"Error processing message: {e}", exc_info=True)
 
     # Connect and run
-    await client.start(phone=PHONE)
+    await client.start(phone=config["phone"] or None)
 
     me = await client.get_me()
     logger.info(f"Connected as: {me.first_name} (@{me.username}) [ID: {me.id}]")
+
+    if backfill_limit:
+        ingested = await _backfill_allowed_chats(client, allowlist, dry_run=dry_run, limit=backfill_limit)
+        logger.info(f"Backfill complete: {ingested} messages accepted")
+        if exit_after_backfill:
+            logger.info("Exiting after backfill (--once)")
+            get_dedupe_store().save()
+            await client.disconnect()
+            return
 
     print("\n" + "=" * 60)
     print("Telethon Ingestion Running")
     print("=" * 60)
     print(f"Mode: {'DRY-RUN' if dry_run else 'LIVE'}")
     print(f"Monitoring {len(allowlist)} allowed chats")
+    if backfill_limit:
+        print(f"Backfill: {min(int(backfill_limit), MAX_BACKFILL_MESSAGES)} messages per allowed chat")
     print("Press Ctrl+C to stop")
     print("=" * 60 + "\n")
 
@@ -268,9 +459,17 @@ Environment Variables:
 Examples:
   # First-time authentication
   python telegram_reader_telethon.py --auth
+  # Missing API ID / hash / phone will be prompted interactively
+  python telegram_reader_telethon.py --auth --reconfigure
 
   # Run ingestion
   python telegram_reader_telethon.py --run
+
+  # Backfill then continue listening
+  python telegram_reader_telethon.py --run --backfill 100
+
+  # Backfill and exit
+  python telegram_reader_telethon.py --once --backfill 100
 
   # Dry-run mode (log only, don't process)
   python telegram_reader_telethon.py --run --dry-run
@@ -288,9 +487,25 @@ Examples:
         help="Run the ingestion process"
     )
     parser.add_argument(
+        "--once",
+        action="store_true",
+        help="Backfill then exit without starting the live listener"
+    )
+    parser.add_argument(
+        "--backfill",
+        type=int,
+        default=0,
+        help=f"Backfill N recent messages per allowed chat (max {MAX_BACKFILL_MESSAGES})"
+    )
+    parser.add_argument(
         "--dry-run",
         action="store_true",
         help="Log what would be ingested without processing"
+    )
+    parser.add_argument(
+        "--reconfigure",
+        action="store_true",
+        help="Prompt for Telegram credentials even if they already exist"
     )
     parser.add_argument(
         "-v", "--verbose",
@@ -316,9 +531,16 @@ Examples:
     signal.signal(signal.SIGTERM, signal_handler)
 
     if args.auth:
-        asyncio.run(authenticate())
-    elif args.run:
-        asyncio.run(run_ingestion(dry_run=args.dry_run))
+        asyncio.run(authenticate(force_prompt=args.reconfigure))
+    elif args.run or args.once:
+        asyncio.run(
+            run_ingestion(
+                dry_run=args.dry_run,
+                backfill_limit=args.backfill,
+                exit_after_backfill=args.once,
+                force_prompt=args.reconfigure,
+            )
+        )
     else:
         parser.print_help()
         sys.exit(1)

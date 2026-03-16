@@ -1,0 +1,8 @@
+spot_pairs:
+  - BTC/USD
+  - ETH/USD
+  - SOL/USD
+
+notes:
+  - Use Kraken spot only in phase 1.
+  - AUD pairs can replace USD pairs later if liquidity and ops are better.

@@ -3,6 +3,8 @@ features:
   volatility_metrics: false
   channel_scoring: false
   strategy_blender: false
+  competing_models: true
+  finance_brain: true
   econ_logging: false
 
 features_params:
@@ -19,5 +21,74 @@ features_params:
     method: weighted_mean
     min_confidence: 0.0
     tie_break: flat
+  competing_models:
+    ewma_decay: 0.9
+    score_scale: 180.0
+    hit_rate_scale: 0.8
+    min_weight: 0.35
+    max_weight: 3.0
+    enter_threshold: 0.18
+    exit_threshold: -0.02
+    risk_exit_threshold: -0.35
+    trend_fast: 8
+    trend_slow: 21
+    pullback_lookback: 12
+    breakout_lookback: 20
+    volatility_cap_pct: 0.04
+    sentiment_signal_scale: 1.5
+    tick_min_trade_count: 20
+    tick_imbalance_scale: 0.45
+    tick_return_scale: 0.0025
+    tick_momentum_scale: 0.0015
+    tick_spread_soft_cap_bps: 6.0
+    regime_params:
+      lookback: 96
+      sideways_threshold: 0.002
+      conf_scale: 0.01
+    volatility_params:
+      atr_period: 14
+      vol_window: 30
+    strategy_blender:
+      method: weighted_mean
+      tie_break: flat
+  finance_brain:
+    enabled: true
+    llm_enabled: true
+    llm_base_url: http://127.0.0.1:8001/v1
+    llm_model: local-assistant
+    llm_timeout_sec: 6.0
+    llm_max_tokens: 96
+    max_live_llm_symbols: 1
+    retrieval_trade_limit: 24
+    enter_threshold: 0.28
+    exit_threshold: -0.12
+    min_confidence: 0.52
+    artifact_path: workspace/artifacts/finance/consensus_latest.json
+    history_path: workspace/artifacts/finance/consensus_history.jsonl
+    external_signal_path: workspace/state/external/macbook_sentiment.json
+    fingpt_signal_path: workspace/state/external/fingpt_sentiment.json
+    sim_root: sim
+    fast_period: 8
+    slow_period: 21
+  execution_model:
+    fee_rate: 0.001
+    maker_fee_rate: 0.0002
+    taker_fee_rate: 0.001
+    slippage_bps: 2.0
+    spread_bps: 1.0
+    market_impact_bps_per_10k: 0.5
+    max_notional_pct: 0.05
+    max_margin_utilization: 0.5
+    leverage: 1.0
+    maintenance_margin_pct: 0.005
+    funding_bps_8h: 1.0
+    borrow_bps_daily: 0.0
+    short_borrow_bps_daily: 0.0
+    bar_ms: 900000
+    tick_min_interval_ms: 5000
+    max_hold_ms: 900000
+    stop_loss_pct: 0.003
+    take_profit_pct: 0.004
+    queue_buffer_bps: 0.25
   econ_logging:
     observe_path: ".openclaw/economics/observe.jsonl"

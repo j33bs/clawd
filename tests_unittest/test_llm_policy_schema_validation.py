@@ -120,6 +120,33 @@ class TestLlmPolicySchemaValidation(unittest.TestCase):
             provider = loaded.get("providers", {}).get("x", {})
             self.assertEqual(provider.get("unknownField"), 123)
 
+    def test_action_class_caps_allowed_in_intent_budget(self):
+        policy_router = _load_policy_router_module()
+        policy_router.log_event = lambda *args, **kwargs: None
+
+        policy = {
+            "version": 2,
+            "budgets": {
+                "intents": {
+                    "itc_classify": {
+                        "dailyTokenBudget": 25000,
+                        "dailyCallBudget": 200,
+                        "maxCallsPerRun": 80,
+                        "actionClassCaps": {"D": 3, "C": 5},
+                    }
+                }
+            }
+        }
+
+        with tempfile.TemporaryDirectory() as td:
+            policy_path = Path(td) / "llm_policy.json"
+            policy_path.write_text(json.dumps(policy), encoding="utf-8")
+            loaded = policy_router.load_policy(policy_path)
+
+        caps = loaded.get("budgets", {}).get("intents", {}).get("itc_classify", {}).get("actionClassCaps", {})
+        self.assertEqual(caps.get("D"), 3)
+        self.assertEqual(caps.get("C"), 5)
+
 
 if __name__ == "__main__":
     unittest.main()

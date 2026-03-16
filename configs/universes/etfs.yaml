@@ -1,0 +1,16 @@
+core_etfs:
+  - SPY
+  - QQQ
+  - IWM
+  - TLT
+  - GLD
+  - XLE
+  - XLF
+  - XLV
+  - SMH
+  - SOXX
+  - IBIT
+  - BITO
+
+notes:
+  - Prefer ETFs for narrative spillover and lower idiosyncratic blow-up risk.

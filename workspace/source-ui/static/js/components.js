@@ -35,6 +35,10 @@ const Components = {
     // Agent Card (full)
     agentCardFull(agent) {
         const initials = agent.name.split(' ').map(n => n[0]).join('');
+        const controlState = agent.control_state || 'active';
+        const showControl = controlState && controlState !== 'active';
+        const tasksCompleted = agent.tasksCompleted ?? agent.tasks_completed ?? 0;
+        const cycles = agent.cycles ?? 0;
         
         return `
             <div class="agent-card-full">
@@ -48,11 +52,11 @@ const Components = {
                 </div>
                 <div class="agent-stats-full">
                     <div class="agent-stat-item">
-                        <div class="agent-stat-value">${agent.tasksCompleted || 0}</div>
+                        <div class="agent-stat-value">${tasksCompleted}</div>
                         <div class="agent-stat-label">Tasks</div>
                     </div>
                     <div class="agent-stat-item">
-                        <div class="agent-stat-value">${agent.cycles || 0}</div>
+                        <div class="agent-stat-value">${cycles}</div>
                         <div class="agent-stat-label">Cycles</div>
                     </div>
                     <div class="agent-stat-item">
@@ -72,12 +76,13 @@ const Components = {
                     </div>
                     <div class="agent-task-full">${agent.task || 'Processing...'}</div>
                 ` : ''}
+                ${showControl ? `<div class="agent-task-full">Operator control: ${controlState.replaceAll('_', ' ')}</div>` : ''}
                 <div class="agent-actions-full">
-                    <button class="agent-action-btn" onclick="controlAgent('${agent.id}', 'pause')">
-                        ${agent.status === 'working' ? '⏸ Pause' : '▶ Resume'}
+                    <button class="agent-action-btn" onclick="controlAgent('${agent.id}', '${controlState === 'paused' ? 'resume' : 'pause'}')">
+                        ${controlState === 'paused' ? '▶ Resume' : '⏸ Pause'}
                     </button>
                     <button class="agent-action-btn danger" onclick="controlAgent('${agent.id}', 'stop')">
-                        ⏹ Stop
+                        ${controlState === 'stop_requested' ? '⏹ Stop Requested' : '⏹ Stop'}
                     </button>
                 </div>
             </div>
@@ -86,17 +91,58 @@ const Components = {
     
     // Task Card
     taskCard(task) {
-        const priorityColors = {
-            high: 'danger',
-            medium: 'warning',
-            low: 'success'
-        };
+        const readOnly = Boolean(task.read_only);
+        const project = task.project ? `<span class="task-card-project">${task.project}</span>` : '';
+        const description = task.description ? `<div class="task-card-desc">${task.description}</div>` : '';
+        const taskKind = String(task.task_kind || 'task').toLowerCase();
+        const sourceLinks = Array.isArray(task.source_links) ? task.source_links.filter(link => link && (link.href || link.ref || link.label)) : [];
+        const sourceBadges = [
+            taskKind === 'experiment' ? `<span class="task-card-badge task-card-badge-experiment">experiment</span>` : '',
+            task.node_label ? `<span class="task-card-badge">${task.node_label}</span>` : '',
+            task.runtime_source_label ? `<span class="task-card-badge">${task.runtime_source_label}</span>` : '',
+            readOnly ? `<span class="task-card-badge task-card-badge-readonly">read-only</span>` : ''
+        ].filter(Boolean).join('');
+        const nextActionLabel = task.status === 'backlog'
+            ? 'Start'
+            : (task.status === 'in_progress' ? 'Review' : (task.status === 'review' ? 'Done' : 'Reopen'));
+        const reviewBadge = task.status === 'review'
+            ? `<span class="task-card-badge task-card-badge-review">⏳ awaiting review</span>` : '';
+        const reviewOwner = task.reviewer || task.assignee;
+        const assigneeBadge = task.status === 'review' && reviewOwner
+            ? `<span class="task-card-badge task-card-badge-reviewer">reviewer: ${reviewOwner}</span>` : '';
+        const reviewReason = task.status === 'review' && (task.review_status_reason || task.status_reason)
+            ? `<div class="task-card-desc">${task.review_status_reason || task.status_reason}</div>` : '';
+        const fixInstructions = task.status !== 'done' && task.fix_instructions
+            ? `<div class="task-card-desc">${task.fix_instructions}</div>` : '';
+        const archiveBtn = (task.status === 'done' || task.status === 'review')
+            ? `<button class="task-action-btn task-action-btn-archive" type="button" onclick="taskQuickAction('${task.id}', 'archive')" title="Archive this task">Archive</button>` : '';
+        const actionMarkup = readOnly ? `
+            <div class="task-card-actions task-card-actions-readonly">
+                <span class="task-card-readonly-note">Observed live runtime task. Manage it from the owning session.</span>
+            </div>
+        ` : `
+            <div class="task-card-actions">
+                <button class="task-action-btn" type="button" onclick="taskQuickAction('${task.id}', 'advance')">${nextActionLabel}</button>
+                <button class="task-action-btn" type="button" onclick="taskQuickAction('${task.id}', 'done')">Done</button>
+                <button class="task-action-btn" type="button" onclick="taskQuickAction('${task.id}', 'priority')">Priority</button>
+                ${archiveBtn}
+            </div>
+        `;
         
         return `
-            <div class="task-card" draggable="true" data-id="${task.id}" data-priority="${task.priority}">
+            <div class="task-card ${readOnly ? 'task-card-readonly' : ''}" draggable="${readOnly ? 'false' : 'true'}" data-id="${task.id}" data-priority="${task.priority}" data-read-only="${readOnly ? 'true' : 'false'}">
                 <div class="task-priority priority-${task.priority}"></div>
                 <div class="task-card-title">${task.title}</div>
-                <div class="task-card-meta">${task.assignee || 'Unassigned'}</div>
+                ${description}
+                ${reviewReason}
+                ${fixInstructions}
+                <div class="task-card-meta">${task.assignee || 'Unassigned'} ${project}</div>
+                ${sourceBadges ? `<div class="task-card-badges">${sourceBadges}</div>` : ''}
+                ${(reviewBadge || assigneeBadge) ? `<div class="task-card-badges">${reviewBadge}${assigneeBadge}</div>` : ''}
+                ${sourceLinks.length ? `<div class="task-source-links">${sourceLinks.slice(0, 3).map(link => link.href
+                    ? `<a class="task-source-link" href="${escapeHtml(link.href)}" target="_blank" rel="noreferrer">${escapeHtml(link.label || link.ref || 'source')}</a>`
+                    : `<span class="task-source-link">${escapeHtml(link.label || link.ref || 'source')}</span>`).join('')}</div>` : ''}
+                ${actionMarkup}
             </div>
         `;
     },
@@ -162,13 +208,14 @@ const Components = {
     
     // Job Item
     jobItem(job) {
+        const nextRun = job.nextRun || job.next_run || 'unscheduled';
         return `
             <div class="job-item">
                 <div class="job-info">
                     <div class="job-name">${job.name}</div>
                     <div class="job-cron">${job.cron}</div>
                 </div>
-                <div class="job-next">${job.nextRun}</div>
+                <div class="job-next">${nextRun}</div>
             </div>
         `;
     },

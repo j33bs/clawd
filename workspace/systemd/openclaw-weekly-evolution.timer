@@ -1,0 +1,11 @@
+[Unit]
+Description=OpenClaw weekly evolution report timer
+
+[Timer]
+OnCalendar=Mon 09:00
+AccuracySec=10m
+Unit=openclaw-weekly-evolution.service
+Persistent=true
+
+[Install]
+WantedBy=timers.target

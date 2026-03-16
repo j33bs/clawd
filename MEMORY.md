@@ -18,6 +18,16 @@
 - **X retrieval:** When lightweight fetch fails on X/Twitter, fall back to browser retrieval before giving up.
 - **Desktop meaning:** When jeebs says "desktop", default to `/Users/jeebs/Desktop`.
 
+## System Landmarks
+- **Source UI:** Means the local dashboard/service on port `18990`, not public docs or GitHub.
+- **Source UI (tailnet):** `http://100.113.160.1:18990`
+- **Source UI (local):** `http://127.0.0.1:18990`
+- **Source UI API probe:** `http://127.0.0.1:18990/api/source/phi`
+- **OpenClaw Control UI:** `http://127.0.0.1:18789`
+- **OpenClaw Control UI (tailnet direct):** `http://100.113.160.1:18800`
+- **Telegram main workspace:** Should use `/home/jeebs/src/clawd` as its workspace so prompt context matches the live system state.
+- **Telegram main runtime:** Prefer `minimax-portal/MiniMax-M2.5` for main replies; keep a smaller helper lane available before falling back to local assistant.
+
 ## Current Projects
 
 ### 1. TACTI(C)-R Framework (Major Update Feb 21)

@@ -13,7 +13,7 @@ from telegram_vector_store import DEFAULT_STORE_DIR, search_store
 
 DEFAULT_TOPK = 6
 DEFAULT_MAX_CHARS = 2000       # was 6000; remaining is low-density noise (env-tunable)
-DEFAULT_RECALL_THRESHOLD = 0.65  # cosine similarity floor — suppress false-trigger injections
+DEFAULT_RECALL_THRESHOLD = 0.25  # keep keyword-stub fallback usable without disabling the relevance gate
 
 
 def parse_bool(value: str | None, default: bool = False) -> bool:
@@ -84,7 +84,7 @@ def _row_to_line(row: dict, per_line_limit: int = 1000) -> str:
 
 
 def _parse_recall_threshold(env_map: Mapping[str, str]) -> float:
-    raw = env_map.get("OPENCLAW_RECALL_THRESHOLD", "")
+    raw = env_map.get("OPENCLAW_TELEGRAM_RECALL_THRESHOLD", env_map.get("OPENCLAW_RECALL_THRESHOLD", ""))
     try:
         val = float(raw)
         return val if 0.0 <= val <= 1.0 else DEFAULT_RECALL_THRESHOLD
@@ -114,7 +114,7 @@ def build_recall_block(
     # Prevents false-trigger recall (keyword match with low semantic relevance).
     # search_store returns rows sorted by similarity desc; check the best score first.
     if not session_start and rows:
-        top_score = float(rows[0].get("score", 0.0))
+        top_score = float(rows[0].get("_score", rows[0].get("score", 0.0)) or 0.0)
         if top_score < threshold:
             return ""
 
@@ -159,4 +159,3 @@ def inject_telegram_recall_context(
     if not recall:
         return prompt
     return f"{recall}\n\n{prompt}"
-

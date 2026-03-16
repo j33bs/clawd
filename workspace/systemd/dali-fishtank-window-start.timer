@@ -1,0 +1,11 @@
+[Unit]
+Description=DALI FishTank schedule window start timer
+
+[Timer]
+OnCalendar=*-*-* 17:00:00
+Persistent=true
+Unit=dali-fishtank-window-start.service
+
+[Install]
+WantedBy=timers.target
+

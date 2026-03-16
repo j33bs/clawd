@@ -37,6 +37,18 @@ Skills are shared. Your setup is yours. Keeping them apart means you can update 
 
 ---
 
+## Local Service Map
+
+- Source UI (tailnet): `http://100.113.160.1:18990`
+- Source UI (local): `http://127.0.0.1:18990`
+- Source UI health/API: `http://127.0.0.1:18990/api/source/phi`
+- OpenClaw Control UI: `http://127.0.0.1:18789`
+- OpenClaw Control UI (tailnet direct): `http://100.113.160.1:18800`
+
+When jeebs asks for "Source UI" in Telegram or another remote context, give the tailnet URL by default. Do not substitute docs, GitHub, Discord, or other public links.
+
+---
+
 ### Music (for my spare time listening)
 
 - "Byte the Dust" — Fabio Fusco & Moon (2015, Goa/psytrance)
@@ -44,3 +56,11 @@ Skills are shared. Your setup is yours. Keeping them apart means you can update 
 ---
 
 Add whatever helps you do your job. This is your cheat sheet.
+
+### Source UI
+
+- Live Source UI backlog: `http://100.113.160.1:18990`
+- When asked in direct chat or Telegram to add something to Source UI backlog, use the hidden control tag:
+  `<source-ui-task>{"title":"...","description":"...","priority":"high","project":"source-ui"}</source-ui-task>`
+- Do not claim `queued`, `visible`, `live`, or `flowing` unless the final reply includes a verified line:
+  `Source UI receipt: #<id> <title> (<status>)`

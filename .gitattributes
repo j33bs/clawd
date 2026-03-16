@@ -51,3 +51,23 @@ workspace/governance/.section_count merge=ours
 
 # LanceDB runtime state — never merge
 workspace/store/lancedb_data/** merge=ours
+
+# Local/private context should stay out of audit archives by default
+MEMORY.md export-ignore
+TOOLS.md export-ignore
+USER.md export-ignore
+memory export-ignore
+memory/** export-ignore
+PREFERENCE_PACKET.md export-ignore
+workspace/source-ui/state export-ignore
+workspace/source-ui/state/** export-ignore
+workspace/state export-ignore
+workspace/state/** export-ignore
+workspace/artifacts export-ignore
+workspace/knowledge_base/data/discord_messages.jsonl export-ignore
+workspace/knowledge_base/data/discord_research_messages.jsonl export-ignore
+workspace/knowledge_base/data/telegram_messages.jsonl export-ignore
+workspace/knowledge_base/data/telegram_memory_ingest_state.json export-ignore
+workspace/knowledge_base/data/user_inferences.jsonl export-ignore
+workspace/knowledge_base/data/preference_profile.json export-ignore
+workspace/artifacts/** export-ignore

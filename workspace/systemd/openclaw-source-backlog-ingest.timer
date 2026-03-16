@@ -1,0 +1,10 @@
+[Unit]
+Description=Periodic OpenClaw Source backlog ingest
+
+[Timer]
+OnBootSec=3min
+OnUnitActiveSec=15min
+Unit=openclaw-source-backlog-ingest.service
+
+[Install]
+WantedBy=timers.target

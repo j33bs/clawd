@@ -1,0 +1,10 @@
+[Unit]
+Description=DALI FishTank schedule window end helper
+After=dali-fishtank.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/src/clawd
+EnvironmentFile=%h/.config/openclaw/dali-fishtank.env
+ExecStart=%h/src/clawd/scripts/dali_fishtank_start.sh control nudge-end
+

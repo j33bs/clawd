@@ -32,12 +32,16 @@ import json
 import logging
 import hashlib
 import importlib.util
-from datetime import datetime
+import re
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Any, Optional, Set
 from dataclasses import dataclass, asdict
 
 from .allowlist import is_chat_allowed, log_allowlist_on_startup
+from core_infra.channel_scoring import load_channel_scores
+from core_infra.strategy_blender import blend_signals
+from workspace.itc.ingest.interfaces import RawPayload, emit_event, persist_artifacts, validate_signal
 try:
     from workspace.memory.message_hooks import build_message_event, process_message_event
 except Exception:  # pragma: no cover
@@ -56,7 +60,20 @@ DEDUPE_STATE_PATH = Path(os.environ.get(
 DEDUPE_MAX_ENTRIES = 10000
 _ITC_CLASSIFIER_PATH = Path(__file__).resolve().parents[2] / "scripts" / "itc_classify.py"
 _ITC_CANON_PATH = Path(__file__).resolve().parents[2] / "itc" / "canon" / "messages.jsonl"
+_ITC_ARTIFACT_ROOT = Path(__file__).resolve().parents[1] / "artifacts" / "itc"
+_ITC_CHANNEL_SCORES_PATH = Path(__file__).resolve().parents[2] / "itc" / "channel_scores.json"
 _CLASSIFY_RULES = None
+
+_BULLISH_PATTERNS = (
+    re.compile(r"\b(long|buy|bull(?:ish)?|accumulat(?:e|ion)|breakout|upside)\b", re.I),
+)
+_BEARISH_PATTERNS = (
+    re.compile(r"\b(short|sell|bear(?:ish)?|distribution|breakdown|downside)\b", re.I),
+)
+_STRUCTURED_SIGNAL_HINTS = (
+    re.compile(r"\b(entry|target|tp|sl|stop(?:\s|-)loss|invalidat(?:e|ion)|leverage)\b", re.I),
+    re.compile(r"[$€£]?\d[\d,]*(?:\.\d+)?"),
+)
 
 
 @dataclass
@@ -280,6 +297,10 @@ def _forward_to_pipeline(message: IngestedMessage):
             f.write(json.dumps(canonical_row, ensure_ascii=False) + "\n")
     except Exception as e:
         logger.error(f"Failed classifier forward write: {e}")
+    try:
+        _persist_contract_signal(message, primary_tag, all_tags)
+    except Exception as e:
+        logger.error(f"Failed ITC contract signal write: {e}")
 
 
 def _resolve_classifier():
@@ -301,6 +322,128 @@ def _resolve_classifier():
     except Exception as e:
         logger.warning(f"Classifier module load failed: {e}")
     return None
+
+
+def _normalize_ts_utc(value: str) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    if text.endswith("Z"):
+        return text
+    try:
+        dt = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        return text
+    return dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _channel_key(chat_title: Optional[str]) -> str:
+    title = str(chat_title or "").lower()
+    if "cryptocosm" in title:
+        return "cryptocosm"
+    if "cryptoverse" in title or "itc" in title:
+        return "cryptoverse"
+    return "telegram"
+
+
+def _infer_message_signal(primary_tag: str, text: str) -> Optional[float]:
+    body = str(text or "")
+    if not body or primary_tag == "spam":
+        return None
+    bullish = any(pattern.search(body) for pattern in _BULLISH_PATTERNS)
+    bearish = any(pattern.search(body) for pattern in _BEARISH_PATTERNS)
+    structured = any(pattern.search(body) for pattern in _STRUCTURED_SIGNAL_HINTS)
+
+    if bullish and not bearish:
+        return 1.0 if primary_tag == "trade_signal" else 0.35
+    if bearish and not bullish:
+        return -1.0 if primary_tag == "trade_signal" else -0.35
+    if primary_tag == "trade_signal" and structured:
+        return 0.25
+    if primary_tag == "news":
+        return 0.0
+    return None
+
+
+def _infer_message_confidence(primary_tag: str, text: str, channel_weight: float) -> float:
+    structured_hits = sum(1 for pattern in _STRUCTURED_SIGNAL_HINTS if pattern.search(str(text or "")))
+    if primary_tag == "trade_signal":
+        base = 0.58 + min(0.22, structured_hits * 0.11)
+    elif primary_tag == "news":
+        base = 0.42 + min(0.18, structured_hits * 0.09)
+    else:
+        base = 0.0
+    scaled = base * max(0.25, min(1.5, float(channel_weight or 1.0)))
+    return max(0.0, min(1.0, scaled))
+
+
+def _build_contract_signal(message: IngestedMessage, primary_tag: str, all_tags: list[str]) -> Optional[dict[str, Any]]:
+    del all_tags
+    signal_value = _infer_message_signal(primary_tag, message.text)
+    if signal_value is None:
+        return None
+    channel_weight = float(load_channel_scores(str(_ITC_CHANNEL_SCORES_PATH)).get(_channel_key(message.chat_title), 1.0))
+    blended = blend_signals(
+        [
+            {
+                "source": _channel_key(message.chat_title),
+                "signal": signal_value,
+                "weight": channel_weight,
+                "confidence": _infer_message_confidence(primary_tag, message.text, channel_weight),
+            }
+        ]
+    )
+    sentiment = max(-1.0, min(1.0, float(blended.get("signal", 0.0) or 0.0)))
+    confidence = max(0.0, min(1.0, float(blended.get("confidence", 0.0) or 0.0)))
+    risk_on = max(0.0, min(1.0, (sentiment + 1.0) / 2.0))
+    signal = {
+        "schema_version": 1,
+        "source": "telegram",
+        "ts_utc": _normalize_ts_utc(message.date),
+        "window": "1h",
+        "metrics": {
+            "risk_on": risk_on,
+            "risk_off": 1.0 - risk_on,
+            "sentiment": sentiment,
+            "regime": "risk_on" if sentiment >= 0.0 else "risk_off",
+            "confidence": confidence,
+        },
+        "raw_ref": "pending://telegram_message",
+        "signature": f"sha256:{hashlib.sha256(message.text.encode('utf-8')).hexdigest()}",
+    }
+    ok, _ = validate_signal(signal)
+    return signal if ok else None
+
+
+def _persist_contract_signal(message: IngestedMessage, primary_tag: str, all_tags: list[str]) -> Optional[dict[str, str]]:
+    signal = _build_contract_signal(message, primary_tag, all_tags)
+    if signal is None:
+        return None
+    raw_payload = {
+        "message": message.to_dict(),
+        "primary_tag": primary_tag,
+        "all_tags": all_tags,
+        "channel_key": _channel_key(message.chat_title),
+    }
+    raw = RawPayload(
+        content=json.dumps(raw_payload, ensure_ascii=False, sort_keys=True).encode("utf-8"),
+        extension="json",
+        metadata={"source": "telegram_ingestion_boundary"},
+    )
+    paths = persist_artifacts(raw, signal, run_id="telegram_ingestion_boundary", artifact_root=_ITC_ARTIFACT_ROOT)
+    emit_event(
+        "itc_telegram_signal_emitted",
+        "telegram_ingestion_boundary",
+        {
+            "chat_id": message.chat_id,
+            "message_id": message.message_id,
+            "primary_tag": primary_tag,
+            "signal_ts": signal["ts_utc"],
+            "normalized_ref": paths["normalized_path"],
+        },
+        _ITC_ARTIFACT_ROOT,
+    )
+    return paths
 
 
 def initialize_ingestion():

@@ -62,6 +62,33 @@ class APIClient {
     async getHealth() {
         return this.request('/api/health');
     }
+
+    async getPortfolio() {
+        return this.request('/api/portfolio');
+    }
+
+    async getDisplayMode() {
+        return this.request('/api/display-mode');
+    }
+
+    async toggleDisplayMode() {
+        return this.request('/api/display-mode/toggle', { method: 'POST' });
+    }
+
+    async runCommand(payload) {
+        return this.request('/api/commands', {
+            method: 'POST',
+            body: JSON.stringify(payload)
+        });
+    }
+
+    async getCommandHistory() {
+        return this.request('/api/commands/history');
+    }
+
+    async getCommandReceipts() {
+        return this.request('/api/commands/receipts');
+    }
     
     // Agents
     async getAgents() {
@@ -80,11 +107,55 @@ class APIClient {
     async getTasks() {
         return this.request('/api/tasks');
     }
+
+    async getUserInferences() {
+        return this.request('/api/user-inferences');
+    }
+
+    async getDeliberations() {
+        return this.request('/api/deliberations');
+    }
+
+    async createDeliberation(payload) {
+        return this.request('/api/deliberations', {
+            method: 'POST',
+            body: JSON.stringify(payload)
+        });
+    }
+
+    async addDeliberationContribution(id, payload) {
+        return this.request(`/api/deliberations/${id}/contributions`, {
+            method: 'POST',
+            body: JSON.stringify(payload)
+        });
+    }
+
+    async addDeliberationSynthesis(id, payload) {
+        return this.request(`/api/deliberations/${id}/synthesis`, {
+            method: 'POST',
+            body: JSON.stringify(payload)
+        });
+    }
+
+    async getLatestWeeklyEvolution() {
+        return this.request('/api/evolution/latest');
+    }
+
+    async generateWeeklyEvolution() {
+        return this.request('/api/evolution/generate', { method: 'POST' });
+    }
     
     async createTask(task) {
         return this.request('/api/tasks', {
             method: 'POST',
             body: JSON.stringify(task)
+        });
+    }
+
+    async promoteResearchItem(payload) {
+        return this.request('/api/research/promote', {
+            method: 'POST',
+            body: JSON.stringify(payload)
         });
     }
     
@@ -94,9 +165,24 @@ class APIClient {
             body: JSON.stringify(updates)
         });
     }
+
+    async updateUserInference(id, updates) {
+        return this.request(`/api/user-inferences/${id}`, {
+            method: 'PATCH',
+            body: JSON.stringify(updates)
+        });
+    }
     
     async deleteTask(id) {
         return this.request(`/api/tasks/${id}`, { method: 'DELETE' });
+    }
+
+    async archiveTask(id) {
+        return this.request(`/api/tasks/${id}/archive`, { method: 'POST' });
+    }
+
+    async getArchivedTasks() {
+        return this.request('/api/tasks/archived');
     }
     
     // Schedule
@@ -172,6 +258,17 @@ class MockAPIClient extends APIClient {
             memory: Math.floor(Math.random() * 40) + 40,
             disk: Math.floor(Math.random() * 30) + 30,
             gpu: Math.floor(Math.random() * 50) + 30
+        };
+    }
+
+    async getPortfolio() {
+        return {
+            generated_at: new Date().toISOString(),
+            projects: [],
+            sims: [],
+            work_items: [],
+            components: [],
+            health_metrics: await this.getHealth()
         };
     }
     

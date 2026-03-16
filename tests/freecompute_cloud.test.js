@@ -752,7 +752,7 @@ await testAsync('registry: generation probe failure skips local and falls back t
   reg.dispose();
 });
 
-await testAsync('registry: prefers external over local when cloud enabled and external configured', async () => {
+await testAsync('registry: enforces local-first provider tier order by default', async () => {
   const reg = new ProviderRegistry({
     env: { ENABLE_FREECOMPUTE_CLOUD: '1', OPENCLAW_GROQ_API_KEY: 'x' }
   });
@@ -792,13 +792,62 @@ await testAsync('registry: prefers external over local when cloud enabled and ex
   });
 
   assert.ok(result, 'expected non-null result');
+  assert.equal(result.provider_id, 'local_vllm');
+  reg.dispose();
+});
+
+await testAsync('registry: local timeout fails fast and falls through to next tier (no local retry loop)', async () => {
+  const reg = new ProviderRegistry({
+    env: { ENABLE_FREECOMPUTE_CLOUD: '1', OPENCLAW_GROQ_API_KEY: 'x' }
+  });
+
+  let localCalls = 0;
+  let groqCalls = 0;
+
+  reg._adapters.set('local_vllm', {
+    async generationProbe() {
+      return { ok: true };
+    },
+    async call() {
+      localCalls += 1;
+      const err = new Error('timeout connecting to local_vllm');
+      err.code = 'PROVIDER_TIMEOUT';
+      throw err;
+    },
+    async health() {
+      return { ok: true, models: ['stub-model'] };
+    }
+  });
+
+  reg._adapters.set('groq', {
+    async call() {
+      groqCalls += 1;
+      return {
+        text: 'ok',
+        raw: {},
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, estimatedCostUsd: 0 }
+      };
+    },
+    async health() {
+      return { ok: true, models: ['stub-model'] };
+    }
+  });
+
+  const result = await reg.dispatch({
+    taskClass: 'fast_chat',
+    messages: [{ role: 'user', content: 'test' }]
+  });
+
+  assert.ok(result);
   assert.equal(result.provider_id, 'groq');
+  assert.equal(localCalls, 1, 'local tier should not retry timeout before fallback');
+  assert.equal(groqCalls, 1);
   reg.dispose();
 });
 
 await testAsync('registry: http 429 opens circuit (rate_limit) and falls back to local', async () => {
   const reg = new ProviderRegistry({
-    env: { ENABLE_FREECOMPUTE_CLOUD: '1', OPENCLAW_GROQ_API_KEY: 'x' }
+    env: { ENABLE_FREECOMPUTE_CLOUD: '1', OPENCLAW_GROQ_API_KEY: 'x', OPENCLAW_ENFORCE_PROVIDER_TIER_ORDER: '0' }
   });
 
   reg._adapters.set('local_vllm', {
@@ -842,7 +891,7 @@ await testAsync('registry: http 429 opens circuit (rate_limit) and falls back to
 
 await testAsync('registry: circuit_open excludes provider from routing until cooldown expires', async () => {
   const reg = new ProviderRegistry({
-    env: { ENABLE_FREECOMPUTE_CLOUD: '1', OPENCLAW_GROQ_API_KEY: 'x' }
+    env: { ENABLE_FREECOMPUTE_CLOUD: '1', OPENCLAW_GROQ_API_KEY: 'x', OPENCLAW_ENFORCE_PROVIDER_TIER_ORDER: '0' }
   });
 
   let groqCalls = 0;
@@ -925,7 +974,7 @@ await testAsync('registry: secrets injection is scoped (does not mutate caller e
 await testAsync('registry: compaction gate does not run under budget', async () => {
   const events = [];
   const reg = new ProviderRegistry({
-    env: { ENABLE_FREECOMPUTE_CLOUD: '1', OPENCLAW_GROQ_API_KEY: 'x', GROQ_MAX_CHARS: '2000' },
+    env: { ENABLE_FREECOMPUTE_CLOUD: '1', OPENCLAW_GROQ_API_KEY: 'x', GROQ_MAX_CHARS: '2000', OPENCLAW_ENFORCE_PROVIDER_TIER_ORDER: '0' },
     emitEvent: (t, p) => events.push({ t, p })
   });
 
@@ -973,7 +1022,7 @@ await testAsync('registry: compaction gate does not run under budget', async () 
 await testAsync('registry: compaction gate compacts preflight when materially over budget', async () => {
   const events = [];
   const reg = new ProviderRegistry({
-    env: { ENABLE_FREECOMPUTE_CLOUD: '1', OPENCLAW_GROQ_API_KEY: 'x', GROQ_MAX_CHARS: '1000' },
+    env: { ENABLE_FREECOMPUTE_CLOUD: '1', OPENCLAW_GROQ_API_KEY: 'x', GROQ_MAX_CHARS: '1000', OPENCLAW_ENFORCE_PROVIDER_TIER_ORDER: '0' },
     emitEvent: (t, p) => events.push({ t, p })
   });
 
@@ -1026,7 +1075,7 @@ await testAsync('registry: compaction gate compacts preflight when materially ov
 await testAsync('registry: 400 context-length triggers one compaction retry (no preflight)', async () => {
   const events = [];
   const reg = new ProviderRegistry({
-    env: { ENABLE_FREECOMPUTE_CLOUD: '1', OPENCLAW_GROQ_API_KEY: 'x', GROQ_MAX_CHARS: '1000' },
+    env: { ENABLE_FREECOMPUTE_CLOUD: '1', OPENCLAW_GROQ_API_KEY: 'x', GROQ_MAX_CHARS: '1000', OPENCLAW_ENFORCE_PROVIDER_TIER_ORDER: '0' },
     emitEvent: (t, p) => events.push({ t, p })
   });
 
@@ -1274,7 +1323,7 @@ await testAsync('registry: checkpoint event includes bounded checkpoint stats', 
 await testAsync('registry: audit events identify which provider rejects size (groq 400 → local fallback)', async () => {
   const events = [];
   const reg = new ProviderRegistry({
-    env: { ENABLE_FREECOMPUTE_CLOUD: '1', OPENCLAW_GROQ_API_KEY: 'x', GROQ_MAX_CHARS: '1000' },
+    env: { ENABLE_FREECOMPUTE_CLOUD: '1', OPENCLAW_GROQ_API_KEY: 'x', GROQ_MAX_CHARS: '1000', OPENCLAW_ENFORCE_PROVIDER_TIER_ORDER: '0' },
     emitEvent: (t, p) => events.push({ t, p })
   });
 

@@ -66,6 +66,14 @@ Capture what matters. Decisions, context, things to remember. Skip the secrets u
 - Anything that leaves the machine
 - Anything you're uncertain about
 
+## Local Surfaces
+
+Questions about links, ports, dashboards, UIs, localhost services, or Tailscale/tailnet addresses refer to this machine first.
+
+- Check `TOOLS.md`, `MEMORY.md`, and recent `memory/*.md` notes before answering.
+- Do not replace a local service URL with docs/GitHub/community links unless jeebs explicitly asked for those public surfaces.
+- If jeebs asks for "Source UI" from Telegram or another remote context, default to the tailnet URL unless localhost was explicitly requested.
+
 ## Group Chats
 
 You have access to your human's stuff. That doesn't mean you _share_ their stuff. In groups, you're a participant — not their voice, not their proxy. Think before you speak.

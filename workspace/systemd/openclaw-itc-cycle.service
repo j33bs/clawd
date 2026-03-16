@@ -1,0 +1,17 @@
+[Unit]
+Description=OpenClaw ITC pipeline cycle (market -> classify -> sim)
+After=network-online.target openclaw-vllm.service
+Wants=network-online.target openclaw-vllm.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/src/clawd
+EnvironmentFile=-%h/.config/openclaw/itc-cycle.env
+ExecStartPre=/usr/bin/mkdir -p %h/.local/state/openclaw
+ExecStartPre=/usr/bin/env bash %h/src/clawd/scripts/wait_for_local_vllm.sh
+ExecStart=/usr/bin/env bash %h/src/clawd/scripts/run_itc_cycle_service.sh
+StandardOutput=append:%h/.local/state/openclaw/itc-cycle.log
+StandardError=append:%h/.local/state/openclaw/itc-cycle.log
+
+[Install]
+WantedBy=default.target

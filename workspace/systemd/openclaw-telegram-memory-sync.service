@@ -1,0 +1,11 @@
+[Unit]
+Description=OpenClaw Telegram memory sync from local main-session transcript
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/src/clawd
+EnvironmentFile=-%h/.config/openclaw/telegram-memory.env
+ExecStartPre=/usr/bin/mkdir -p %h/.local/state/openclaw
+ExecStart=/usr/bin/env python3 %h/src/clawd/workspace/scripts/telegram_memory_sync_openclaw_session.py
+StandardOutput=append:%h/.local/state/openclaw/telegram-memory-sync.log
+StandardError=append:%h/.local/state/openclaw/telegram-memory-sync.log

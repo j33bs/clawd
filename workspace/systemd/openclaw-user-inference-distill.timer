@@ -1,0 +1,10 @@
+[Unit]
+Description=Periodic OpenClaw user inference distillation
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=6h
+Unit=openclaw-user-inference-distill.service
+
+[Install]
+WantedBy=timers.target

@@ -11,6 +11,7 @@ from typing import Optional
 
 GROK_FAST = "xai/grok" + "-4-1-fast"
 MINIMAX = "minimax-portal/MiniMax-M2.1"
+GPT54_PRO = "openai/gpt-5.4-pro"
 
 _GROK_FAST_PATTERNS = [
     re.compile(r"use grok fast", re.IGNORECASE),
@@ -28,6 +29,13 @@ _CHEAP_PATTERNS = [
     re.compile(r"cheap mode", re.IGNORECASE),
     re.compile(r"use cheap", re.IGNORECASE),
 ]
+_GPT54_PRO_PATTERNS = [
+    re.compile(r"use chatgpt", re.IGNORECASE),
+    re.compile(r"switch to chatgpt", re.IGNORECASE),
+    re.compile(r"use gpt[- ]?5\.4(?:[- ]?pro)?", re.IGNORECASE),
+    re.compile(r"switch to gpt[- ]?5\.4(?:[- ]?pro)?", re.IGNORECASE),
+    re.compile(r"use 5\.4 pro", re.IGNORECASE),
+]
 _AUTO_PATTERNS = [re.compile(r"\bauto\b", re.IGNORECASE)]
 
 
@@ -44,9 +52,44 @@ def handle_model_intent(text: str) -> Optional[dict]:
         return {"action": "switch", "primary": GROK_FAST, "reason": "grok"}
     if any(rx.search(value) for rx in _CHEAP_PATTERNS):
         return {"action": "switch", "primary": MINIMAX, "reason": "cheap"}
+    if any(rx.search(value) for rx in _GPT54_PRO_PATTERNS):
+        return {"action": "switch", "primary": GPT54_PRO, "reason": "chatgpt"}
     if any(rx.search(value) for rx in _AUTO_PATTERNS):
         return {"action": "switch", "primary": GROK_FAST, "reason": "auto"}
     return None
+
+
+def route_metadata_for_text(text: str) -> Optional[dict]:
+    intent = handle_model_intent(text)
+    if not intent:
+        return None
+    primary = str(intent.get("primary") or "").strip()
+    reason = str(intent.get("reason") or "").strip()
+    if not primary:
+        return None
+
+    if primary == GROK_FAST:
+        return {
+            "preferred_provider": "grok_api",
+            "override_model": GROK_FAST,
+            "route_reason": reason,
+        }
+    if primary == MINIMAX:
+        return {
+            "preferred_provider": "minimax_m25",
+            "override_model": MINIMAX,
+            "route_reason": reason,
+        }
+    if primary == GPT54_PRO:
+        return {
+            "preferred_provider": "openai_auth",
+            "override_model": GPT54_PRO,
+            "route_reason": reason,
+        }
+    return {
+        "override_model": primary,
+        "route_reason": reason,
+    }
 
 
 def maybe_apply_model_intent(text: str) -> Optional[dict]:
@@ -70,4 +113,4 @@ def maybe_apply_model_intent(text: str) -> Optional[dict]:
     return intent
 
 
-__all__ = ["handle_model_intent", "maybe_apply_model_intent"]
+__all__ = ["handle_model_intent", "maybe_apply_model_intent", "route_metadata_for_text"]

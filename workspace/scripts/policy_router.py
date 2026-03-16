@@ -29,6 +29,12 @@ except Exception:  # pragma: no cover - optional integration
     append_envelope = None
     make_envelope = None
 
+try:
+    from vllm_deferred_queue import enqueue_router_request, should_defer_local_vllm
+except Exception:  # pragma: no cover - optional integration
+    enqueue_router_request = None
+    should_defer_local_vllm = None
+
 def _resolve_repo_root(start: Path):
     current = start
     for _ in range(8):
@@ -78,10 +84,10 @@ DEFAULT_POLICY = {
     "defaults": {
         "allowPaid": False,
         "preferLocal": True,
-        "maxTokensPerRequest": 1024,
-        "local_context_max_tokens_assistant": 32768,
+        "maxTokensPerRequest": 8192,
+        "local_context_max_tokens_assistant": 8192,
         "local_context_max_tokens_coder": 32768,
-        "local_context_soft_limit_tokens": 24576,
+        "local_context_soft_limit_tokens": 6144,
         "local_context_overflow_policy": "compress",
         "remoteRoutingEnabled": False,
         "remoteAllowlistTaskClasses": [
@@ -104,7 +110,7 @@ DEFAULT_POLICY = {
     "budgets": {
         "intents": {
             "itc_classify": {
-                "dailyTokenBudget": 25000,
+                "dailyTokenBudget": 250000,
                 "dailyCallBudget": 200,
                 "maxCallsPerRun": 80,
             },
@@ -160,6 +166,11 @@ DEFAULT_POLICY = {
             "tier": "auth",
             "type": "openai_auth",
             "readyEnv": "OPENAI_AUTH_READY",
+            "models": [
+                {"id": "openai/gpt-5.4-pro", "maxInputChars": 60000},
+                {"id": "openai/gpt-5.4", "maxInputChars": 60000},
+                {"id": "openai-codex/gpt-5.4", "maxInputChars": 60000},
+            ],
         },
         "claude_auth": {
             "enabled": True,
@@ -206,8 +217,9 @@ DEFAULT_POLICY = {
         "free_order": ["ollama", "groq", "qwen"],
         "intents": {
             "itc_classify": {
-                "order": ["free"],
+                "order": ["local_vllm_assistant", "ollama", "free"],
                 "fallback": "rules",
+                "allowCapabilityRouter": False,
                 "preferLocalForShort": True,
                 "shortMessageChars": 240,
             },
@@ -400,7 +412,7 @@ def _budget_intent_key(intent):
 
 def _validate_policy_schema(raw):
     errors = []
-    budget_intent_keys = {"dailyTokenBudget", "dailyCallBudget", "maxCallsPerRun"}
+    budget_intent_keys = {"dailyTokenBudget", "dailyCallBudget", "maxCallsPerRun", "actionClassCaps"}
     provider_keys = {
         "enabled",
         "paid",
@@ -1069,7 +1081,44 @@ def _oauth_endpoint_supported(base_url):
     return "chatgpt.com/backend-api" in lowered
 
 
-def _call_openai_compatible(base_url, api_key, model_id, payload, timeout=15):
+def resolve_tool_call_capability(provider, model_id):
+    caps = {"supports_tools": True}
+    models = provider.get("models", [])
+    if isinstance(models, list):
+        for model in models:
+            if not isinstance(model, dict):
+                continue
+            if str(model.get("id", "")).strip() != str(model_id or "").strip():
+                continue
+            if "supports_tools" in model:
+                caps["supports_tools"] = bool(model.get("supports_tools"))
+            elif "toolCalling" in model:
+                caps["supports_tools"] = bool(model.get("toolCalling"))
+            break
+    if "supports_tools" in provider:
+        caps["supports_tools"] = bool(provider.get("supports_tools"))
+    elif "toolCalling" in provider:
+        caps["supports_tools"] = bool(provider.get("toolCalling"))
+    return caps
+
+
+def _sanitize_openai_payload_for_capabilities(payload, provider_caps=None):
+    body = dict(payload or {})
+    caps = provider_caps or {}
+    stripped = False
+    if not bool(caps.get("supports_tools", True)):
+        for key in ("tools", "tool_choice", "parallel_tool_calls"):
+            if key in body:
+                stripped = True
+                body.pop(key, None)
+    return body, stripped
+
+
+def _curiosity_route_on_failure(**_kwargs):
+    return {"triggered": False, "leads": []}
+
+
+def _call_openai_compatible(base_url, api_key, model_id, payload, timeout=15, provider_caps=None):
     if requests is None:
         return {"ok": False, "reason_code": "no_requests_lib"}
     if _looks_like_jwt(api_key) and not _oauth_endpoint_supported(base_url):
@@ -1085,8 +1134,9 @@ def _call_openai_compatible(base_url, api_key, model_id, payload, timeout=15):
     headers = {"Content-Type": "application/json"}
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
+    request_payload, tool_fields_stripped = _sanitize_openai_payload_for_capabilities(payload, provider_caps=provider_caps)
     try:
-        resp = requests.post(url, json={"model": model_id, **payload}, headers=headers, timeout=timeout)
+        resp = requests.post(url, json={"model": model_id, **request_payload}, headers=headers, timeout=timeout)
         if resp.status_code == 429:
             return {"ok": False, "reason_code": "request_http_429"}
         if resp.status_code == 404:
@@ -1102,7 +1152,7 @@ def _call_openai_compatible(base_url, api_key, model_id, payload, timeout=15):
             content = choice.get("message", {}).get("content", "")
         else:
             content = choice.get("text", "")
-        return {"ok": True, "text": content}
+        return {"ok": True, "text": content, "tool_fields_stripped": tool_fields_stripped}
     except requests.exceptions.Timeout:
         return {"ok": False, "reason_code": "request_timeout"}
     except requests.exceptions.ConnectionError:
@@ -1183,6 +1233,16 @@ def _ollama_reachable(base_url):
         return False
     try:
         resp = requests.get(base_url.rstrip("/") + "/api/tags", timeout=3)
+        return resp.status_code == 200
+    except Exception:
+        return False
+
+
+def _openai_compatible_reachable(base_url):
+    if requests is None:
+        return False
+    try:
+        resp = requests.get(base_url.rstrip("/") + "/models", timeout=3)
         return resp.status_code == 200
     except Exception:
         return False
@@ -1270,8 +1330,16 @@ class PolicyRouter:
         provider = self._provider_cfg(name)
         models = provider.get("models", [])
         override = (context or {}).get("override_model")
-        if override and name == "ollama":
-            return override
+        if override:
+            normalized_override = str(override).strip()
+            if normalized_override:
+                if not models:
+                    return normalized_override
+                for model in models:
+                    if str(model.get("id") or "").strip() == normalized_override:
+                        return normalized_override
+                if name == "ollama":
+                    return normalized_override
         if not models:
             return None
         if name == "ollama":
@@ -1495,6 +1563,14 @@ class PolicyRouter:
 
     def _capability_decision(self, context_metadata, payload_text=""):
         context_metadata = context_metadata or {}
+        direct_provider = normalize_provider_id(context_metadata.get("preferred_provider"))
+        if direct_provider:
+            return {
+                "trigger": "context_metadata",
+                "matched": "preferred_provider",
+                "provider": direct_provider,
+                "reason": "request metadata preferred provider",
+            }
         ai_payload = context_metadata.get("active_inference")
         if isinstance(ai_payload, dict):
             ai_provider = normalize_provider_id(ai_payload.get("preferred_provider"))
@@ -1623,6 +1699,8 @@ class PolicyRouter:
 
     def _ordered_providers(self, intent_cfg, context_metadata, payload_text=""):
         base_order = _resolve_order(intent_cfg, self.policy)
+        if intent_cfg.get("allowCapabilityRouter") is False:
+            return base_order, None
         decision = self._capability_decision(context_metadata, payload_text)
         if not decision:
             return base_order, None
@@ -1645,6 +1723,8 @@ class PolicyRouter:
 
         ptype = provider.get("type")
         if ptype == "openai_auth" or ptype == "anthropic_auth":
+            if callable(self.handlers.get(name)):
+                return True, None
             ready_env = provider.get("readyEnv")
             if ready_env and not os.environ.get(ready_env):
                 return False, "auth_login_required"
@@ -1672,6 +1752,11 @@ class PolicyRouter:
             base = provider.get("baseUrl", "http://localhost:11434")
             if not _ollama_reachable(base):
                 return False, "ollama_unreachable"
+
+        if ptype == "openai_compatible" and str(provider.get("provider_id", "")).strip().lower() == "local_vllm":
+            base = provider.get("baseUrl", "")
+            if not _openai_compatible_reachable(base):
+                return False, "local_vllm_unreachable"
 
         return True, None
 
@@ -1813,6 +1898,26 @@ class PolicyRouter:
             return {"provider": name, "model": model_id, "reason_code": reason}
         return None
 
+
+    def _pipeline_cfg(self):
+        routing = self.policy.get("routing", {})
+        capability = routing.get("capability_router", {}) if isinstance(routing, dict) else {}
+        pipeline = capability.get("pipeline", {}) if isinstance(capability, dict) else {}
+        return pipeline if isinstance(pipeline, dict) and pipeline.get("enabled") else {}
+
+    def _pipeline_stage_for_provider(self, provider_name):
+        pipeline = self._pipeline_cfg()
+        if not pipeline:
+            return None
+        provider = str(provider_name or "")
+        if provider == str(pipeline.get("slmProvider") or ""):
+            return "slm"
+        if provider == str(pipeline.get("llmProvider") or ""):
+            return "llm"
+        if provider == str(pipeline.get("fmProvider") or ""):
+            return "fm"
+        return None
+
     def intent_status(self, intent):
         intent_cfg = self._intent_cfg(intent)
         order = _resolve_order(intent_cfg, self.policy)
@@ -1873,12 +1978,15 @@ class PolicyRouter:
             "local_context_overflow_policy": ctx_defaults.get("overflow_policy"),
             "remote_routing_enabled": self._remote_routing_enabled(),
             "remote_allowlist_task_classes": self._remote_allowlist_task_classes(),
+            "pipeline_stage": self._pipeline_stage_for_provider(chosen.get("provider") if chosen else None),
         }
 
     def execute_with_escalation(self, intent, payload, context_metadata=None, validate_fn=None):
         intent_cfg = self._intent_cfg(intent)
         attempts = 0
         last_reason = None
+        first_reason = None
+        curiosity_payload = None
         context_metadata = context_metadata or {}
         runtime_context = dict(context_metadata)
         request_id = str(runtime_context.get("request_id") or _new_request_id("rt"))
@@ -1936,6 +2044,7 @@ class PolicyRouter:
             provider_start = time.perf_counter()
             if max_per_run and self.run_counts[budget_intent] >= max_per_run:
                 last_reason = "max_calls_per_run_exhausted"
+                first_reason = first_reason or last_reason
                 _emit("router_skip", {"intent": intent, "provider": name, "reason_code": last_reason})
                 break
 
@@ -1944,12 +2053,14 @@ class PolicyRouter:
                 remote_allowed, remote_reason = self._remote_allowed_for_task_class(capability_class)
                 if not remote_allowed:
                     last_reason = remote_reason
+                    first_reason = first_reason or last_reason
                     _emit("router_skip", {"intent": intent, "provider": name, "reason_code": remote_reason})
                     continue
 
             ok, reason = self._provider_available(name, intent_cfg)
             if not ok:
                 last_reason = reason
+                first_reason = first_reason or last_reason
                 _emit("router_skip", {"intent": intent, "provider": name, "reason_code": reason})
                 continue
 
@@ -1957,11 +2068,67 @@ class PolicyRouter:
             tier = provider.get("tier", "free")
             model_id = self._provider_model(name, intent_cfg, runtime_context)
             circuit_key = _circuit_key(name, model_id)
+            provider_id = str(provider.get("provider_id", "")).strip().lower()
+
+            if (
+                provider_id == "local_vllm"
+                and callable(should_defer_local_vllm)
+                and should_defer_local_vllm()
+            ):
+                queue_entry = None
+                if callable(enqueue_router_request):
+                    try:
+                        queue_entry = enqueue_router_request(
+                            intent=intent,
+                            payload=dict(payload or {}),
+                            context_metadata=runtime_context,
+                            provider=name,
+                            model=model_id,
+                            capability_class=capability_class,
+                            request_id=request_id,
+                        )
+                    except Exception:
+                        queue_entry = None
+                _emit(
+                    "router_deferred",
+                    {
+                        "intent": intent,
+                        "provider": name,
+                        "model": model_id,
+                        "reason_code": "deferred_fishtank",
+                        "queue_entry_id": (queue_entry or {}).get("id"),
+                    },
+                )
+                return {
+                    "ok": False,
+                    "deferred": True,
+                    "provider": name,
+                    "model": model_id,
+                    "reason_code": "deferred_fishtank",
+                    "request_id": request_id,
+                    "capability_class": capability_class,
+                    "queue_entry": {
+                        "id": (queue_entry or {}).get("id"),
+                        "kind": (queue_entry or {}).get("kind"),
+                        "status": (queue_entry or {}).get("status"),
+                    }
+                    if isinstance(queue_entry, dict)
+                    else None,
+                    "error": {
+                        "type": "DEFERRED_UNTIL_WORK_MODE",
+                        "message": "Local vLLM is deferred while fishtank mode is active.",
+                        "remediation": [
+                            "switch the system back to work mode to resume local inference",
+                            "for time-sensitive market workflows, rerun the producer after work mode is enabled",
+                        ],
+                    },
+                }
 
             if tacti_controls.get("suppress_heavy"):
                 is_heavy = tier in {"paid", "auth"} or str(name).startswith(("openai_", "claude_", "grok_"))
                 if is_heavy:
                     last_reason = "tacti_cr_arousal_suppress_heavy"
+                    first_reason = first_reason or last_reason
                     _emit(
                         "router_skip",
                         {"intent": intent, "provider": name, "reason_code": last_reason},
@@ -1970,6 +2137,7 @@ class PolicyRouter:
             if tacti_controls.get("prefer_local"):
                 if str(name).startswith(("openai_", "claude_", "grok_")):
                     last_reason = "tacti_cr_valence_prefer_local"
+                    first_reason = first_reason or last_reason
                     _emit(
                         "router_skip",
                         {"intent": intent, "provider": name, "reason_code": last_reason},
@@ -1978,6 +2146,7 @@ class PolicyRouter:
 
             if self._circuit_open(circuit_key, now):
                 last_reason = "circuit_open"
+                first_reason = first_reason or last_reason
                 _emit("router_skip", {"intent": intent, "provider": name, "reason_code": "circuit_open"})
                 continue
             max_chars = self._provider_max_chars(name, model_id)
@@ -1986,6 +2155,7 @@ class PolicyRouter:
             text = _extract_text_from_payload(candidate_payload)
             if max_chars and len(text) > max_chars and not is_local_provider:
                 last_reason = "provider_input_limit_exceeded"
+                first_reason = first_reason or last_reason
                 _emit("router_skip", {"intent": intent, "provider": name, "reason_code": last_reason})
                 continue
 
@@ -2000,6 +2170,7 @@ class PolicyRouter:
                     context_needs_remote = bool(guard.get("requires_remote"))
                     context_guard_snapshot = guard.get("context", {})
                     last_reason = guard.get("reason_code", "context_too_large")
+                    first_reason = first_reason or last_reason
                     _emit("router_skip", {"intent": intent, "provider": name, "reason_code": last_reason})
                     continue
                 candidate_payload = guard.get("payload", candidate_payload)
@@ -2015,6 +2186,7 @@ class PolicyRouter:
             )
             if max_tokens_req and est_tokens > max_tokens_req:
                 last_reason = "request_token_cap_exceeded"
+                first_reason = first_reason or last_reason
                 _emit(
                     "router_skip",
                     {"intent": intent, "provider": name, "reason_code": last_reason},
@@ -2029,6 +2201,7 @@ class PolicyRouter:
             allowed, reason = self._budget_allows(budget_intent, tier, effective_tokens)
             if not allowed:
                 last_reason = reason
+                first_reason = first_reason or last_reason
                 _emit("router_skip", {"intent": intent, "provider": name, "reason_code": reason})
                 continue
 
@@ -2097,6 +2270,7 @@ class PolicyRouter:
             if not result.get("ok"):
                 reason_code = result.get("reason_code", "provider_error")
                 last_reason = reason_code
+                first_reason = first_reason or last_reason
                 cfg = self.policy.get("defaults", {}).get("circuitBreaker", {})
                 if reason_code in cfg.get("failOn", []):
                     self._record_failure(circuit_key, reason_code)
@@ -2146,6 +2320,45 @@ class PolicyRouter:
 
             text_out = result.get("text", "")
             parsed = None
+            if not str(text_out or "").strip():
+                last_reason = "response_null"
+                first_reason = first_reason or last_reason
+                try:
+                    curiosity_payload = _curiosity_route_on_failure(
+                        intent=intent,
+                        payload=payload,
+                        runtime_context=runtime_context,
+                        provider=name,
+                        model=model_id,
+                        request_id=request_id,
+                    )
+                except Exception:
+                    curiosity_payload = {"triggered": False, "leads": []}
+                _emit(
+                    "router_attempt",
+                    {
+                        "intent": intent,
+                        "provider": name,
+                        "model": model_id,
+                        "tier": tier,
+                        "reason_code": "response_null",
+                        "outcome_class": _outcome_class_from_reason("response_null"),
+                        "latency_ms": latency_ms,
+                        "attempt": attempts,
+                    },
+                )
+                _emit(
+                    "router_escalate",
+                    {
+                        "intent": intent,
+                        "from_provider": name,
+                        "reason_code": "response_null",
+                        "outcome_class": _outcome_class_from_reason("response_null"),
+                        "latency_ms": latency_ms,
+                        "attempt": attempts,
+                    },
+                )
+                continue
             if validate_fn:
                 try:
                     parsed = validate_fn(text_out)
@@ -2153,6 +2366,7 @@ class PolicyRouter:
                     parsed = None
                 if not parsed:
                     last_reason = "response_invalid"
+                    first_reason = first_reason or last_reason
                     _emit(
                         "router_attempt",
                         {
@@ -2231,23 +2445,25 @@ class PolicyRouter:
                 "reason_code": "success",
                 "request_id": request_id,
                 "capability_class": capability_class,
+                "pipeline_stage": self._pipeline_stage_for_provider(name),
                 "tacti": tacti_plan,
             }
             if meta is not None:
                 result_payload["meta"] = meta
             return result_payload
 
+        terminal_reason = first_reason or last_reason or "no_provider_available"
         _emit(
             "router_fail",
             {
                 "intent": intent,
-                "reason_code": last_reason or "no_provider_available",
-                "outcome_class": _outcome_class_from_reason(last_reason or "no_provider_available"),
+                "reason_code": terminal_reason,
+                "outcome_class": _outcome_class_from_reason(terminal_reason),
                 "attempts": attempts,
             },
         )
         if context_needs_remote:
-            reason = str(last_reason or "remote_unavailable_after_context_overflow")
+            reason = str(first_reason or last_reason or "remote_unavailable_after_context_overflow")
             remediation = [
                 "reduce input size or split request into smaller steps",
                 "confirm policy defaults.local_context_overflow_policy is `compress` or `spill_remote`",
@@ -2275,8 +2491,9 @@ class PolicyRouter:
             }
         return {
             "ok": False,
-            "reason_code": last_reason or "no_provider_available",
+            "reason_code": terminal_reason,
             "attempts": attempts,
             "request_id": request_id,
             "capability_class": capability_class,
+            **({"curiosity": curiosity_payload} if curiosity_payload is not None else {}),
         }

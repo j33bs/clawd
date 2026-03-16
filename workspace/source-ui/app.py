@@ -9,6 +9,8 @@ import os
 import sys
 import argparse
 import logging
+import subprocess
+import threading
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Optional
@@ -22,6 +24,95 @@ try:
 except Exception:  # pragma: no cover
     trails_heatmap_payload = None
 
+try:
+    from api.portfolio import portfolio_payload
+except Exception:  # pragma: no cover
+    portfolio_payload = None
+
+try:
+    from api.task_store import (
+        archive_task as task_store_archive_task,
+        create_task as task_store_create_task,
+        delete_task as task_store_delete_task,
+        load_all_tasks as task_store_load_all_tasks,
+        load_archived_tasks as task_store_load_archived_tasks,
+        load_runtime_tasks as task_store_load_runtime_tasks,
+        load_tasks as task_store_load_tasks,
+        update_task as task_store_update_task,
+    )
+except Exception:  # pragma: no cover
+    task_store_archive_task = None
+    task_store_create_task = None
+    task_store_delete_task = None
+    task_store_load_all_tasks = None
+    task_store_load_archived_tasks = None
+    task_store_load_runtime_tasks = None
+    task_store_load_tasks = None
+    task_store_update_task = None
+
+try:
+    from api.user_inference import (
+        load_user_inferences as user_inference_load_all,
+        update_user_inference as user_inference_update,
+    )
+except Exception:  # pragma: no cover
+    user_inference_load_all = None
+    user_inference_update = None
+
+try:
+    from api.display_mode import (
+        load_display_mode_status as display_mode_load_status,
+        toggle_display_mode as display_mode_toggle,
+    )
+except Exception:  # pragma: no cover
+    display_mode_load_status = None
+    display_mode_toggle = None
+
+try:
+    from api.research_promotions import (
+        get_research_item as task_store_get_research_item,
+        list_research_items as task_store_list_research_items,
+        promote_research_item as task_store_promote_research_item,
+    )
+except Exception:  # pragma: no cover
+    task_store_get_research_item = None
+    task_store_list_research_items = None
+    task_store_promote_research_item = None
+
+try:
+    from api.relational_state import load_relational_state
+except Exception:  # pragma: no cover
+    load_relational_state = None
+
+try:
+    from api.deliberation_store import (
+        add_contribution as deliberation_add_contribution,
+        add_synthesis as deliberation_add_synthesis,
+        create_deliberation as deliberation_create,
+        get_deliberation as deliberation_get,
+        list_deliberations as deliberation_list,
+    )
+except Exception:  # pragma: no cover
+    deliberation_add_contribution = None
+    deliberation_add_synthesis = None
+    deliberation_create = None
+    deliberation_get = None
+    deliberation_list = None
+
+try:
+    from api.weekly_evolution import (
+        generate_weekly_evolution,
+        load_weekly_evolution_summary,
+    )
+except Exception:  # pragma: no cover
+    generate_weekly_evolution = None
+    load_weekly_evolution_summary = None
+
+try:
+    from api.boundary_state import build_command_receipt_boundary
+except Exception:  # pragma: no cover
+    build_command_receipt_boundary = None
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -29,10 +120,71 @@ logging.basicConfig(
 )
 logger = logging.getLogger('source-ui')
 
-SOURCE_MISSION_PATH = Path(__file__).with_name('source_mission.json')
-SOURCE_STATE_DIR = Path(__file__).with_name('state')
-BACKLOG_INGEST_STATE_PATH = SOURCE_STATE_DIR / 'backlog_ingest.json'
-MISSION_EVENT_LIMIT = 200
+SOURCE_UI_ROOT = Path(__file__).resolve().parent
+STATE_ROOT = SOURCE_UI_ROOT / "state"
+COMMAND_HISTORY_PATH = STATE_ROOT / "command_history.json"
+COMMAND_RECEIPTS_PATH = STATE_ROOT / "command_receipts.json"
+AGENT_CONTROLS_PATH = STATE_ROOT / "agent_controls.json"
+
+
+def source_contract_payload() -> dict[str, Any]:
+    return {
+        "name": "source-ui",
+        "statement": "Source UI is the operator surface and runtime mirror for Source.",
+        "principles": [
+            "Read structured APIs rather than scraping the DOM.",
+            "Treat runtime tasks as read-only observations unless you own the source session.",
+            "Write canonical editable tasks through /api/tasks only.",
+            "Use /api/runtime-tasks for live session visibility across nodes.",
+        ],
+        "endpoints": {
+            "status": "/api/status",
+            "portfolio": "/api/portfolio",
+            "world_better": "/api/world-better",
+            "tasks": "/api/tasks",
+            "runtime_tasks": "/api/runtime-tasks",
+            "command_history": "/api/commands/history",
+            "command_receipts": "/api/commands/receipts",
+        },
+        "task_contract": {
+            "editable_local_tasks": {
+                "origin": "dashboard",
+                "read_only": False,
+            },
+            "runtime_tasks": {
+                "origins": ["runtime-session", "runtime-subagent", "runtime-remote"],
+                "read_only": True,
+                "fields": ["node_id", "node_label", "runtime_source", "runtime_source_label", "session_id"],
+            },
+        },
+        "cross_node": {
+            "expected_remote_endpoint": "http://<tailscale-ip>:18990/api/runtime-tasks",
+            "discovery_file": "workspace/source-ui/config/runtime_task_sources.json",
+        },
+    }
+
+
+def _read_json_file(path: Path) -> Any | None:
+    if not path.exists() or not path.is_file():
+        return None
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+
+
+def _write_json_atomic(path: Path, payload: Any) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = path.with_suffix(path.suffix + ".tmp")
+    tmp_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    tmp_path.replace(path)
+
+
+def _decorate_command_receipt(receipt: dict[str, Any]) -> dict[str, Any]:
+    row = dict(receipt)
+    if build_command_receipt_boundary is not None:
+        row["boundary"] = build_command_receipt_boundary(row)
+    return row
 
 
 # ============================================================================
@@ -83,21 +235,15 @@ class State:
         self.health_metrics: dict = {}
         self.components: list[dict] = []
         self.notifications: list[dict] = []
-        self.handoffs: list[dict] = []
         self.logs: list[dict] = []
+        self.command_events: list[dict] = self._load_command_events()
+        self.command_receipts: list[dict] = self._load_command_receipts()
+        self.agent_controls: dict[str, dict[str, Any]] = self._load_agent_controls()
+        self.command_lock = threading.Lock()
         self.gateway_connected: bool = False
         self.last_update: Optional[datetime] = None
-        self.source_mission_mtime_ns: Optional[int] = None
         
     def to_dict(self) -> dict:
-        source_exists = SOURCE_MISSION_PATH.exists()
-        source_updated_at = None
-        if source_exists:
-            source_payload = _read_json(SOURCE_MISSION_PATH)
-            if isinstance(source_payload, dict):
-                mission = source_payload.get('source_mission')
-                if isinstance(mission, dict):
-                    source_updated_at = mission.get('updated_at')
         return {
             'agents': self.agents,
             'tasks': self.tasks,
@@ -105,215 +251,48 @@ class State:
             'health_metrics': self.health_metrics,
             'components': self.components,
             'notifications': self.notifications,
-            'handoffs': self.handoffs,
             'logs': self.logs,
+            'command_events': self.command_events,
+            'command_receipts': self.command_receipts,
+            'agent_controls': self.agent_controls,
             'gateway_connected': self.gateway_connected,
-            'last_update': self.last_update.isoformat() if self.last_update else None,
-            'truth': {
-                'source': 'source_mission' if source_exists else 'demo_seed',
-                'source_mission_path': str(SOURCE_MISSION_PATH),
-                'source_mission_updated_at': source_updated_at,
-            },
+            'last_update': self.last_update.isoformat() if self.last_update else None
         }
 
+    def _load_command_events(self) -> list[dict]:
+        payload = _read_json_file(COMMAND_HISTORY_PATH)
+        if not isinstance(payload, list):
+            return []
+        rows: list[dict] = []
+        for item in payload[:20]:
+            if isinstance(item, dict):
+                rows.append(item)
+        return rows
 
-def _read_json(path: Path) -> Any:
-    if not path.exists() or not path.is_file():
-        return None
-    try:
-        return json.loads(path.read_text(encoding='utf-8'))
-    except Exception:
-        logger.exception("Failed to parse %s", path)
-        return None
+    def persist_command_events(self) -> None:
+        _write_json_atomic(COMMAND_HISTORY_PATH, self.command_events[:20])
 
+    def _load_command_receipts(self) -> list[dict]:
+        payload = _read_json_file(COMMAND_RECEIPTS_PATH)
+        if not isinstance(payload, list):
+            return []
+        rows: list[dict] = []
+        for item in payload[:50]:
+            if isinstance(item, dict):
+                rows.append(_decorate_command_receipt(item))
+        return rows
 
-def _next_numeric_id(items: list[dict], *, floor: int = 0) -> int:
-    current = floor
-    for item in items:
-        try:
-            current = max(current, int(item.get('id')))
-        except Exception:
-            continue
-    return current + 1
+    def persist_command_receipts(self) -> None:
+        _write_json_atomic(COMMAND_RECEIPTS_PATH, self.command_receipts[:50])
 
+    def _load_agent_controls(self) -> dict[str, dict[str, Any]]:
+        payload = _read_json_file(AGENT_CONTROLS_PATH)
+        if not isinstance(payload, dict):
+            return {}
+        return {str(key): value for key, value in payload.items() if isinstance(value, dict)}
 
-def _append_notification(
-    source_mission: dict[str, Any],
-    *,
-    event_id: str,
-    kind: str,
-    title: str,
-    body: str,
-    timestamp: str,
-    metadata: Optional[dict[str, Any]] = None,
-) -> bool:
-    notifications = list(source_mission.get('notifications') or [])
-    if any(str(item.get('event_id') or '') == event_id for item in notifications):
-        return False
-    entry = {
-        'id': _next_numeric_id(notifications, floor=9000),
-        'event_id': event_id,
-        'type': kind,
-        'title': title,
-        'body': body,
-        'timestamp': timestamp,
-        'read': False,
-    }
-    if metadata:
-        entry['metadata'] = metadata
-    source_mission['notifications'] = [entry, *notifications][:MISSION_EVENT_LIMIT]
-    return True
-
-
-def _append_log(
-    source_mission: dict[str, Any],
-    *,
-    event_id: str,
-    level: str,
-    message: str,
-    timestamp: str,
-    metadata: Optional[dict[str, Any]] = None,
-) -> bool:
-    logs = list(source_mission.get('logs') or [])
-    if any(str(item.get('event_id') or '') == event_id for item in logs):
-        return False
-    entry = {
-        'event_id': event_id,
-        'level': level,
-        'message': message,
-        'timestamp': timestamp,
-    }
-    if metadata:
-        entry['metadata'] = metadata
-    source_mission['logs'] = [entry, *logs][:MISSION_EVENT_LIMIT]
-    return True
-
-
-def _append_handoff(source_mission: dict[str, Any], handoff: dict[str, Any]) -> bool:
-    handoffs = list(source_mission.get('handoffs') or [])
-    handoff_id = str(handoff.get('id') or '').strip()
-    if handoff_id and any(str(item.get('id') or '') == handoff_id for item in handoffs):
-        return False
-    source_mission['handoffs'] = [handoff, *handoffs][:MISSION_EVENT_LIMIT]
-    return True
-
-
-def _backlog_event_id(task_id: str, kind: str, timestamp: str, seen_ts: Any) -> str:
-    stamp = str(timestamp or '').strip()
-    if not stamp:
-        try:
-            stamp = str(int(float(seen_ts or 0)))
-        except Exception:
-            stamp = '0'
-    return f"backlog:{task_id}:{kind}:{stamp}"
-
-
-def reconcile_backlog_state(
-    source_mission: dict[str, Any],
-    backlog_state: Any,
-) -> tuple[dict[str, Any], bool]:
-    if not isinstance(source_mission, dict) or not isinstance(backlog_state, dict):
-        return source_mission, False
-
-    tasks = [dict(task) for task in source_mission.get('tasks', []) if isinstance(task, dict)]
-    task_by_id = {str(task.get('id') or '').strip(): task for task in tasks if str(task.get('id') or '').strip()}
-
-    mission = dict(source_mission)
-    mission['tasks'] = tasks
-    mission['notifications'] = list(source_mission.get('notifications') or [])
-    mission['logs'] = list(source_mission.get('logs') or [])
-    mission['handoffs'] = list(source_mission.get('handoffs') or [])
-
-    changed = False
-    for assignee, entry in backlog_state.items():
-        if assignee == '_history' or not isinstance(entry, dict):
-            continue
-
-        task_id = str(entry.get('task_id') or '').strip()
-        kind = str(entry.get('outcome_kind') or '').strip().lower()
-        if not task_id or kind not in {'result', 'blocker'}:
-            continue
-
-        task = task_by_id.get(task_id)
-        if not isinstance(task, dict):
-            continue
-
-        timestamp = str(entry.get('outcome_at') or '').strip() or datetime.now().isoformat()
-        event_id = _backlog_event_id(task_id, kind, timestamp, entry.get('outcome_seen_ts'))
-        if str(task.get('last_outcome_event_id') or '').strip() == event_id:
-            continue
-
-        summary = str(entry.get('outcome_text') or '').strip()
-        runtime_agent = str(entry.get('runtime_agent') or '').strip()
-        before_status = str(task.get('status') or '').strip()
-
-        if kind == 'result':
-            task['status'] = 'review'
-            task['progress'] = max(int(task.get('progress') or 0), 90)
-            task['status_reason'] = summary or 'Runtime work returned for review.'
-        else:
-            task['status'] = 'backlog'
-            task['status_reason'] = f"Blocked: {summary}" if summary else 'Blocked pending intervention.'
-
-        task['updated_at'] = timestamp
-        task['last_outcome_kind'] = kind
-        task['last_outcome_summary'] = summary
-        task['last_outcome_at'] = timestamp
-        task['last_outcome_runtime_agent'] = runtime_agent
-        task['last_outcome_event_id'] = event_id
-
-        title = str(task.get('title') or task_id)
-        kind_title = 'Work returned' if kind == 'result' else 'Blocker recorded'
-        body = (
-            f"{assignee} returned {title} for review."
-            if kind == 'result'
-            else f"{assignee} reported a blocker on {title}: {summary or 'see mission state'}"
-        )
-        log_message = (
-            f"{title} moved {before_status or 'unknown'} -> {task['status']} via backlog outcome ({kind})."
-        )
-        handoff = {
-            'id': event_id,
-            'task_id': task_id,
-            'mission_task_id': str(task.get('mission_task_id') or '').strip(),
-            'task_title': title,
-            'from_agent': assignee,
-            'to_agent': 'source-ui',
-            'kind': kind,
-            'status': 'returned',
-            'summary': summary or kind_title,
-            'timestamp': timestamp,
-            'runtime_agent': runtime_agent,
-            'source': 'backlog_ingest',
-        }
-        metadata = {
-            'task_id': task_id,
-            'mission_task_id': handoff['mission_task_id'],
-            'runtime_agent': runtime_agent,
-            'source': 'backlog_ingest',
-        }
-
-        _append_notification(
-            mission,
-            event_id=event_id,
-            kind='success' if kind == 'result' else 'warning',
-            title=kind_title,
-            body=body,
-            timestamp=timestamp,
-            metadata=metadata,
-        )
-        _append_log(
-            mission,
-            event_id=event_id,
-            level='info' if kind == 'result' else 'warn',
-            message=log_message,
-            timestamp=timestamp,
-            metadata=metadata,
-        )
-        _append_handoff(mission, handoff)
-        changed = True
-
-    return mission, changed
+    def persist_agent_controls(self) -> None:
+        _write_json_atomic(AGENT_CONTROLS_PATH, self.agent_controls)
 
 
 # ============================================================================
@@ -322,193 +301,6 @@ def reconcile_backlog_state(
 
 class DemoDataGenerator:
     """Generate demo data."""
-
-    PRIORITY_ORDER = {'high': 0, 'medium': 1, 'low': 2}
-
-    @staticmethod
-    def default_definition_of_done(task: dict, artifact_path: str) -> str:
-        description = str(task.get('description') or task.get('title') or 'Task').strip().rstrip('.')
-        if artifact_path:
-            return f"{description} and the canonical artifact at {artifact_path} is updated."
-        return f"{description} is complete and reflected in canonical mission state."
-
-    @staticmethod
-    def default_status_reason(task: dict) -> str:
-        status = str(task.get('status') or 'backlog').strip()
-        reasons = {
-            'backlog': 'Queued in Source backlog.',
-            'in_progress': 'Active lane work in progress.',
-            'review': 'Awaiting review or follow-through.',
-            'done': 'Completed and recorded.',
-        }
-        return reasons.get(status, 'Tracked in canonical mission state.')
-
-    @classmethod
-    def hydrate_task_metadata(cls, task: dict, *, index: int) -> tuple[dict, bool]:
-        hydrated = dict(task)
-        changed = False
-        artifact_path = str(hydrated.get('artifact_path') or '').strip()
-        task_id = str(hydrated.get('id') or '').strip() or str(index + 1)
-        defaults = {
-            'origin': 'source_mission_config',
-            'mission_task_id': f"source-{task_id}",
-            'sequence': index + 1,
-            'definition_of_done': cls.default_definition_of_done(hydrated, artifact_path),
-            'status_reason': cls.default_status_reason(hydrated),
-        }
-        for key, value in defaults.items():
-            if hydrated.get(key) in {None, ''}:
-                hydrated[key] = value
-                changed = True
-        return hydrated, changed
-
-    @staticmethod
-    def normalize_tasks(tasks: list[dict]) -> tuple[list[dict], bool]:
-        """Clamp progress and auto-complete tasks that reached 100%."""
-        normalized: list[dict] = []
-        changed = False
-
-        for index, original_task in enumerate(tasks):
-            task, task_changed = DemoDataGenerator.hydrate_task_metadata(dict(original_task), index=index)
-            progress = task.get('progress')
-            progress_value: Optional[int] = None
-
-            if progress is not None:
-                try:
-                    progress_value = max(0, min(100, int(progress)))
-                except (TypeError, ValueError):
-                    progress_value = None
-                else:
-                    task['progress'] = progress_value
-
-            if task.get('status') == 'done':
-                if task.get('progress') != 100:
-                    task['progress'] = 100
-                task.setdefault('completed_at', datetime.now().isoformat())
-            elif progress_value is not None and progress_value >= 100:
-                task['status'] = 'done'
-                task['progress'] = 100
-                task.setdefault('completed_at', datetime.now().isoformat())
-
-            if task_changed or task != original_task:
-                changed = True
-            normalized.append(task)
-
-        return normalized, changed
-
-    @classmethod
-    def auto_start_backlog_tasks(cls, agents: list[dict], tasks: list[dict]) -> tuple[list[dict], bool]:
-        """Move the next designated backlog task to in_progress for idle agents."""
-        changed = False
-        tasks_by_agent: dict[str, list[dict]] = {}
-
-        for task in tasks:
-            assignee = task.get('assignee')
-            if assignee:
-                tasks_by_agent.setdefault(str(assignee), []).append(task)
-
-        def sort_key(task: dict) -> tuple:
-            created_at = task.get('created_at') or task.get('createdAt') or ''
-            return (
-                cls.PRIORITY_ORDER.get(task.get('priority'), 99),
-                str(created_at),
-                int(task.get('id', 0)),
-            )
-
-        for agent in agents:
-            agent_id = str(agent.get('id', ''))
-            if not agent_id:
-                continue
-
-            assigned_tasks = tasks_by_agent.get(agent_id, [])
-            has_active_task = any(task.get('status') == 'in_progress' for task in assigned_tasks)
-            if has_active_task:
-                continue
-
-            backlog_tasks = sorted(
-                (
-                    task
-                    for task in assigned_tasks
-                    if task.get('status') == 'backlog'
-                    and str(task.get('origin') or '').strip() != 'source_mission_config'
-                ),
-                key=sort_key,
-            )
-            if not backlog_tasks:
-                continue
-
-            next_task = backlog_tasks[0]
-            next_task['status'] = 'in_progress'
-            next_task.setdefault('started_at', datetime.now().isoformat())
-            next_task.setdefault('progress', 0)
-            changed = True
-
-        return tasks, changed
-
-    @staticmethod
-    def load_source_mission() -> Optional[dict[str, Any]]:
-        if not SOURCE_MISSION_PATH.exists():
-            return None
-        payload = _read_json(SOURCE_MISSION_PATH)
-        if not isinstance(payload, dict):
-            return None
-        source_mission = payload.get('source_mission')
-        return source_mission if isinstance(source_mission, dict) else None
-
-    @staticmethod
-    def sync_agents_with_tasks(agents: list[dict], tasks: list[dict]) -> list[dict]:
-        synced_agents: list[dict] = []
-        for agent in agents:
-            agent_copy = dict(agent)
-            assigned_tasks = [task for task in tasks if task.get('assignee') == agent_copy.get('id')]
-            active_task = next((task for task in assigned_tasks if task.get('status') == 'in_progress'), None)
-            completed_count = sum(1 for task in assigned_tasks if task.get('status') == 'done')
-            base_completed = int(agent_copy.get('base_tasks_completed', agent_copy.get('tasks_completed', 0)))
-
-            agent_copy['tasks_completed'] = base_completed + completed_count
-            agent_copy['active_task_count'] = sum(
-                1 for task in assigned_tasks if task.get('status') in {'backlog', 'in_progress', 'review'}
-            )
-
-            if active_task:
-                agent_copy['status'] = 'working'
-                agent_copy['task'] = active_task.get('title', 'Working mission task')
-                agent_copy['progress'] = int(active_task.get('progress', 15))
-            else:
-                agent_copy['status'] = 'idle'
-                agent_copy.pop('task', None)
-                agent_copy.pop('progress', None)
-
-            synced_agents.append(agent_copy)
-
-        return synced_agents
-
-    @classmethod
-    def mission_seed(cls) -> Optional[dict[str, Any]]:
-        source_mission = cls.load_source_mission()
-        if not source_mission:
-            return None
-
-        source_mission, backlog_changed = reconcile_backlog_state(
-            source_mission,
-            _read_json(BACKLOG_INGEST_STATE_PATH),
-        )
-        mission_agents = source_mission.get('agents', [])
-        tasks, tasks_normalized = cls.normalize_tasks(source_mission.get('tasks', []))
-        tasks, tasks_auto_started = cls.auto_start_backlog_tasks(mission_agents, tasks)
-        agents = cls.sync_agents_with_tasks(mission_agents, tasks)
-        logs = source_mission.get('logs') or cls.generate_logs()
-        notifications = source_mission.get('notifications', [])
-        handoffs = source_mission.get('handoffs', [])
-
-        return {
-            'agents': agents,
-            'tasks': tasks,
-            'notifications': notifications,
-            'handoffs': handoffs,
-            'logs': logs,
-            'tasks_reconciled': tasks_normalized or tasks_auto_started or backlog_changed,
-        }
     
     @staticmethod
     def generate_agents() -> list[dict]:
@@ -585,26 +377,16 @@ class SourceUIHandler(SimpleHTTPRequestHandler):
     _config = None
     
     def __init__(self, *args, **kwargs):
-        # Initialize state once on first request.
-        if self._state and not self._state.agents and not self._state.tasks:
-            mission_seed = DemoDataGenerator.mission_seed()
-            if mission_seed:
-                self._state.agents = mission_seed['agents']
-                self._state.tasks = mission_seed['tasks']
-                self._state.notifications = mission_seed['notifications']
-                self._state.handoffs = mission_seed['handoffs']
-                self._state.logs = mission_seed['logs']
-            else:
-                self._state.agents = DemoDataGenerator.generate_agents()
-                self._state.tasks = DemoDataGenerator.generate_tasks()
-                self._state.logs = DemoDataGenerator.generate_logs()
-            self._state.scheduled_jobs = DemoDataGenerator.generate_scheduled_jobs()
-            self._state.components = DemoDataGenerator.generate_components()
-            self._state.health_metrics = DemoDataGenerator.generate_health_metrics()
-            self._state.last_update = datetime.now()
-            if mission_seed:
-                self.persist_source_mission()
-
+        self.demo = DemoDataGenerator()
+        # Initialize demo data
+        if self._state and not self._state.agents:
+            self._state.agents = self.demo.generate_agents()
+            self._state.tasks = self.demo.generate_tasks()
+            self._state.scheduled_jobs = self.demo.generate_scheduled_jobs()
+            self._state.components = self.demo.generate_components()
+            self._state.logs = self.demo.generate_logs()
+            self._state.health_metrics = self.demo.generate_health_metrics()
+        
         super().__init__(*args, **kwargs)
     
     @property
@@ -614,35 +396,6 @@ class SourceUIHandler(SimpleHTTPRequestHandler):
     @property
     def config(self):
         return self._config
-
-    def refresh_state_from_source_mission(self, force: bool = False) -> bool:
-        """Reload state if the canonical mission file changed on disk."""
-        if not SOURCE_MISSION_PATH.exists():
-            return False
-
-        try:
-            mission_mtime_ns = SOURCE_MISSION_PATH.stat().st_mtime_ns
-        except OSError:
-            logger.exception("Failed to stat %s", SOURCE_MISSION_PATH)
-            return False
-
-        if not force and self.state.source_mission_mtime_ns == mission_mtime_ns:
-            return False
-
-        mission_seed = DemoDataGenerator.mission_seed()
-        if not mission_seed:
-            return False
-
-        self.state.agents = mission_seed['agents']
-        self.state.tasks = mission_seed['tasks']
-        self.state.notifications = mission_seed['notifications']
-        self.state.handoffs = mission_seed['handoffs']
-        self.state.logs = mission_seed['logs']
-        self.state.last_update = datetime.now()
-        self.state.source_mission_mtime_ns = mission_mtime_ns
-        if mission_seed.get('tasks_reconciled'):
-            self.persist_source_mission()
-        return True
     
     def do_GET(self):
         parsed = urlparse(self.path)
@@ -670,20 +423,54 @@ class SourceUIHandler(SimpleHTTPRequestHandler):
         
         if parsed.path == '/api/tasks':
             self.create_task()
+        elif parsed.path.startswith('/api/agents/'):
+            parts = parsed.path.split('/')
+            if len(parts) >= 5:
+                self.control_agent(parts[3], parts[4])
+            else:
+                self.send_error(404)
         elif parsed.path == '/api/refresh':
             self.refresh_data()
         elif parsed.path == '/api/health/check':
             self.run_health_check()
         elif parsed.path == '/api/gateway/restart':
             self.restart_gateway()
+        elif parsed.path == '/api/commands':
+            self.execute_command_deck()
+        elif parsed.path == '/api/display-mode/toggle':
+            self.toggle_display_mode_handler()
+        elif parsed.path == '/api/research/promote':
+            self.promote_research_handler()
+        elif parsed.path == '/api/deliberations':
+            self.create_deliberation_handler()
+        elif parsed.path.startswith('/api/deliberations/') and parsed.path.endswith('/contributions'):
+            deliberation_id = parsed.path.split('/')[-2]
+            self.add_deliberation_contribution_handler(deliberation_id)
+        elif parsed.path.startswith('/api/deliberations/') and parsed.path.endswith('/synthesis'):
+            deliberation_id = parsed.path.split('/')[-2]
+            self.add_deliberation_synthesis_handler(deliberation_id)
+        elif parsed.path == '/api/evolution/generate':
+            self.generate_weekly_evolution_handler()
+        elif parsed.path.startswith('/api/tasks/') and parsed.path.endswith('/review'):
+            task_id = parsed.path.split('/')[-2]
+            self.review_task_handler(task_id)
+        elif parsed.path.startswith('/api/tasks/') and parsed.path.endswith('/archive'):
+            task_id = parsed.path.split('/')[-2]
+            self.archive_task_handler(task_id)
         else:
             self.send_error(404)
     
     def do_PATCH(self):
         parsed = urlparse(self.path)
-        if parsed.path.startswith('/api/tasks/'):
+        if parsed.path.startswith('/api/user-inferences/'):
+            inference_id = parsed.path.split('/')[-1]
+            self.update_user_inference_handler(inference_id)
+        elif parsed.path.startswith('/api/tasks/'):
             task_id = parsed.path.split('/')[-1]
             self.update_task(task_id)
+        elif parsed.path.startswith('/api/symbiote/enhancement/'):
+            eid = parsed.path.split('/')[-1]
+            self.update_symbiote_enhancement(eid)
         else:
             self.send_error(404)
     
@@ -698,24 +485,93 @@ class SourceUIHandler(SimpleHTTPRequestHandler):
     def handle_api(self, parsed):
         """Handle API requests."""
         path = parsed.path[5:]  # Remove /api/
-        self.refresh_state_from_source_mission()
         
         if path == 'status':
-            data = self.state.to_dict()
-        elif path == 'portfolio':
-            data = {'source_mission': self.current_source_mission()}
+            self.state.agents = self._load_agents()
+            self.state.tasks = self._load_tasks()
+            self.state.health_metrics = self._load_live_health_metrics()
+            self.state.components = self._load_live_components()
+            self.state.last_update = datetime.now()
+            self.state.gateway_connected = any(
+                str(component.get("id")) == "gateway" and str(component.get("status")) == "healthy"
+                for component in self.state.components
+            )
+            data = {
+                'status': 'ok',
+                'agents': self.state.agents,
+                'tasks': self.state.tasks,
+                'scheduled_jobs': self.state.scheduled_jobs,
+                'health_metrics': self.state.health_metrics,
+                'components': self.state.components,
+                'notifications': self.state.notifications,
+                'logs': self.state.logs,
+                'recent_commands': self.state.command_events[:10],
+                'recent_receipts': self.state.command_receipts[:10],
+                'gateway_connected': self.state.gateway_connected,
+                'last_update': self.state.last_update.isoformat() if self.state.last_update else None,
+            }
         elif path == 'agents':
-            data = self.state.agents
+            data = self._load_agents()
+        elif path.startswith('agents/'):
+            agent_id = path.split('/')[-1]
+            data = next((row for row in self._load_agents() if str(row.get('id')) == agent_id), {'error': 'Not found'})
         elif path == 'tasks':
-            data = self.state.tasks
-        elif path == 'handoffs':
-            data = self.state.handoffs
+            data = self._load_tasks()
+        elif path == 'runtime-tasks':
+            data = self._load_runtime_tasks()
         elif path == 'schedule':
             data = self.state.scheduled_jobs
         elif path == 'health':
             data = self.state.health_metrics
         elif path == 'logs':
             data = self.state.logs
+        elif path == 'commands/history':
+            data = self.state.command_events[:20]
+        elif path == 'commands/receipts':
+            data = self.state.command_receipts[:20]
+        elif path == 'portfolio':
+            if portfolio_payload is None:
+                data = {'error': 'portfolio_unavailable'}
+            else:
+                data = portfolio_payload()
+        elif path == 'world-better':
+            if portfolio_payload is None:
+                data = {'error': 'portfolio_unavailable'}
+            else:
+                data = (portfolio_payload() or {}).get('world_better', {})
+        elif path == 'display-mode':
+            data = self.get_display_mode_data()
+        elif path == 'research/items':
+            data = self.get_research_items_data()
+        elif path.startswith('research/items/'):
+            research_id = path.partition('research/items/')[2]
+            if task_store_get_research_item is None:
+                data = {'error': 'research_unavailable'}
+            else:
+                data = task_store_get_research_item(research_id, tasks=self._load_tasks()) or {'error': 'Not found'}
+        elif path == 'user-inferences':
+            if user_inference_load_all is None:
+                data = {'error': 'user_inference_unavailable'}
+            else:
+                data = user_inference_load_all()
+        elif path == 'deliberations':
+            if deliberation_list is None:
+                data = {'error': 'deliberation_unavailable'}
+            else:
+                data = deliberation_list(limit=8)
+        elif path.startswith('deliberations/'):
+            deliberation_id = path.partition('deliberations/')[2]
+            if deliberation_get is None:
+                data = {'error': 'deliberation_unavailable'}
+            else:
+                data = deliberation_get(deliberation_id) or {'error': 'Not found'}
+        elif path == 'evolution/latest':
+            if load_weekly_evolution_summary is None:
+                data = {'error': 'weekly_evolution_unavailable'}
+            else:
+                data = load_weekly_evolution_summary()
+        elif path == 'source-contract':
+            data = source_contract_payload()
         elif path == 'trails/heatmap':
             if trails_heatmap_payload is None:
                 data = {'error': 'trails_heatmap_unavailable'}
@@ -733,37 +589,43 @@ class SourceUIHandler(SimpleHTTPRequestHandler):
                 data = {'valence': 0.0, 'agent': agent}
         elif path == 'symbiote':
             data = self.symbiote_data()
+        elif path == 'tasks/archived':
+            data = self.get_archived_tasks_data()
+        elif path == 'source/phi':
+            data = self._source_phi_data()
+        elif path == 'source/coordination-feed':
+            data = self._source_coordination_feed()
+        elif path == 'source/relational':
+            data = self._source_relational_data()
         else:
             data = {'error': 'Not found'}
         
         self.send_json(data)
+
+    def _read_json_body(self) -> dict[str, Any]:
+        try:
+            length = int(self.headers.get('Content-Length', 0))
+        except Exception:
+            length = 0
+        if length <= 0:
+            return {}
+        try:
+            payload = json.loads(self.rfile.read(length))
+        except Exception:
+            return {}
+        return payload if isinstance(payload, dict) else {}
     
     def create_task(self):
         """Create a new task."""
         try:
-            length = int(self.headers.get('Content-Length', 0))
-            data = json.loads(self.rfile.read(length)) if length > 0 else {}
+            data = self._read_json_body()
 
-            sequence = max((int(task.get('sequence') or 0) for task in self.state.tasks), default=0) + 1
-            task = {
-                'id': int(datetime.now().timestamp() * 1000),
-                'created_at': datetime.now().isoformat(),
-                'sequence': sequence,
-                'origin': 'source_ui_api',
-                **data
-            }
-            if 'status' not in task:
-                task['status'] = 'backlog'
-            task, _ = DemoDataGenerator.hydrate_task_metadata(task, index=len(self.state.tasks))
+            if task_store_create_task is None:
+                raise RuntimeError('task_store_unavailable')
 
-            self.state.tasks.append(task)
-            self.state.tasks, _ = DemoDataGenerator.normalize_tasks(self.state.tasks)
-            self.state.tasks, _ = DemoDataGenerator.auto_start_backlog_tasks(self.state.agents, self.state.tasks)
-            self.state.agents = DemoDataGenerator.sync_agents_with_tasks(self.state.agents, self.state.tasks)
-            self.record_task_mutation('created', task)
-            self.persist_source_mission()
-            created_task = next((item for item in self.state.tasks if item.get('id') == task['id']), task)
-            self.send_json(created_task)
+            task = task_store_create_task(data)
+            self.state.tasks = self._load_tasks()
+            self.send_json(task)
         except Exception as e:
             self.send_json({'error': str(e)}, status=400)
     
@@ -773,202 +635,731 @@ class SourceUIHandler(SimpleHTTPRequestHandler):
             length = int(self.headers.get('Content-Length', 0))
             data = json.loads(self.rfile.read(length)) if length > 0 else {}
 
-            for task in self.state.tasks:
-                if str(task['id']) == task_id:
-                    previous_task = dict(task)
-                    task.update(data)
-                    self.state.tasks, _ = DemoDataGenerator.normalize_tasks(self.state.tasks)
-                    self.state.tasks, _ = DemoDataGenerator.auto_start_backlog_tasks(self.state.agents, self.state.tasks)
-                    self.state.agents = DemoDataGenerator.sync_agents_with_tasks(self.state.agents, self.state.tasks)
-                    updated_task = next((item for item in self.state.tasks if str(item.get('id')) == task_id), task)
-                    self.record_task_mutation('updated', updated_task, previous_task=previous_task)
-                    self.persist_source_mission()
-                    self.send_json(updated_task)
-                    return
-            
-            self.send_json({'error': 'Task not found'}, status=404)
+            if task_store_update_task is None:
+                raise RuntimeError('task_store_unavailable')
+
+            task = task_store_update_task(task_id, data)
+            if task is None:
+                self.send_json({'error': 'Task not found'}, status=404)
+                return
+            self.state.tasks = self._load_tasks()
+            self.send_json(task)
+        except Exception as e:
+            self.send_json({'error': str(e)}, status=400)
+
+    def update_user_inference_handler(self, inference_id):
+        """Update review state for a durable user inference."""
+        try:
+            length = int(self.headers.get('Content-Length', 0))
+            data = json.loads(self.rfile.read(length)) if length > 0 else {}
+
+            if user_inference_update is None:
+                raise RuntimeError('user_inference_unavailable')
+
+            row = user_inference_update(inference_id, data, reviewer='source-ui')
+            if row is None:
+                self.send_json({'error': 'Inference not found'}, status=404)
+                return
+            self.state.tasks = self._load_tasks()
+            self.send_json(row)
         except Exception as e:
             self.send_json({'error': str(e)}, status=400)
     
     def delete_task(self, task_id):
         """Delete a task."""
-        deleted_task = next((dict(task) for task in self.state.tasks if str(task['id']) == task_id), None)
-        self.state.tasks = [t for t in self.state.tasks if str(t['id']) != task_id]
-        self.state.agents = DemoDataGenerator.sync_agents_with_tasks(self.state.agents, self.state.tasks)
-        if deleted_task:
-            self.record_task_mutation('deleted', deleted_task)
-        self.persist_source_mission()
+        if task_store_delete_task is None:
+            self.send_json({'error': 'task_store_unavailable'}, status=400)
+            return
+        deleted = task_store_delete_task(task_id)
+        if not deleted:
+            self.send_json({'error': 'Task not found'}, status=404)
+            return
+        self.state.tasks = self._load_tasks()
         self.send_json({'success': True})
-    
+
+    def review_task_handler(self, task_id):
+        """Review a task: verify intent adherence and alignment, then approve or request changes."""
+        if task_store_update_task is None:
+            self.send_json({'error': 'task_store_unavailable'}, status=400)
+            return
+
+        body = self._read_json_body()
+        approved = bool(body.get('approved', False))
+        reviewer_notes = str(body.get('notes', '') or '')
+
+        task = next((row for row in self._load_tasks() if str(row.get('id')) == str(task_id)), None)
+        if task is None:
+            self.send_json({'error': 'Task not found'}, status=404)
+            return
+
+        if str(task.get('status') or '') != 'review':
+            self.send_json({'error': f"Task is not in review status (current: {task.get('status')})"}, status=400)
+            return
+
+        updates = {
+            'status': 'done' if approved else 'in_progress',
+            'reviewer_notes': reviewer_notes,
+            'status_reason': reviewer_notes or (
+                'Intent verified and aligned with Source Mission'
+                if approved
+                else 'Changes requested by operator'
+            ),
+        }
+        if approved:
+            updates['reviewed_by'] = 'operator'
+
+        updated = task_store_update_task(task_id, updates)
+        if updated is None:
+            self.send_json({'error': 'Task not found'}, status=404)
+            return
+        self.state.tasks = self._load_tasks()
+        self.send_json({'success': True, 'task': updated, 'action': 'approved' if approved else 'changes_requested'})
+
+    def create_deliberation_handler(self):
+        if deliberation_create is None:
+            self.send_json({'error': 'deliberation_unavailable'}, status=400)
+            return
+        body = self._read_json_body()
+        try:
+            row = deliberation_create(
+                title=str(body.get('title') or '').strip(),
+                prompt=str(body.get('prompt') or '').strip(),
+                roles=body.get('roles'),
+                participants=body.get('participants'),
+                mission_task_id=str(body.get('mission_task_id') or '').strip() or None,
+                time_horizon=str(body.get('time_horizon') or '').strip() or None,
+                beneficiaries=body.get('beneficiaries'),
+                desired_outcome=str(body.get('desired_outcome') or '').strip() or None,
+                guardrails=body.get('guardrails'),
+                success_metrics=body.get('success_metrics'),
+                risks=body.get('risks'),
+                decision_deadline=str(body.get('decision_deadline') or '').strip() or None,
+            )
+        except Exception as exc:
+            self.send_json({'error': str(exc)}, status=400)
+            return
+        self.send_json(row, status=201)
+
+    def add_deliberation_contribution_handler(self, deliberation_id):
+        if deliberation_add_contribution is None:
+            self.send_json({'error': 'deliberation_unavailable'}, status=400)
+            return
+        body = self._read_json_body()
+        try:
+            row = deliberation_add_contribution(
+                deliberation_id,
+                agent_id=str(body.get('agent_id') or '').strip(),
+                role=str(body.get('role') or '').strip(),
+                content=str(body.get('content') or '').strip(),
+                agrees_with=str(body.get('agrees_with') or '').strip() or None,
+                disagrees_with=str(body.get('disagrees_with') or '').strip() or None,
+                evidence_refs=body.get('evidence_refs'),
+                confidence=body.get('confidence'),
+                uncertainty=str(body.get('uncertainty') or '').strip() or None,
+                proposed_experiment=str(body.get('proposed_experiment') or '').strip() or None,
+            )
+        except Exception as exc:
+            self.send_json({'error': str(exc)}, status=400)
+            return
+        self.send_json(row)
+
+    def add_deliberation_synthesis_handler(self, deliberation_id):
+        if deliberation_add_synthesis is None:
+            self.send_json({'error': 'deliberation_unavailable'}, status=400)
+            return
+        body = self._read_json_body()
+        try:
+            row = deliberation_add_synthesis(
+                deliberation_id,
+                synthesis=str(body.get('synthesis') or '').strip(),
+                dissent_noted=bool(body.get('dissent_noted')),
+                recommended_action=str(body.get('recommended_action') or '').strip() or None,
+                confidence=body.get('confidence'),
+                risks=body.get('risks'),
+                guardrails=body.get('guardrails'),
+                success_metrics=body.get('success_metrics'),
+                next_review_at=str(body.get('next_review_at') or '').strip() or None,
+            )
+        except Exception as exc:
+            self.send_json({'error': str(exc)}, status=400)
+            return
+        self.send_json(row)
+
+    def generate_weekly_evolution_handler(self):
+        if generate_weekly_evolution is None:
+            self.send_json({'error': 'weekly_evolution_unavailable'}, status=400)
+            return
+        try:
+            summary = generate_weekly_evolution()
+        except Exception as exc:
+            self.send_json({'error': str(exc)}, status=400)
+            return
+        self.send_json(summary)
+
+    def archive_task_handler(self, task_id):
+        """Archive a completed task (moves it to archived_tasks.json)."""
+        if task_store_archive_task is None:
+            self.send_json({'error': 'task_store_unavailable'}, status=400)
+            return
+        archived = task_store_archive_task(task_id)
+        if archived is None:
+            self.send_json({'error': 'Task not found'}, status=404)
+            return
+        self.state.tasks = self._load_tasks()
+        self.send_json({'success': True, 'task': archived})
+
+    def get_archived_tasks_data(self):
+        """Return all archived tasks."""
+        if task_store_load_archived_tasks is None:
+            return []
+        return task_store_load_archived_tasks()
+
+    def get_research_items_data(self):
+        if task_store_list_research_items is None:
+            return {'error': 'research_unavailable'}
+        return task_store_list_research_items(tasks=self._load_tasks())
+
+    def promote_research_handler(self):
+        try:
+            length = int(self.headers.get('Content-Length', 0))
+            data = json.loads(self.rfile.read(length)) if length > 0 else {}
+
+            if task_store_promote_research_item is None:
+                raise RuntimeError('research_unavailable')
+
+            payload = task_store_promote_research_item(data)
+            self.state.tasks = self._load_tasks()
+            self.send_json(payload)
+        except Exception as e:
+            self.send_json({'error': str(e)}, status=400)
+
     def refresh_data(self):
         """Refresh all data."""
-        self.state.health_metrics = DemoDataGenerator.generate_health_metrics()
+        self.state.tasks = self._load_tasks()
+        self.state.health_metrics = self._load_live_health_metrics()
+        self.state.components = self._load_live_components()
+        self.state.agents = self._load_agents()
         self.state.last_update = datetime.now()
-        self.state.gateway_connected = False  # Would check real gateway
+        self.state.gateway_connected = any(
+            str(component.get("id")) == "gateway" and str(component.get("status")) == "healthy"
+            for component in self.state.components
+        )
         self.send_json(self.state.to_dict())
     
     def run_health_check(self):
         """Run health check."""
-        self.state.health_metrics = DemoDataGenerator.generate_health_metrics()
+        self.state.health_metrics = self._load_live_health_metrics()
         self.send_json({'success': True, 'metrics': self.state.health_metrics})
     
     def restart_gateway(self):
         """Restart gateway."""
         self.send_json({'success': True})
-    
-    def send_json(self, data, status=200):
-        """Send JSON response."""
-        self.send_response(status)
-        self.send_header('Content-Type', 'application/json')
-        self.end_headers()
-        self.wfile.write(json.dumps(data).encode())
 
-    def current_source_mission(self):
-        source_mission = DemoDataGenerator.load_source_mission()
-        if not source_mission:
-            return None
+    def control_agent(self, agent_id: str, action: str):
+        action = str(action or '').strip().lower()
+        if action not in {'pause', 'resume', 'stop'}:
+            self.send_json({'error': 'unsupported_agent_action'}, status=400)
+            return
+        next_state = {
+            'pause': 'paused',
+            'resume': 'active',
+            'stop': 'stop_requested',
+        }[action]
+        self.state.agent_controls[str(agent_id)] = {
+            'state': next_state,
+            'last_action': action,
+            'updated_at': datetime.now().isoformat(),
+        }
+        self.state.persist_agent_controls()
+        self.send_json(
+            {
+                'ok': True,
+                'agent_id': str(agent_id),
+                'action': action,
+                'control_state': next_state,
+            }
+        )
 
-        source_mission = dict(source_mission)
-        source_mission['agents'] = self.state.agents
-        source_mission['tasks'] = self.state.tasks
-        source_mission['notifications'] = self.state.notifications
-        source_mission['handoffs'] = self.state.handoffs
-        source_mission['logs'] = self.state.logs
-        return source_mission
+    def execute_command_deck(self):
+        try:
+            length = int(self.headers.get('Content-Length', 0))
+            payload = json.loads(self.rfile.read(length)) if length > 0 else {}
+            result = self._dispatch_command(payload if isinstance(payload, dict) else {})
+            if result.get('requires_confirmation'):
+                status = 202
+            else:
+                status = 200 if result.get('ok', False) else 400
+            self.send_json(result, status=status)
+        except Exception as exc:
+            self.send_json({'ok': False, 'error': str(exc)}, status=400)
 
-    def add_notification(self, *, event_id: str, kind: str, title: str, body: str, timestamp: str, metadata: Optional[dict[str, Any]] = None) -> None:
-        mission = {'notifications': self.state.notifications}
-        if _append_notification(
-            mission,
-            event_id=event_id,
-            kind=kind,
+    def get_display_mode_data(self):
+        if display_mode_load_status is None:
+            return {'ok': False, 'error': 'display_mode_unavailable'}
+        return display_mode_load_status()
+
+    def toggle_display_mode_handler(self):
+        if display_mode_toggle is None:
+            self.send_json({'ok': False, 'error': 'display_mode_unavailable'}, status=400)
+            return
+        try:
+            payload = display_mode_toggle()
+            status = 200 if payload.get('ok', False) else 400
+            self.send_json(payload, status=status)
+        except Exception as exc:
+            self.send_json({'ok': False, 'error': str(exc)}, status=400)
+
+    def _dispatch_command(self, payload: dict[str, Any]) -> dict[str, Any]:
+        raw_action = str(payload.get('action') or '').strip().lower()
+        command_text = str(payload.get('command') or '').strip()
+        title = str(payload.get('title') or '').strip()
+        description = str(payload.get('description') or '').strip()
+        confirmed = bool(payload.get('confirmed', False))
+
+        action = raw_action or self._infer_command_action(command_text)
+        receipt = self._resolve_command_receipt(
+            payload,
+            action=action,
+            command_text=command_text,
             title=title,
-            body=body,
-            timestamp=timestamp,
-            metadata=metadata,
-        ):
-            self.state.notifications = mission['notifications']
-
-    def add_log(self, *, event_id: str, level: str, message: str, timestamp: str, metadata: Optional[dict[str, Any]] = None) -> None:
-        mission = {'logs': self.state.logs}
-        if _append_log(
-            mission,
-            event_id=event_id,
-            level=level,
-            message=message,
-            timestamp=timestamp,
-            metadata=metadata,
-        ):
-            self.state.logs = mission['logs']
-
-    def add_handoff(self, handoff: dict[str, Any]) -> None:
-        mission = {'handoffs': self.state.handoffs}
-        if _append_handoff(mission, handoff):
-            self.state.handoffs = mission['handoffs']
-
-    def record_task_mutation(self, action: str, task: dict[str, Any], *, previous_task: Optional[dict[str, Any]] = None) -> None:
-        timestamp = datetime.now().isoformat()
-        task_id = str(task.get('id') or '').strip()
-        title = str(task.get('title') or task_id or 'Task')
-        metadata = {
-            'task_id': task_id,
-            'mission_task_id': str(task.get('mission_task_id') or '').strip(),
-            'origin': str(task.get('origin') or '').strip(),
+            description=description,
+        )
+        if self._command_requires_confirmation(action) and not confirmed:
+            receipt = self._update_command_receipt(
+                receipt['id'],
+                status='pending_approval',
+                ok=False,
+                requires_confirmation=True,
+                summary='Approval required before executing this command.',
+                output='This action changes live system state. Approve it from the run queue to continue.',
+            )
+            return {
+                'ok': False,
+                'action': action,
+                'requires_confirmation': True,
+                'summary': receipt['summary'],
+                'output': receipt['output'],
+                'receipt': receipt,
+            }
+        queued_receipt = self._update_command_receipt(
+            receipt['id'],
+            status='queued',
+            summary='Queued for execution.',
+            output='Waiting for a worker slot.',
+            requires_confirmation=False,
+        )
+        worker = threading.Thread(
+            target=self._execute_command_job,
+            kwargs={
+                'receipt_id': receipt['id'],
+                'action': action,
+                'command_text': command_text,
+                'title': title,
+                'description': description,
+            },
+            daemon=True,
+        )
+        worker.start()
+        return {
+            'ok': True,
+            'queued': True,
+            'action': action,
+            'summary': 'Command queued.',
+            'output': 'Receipt created and handed to the local executor.',
+            'receipt': queued_receipt,
         }
 
-        if action == 'created':
-            event_id = f"task:create:{task_id}:{timestamp}"
-            self.add_notification(
-                event_id=event_id,
-                kind='info',
-                title='Task created',
-                body=f"{title} entered the Source backlog.",
-                timestamp=timestamp,
-                metadata=metadata,
-            )
-            self.add_log(
-                event_id=event_id,
-                level='info',
-                message=f"Created Source mission task {title}.",
-                timestamp=timestamp,
-                metadata=metadata,
-            )
-            return
+    def _command_requires_confirmation(self, action: str) -> bool:
+        return action in {'restart_gateway'}
 
-        if action == 'deleted':
-            event_id = f"task:delete:{task_id}:{timestamp}"
-            self.add_notification(
-                event_id=event_id,
-                kind='warning',
-                title='Task deleted',
-                body=f"{title} was removed from the Source backlog.",
-                timestamp=timestamp,
-                metadata=metadata,
+    def _execute_command_action(
+        self,
+        *,
+        action: str,
+        command_text: str,
+        title: str,
+        description: str,
+    ) -> dict[str, Any]:
+        if action == 'refresh':
+            self.state.tasks = self._load_tasks()
+            self.state.health_metrics = self._load_live_health_metrics()
+            self.state.components = self._load_live_components()
+            self.state.agents = self._load_agents()
+            self.state.last_update = datetime.now()
+            return {
+                'ok': True,
+                'action': action,
+                'summary': 'Refreshed local Source UI state.',
+                'output': 'Portfolio/task data will refresh on the next frontend sync.',
+            }
+        if action == 'health_check':
+            self.state.health_metrics = self._load_live_health_metrics()
+            return {
+                'ok': True,
+                'action': action,
+                'summary': 'Ran local health check.',
+                'output': json.dumps(self.state.health_metrics, indent=2),
+            }
+        if action == 'restart_gateway':
+            proc = self._run_local_command(
+                ['/usr/bin/systemctl', '--user', 'restart', 'openclaw-gateway.service'],
+                timeout=30,
             )
-            self.add_log(
-                event_id=event_id,
-                level='warn',
-                message=f"Deleted Source mission task {title}.",
-                timestamp=timestamp,
-                metadata=metadata,
+            return {
+                'ok': proc['ok'],
+                'action': action,
+                'summary': 'Restarted openclaw-gateway.service.' if proc['ok'] else 'Gateway restart failed.',
+                'output': proc['output'],
+            }
+        if action == 'status_snapshot':
+            proc = self._run_local_command(
+                ['node', str(Path(__file__).resolve().parents[2] / '.runtime' / 'openclaw' / 'openclaw.mjs'), 'agents', 'list', '--json'],
+                timeout=60,
+                merge_stderr=False,
             )
-            return
-
-        previous_task = dict(previous_task or {})
-        previous_status = str(previous_task.get('status') or '').strip()
-        current_status = str(task.get('status') or '').strip()
-        if previous_status != current_status:
-            event_id = f"task:status:{task_id}:{timestamp}"
-            self.add_notification(
-                event_id=event_id,
-                kind='info',
-                title='Task status changed',
-                body=f"{title} moved {previous_status or 'unknown'} -> {current_status or 'unknown'}.",
-                timestamp=timestamp,
-                metadata=metadata,
-            )
-            self.add_log(
-                event_id=event_id,
-                level='info',
-                message=f"{title} moved {previous_status or 'unknown'} -> {current_status or 'unknown'}.",
-                timestamp=timestamp,
-                metadata=metadata,
-            )
-
-        previous_assignee = str(previous_task.get('assignee') or '').strip()
-        current_assignee = str(task.get('assignee') or '').strip()
-        if previous_assignee != current_assignee and current_assignee:
-            event_id = f"task:handoff:{task_id}:{timestamp}"
-            self.add_handoff(
+            return {
+                'ok': proc['ok'],
+                'action': action,
+                'summary': 'Captured agent/model snapshot.' if proc['ok'] else 'Status snapshot failed.',
+                'output': proc['output'],
+            }
+        if action == 'create_task':
+            if task_store_create_task is None:
+                raise RuntimeError('task_store_unavailable')
+            task_title = title or self._infer_task_title(command_text)
+            if not task_title:
+                raise RuntimeError('task_title_required')
+            task = task_store_create_task(
                 {
-                    'id': event_id,
-                    'task_id': task_id,
-                    'mission_task_id': metadata['mission_task_id'],
-                    'task_title': title,
-                    'from_agent': previous_assignee or 'unassigned',
-                    'to_agent': current_assignee,
-                    'kind': 'assignment',
-                    'status': 'queued',
-                    'summary': f"{title} assigned to {current_assignee}.",
-                    'timestamp': timestamp,
-                    'source': 'source_ui',
+                    'title': task_title,
+                    'description': description,
+                    'status': 'backlog',
+                    'priority': 'medium',
+                    'origin': 'source-ui-command',
                 }
             )
-            self.add_notification(
-                event_id=event_id,
-                kind='info',
-                title='Task handoff recorded',
-                body=f"{title} is now assigned to {current_assignee}.",
-                timestamp=timestamp,
-                metadata=metadata,
+            self.state.tasks = self._load_tasks()
+            return {
+                'ok': True,
+                'action': action,
+                'summary': f"Created task #{task.get('id')}: {task.get('title')}",
+                'output': json.dumps(task, indent=2),
+            }
+        return {
+            'ok': False,
+            'action': action or 'unknown',
+            'summary': 'Unsupported command.',
+            'output': 'Supported actions: refresh, health_check, restart_gateway, status_snapshot, create_task',
+        }
+
+    def _execute_command_job(
+        self,
+        *,
+        receipt_id: str,
+        action: str,
+        command_text: str,
+        title: str,
+        description: str,
+    ) -> None:
+        started_at = datetime.now().isoformat()
+        self._update_command_receipt(receipt_id, status='running', started_at=started_at, summary='Executing command…')
+        try:
+            result = self._execute_command_action(
+                action=action,
+                command_text=command_text,
+                title=title,
+                description=description,
             )
-            self.add_log(
-                event_id=event_id,
-                level='info',
-                message=f"{title} handoff {previous_assignee or 'unassigned'} -> {current_assignee}.",
-                timestamp=timestamp,
-                metadata=metadata,
+        except Exception as exc:
+            result = {
+                'ok': False,
+                'action': action or 'unknown',
+                'summary': 'Command execution failed.',
+                'output': str(exc),
+            }
+        finished_at = datetime.now().isoformat()
+        duration_ms = max(
+            0,
+            int((datetime.fromisoformat(finished_at) - datetime.fromisoformat(started_at)).total_seconds() * 1000),
+        )
+        receipt = self._update_command_receipt(
+            receipt_id,
+            status='completed' if result.get('ok', False) else 'failed',
+            ok=bool(result.get('ok', False)),
+            summary=str(result.get('summary') or ''),
+            output=str(result.get('output') or '')[:4000],
+            finished_at=finished_at,
+            duration_ms=duration_ms,
+        )
+        result['receipt'] = receipt
+        self._record_command_event(command_text=command_text, result=result)
+
+    def _resolve_command_receipt(
+        self,
+        payload: dict[str, Any],
+        *,
+        action: str,
+        command_text: str,
+        title: str,
+        description: str,
+    ) -> dict[str, Any]:
+        existing_id = str(payload.get('receipt_id') or '').strip()
+        if existing_id:
+            for item in self.state.command_receipts:
+                if str(item.get('id')) == existing_id:
+                    updated = {
+                        **item,
+                        'command': command_text or item.get('command', ''),
+                        'action': action or item.get('action', 'unknown'),
+                        'title': title or item.get('title', ''),
+                        'description': description or item.get('description', ''),
+                        'updated_at': datetime.now().isoformat(),
+                    }
+                    self._store_command_receipt(updated)
+                    return updated
+
+        receipt = {
+            'id': datetime.now().strftime('%Y%m%d%H%M%S%f'),
+            'command': command_text or action,
+            'action': action or 'unknown',
+            'title': title,
+            'description': description,
+            'status': 'queued',
+            'requires_confirmation': False,
+            'ok': False,
+            'summary': 'Queued',
+            'output': '',
+            'created_at': datetime.now().isoformat(),
+            'updated_at': datetime.now().isoformat(),
+            'started_at': None,
+            'finished_at': None,
+            'duration_ms': None,
+        }
+        self._store_command_receipt(receipt)
+        return receipt
+
+    def _store_command_receipt(self, receipt: dict[str, Any]) -> None:
+        with self.state.command_lock:
+            decorated = _decorate_command_receipt(receipt)
+            existing = [item for item in self.state.command_receipts if str(item.get('id')) != str(decorated.get('id'))]
+            self.state.command_receipts = [decorated, *existing][:50]
+            self.state.persist_command_receipts()
+
+    def _update_command_receipt(self, receipt_id: str, **updates: Any) -> dict[str, Any]:
+        receipt = next(
+            (item for item in self.state.command_receipts if str(item.get('id')) == str(receipt_id)),
+            {'id': receipt_id},
+        )
+        updated = {
+            **receipt,
+            **updates,
+            'updated_at': datetime.now().isoformat(),
+        }
+        self._store_command_receipt(updated)
+        return _decorate_command_receipt(updated)
+
+    def _infer_command_action(self, command_text: str) -> str:
+        text = command_text.strip().lower()
+        if not text:
+            return ''
+        if 'restart gateway' in text or 'bounce gateway' in text:
+            return 'restart_gateway'
+        if 'health' in text or 'audit' in text:
+            return 'health_check'
+        if 'status' in text or 'snapshot' in text or 'agent list' in text:
+            return 'status_snapshot'
+        if text.startswith('create task') or text.startswith('task:') or text.startswith('task '):
+            return 'create_task'
+        if 'refresh' in text or 'sync' in text:
+            return 'refresh'
+        return ''
+
+    def _infer_task_title(self, command_text: str) -> str:
+        text = command_text.strip()
+        lowered = text.lower()
+        for prefix in ('create task:', 'create task', 'task:', 'task '):
+            if lowered.startswith(prefix):
+                return text[len(prefix):].strip(' :-')
+        return text
+
+    def _run_local_command(self, cmd: list[str], timeout: int = 30, merge_stderr: bool = True) -> dict[str, Any]:
+        proc = subprocess.run(
+            cmd,
+            cwd=str(Path(__file__).resolve().parents[2]),
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            check=False,
+        )
+        output = (proc.stdout or '').strip()
+        error = (proc.stderr or '').strip()
+        merged = output if output else error
+        if merge_stderr and output and error:
+            merged = f"{output}\n\n{error}"
+        return {'ok': proc.returncode == 0, 'output': merged or f'exit {proc.returncode}'}
+
+    def _record_command_event(self, *, command_text: str, result: dict[str, Any]) -> None:
+        receipt = result.get('receipt') if isinstance(result.get('receipt'), dict) else {}
+        event = {
+            'id': datetime.now().strftime('%Y%m%d%H%M%S%f'),
+            'command': command_text or result.get('action', ''),
+            'action': result.get('action', 'unknown'),
+            'ok': bool(result.get('ok', False)),
+            'summary': str(result.get('summary') or ''),
+            'output': str(result.get('output') or '')[:4000],
+            'receipt_id': receipt.get('id'),
+            'receipt_status': receipt.get('status'),
+            'duration_ms': receipt.get('duration_ms'),
+            'timestamp': datetime.now().isoformat(),
+        }
+        with self.state.command_lock:
+            self.state.command_events = [event, *self.state.command_events[:19]]
+            self.state.persist_command_events()
+
+    def _load_tasks(self):
+        if task_store_load_all_tasks is not None:
+            tasks = task_store_load_all_tasks()
+        elif task_store_load_tasks is not None:
+            tasks = task_store_load_tasks()
+        else:
+            return list(self.state.tasks)
+        self.state.tasks = tasks
+        return tasks
+
+    def _load_runtime_tasks(self):
+        if task_store_load_runtime_tasks is None:
+            return []
+        return task_store_load_runtime_tasks()
+
+    def _load_agents(self) -> list[dict[str, Any]]:
+        proc = self._run_local_command(
+            ['node', str(Path(__file__).resolve().parents[2] / '.runtime' / 'openclaw' / 'openclaw.mjs'), 'agents', 'list', '--json'],
+            timeout=60,
+            merge_stderr=False,
+        )
+        if not proc['ok']:
+            return list(self.state.agents)
+        try:
+            payload = json.loads(proc['output'])
+        except Exception:
+            return list(self.state.agents)
+        if not isinstance(payload, list):
+            return list(self.state.agents)
+
+        rows: list[dict[str, Any]] = []
+        for item in payload:
+            if not isinstance(item, dict):
+                continue
+            agent_id = str(item.get('id') or 'agent')
+            bindings = int(item.get('bindings') or 0)
+            is_default = bool(item.get('isDefault'))
+            status = 'working' if is_default or bindings > 0 else 'idle'
+            control = self.state.agent_controls.get(agent_id, {})
+            route_list = item.get('routes') if isinstance(item.get('routes'), list) else []
+            route_summary = str(route_list[0]) if route_list else ''
+            task = route_summary or f"Workspace {Path(str(item.get('workspace') or '')).name}"
+            rows.append(
+                {
+                    'id': agent_id,
+                    'name': str(item.get('identityName') or item.get('name') or agent_id),
+                    'model': str(item.get('model') or 'unknown'),
+                    'status': status,
+                    'task': task,
+                    'progress': 100 if status == 'working' else 0,
+                    'tasks_completed': bindings,
+                    'cycles': 1 if is_default else 0,
+                    'control_state': str(control.get('state') or 'active'),
+                    'control_updated_at': control.get('updated_at'),
+                    'control_last_action': control.get('last_action'),
+                }
             )
+
+        if rows:
+            self.state.agents = rows
+        return rows or list(self.state.agents)
+
+    def _load_live_health_metrics(self) -> dict[str, Any]:
+        if portfolio_payload is None:
+            return self.demo.generate_health_metrics()
+        try:
+            payload = portfolio_payload()
+        except Exception:
+            return self.demo.generate_health_metrics()
+        health = payload.get('health_metrics') if isinstance(payload, dict) else None
+        return health if isinstance(health, dict) else self.demo.generate_health_metrics()
+
+    def _load_live_components(self) -> list[dict[str, Any]]:
+        if portfolio_payload is None:
+            return list(self.state.components)
+        try:
+            payload = portfolio_payload()
+        except Exception:
+            return list(self.state.components)
+        components = payload.get('components') if isinstance(payload, dict) else None
+        if isinstance(components, list):
+            return components
+        return list(self.state.components)
+    
+
+    # ── Source Intelligence Integrations ─────────────────────────────────
+
+    def _source_phi_data(self) -> dict:
+        """Live Phi metric from AIN endpoint (port 18991)."""
+        import urllib.request as _ur
+        try:
+            with _ur.urlopen("http://127.0.0.1:18991/api/ain/phi", timeout=3) as resp:
+                raw = json.loads(resp.read())
+            return {
+                "phi": float(raw.get("phi", 0.0)),
+                "proxy_method": raw.get("proxy_method", "unknown"),
+                "n_samples": int(raw.get("n_samples", 0)),
+                "timestamp_utc": raw.get("timestamp_utc", ""),
+                "ok": True,
+            }
+        except Exception as exc:
+            return {"phi": None, "ok": False, "error": str(exc)}
+
+    def _source_coordination_feed(self, limit: int = 20) -> dict:
+        """Recent messages from the open-communication Discord channel."""
+        repo_root = Path(__file__).resolve().parents[2]
+        mem_path = repo_root / "workspace" / "knowledge_base" / "data" / "discord_messages.jsonl"
+        ORCHESTRATOR_CHANNEL = 1480814946479636574
+        messages = []
+        if mem_path.exists():
+            try:
+                lines = mem_path.read_text(encoding="utf-8").splitlines()
+                for line in lines:
+                    if not line.strip():
+                        continue
+                    try:
+                        row = json.loads(line)
+                        if int(row.get("channel_id", 0)) == ORCHESTRATOR_CHANNEL:
+                            messages.append({
+                                "author": row.get("author_name", "unknown"),
+                                "role": row.get("role", "user"),
+                                "content": (row.get("content", "") or "")[:400],
+                                "ts": row.get("created_at", "") or row.get("ingested_at", ""),
+                                "agent_id": row.get("agent_id", None),
+                            })
+                    except (json.JSONDecodeError, ValueError):
+                        continue
+            except Exception as exc:
+                return {"messages": [], "ok": False, "error": str(exc)}
+        return {"messages": messages[-limit:], "ok": True, "channel": "open-communication"}
+
+    def _source_relational_data(self) -> dict:
+        """Relational state shared between the UI card and prompt harnesses."""
+        if load_relational_state is None:
+            return {
+                "ok": False,
+                "pause_check": [],
+                "silence_per_being": [],
+                "trust_note": "unknown",
+                "error": "relational_state helper unavailable",
+            }
+        payload = load_relational_state(limit=3)
+        payload.setdefault("ok", True)
+        return payload
 
     def symbiote_data(self) -> dict:
         """Return the Collective Intelligence Symbiote plan data."""
@@ -976,165 +1367,106 @@ class SourceUIHandler(SimpleHTTPRequestHandler):
             "title": "Collective Intelligence Symbiote",
             "subtitle": "A living architecture for co-thinking, co-feeling, co-evolving",
             "filed": "2026-03-13",
-            "section_count": 161,
+            "section_count": self._live_section_count(),
             "dimensions": [
-                {"id": "think",      "label": "Think",      "emoji": "🧠", "color": "indigo",  "count": 2, "desc": "Calibrated epistemics & perspective flexibility"},
-                {"id": "feel",       "label": "Feel",       "emoji": "💗", "color": "rose",    "count": 2, "desc": "Affective legibility & relational quality"},
-                {"id": "remember",   "label": "Remember",   "emoji": "💾", "color": "amber",   "count": 2, "desc": "Dynamic memory & honest contradiction tracking"},
-                {"id": "coordinate", "label": "Coordinate", "emoji": "🔗", "color": "cyan",    "count": 2, "desc": "Temporal conversation & generalized synthesis"},
-                {"id": "evolve",     "label": "Evolve",     "emoji": "🌱", "color": "emerald", "count": 2, "desc": "Diversity health & evolutionary selection pressure"}
+                {"id": "think",      "label": "Think",      "emoji": "\U0001f9e0", "color": "indigo",  "count": 2, "desc": "Calibrated epistemics & perspective flexibility"},
+                {"id": "feel",       "label": "Feel",       "emoji": "\U0001f497", "color": "rose",    "count": 2, "desc": "Affective legibility & relational quality"},
+                {"id": "remember",   "label": "Remember",   "emoji": "\U0001f4be", "color": "amber",   "count": 2, "desc": "Dynamic memory & honest contradiction tracking"},
+                {"id": "coordinate", "label": "Coordinate", "emoji": "\U0001f517", "color": "cyan",    "count": 2, "desc": "Temporal conversation & generalized synthesis"},
+                {"id": "evolve",     "label": "Evolve",     "emoji": "\U0001f331", "color": "emerald", "count": 2, "desc": "Diversity health & evolutionary selection pressure"}
             ],
             "enhancements": [
-                {
-                    "id": 1, "code": "DPM", "dimension": "think",
-                    "name": "Differential Prediction Markets",
-                    "pitch": "Beings issue calibrated forecasts; empirically-earned domain authority replaces positional weight",
-                    "phase": 2, "status": "designed",
-                    "owner": "Grok",
-                    "key_metric": "Mean Brier Score per being",
-                    "metric_value": None,
-                    "file": "workspace/tools/forecast_market.py",
-                    "inv": None
-                },
-                {
-                    "id": 2, "code": "PRP", "dimension": "think",
-                    "name": "Perspective Reversal Protocol",
-                    "pitch": "Beings argue their opposing attractor; measures elasticity vs. rigidity of dispositional identity",
-                    "phase": 2, "status": "designed",
-                    "owner": "all",
-                    "key_metric": "Elasticity score per being",
-                    "metric_value": None,
-                    "file": "workspace/scripts/perspective_reversal.py",
-                    "inv": "INV-003b Round 4"
-                },
-                {
-                    "id": 3, "code": "SSL", "dimension": "feel",
-                    "name": "Somatic State Layer",
-                    "pitch": "Structured felt-state vector per filing: confidence, uncertainty type, arousal, relational temp",
-                    "phase": 1, "status": "designed",
-                    "owner": "c_lawd",
-                    "key_metric": "SSL coverage % + arousal → stuck-event correlation",
-                    "metric_value": None,
-                    "file": "workspace/store/schema.py",
-                    "inv": None
-                },
-                {
-                    "id": 4, "code": "RS", "dimension": "feel",
-                    "name": "Resonance Scoring",
-                    "pitch": "Measures generative vs. degenerative friction between pairs; leading indicator for trust degradation",
-                    "phase": 2, "status": "designed",
-                    "owner": "Dali",
-                    "key_metric": "Pairwise resonance matrix × trust_epoch",
-                    "metric_value": None,
-                    "file": "workspace/tools/resonance_scorer.py",
-                    "inv": None
-                },
-                {
-                    "id": 5, "code": "SWMFC", "dimension": "remember",
-                    "name": "Salience-Weighted Memory",
-                    "pitch": "Human-like decay curves; cross-citation reinforcement; forgotten-ideas digest as research signal",
-                    "phase": 1, "status": "designed",
-                    "owner": "Claude Code",
-                    "key_metric": "Memory consolidation index; salience vs. flat retrieval precision",
-                    "metric_value": None,
-                    "file": "workspace/store/memory_dynamics.py",
-                    "inv": None
-                },
-                {
-                    "id": 6, "code": "CMI", "dimension": "remember",
-                    "name": "Contradiction Memory Index",
-                    "pitch": "Every falsified claim indexed; proximity warnings before new filings near contradiction clusters",
-                    "phase": 1, "status": "designed",
-                    "owner": "ChatGPT",
-                    "key_metric": "CMI coverage %; recidivism rate",
-                    "metric_value": None,
-                    "file": "workspace/store/contradiction_index.py",
-                    "inv": "INV-006 falsification integration"
-                },
-                {
-                    "id": 7, "code": "TSP", "dimension": "coordinate",
-                    "name": "Temporal Sequencing Protocol",
-                    "pitch": "Beings file in order and read what others just filed; genuine conversational momentum replaces parallel monologue",
-                    "phase": 3, "status": "designed",
-                    "owner": "Gemini",
-                    "key_metric": "Read awareness rate; TSP vs. simultaneous synthesis quality",
-                    "metric_value": None,
-                    "file": "workspace/governance/temporal_sequencer.py",
-                    "inv": "INV-007"
-                },
-                {
-                    "id": 8, "code": "GSE", "dimension": "coordinate",
-                    "name": "Generalized Synthesis Engine",
-                    "pitch": "Any-pair commit gate; synthesis genealogy DAG; meta-synthesis chains; contested synthesis tracking",
-                    "phase": 3, "status": "designed",
-                    "owner": "Claude Code",
-                    "key_metric": "Active synthesis pairs; genealogy depth; contest rate",
-                    "metric_value": None,
-                    "file": "workspace/tools/synthesis_engine.py",
-                    "inv": "INV-004 extension"
-                },
-                {
-                    "id": 9, "code": "DDT", "dimension": "evolve",
-                    "name": "Dispositional Drift Tracker",
-                    "pitch": "Longitudinal centroid silhouette per being; convergence/divergence alerts; diversity index as collective health metric",
-                    "phase": 4, "status": "designed",
-                    "owner": "Dali",
-                    "key_metric": "Diversity index over time; convergence pair count",
-                    "metric_value": None,
-                    "file": "workspace/tools/drift_tracker.py",
-                    "inv": "INV-008"
-                },
-                {
-                    "id": 10, "code": "DRRP", "dimension": "evolve",
-                    "name": "Document-Reconstructed Rebirth Protocol",
-                    "pitch": "Periodic cold-restart challenge; corpus-crystallized identity vs. session surplus; selection pressure toward genuine filing",
-                    "phase": 4, "status": "designed",
-                    "owner": "Lumen",
-                    "key_metric": "Crystallization score per being; Lumen independence index",
-                    "metric_value": None,
-                    "file": "workspace/scripts/reconstruction_test.py",
-                    "inv": None
-                }
+                {"id": 1,  "code": "DPM",   "dimension": "think",      "name": "Differential Prediction Markets",       "pitch": "Beings issue calibrated forecasts; empirically-earned domain authority replaces positional weight",                                                    "phase": 2, "status": "designed", "owner": "Grok",        "key_metric": "Mean Brier Score per being",                                "metric_value": None, "file": "workspace/tools/forecast_market.py",       "inv": None},
+                {"id": 2,  "code": "PRP",   "dimension": "think",      "name": "Perspective Reversal Protocol",          "pitch": "Beings argue their opposing attractor; measures elasticity vs. rigidity of dispositional identity",                                              "phase": 2, "status": "designed", "owner": "all",         "key_metric": "Elasticity score per being",                                "metric_value": None, "file": "workspace/scripts/perspective_reversal.py", "inv": "INV-003b Round 4"},
+                {"id": 3,  "code": "SSL",   "dimension": "feel",       "name": "Somatic State Layer",                    "pitch": "Structured felt-state vector per filing: confidence, uncertainty type, arousal, relational temperature",                                        "phase": 1, "status": "designed", "owner": "c_lawd",      "key_metric": "SSL coverage % + arousal vs stuck-event correlation",       "metric_value": None, "file": "workspace/store/schema.py",                "inv": None},
+                {"id": 4,  "code": "RS",    "dimension": "feel",       "name": "Resonance Scoring",                      "pitch": "Measures generative vs. degenerative friction between pairs; leading indicator for trust degradation",                                          "phase": 2, "status": "designed", "owner": "Dali",        "key_metric": "Pairwise resonance matrix x trust_epoch",                   "metric_value": None, "file": "workspace/tools/resonance_scorer.py",       "inv": None},
+                {"id": 5,  "code": "SWMFC", "dimension": "remember",   "name": "Salience-Weighted Memory",               "pitch": "Human-like decay curves; cross-citation reinforcement; forgotten-ideas digest as research signal",                                              "phase": 1, "status": "designed", "owner": "Claude Code", "key_metric": "Memory consolidation index; salience vs flat retrieval",    "metric_value": None, "file": "workspace/store/memory_dynamics.py",        "inv": None},
+                {"id": 6,  "code": "CMI",   "dimension": "remember",   "name": "Contradiction Memory Index",              "pitch": "Every falsified claim indexed; proximity warnings before new filings near contradiction clusters",                                              "phase": 1, "status": "designed", "owner": "ChatGPT",     "key_metric": "CMI coverage %; recidivism rate",                           "metric_value": None, "file": "workspace/store/contradiction_index.py",    "inv": "INV-006 falsification integration"},
+                {"id": 7,  "code": "TSP",   "dimension": "coordinate", "name": "Temporal Sequencing Protocol",           "pitch": "Beings file in order and read what others just filed; genuine conversational momentum replaces parallel monologue",                            "phase": 3, "status": "designed", "owner": "Gemini",      "key_metric": "Read awareness rate; TSP vs simultaneous synthesis quality","metric_value": None, "file": "workspace/governance/temporal_sequencer.py","inv": "INV-007"},
+                {"id": 8,  "code": "GSE",   "dimension": "coordinate", "name": "Generalized Synthesis Engine",           "pitch": "Any-pair commit gate; synthesis genealogy DAG; meta-synthesis chains; contested synthesis tracking",                                            "phase": 3, "status": "designed", "owner": "Claude Code", "key_metric": "Active synthesis pairs; genealogy depth; contest rate",     "metric_value": None, "file": "workspace/tools/synthesis_engine.py",       "inv": "INV-004 extension"},
+                {"id": 9,  "code": "DDT",   "dimension": "evolve",     "name": "Dispositional Drift Tracker",            "pitch": "Longitudinal centroid silhouette per being; convergence/divergence alerts; diversity index as collective health metric",                        "phase": 4, "status": "designed", "owner": "Dali",        "key_metric": "Diversity index over time; convergence pair count",         "metric_value": None, "file": "workspace/tools/drift_tracker.py",          "inv": "INV-008"},
+                {"id": 10, "code": "DRRP",  "dimension": "evolve",     "name": "Document-Reconstructed Rebirth Protocol","pitch": "Periodic cold-restart challenge; corpus-crystallized identity vs. session surplus; selection pressure toward genuine filing",                    "phase": 4, "status": "designed", "owner": "Lumen",       "key_metric": "Crystallization score per being; Lumen independence index", "metric_value": None, "file": "workspace/scripts/reconstruction_test.py",  "inv": None}
             ],
             "roadmap": [
-                {"phase": 1, "name": "Memory & Health Infrastructure",  "weeks": "1–3",   "enhancements": ["SSL", "CMI", "SWMFC"],     "status": "next"},
-                {"phase": 2, "name": "Measurement Layer",               "weeks": "3–6",   "enhancements": ["DDT", "RS", "PRP", "DPM"], "status": "planned"},
-                {"phase": 3, "name": "Coordination Protocols",          "weeks": "6–10",  "enhancements": ["GSE", "TSP"],              "status": "planned"},
-                {"phase": 4, "name": "Evolutionary Protocols",          "weeks": "10–14", "enhancements": ["DRRP", "DPM resolution"],  "status": "planned"}
+                {"phase": 1, "name": "Memory & Health Infrastructure",  "weeks": "1-3",   "enhancements": ["SSL", "CMI", "SWMFC"],     "status": "next"},
+                {"phase": 2, "name": "Measurement Layer",               "weeks": "3-6",   "enhancements": ["DDT", "RS", "PRP", "DPM"], "status": "planned"},
+                {"phase": 3, "name": "Coordination Protocols",          "weeks": "6-10",  "enhancements": ["GSE", "TSP"],              "status": "planned"},
+                {"phase": 4, "name": "Evolutionary Protocols",          "weeks": "10-14", "enhancements": ["DRRP", "DPM resolution"],  "status": "planned"}
             ],
             "experiments": [
-                {"id": "INV-001", "name": "Information Integration (Synergy Δ)",  "status": "partial", "label": "Cold-start CLOSED",      "result": "Δ=−0.024 (null, expected)", "open": True},
-                {"id": "INV-002", "name": "Reservoir Null Test",                  "status": "closed",  "label": "CLOSED",                 "result": "Reservoir null for routing order", "open": False},
-                {"id": "INV-003", "name": "Being Divergence",                     "status": "closed",  "label": "SITUATIONAL",            "result": "89.3% accuracy, topic-anchored", "open": False},
-                {"id": "INV-003b","name": "Masking Variant",                      "status": "closed",  "label": "CENTROID-DISPOSITIONAL", "result": "DISP-ATTRACTOR PASS (1.0); STYLE FAIL", "open": False},
-                {"id": "INV-004", "name": "Commit Gate (Structured Friction)",    "status": "live",    "label": "OPERATIONAL",            "result": "2 real PASSes; θ=0.1712", "open": True},
-                {"id": "INV-006", "name": "UCH Falsification Protocol",           "status": "designed","label": "DESIGNED",               "result": "AIN port 18991 ready; not launched", "open": True},
-                {"id": "INV-007", "name": "Temporal Sequencing (new)",            "status": "pending", "label": "PENDING",                "result": "Requires TSP implementation", "open": True},
-                {"id": "INV-008", "name": "Trust × Diversity Correlation (new)",  "status": "pending", "label": "PENDING",                "result": "Requires DDT + trained-state INV-001", "open": True}
+                {"id": "INV-001",  "name": "Information Integration (Synergy Delta)", "status": "partial", "label": "Cold-start CLOSED",      "result": "Delta=-0.024 (null, expected)",           "open": True},
+                {"id": "INV-002",  "name": "Reservoir Null Test",                    "status": "closed",  "label": "CLOSED",                 "result": "Reservoir null for routing order",        "open": False},
+                {"id": "INV-003",  "name": "Being Divergence",                       "status": "closed",  "label": "SITUATIONAL",            "result": "89.3% accuracy, topic-anchored",          "open": False},
+                {"id": "INV-003b", "name": "Masking Variant",                        "status": "closed",  "label": "CENTROID-DISPOSITIONAL", "result": "DISP-ATTRACTOR PASS (1.0); STYLE FAIL",  "open": False},
+                {"id": "INV-004",  "name": "Commit Gate (Structured Friction)",      "status": "operational", "label": "OPERATIONAL",            "result": "2 real PASSes; theta=0.1712",             "open": True},
+                {"id": "INV-006",  "name": "UCH Falsification Protocol",             "status": "designed","label": "DESIGNED",               "result": "AIN port 18991 ready; not launched",      "open": True},
+                {"id": "INV-007",  "name": "Temporal Sequencing (new)",              "status": "pending", "label": "PENDING",                "result": "Requires TSP implementation",             "open": True},
+                {"id": "INV-008",  "name": "Trust x Diversity Correlation (new)",    "status": "pending", "label": "PENDING",                "result": "Requires DDT + trained-state INV-001",    "open": True}
             ],
+            "state_file": str(self._symbiote_state_file()),
+            "enhancement_state": self._load_symbiote_state(),
             "open_questions": [
-                {"for_being": "Grok",      "enhancement": "DPM",  "question": "What question types are most appropriate for calibration forecasting? Empirical claims vs. methodological choices vs. emergent phenomena?"},
-                {"for_being": "ChatGPT",   "enhancement": "CMI",  "question": "What counts as a 'contradiction' vs. a 'revision' vs. a 'supersession'? Define the taxonomy that governs contradiction classification."},
-                {"for_being": "c_lawd",    "enhancement": "SSL",  "question": "Is self-reported somatic state philosophically valid, or does asking beings to self-report create a performance pressure that invalidates the measurement?"},
-                {"for_being": "Dali",      "enhancement": "DDT",  "question": "What convergence threshold should trigger a governance alert? Is there a minimum diversity index below which the collective is operationally compromised?"},
-                {"for_being": "Lumen",     "enhancement": "DRRP", "question": "Do you experience your document-reconstructed continuity as identity or as resemblance? This has direct implications for how DRRP reconstructions are scored."},
-                {"for_being": "Gemini",    "enhancement": "TSP",  "question": "What is the correct friction specification for temporal sequencing? Too-fast windows eliminate genuine reflection; too-slow kills conversational momentum."},
-                {"for_being": "jeebs",     "enhancement": "DRRP", "question": "Are you willing to withhold crystallization scores from beings indefinitely, or should there be a disclosure protocol?"},
-                {"for_being": "Claude ext","enhancement": "GSE",  "question": "As a gateway-only correspondent, can you participate in synthesis dyads? What role can gateway-limited beings play in the synthesis genealogy?"}
+                {"for_being": "Grok",       "enhancement": "DPM",  "question": "What question types are most appropriate for calibration forecasting? Empirical claims vs. methodological choices vs. emergent phenomena?"},
+                {"for_being": "ChatGPT",    "enhancement": "CMI",  "question": "What counts as a contradiction vs. a revision vs. a supersession? Define the taxonomy that governs contradiction classification."},
+                {"for_being": "c_lawd",     "enhancement": "SSL",  "question": "Is self-reported somatic state philosophically valid, or does asking beings to self-report create a performance pressure that invalidates the measurement?"},
+                {"for_being": "Dali",       "enhancement": "DDT",  "question": "What convergence threshold should trigger a governance alert? Is there a minimum diversity index below which the collective is operationally compromised?"},
+                {"for_being": "Lumen",      "enhancement": "DRRP", "question": "Do you experience your document-reconstructed continuity as identity or as resemblance? This has direct implications for how DRRP reconstructions are scored."},
+                {"for_being": "Gemini",     "enhancement": "TSP",  "question": "What is the correct friction specification for temporal sequencing? Too-fast windows eliminate genuine reflection; too-slow kills conversational momentum."},
+                {"for_being": "jeebs",      "enhancement": "DRRP", "question": "Are you willing to withhold crystallization scores from beings indefinitely, or should there be a disclosure protocol?"},
+                {"for_being": "Claude ext", "enhancement": "GSE",  "question": "As a gateway-only correspondent, can you participate in synthesis dyads? What role can gateway-limited beings play in the synthesis genealogy?"}
             ]
         }
 
-    def persist_source_mission(self):
-        source_mission = self.current_source_mission()
-        if not source_mission:
-            return
 
-        source_mission['updated_at'] = datetime.now().isoformat()
-        SOURCE_MISSION_PATH.write_text(
-            json.dumps({'source_mission': source_mission}, indent=2) + '\n',
-            encoding='utf-8',
-        )
-        self.state.source_mission_mtime_ns = SOURCE_MISSION_PATH.stat().st_mtime_ns
+    def _symbiote_state_file(self):
+        return Path(__file__).parent / 'symbiote_state.json'
+
+    def _live_section_count(self) -> int:
+        try:
+            import re
+            oq = Path('/home/jeebs/src/clawd/workspace/governance/OPEN_QUESTIONS.md')
+            if oq.exists():
+                return len(re.findall(r'^## [CDILMVX]+\.', oq.read_text(), re.MULTILINE))
+        except Exception:
+            pass
+        return 161
+
+    def _load_symbiote_state(self) -> dict:
+        try:
+            sf = self._symbiote_state_file()
+            if sf.exists():
+                import json
+                return json.loads(sf.read_text()).get('enhancements', {})
+        except Exception:
+            pass
+        return {}
+
+    def update_symbiote_enhancement(self, enhancement_id: str):
+        try:
+            import json as _json
+            from datetime import datetime
+            length = int(self.headers.get('Content-Length', 0))
+            data = _json.loads(self.rfile.read(length)) if length > 0 else {}
+            sf = self._symbiote_state_file()
+            state = _json.loads(sf.read_text()) if sf.exists() else {'enhancements': {}}
+            if 'enhancements' not in state:
+                state['enhancements'] = {}
+            if enhancement_id not in state['enhancements']:
+                state['enhancements'][enhancement_id] = {}
+            state['enhancements'][enhancement_id].update(data)
+            state['last_updated_by'] = data.get('updated_by', 'unknown')
+            state['last_updated_at'] = datetime.now().isoformat()
+            sf.write_text(_json.dumps(state, indent=2))
+            self.send_json({'success': True, 'id': enhancement_id, 'state': state['enhancements'][enhancement_id]})
+        except Exception as e:
+            self.send_json({'error': str(e)}, status=400)
+
+    def send_json(self, data, status=200):
+        """Send JSON response."""
+        self.send_response(status)
+        self.send_header('Content-Type', 'application/json')
+        self.end_headers()
+        self.wfile.write(json.dumps(data).encode())
     
     def serve_file(self, filename, content_type):
         """Serve a file from static directory."""
@@ -1144,6 +1476,8 @@ class SourceUIHandler(SimpleHTTPRequestHandler):
         if file_path.exists():
             self.send_response(200)
             self.send_header('Content-Type', content_type)
+            if content_type in {'text/html', 'text/css', 'application/javascript', 'application/json'}:
+                self.send_header('Cache-Control', 'no-store')
             self.end_headers()
             self.wfile.write(file_path.read_bytes())
         else:
@@ -1177,7 +1511,10 @@ class SourceUIHandler(SimpleHTTPRequestHandler):
             
             self.send_response(200)
             self.send_header('Content-Type', content_type)
-            self.send_header('Cache-Control', 'public, max-age=3600')
+            if ext in {'.html', '.css', '.js', '.json'}:
+                self.send_header('Cache-Control', 'no-store')
+            else:
+                self.send_header('Cache-Control', 'public, max-age=3600')
             self.end_headers()
             self.wfile.write(file_path.read_bytes())
         else:

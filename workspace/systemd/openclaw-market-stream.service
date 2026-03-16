@@ -1,0 +1,18 @@
+[Unit]
+Description=OpenClaw live market kline stream
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/src/clawd
+EnvironmentFile=-%h/.config/openclaw/market-stream.env
+ExecStartPre=/usr/bin/mkdir -p %h/.local/state/openclaw
+ExecStart=/usr/bin/env bash %h/src/clawd/scripts/run_market_stream_live_service.sh
+Restart=on-failure
+RestartSec=10
+StandardOutput=append:%h/.local/state/openclaw/market-stream.log
+StandardError=append:%h/.local/state/openclaw/market-stream.log
+
+[Install]
+WantedBy=default.target

@@ -32,6 +32,7 @@ class EventEmitter {
 class Store extends EventEmitter {
     constructor() {
         super();
+        this.defaultRefreshInterval = 3000;
         this.state = {
             // Navigation
             currentView: 'dashboard',
@@ -39,6 +40,32 @@ class Store extends EventEmitter {
             // System
             connected: false,
             gatewayStatus: 'connecting',
+            displayMode: {
+                ok: false,
+                profile_current: 'unknown',
+                requested_mode: 'auto',
+                toggle_target: 'work',
+                queue: {
+                    pending: 0,
+                    review_required: 0,
+                    completed: 0,
+                    discord_pending: 0,
+                    router_pending: 0
+                }
+            },
+            portfolio: {
+                generated_at: null,
+                projects: [],
+                sims: [],
+                tasks: [],
+                work_items: [],
+                discord_bridge: {
+                    channels: []
+                },
+                teamchat: {
+                    sessions: []
+                }
+            },
             
             // Agents
             agents: [],
@@ -63,7 +90,11 @@ class Store extends EventEmitter {
             // Logs
             logs: [],
             logFilter: 'all',
-            
+
+            // Commands
+            commands: [],
+            commandReceipts: [],
+
             // Notifications
             notifications: [],
             unreadCount: 0,
@@ -72,7 +103,7 @@ class Store extends EventEmitter {
             settings: {
                 theme: 'dark',
                 autoRefresh: true,
-                refreshInterval: 10000,
+                refreshInterval: this.defaultRefreshInterval,
                 desktopNotifications: false,
                 soundAlerts: false,
                 enableFallback: true,
@@ -130,13 +161,13 @@ class Store extends EventEmitter {
     
     updateTask(id, updates) {
         const tasks = this.state.tasks.map(t => 
-            t.id === id ? { ...t, ...updates } : t
+            String(t.id) === String(id) ? { ...t, ...updates } : t
         );
         this.set('tasks', tasks);
     }
     
     removeTask(id) {
-        const tasks = this.state.tasks.filter(t => t.id !== id);
+        const tasks = this.state.tasks.filter(t => String(t.id) !== String(id));
         this.set('tasks', tasks);
     }
     
@@ -172,16 +203,19 @@ class Store extends EventEmitter {
     
     // Settings methods
     loadSettings() {
-        try {
-            const saved = localStorage.getItem('source-ui-settings');
-            if (saved) {
-                const settings = JSON.parse(saved);
-                this.set('settings', { ...this.state.settings, ...settings });
+    try {
+        const saved = localStorage.getItem('source-ui-settings');
+        if (saved) {
+            const settings = JSON.parse(saved);
+            if (settings.refreshInterval == null || settings.refreshInterval === 10000) {
+                settings.refreshInterval = this.defaultRefreshInterval;
             }
-        } catch (e) {
-            console.warn('Failed to load settings:', e);
+            this.set('settings', { ...this.state.settings, ...settings });
         }
+    } catch (e) {
+        console.warn('Failed to load settings:', e);
     }
+}
     
     saveSettings() {
         try {
@@ -206,15 +240,8 @@ class Store extends EventEmitter {
             { id: 'memory', name: 'Memory Agent', model: 'MiniMax-M2.5', status: 'working', task: 'Indexing memories', progress: 30, tasksCompleted: 15, cycles: 42 }
         ]);
         
-        // Demo tasks
-        this.set('tasks', [
-            { id: 1, title: 'Implement task drag-and-drop', status: 'in_progress', priority: 'high', assignee: 'coder', createdAt: new Date().toISOString() },
-            { id: 2, title: 'Add WebSocket support', status: 'backlog', priority: 'high', assignee: 'coder', createdAt: new Date().toISOString() },
-            { id: 3, title: 'Write API integration tests', status: 'backlog', priority: 'medium', assignee: 'coder', createdAt: new Date().toISOString() },
-            { id: 4, title: 'Design notification system', status: 'review', priority: 'medium', assignee: 'planner', createdAt: new Date().toISOString() },
-            { id: 5, title: 'Fix memory leak in worker', status: 'done', priority: 'high', assignee: 'coder', createdAt: new Date().toISOString() },
-            { id: 6, title: 'Update documentation', status: 'backlog', priority: 'low', assignee: 'planner', createdAt: new Date().toISOString() }
-        ]);
+        // Tasks are loaded from the canonical JSON store via API.
+        this.set('tasks', []);
         
         // Demo scheduled jobs
         this.set('scheduledJobs', [

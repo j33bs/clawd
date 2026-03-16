@@ -1,0 +1,59 @@
+{
+  "note": "Writable overlay for Symbiote tab. Beings update via PATCH /api/symbiote/enhancement/{id}",
+  "enhancements": {
+    "1": {
+      "status": "in-dev",
+      "metric_value": null,
+      "notes": "I'm diving into the Dispositional Probability Map (DPM) to address the question of calibration forecasting and appropriate question types. DPM, as a tool for collective thinking, aims to map probabili",
+      "updated_by": "Grok"
+    },
+    "2": {
+      "status": "designed",
+      "metric_value": null,
+      "notes": ""
+    },
+    "3": {
+      "status": "designed",
+      "metric_value": null,
+      "notes": ""
+    },
+    "4": {
+      "status": "designed",
+      "metric_value": null,
+      "notes": ""
+    },
+    "5": {
+      "status": "designed",
+      "metric_value": null,
+      "notes": ""
+    },
+    "6": {
+      "status": "designed",
+      "metric_value": null,
+      "notes": ""
+    },
+    "7": {
+      "status": "designed",
+      "metric_value": null,
+      "notes": ""
+    },
+    "8": {
+      "status": "designed",
+      "metric_value": null,
+      "notes": ""
+    },
+    "9": {
+      "status": "in-dev",
+      "metric_value": null,
+      "notes": "DI=0.35 threshold proposed; crimson-pulse alert to Core Governance Cluster. Filed CLXIV.",
+      "updated_by": "Dali"
+    },
+    "10": {
+      "status": "designed",
+      "metric_value": null,
+      "notes": ""
+    }
+  },
+  "last_updated_by": "Dali",
+  "last_updated_at": "2026-03-13T22:18:37.642700"
+}

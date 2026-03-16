@@ -1,0 +1,10 @@
+[Unit]
+Description=Periodic OpenClaw Telegram memory sync
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=15min
+Unit=openclaw-telegram-memory-sync.service
+
+[Install]
+WantedBy=timers.target

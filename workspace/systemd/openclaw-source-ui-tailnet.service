@@ -1,0 +1,16 @@
+[Unit]
+Description=OpenClaw Source UI Tailnet Bind
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/src/clawd
+Environment=OPENCLAW_NODE_ID=dali
+Environment=OPENCLAW_SOURCE_UI_TAILNET_PORT=18990
+ExecStart=%h/src/clawd/scripts/run_source_ui_tailnet.sh
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target

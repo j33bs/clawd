@@ -1,0 +1,56 @@
+{
+  "schema_version": 1,
+  "producer": "dali",
+  "poll": {
+    "recommended_interval_seconds": 1800,
+    "stale_after_seconds": 5400
+  },
+  "model": {
+    "provider": "openai_compatible",
+    "base_url": "http://127.0.0.1:8001/v1",
+    "api_key_env": "OPENCLAW_LOCAL_ASSISTANT_API_KEY",
+    "requested": "local-assistant",
+    "fallbacks": [],
+    "timeout_seconds": 25,
+    "temperature": 0.0,
+    "num_predict": 160
+  },
+  "delivery": {
+    "enabled": false
+  },
+  "sources": {
+    "forex_factory": {
+      "enabled": true,
+      "optional": false,
+      "weight_hint": 1.0,
+      "timeout_seconds": 20,
+      "url": "https://nfs.faireconomy.media/ff_calendar_thisweek.xml"
+    },
+    "coingecko": {
+      "enabled": true,
+      "optional": false,
+      "weight_hint": 1.25,
+      "timeout_seconds": 20,
+      "base_url": "https://api.coingecko.com/api/v3",
+      "api_key_env": "COINGECKO_API_KEY",
+      "vs_currency": "usd",
+      "markets_limit": 20
+    },
+    "coinmarketcap": {
+      "enabled": true,
+      "optional": true,
+      "weight_hint": 0.9,
+      "timeout_seconds": 20,
+      "base_url": "https://pro-api.coinmarketcap.com",
+      "api_key_env": "COINMARKETCAP_API_KEY",
+      "limit": 20
+    },
+    "fear_greed": {
+      "enabled": true,
+      "optional": false,
+      "weight_hint": 0.85,
+      "timeout_seconds": 20,
+      "url": "https://api.alternative.me/fng/"
+    }
+  }
+}

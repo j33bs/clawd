@@ -13,6 +13,7 @@ VLLM_PORT="${OPENCLAW_VLLM_ASSISTANT_PORT:-8001}"
 VLLM_GPU_UTILIZATION="${OPENCLAW_VLLM_ASSISTANT_GPU_MEMORY_UTILIZATION:-0.85}"
 VLLM_MAX_MODEL_LEN="${OPENCLAW_VLLM_ASSISTANT_MAX_MODEL_LEN:-16384}"
 VLLM_MAX_NUM_SEQS="${OPENCLAW_VLLM_ASSISTANT_MAX_NUM_SEQS:-8}"
+VLLM_QUANTIZATION="${OPENCLAW_VLLM_ASSISTANT_QUANTIZATION:-awq_marlin}"
 ASSISTANT_LOG_PATH="${OPENCLAW_VLLM_ASSISTANT_LOG_PATH:-$HOME/.local/state/openclaw/vllm-assistant.log}"
 
 mkdir -p "$(dirname "$ASSISTANT_LOG_PATH")"
@@ -66,13 +67,13 @@ fi
 
 echo "=== vllm_launch_assistant.sh ==="
 echo "host=$VLLM_HOST port=$VLLM_PORT model=$MODEL_PATH served_model=$SERVED_MODEL_NAME"
-echo "python=$VLLM_PYTHON entrypoint=$VLLM_ENTRYPOINT gpu_util=$VLLM_GPU_UTILIZATION max_model_len=$VLLM_MAX_MODEL_LEN max_num_seqs=$VLLM_MAX_NUM_SEQS"
+echo "python=$VLLM_PYTHON entrypoint=$VLLM_ENTRYPOINT gpu_util=$VLLM_GPU_UTILIZATION max_model_len=$VLLM_MAX_MODEL_LEN max_num_seqs=$VLLM_MAX_NUM_SEQS quantization=$VLLM_QUANTIZATION"
 
 exec "$VLLM_PYTHON" "$VLLM_ENTRYPOINT" serve "$MODEL_PATH" \
   --served-model-name "$SERVED_MODEL_NAME" \
   --host "$VLLM_HOST" \
   --port "$VLLM_PORT" \
-  --quantization awq \
+  --quantization "$VLLM_QUANTIZATION" \
   --dtype auto \
   --gpu-memory-utilization "$VLLM_GPU_UTILIZATION" \
   --max-model-len "$VLLM_MAX_MODEL_LEN" \

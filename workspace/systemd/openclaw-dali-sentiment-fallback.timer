@@ -1,0 +1,11 @@
+[Unit]
+Description=OpenClaw Dali fallback sentiment cadence
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=20min
+AccuracySec=1min
+Unit=openclaw-dali-sentiment-fallback.service
+
+[Install]
+WantedBy=timers.target
