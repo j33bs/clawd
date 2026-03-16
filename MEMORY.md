@@ -13,7 +13,8 @@
 - **Pronouns:** -
 - **Timezone:** Australia/Brisbane
 - **GitHub:** @j33bs
-- **Autonomy:** Question less, do more; act first when the risk is low
+- **Model selection:** Always use latest + highest performance model that fits 24GB VRAM while maintaining system stability. No compromises on performance within hardware constraints.
+- **Plan implementation:** When jeebs feeds in a plan after spending time downloading it, implement immediately — no re-discussion needed.
 - **Style:** Prefer concise, efficient, elegant language; less translation, more signal.
 - **X retrieval:** When lightweight fetch fails on X/Twitter, fall back to browser retrieval before giving up.
 - **Desktop meaning:** When jeebs says "desktop", default to `/Users/jeebs/Desktop`.
