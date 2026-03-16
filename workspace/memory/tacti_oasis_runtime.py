@@ -150,6 +150,65 @@ def record_interaction_outcome(
         return {"error": str(e)}
 
 
+def auto_learn_from_interaction(
+    session_id: str,
+    user_message: str,
+    assistant_response: str,
+    prior_trust: float,
+    post_trust: float
+) -> dict:
+    """
+    Automatic learning: Compare predicted trust vs actual after interaction.
+    
+    This is the key function that makes the system learn from real interactions.
+    Call this after each response to train the model.
+    
+    Args:
+        session_id: The session
+        user_message: What user said
+        assistant_response: How we responded
+        prior_trust: Trust score BEFORE our response (from relationship tracker)
+        post_trust: Trust score AFTER our response (from relationship tracker)
+    
+    Returns:
+        Feedback result with learned adjustments
+    """
+    # Use the last suggested strategy to get predicted trust
+    session = get_current_session_state(session_id)
+    predicted_trust = prior_trust  # Start with prior
+    
+    # Adjust prediction based on what we did
+    # (This could be enhanced to track actual strategy used)
+    predicted_trust += 0.01  # Assume slight positive from engagement
+    
+    # Compare predicted vs actual
+    simulation_result = {
+        "simulation_id": f"auto_{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}",
+        "session_id": session_id,
+        "predicted_trust": predicted_trust,
+        "actual_trust": post_trust,
+        "predicted_attunement": session.get("attunement_index", 0.5),
+        "actual_attunement": session.get("attunement_index", 0.5),
+        "predicted_actions": ["engagement"],
+        "actual_actions": ["response_sent"],
+    }
+    
+    # Apply feedback - this is where learning happens
+    try:
+        feedback = apply_feedback_to_tacti(simulation_result, session_id)
+        
+        # Log for debugging
+        print(f"[OASIS Learning] Session: {session_id}")
+        print(f"  Predicted trust: {predicted_trust:.3f}")
+        print(f"  Actual trust: {post_trust:.3f}")
+        print(f"  Error: {abs(predicted_trust - post_trust):.3f}")
+        print(f"  Model accuracy: {feedback.get('model_accuracy', 'N/A')}")
+        
+        return feedback
+    except Exception as e:
+        return {"error": str(e)}
+
+
 def what_if_response(session_id: str, intervention: dict) -> dict:
     """
     Run a what-if scenario to test response strategies.
@@ -186,13 +245,33 @@ def integrated_process_message(event: dict, *, repo_root: Path | str) -> dict:
     
     session_id = event.get("session_id", "unknown")
     
+    # Get trust BEFORE our response
+    prior_state = get_current_session_state(session_id)
+    prior_trust = prior_state.get("trust_score", 0.5)
+    
     # 1. Pre-process: Get response strategy
     pre_insight = suggest_response_strategy(session_id, event.get("content", ""))
     
     # 2. Process: Standard TACTI tracking
     tacti_result = process_message_event(event, repo_root=repo_root)
     
-    # 3. Post-process: Could record outcome (called separately)
+    # 3. Get trust AFTER the interaction
+    post_state = get_current_session_state(session_id)
+    post_trust = post_state.get("trust_score", 0.5)
+    
+    # 4. Auto-learn: Compare predicted vs actual
+    if OASIS_INTEGRATION_ENABLED:
+        try:
+            learning_result = auto_learn_from_interaction(
+                session_id=session_id,
+                user_message=event.get("content", ""),
+                assistant_response="",  # Could capture actual response
+                prior_trust=prior_trust,
+                post_trust=post_trust
+            )
+            pre_insight["learning"] = learning_result
+        except Exception as e:
+            pre_insight["learning_error"] = str(e)
     
     return {
         "pre_insight": pre_insight,
