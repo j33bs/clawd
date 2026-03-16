@@ -191,6 +191,32 @@ class TestHeavyNodeTelemetryRollup(unittest.TestCase):
             m = self._read_metrics(tel)
             self.assertIn("unknown", m["by_endpoint"])
 
+    def test_by_endpoint_tracks_latency_average(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tel = _make_telemetry(tmp)
+            tel.write({"endpoint": "chat", "latency_ms": 100})
+            tel.write({"endpoint": "chat", "latency_ms": 200})
+            m = self._read_metrics(tel)
+            self.assertAlmostEqual(m["by_endpoint"]["chat"]["latency_avg_ms"], 150.0, places=1)
+
+    def test_by_endpoint_tracks_token_totals(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tel = _make_telemetry(tmp)
+            tel.write({"endpoint": "chat", "tokens_in": 5, "tokens_out": 7, "latency_ms": 0})
+            tel.write({"endpoint": "chat", "tokens_in": 3, "tokens_out": 2, "latency_ms": 0})
+            m = self._read_metrics(tel)
+            self.assertEqual(m["by_endpoint"]["chat"]["tokens_in_total"], 8)
+            self.assertEqual(m["by_endpoint"]["chat"]["tokens_out_total"], 9)
+
+    def test_by_endpoint_tracks_errors_and_last_status(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tel = _make_telemetry(tmp)
+            tel.write({"endpoint": "chat", "status": "ok", "latency_ms": 0})
+            tel.write({"endpoint": "chat", "status": "error", "latency_ms": 0})
+            m = self._read_metrics(tel)
+            self.assertEqual(m["by_endpoint"]["chat"]["errors_total"], 1)
+            self.assertEqual(m["by_endpoint"]["chat"]["last_status"], "error")
+
     def test_last_updated_utc_set(self):
         with tempfile.TemporaryDirectory() as tmp:
             tel = _make_telemetry(tmp)

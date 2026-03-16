@@ -1,0 +1,22 @@
+roles:
+  hint:
+    model_id: phi3:mini
+    backend: ollama
+    quantization: q4_k_m (runner default)
+    max_context: 4096
+    notes: Strict short hints only.
+  answer:
+    model_id: gemma:2b
+    backend: ollama
+    quantization: q4_k_m (runner default)
+    max_context: 4096
+    notes: General heavy answer path (stable output on this host).
+  code:
+    model_id: qwen2.5-coder:7b
+    backend: ollama
+    quantization: q4_k_m (runner default)
+    max_context: 8192
+    notes: Optional coding endpoint.
+server:
+  host: 0.0.0.0
+  port: 18891

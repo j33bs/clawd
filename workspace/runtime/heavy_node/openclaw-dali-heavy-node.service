@@ -1,0 +1,18 @@
+[Unit]
+Description=OpenClaw DALI Heavy Node
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/clawd
+Environment=PYTHONUNBUFFERED=1
+Environment=DALI_HEAVY_NODE_MANIFEST=%h/clawd/workspace/runtime/heavy_node/model_manifest.yaml
+ExecStart=%h/clawd/workspace/runtime/heavy_node/.venv/bin/python -m uvicorn workspace.runtime.heavy_node.server:app --host 0.0.0.0 --port 18891
+Restart=on-failure
+RestartSec=2
+StandardOutput=append:%h/clawd/workspace/logs/dali_heavy_node_service.log
+StandardError=append:%h/clawd/workspace/logs/dali_heavy_node_service.log
+
+[Install]
+WantedBy=default.target
