@@ -1,0 +1,17 @@
+[Unit]
+Description=OpenClaw Discord control-surface bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/src/clawd
+ExecStart=%h/.local/share/openclaw/venvs/discord-bot/bin/python %h/src/clawd/workspace/scripts/discord_bot.py --env-file %h/.config/openclaw/discord-bot.env
+Restart=always
+RestartSec=5
+StandardOutput=append:%h/.local/state/openclaw/discord/bot.out.log
+StandardError=append:%h/.local/state/openclaw/discord/bot.err.log
+
+[Install]
+WantedBy=default.target
+
