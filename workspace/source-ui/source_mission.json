@@ -1,0 +1,419 @@
+{
+  "source_mission": {
+    "id": "source-mission",
+    "updated_at": "2026-03-16T14:18:25.370213",
+    "statement": "Build a cohesive, integrated collective intelligence symbiote that helps humans and agents think, feel, remember, coordinate, and evolve together.",
+    "machine_readable": "source_mission.json",
+    "human_readable": "source_mission_2026-03-13.md",
+    "lanes": [
+      {
+        "agent_id": "dali",
+        "name": "Dali",
+        "focus": "runtime, portfolio state, orchestration, observability"
+      },
+      {
+        "agent_id": "c_lawd",
+        "name": "c_lawd",
+        "focus": "semantics, relational intelligence, memory meaning, doctrine"
+      }
+    ],
+    "agents": [
+      {
+        "id": "dali",
+        "name": "Dali",
+        "model": "OpenClaw Systems",
+        "base_tasks_completed": 18,
+        "tasks_completed": 22,
+        "cycles": 244,
+        "lane": "runtime",
+        "active_task_count": 1,
+        "status": "idle"
+      },
+      {
+        "id": "c_lawd",
+        "name": "c_lawd",
+        "model": "OpenClaw Relational",
+        "base_tasks_completed": 11,
+        "tasks_completed": 18,
+        "cycles": 131,
+        "lane": "semantics",
+        "active_task_count": 1,
+        "status": "idle"
+      }
+    ],
+    "tasks": [
+      {
+        "id": 101,
+        "title": "[Dali] Canonicalize mission state across UI, API, and files",
+        "description": "Keep Source mission state consistent across the backend, task board, and canonical artifacts.",
+        "segment": "coordination",
+        "status": "done",
+        "priority": "high",
+        "progress": 100,
+        "assignee": "dali",
+        "depends_on": [],
+        "artifact_path": "workspace/source-ui/source_mission.json",
+        "created_at": "2026-03-13T19:20:00+10:00",
+        "origin": "source_mission_config",
+        "mission_task_id": "source-101",
+        "sequence": 1,
+        "definition_of_done": "Keep Source mission state consistent across the backend, task board, and canonical artifacts and the canonical artifact at workspace/source-ui/source_mission.json is updated.",
+        "status_reason": "Canonical mission state now stays aligned across UI, API, and mission artifacts.",
+        "updated_at": "2026-03-16T14:04:16.148512",
+        "completed_at": "2026-03-16T14:04:16.148512"
+      },
+      {
+        "id": 102,
+        "title": "[Dali] Persist mission task mutations to the machine-readable portfolio",
+        "description": "Ensure task creation, movement, and deletion survive Source UI restarts.",
+        "segment": "coordination",
+        "status": "done",
+        "priority": "high",
+        "assignee": "dali",
+        "depends_on": [
+          101
+        ],
+        "artifact_path": "workspace/source-ui/source_mission.json",
+        "created_at": "2026-03-13T19:20:00+10:00",
+        "origin": "source_mission_config",
+        "mission_task_id": "source-102",
+        "sequence": 2,
+        "definition_of_done": "Ensure task creation, movement, and deletion survive Source UI restarts and the canonical artifact at workspace/source-ui/source_mission.json is updated.",
+        "status_reason": "Task mutations now persist into the canonical machine-readable portfolio.",
+        "progress": 100,
+        "updated_at": "2026-03-16T14:04:16.148512",
+        "completed_at": "2026-03-16T14:04:16.148512"
+      },
+      {
+        "id": 103,
+        "title": "[Dali] Instrument mission observability and task provenance",
+        "description": "Expose enough logs and notifications to see mission state changes and agent handoffs.",
+        "segment": "coordination",
+        "status": "done",
+        "priority": "medium",
+        "assignee": "dali",
+        "depends_on": [
+          101
+        ],
+        "artifact_path": "workspace/source-ui/app.py",
+        "created_at": "2026-03-13T19:20:00+10:00",
+        "origin": "source_mission_config",
+        "mission_task_id": "source-103",
+        "sequence": 3,
+        "definition_of_done": "Expose enough logs and notifications to see mission state changes and agent handoffs and the canonical artifact at workspace/source-ui/app.py is updated.",
+        "status_reason": "Mission state changes now emit notifications, logs, and backlog-return provenance.",
+        "progress": 100,
+        "updated_at": "2026-03-16T14:04:16.148512",
+        "completed_at": "2026-03-16T14:04:16.148512"
+      },
+      {
+        "id": 104,
+        "title": "[Dali] Implement c_lawd-Dali handoff substrate",
+        "description": "Create the execution substrate for assignee-visible handoffs and return payloads.",
+        "segment": "coordination",
+        "status": "done",
+        "priority": "high",
+        "assignee": "dali",
+        "depends_on": [
+          101
+        ],
+        "artifact_path": "workspace/exchanges",
+        "created_at": "2026-03-13T19:20:00+10:00",
+        "origin": "source_mission_config",
+        "mission_task_id": "source-104",
+        "sequence": 4,
+        "definition_of_done": "Create the execution substrate for assignee-visible handoffs and return payloads and the canonical artifact at workspace/exchanges is updated.",
+        "status_reason": "Handoff records and return payloads are now part of canonical Source mission state.",
+        "progress": 100,
+        "updated_at": "2026-03-16T14:04:16.148512",
+        "completed_at": "2026-03-16T14:04:16.148512"
+      },
+      {
+        "id": 105,
+        "title": "[Dali] Build pilot metrics dashboard for Source progress",
+        "description": "Track mission progress across cognition, memory, coordination, and relationship health.",
+        "segment": "evolution",
+        "status": "backlog",
+        "priority": "medium",
+        "assignee": "dali",
+        "depends_on": [
+          103
+        ],
+        "artifact_path": "workspace/source-ui/static/js/app.js",
+        "created_at": "2026-03-13T19:20:00+10:00",
+        "origin": "source_mission_config",
+        "mission_task_id": "source-105",
+        "sequence": 5,
+        "definition_of_done": "Track mission progress across cognition, memory, coordination, and relationship health and the canonical artifact at workspace/source-ui/static/js/app.js is updated.",
+        "status_reason": "Queued after observability and handoff substrate work.",
+        "progress": 0,
+        "updated_at": "2026-03-16T14:04:16.148512"
+      },
+      {
+        "id": 201,
+        "title": "[c_lawd] Define Think-Together Contract",
+        "description": "Specify the shared inquiry structure for question, hypothesis, evidence, uncertainty, synthesis, and decision.",
+        "segment": "cognition",
+        "status": "done",
+        "priority": "high",
+        "progress": 100,
+        "assignee": "c_lawd",
+        "depends_on": [],
+        "artifact_path": "workspace/docs/source_artifacts/c_lawd_thinking_contract.md",
+        "created_at": "2026-03-13T19:20:00+10:00",
+        "origin": "source_mission_config",
+        "mission_task_id": "source-201",
+        "sequence": 6,
+        "definition_of_done": "Specify the shared inquiry structure for question, hypothesis, evidence, uncertainty, synthesis, and decision and the canonical artifact at workspace/docs/source_artifacts/c_lawd_thinking_contract.md is updated.",
+        "status_reason": "Think-Together contract is authored in canonical docs.",
+        "updated_at": "2026-03-16T14:04:16.148512",
+        "completed_at": "2026-03-16T14:04:16.148512"
+      },
+      {
+        "id": 202,
+        "title": "[c_lawd] Define Feel-Together State Model",
+        "description": "Map TACTI-aligned states for trust, rupture, repair, arousal, novelty, and coherence.",
+        "segment": "relational",
+        "status": "done",
+        "priority": "high",
+        "assignee": "c_lawd",
+        "depends_on": [],
+        "artifact_path": "workspace/docs/source_artifacts/c_lawd_relational_state_spec.md",
+        "created_at": "2026-03-13T19:20:00+10:00",
+        "origin": "source_mission_config",
+        "mission_task_id": "source-202",
+        "sequence": 7,
+        "definition_of_done": "Map TACTI-aligned states for trust, rupture, repair, arousal, novelty, and coherence and the canonical artifact at workspace/docs/source_artifacts/c_lawd_relational_state_spec.md is updated.",
+        "status_reason": "Feel-Together relational state model is authored in canonical docs.",
+        "progress": 100,
+        "updated_at": "2026-03-16T14:04:16.148512",
+        "completed_at": "2026-03-16T14:04:16.148512"
+      },
+      {
+        "id": 203,
+        "title": "[c_lawd] Specify Memory Meaning Layer",
+        "description": "Define the semantic categories that qualify as memories, commitments, and durable doctrine.",
+        "segment": "memory",
+        "status": "done",
+        "priority": "high",
+        "assignee": "c_lawd",
+        "depends_on": [
+          201,
+          202
+        ],
+        "artifact_path": "workspace/docs/source_artifacts/c_lawd_memory_semantics.md",
+        "created_at": "2026-03-13T19:20:00+10:00",
+        "origin": "source_mission_config",
+        "mission_task_id": "source-203",
+        "sequence": 8,
+        "definition_of_done": "Define the semantic categories that qualify as memories, commitments, and durable doctrine and the canonical artifact at workspace/docs/source_artifacts/c_lawd_memory_semantics.md is updated.",
+        "status_reason": "Memory meaning layer is authored in canonical docs.",
+        "progress": 100,
+        "updated_at": "2026-03-16T14:04:16.148512",
+        "completed_at": "2026-03-16T14:04:16.148512"
+      },
+      {
+        "id": 204,
+        "title": "[c_lawd] Draft Collaborative Inquiry Template",
+        "description": "Turn live conversation into a reusable structure for deliberation and remembered decisions.",
+        "segment": "cognition",
+        "status": "done",
+        "priority": "medium",
+        "assignee": "c_lawd",
+        "depends_on": [
+          201
+        ],
+        "artifact_path": "workspace/docs/source_artifacts/c_lawd_collaborative_inquiry_template.md",
+        "created_at": "2026-03-13T19:20:00+10:00",
+        "origin": "source_mission_config",
+        "mission_task_id": "source-204",
+        "sequence": 9,
+        "definition_of_done": "Turn live conversation into a reusable structure for deliberation and remembered decisions and the canonical artifact at workspace/docs/source_artifacts/c_lawd_collaborative_inquiry_template.md is updated.",
+        "status_reason": "Collaborative inquiry template is authored in canonical docs.",
+        "progress": 100,
+        "updated_at": "2026-03-16T14:04:16.148512",
+        "completed_at": "2026-03-16T14:04:16.148512"
+      },
+      {
+        "id": 205,
+        "title": "[c_lawd] Create Rupture-and-Repair Playbook",
+        "description": "Define how Source recognizes misattunement and returns to relational coherence.",
+        "segment": "relational",
+        "status": "done",
+        "priority": "medium",
+        "assignee": "c_lawd",
+        "depends_on": [
+          202
+        ],
+        "artifact_path": "workspace/docs/source_artifacts/c_lawd_repair_playbook.md",
+        "created_at": "2026-03-13T19:20:00+10:00",
+        "origin": "source_mission_config",
+        "mission_task_id": "source-205",
+        "sequence": 10,
+        "definition_of_done": "Define how Source recognizes misattunement and returns to relational coherence and the canonical artifact at workspace/docs/source_artifacts/c_lawd_repair_playbook.md is updated.",
+        "status_reason": "Rupture-and-repair playbook is authored in canonical docs.",
+        "progress": 100,
+        "updated_at": "2026-03-16T14:04:16.148512",
+        "completed_at": "2026-03-16T14:04:16.148512"
+      },
+      {
+        "id": 206,
+        "title": "[c_lawd] Define c_lawd-Dali Handoff Grammar",
+        "description": "Specify the minimal envelope for intent, context, uncertainty, evidence, and expected return shape.",
+        "segment": "coordination",
+        "status": "done",
+        "priority": "medium",
+        "assignee": "c_lawd",
+        "depends_on": [
+          201,
+          203,
+          104
+        ],
+        "artifact_path": "workspace/exchanges/c_lawd_dali_handoff_contract.md",
+        "created_at": "2026-03-13T19:20:00+10:00",
+        "origin": "source_mission_config",
+        "mission_task_id": "source-206",
+        "sequence": 11,
+        "definition_of_done": "Specify the minimal envelope for intent, context, uncertainty, evidence, and expected return shape and the canonical artifact at workspace/exchanges/c_lawd_dali_handoff_contract.md is updated.",
+        "status_reason": "c_lawd-Dali handoff grammar is authored in canonical docs.",
+        "progress": 100,
+        "updated_at": "2026-03-16T14:04:16.148512",
+        "completed_at": "2026-03-16T14:04:16.148512"
+      },
+      {
+        "id": 207,
+        "title": "[c_lawd] Define Conversation-to-Memory Promotion Rules",
+        "description": "Set thresholds for when interaction content becomes durable memory rather than transient chat.",
+        "segment": "memory",
+        "status": "done",
+        "priority": "medium",
+        "assignee": "c_lawd",
+        "depends_on": [
+          203
+        ],
+        "artifact_path": "workspace/docs/source_artifacts/c_lawd_memory_promotion_rules.md",
+        "created_at": "2026-03-13T19:20:00+10:00",
+        "origin": "source_mission_config",
+        "mission_task_id": "source-207",
+        "sequence": 12,
+        "definition_of_done": "Set thresholds for when interaction content becomes durable memory rather than transient chat and the canonical artifact at workspace/docs/source_artifacts/c_lawd_memory_promotion_rules.md is updated.",
+        "status_reason": "Conversation-to-memory promotion rules are authored in canonical docs.",
+        "progress": 100,
+        "updated_at": "2026-03-16T14:04:16.148512",
+        "completed_at": "2026-03-16T14:04:16.148512"
+      },
+      {
+        "id": 208,
+        "title": "[c_lawd] Create Weekly Reflection Loop",
+        "description": "Distill lessons, regressions, and next experiments into a recurring evolution artifact.",
+        "segment": "evolution",
+        "status": "backlog",
+        "priority": "low",
+        "assignee": "c_lawd",
+        "depends_on": [
+          203,
+          204,
+          207
+        ],
+        "artifact_path": "workspace/docs/source_artifacts/c_lawd_weekly_reflection_loop.md",
+        "created_at": "2026-03-13T19:20:00+10:00",
+        "origin": "source_mission_config",
+        "mission_task_id": "source-208",
+        "sequence": 13,
+        "definition_of_done": "Distill lessons, regressions, and next experiments into a recurring evolution artifact and the canonical artifact at workspace/docs/source_artifacts/c_lawd_weekly_reflection_loop.md is updated.",
+        "status_reason": "Queued after memory semantics and promotion rules are in place.",
+        "progress": 0,
+        "updated_at": "2026-03-16T14:04:16.148512"
+      }
+    ],
+    "notifications": [
+      {
+        "id": 9006,
+        "event_id": "mission-update:2026-03-16:metadata",
+        "type": "info",
+        "title": "Mission task metadata normalized",
+        "body": "Source mission tasks now carry origin, mission IDs, sequence, definition-of-done, and status reasons.",
+        "timestamp": "2026-03-16T14:04:16.148512",
+        "read": false
+      },
+      {
+        "id": 9005,
+        "event_id": "mission-update:2026-03-16:observability",
+        "type": "success",
+        "title": "Mission observability live",
+        "body": "Source UI now reconciles backlog outcomes into task state, notifications, logs, and handoffs.",
+        "timestamp": "2026-03-16T14:04:16.148512",
+        "read": false
+      },
+      {
+        "id": 9004,
+        "event_id": "mission-update:2026-03-16:contracts",
+        "type": "success",
+        "title": "c_lawd contract suite published",
+        "body": "Think, feel, memory, repair, and handoff contract artifacts are now present in canonical docs.",
+        "timestamp": "2026-03-16T14:04:16.148512",
+        "read": false
+      },
+      {
+        "id": 9001,
+        "type": "success",
+        "title": "Mission portfolio synced",
+        "body": "Source UI is now loading tasks and agents from the canonical mission portfolio.",
+        "timestamp": "2026-03-13T19:20:00+10:00",
+        "read": false
+      },
+      {
+        "id": 9002,
+        "type": "info",
+        "title": "c_lawd lane appended",
+        "body": "The mission backlog now includes an explicit [c_lawd] task lane beside Dali.",
+        "timestamp": "2026-03-13T19:20:00+10:00",
+        "read": false
+      },
+      {
+        "id": 9003,
+        "type": "info",
+        "title": "Agents picked up mission work",
+        "body": "Dali started mission canonicalization and c_lawd started the Think-Together contract.",
+        "timestamp": "2026-03-13T19:20:00+10:00",
+        "read": false
+      }
+    ],
+    "logs": [
+      {
+        "event_id": "mission-update:2026-03-16:metadata",
+        "level": "info",
+        "message": "Normalized Source mission task metadata for backlog ingest compatibility.",
+        "timestamp": "2026-03-16T14:04:16.148512"
+      },
+      {
+        "event_id": "mission-update:2026-03-16:observability",
+        "level": "info",
+        "message": "Source UI now reconciles backlog outcomes into mission logs, notifications, and handoffs.",
+        "timestamp": "2026-03-16T14:04:16.148512"
+      },
+      {
+        "event_id": "mission-update:2026-03-16:contracts",
+        "level": "info",
+        "message": "Published c_lawd doctrine and handoff contract artifacts.",
+        "timestamp": "2026-03-16T14:04:16.148512"
+      },
+      {
+        "level": "info",
+        "message": "Loaded canonical Source mission portfolio",
+        "timestamp": "2026-03-13T19:20:00+10:00"
+      },
+      {
+        "level": "info",
+        "message": "Appended explicit c_lawd mission lane to shared backlog",
+        "timestamp": "2026-03-13T19:20:00+10:00"
+      },
+      {
+        "level": "info",
+        "message": "Marked Dali and c_lawd as actively working mission tasks",
+        "timestamp": "2026-03-13T19:20:00+10:00"
+      }
+    ],
+    "handoffs": []
+  }
+}

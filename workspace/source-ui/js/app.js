@@ -382,7 +382,7 @@ function updatePanelTimestamp(panel, timestamp) {
     }
 }
 
-function shapePanelData(panel, payload) {
+async function shapePanelData(panel, payload) {
     switch (panel) {
         case 'dream': {
             return {
@@ -511,7 +511,7 @@ async function refreshTactiPanel(panel, showToast) {
             const reason = payload?.error?.message || payload?.error?.code || 'endpoint unavailable';
             throw new Error(reason);
         }
-        const shaped = shapePanelData(panel, payload.data || {});
+        const shaped = await shapePanelData(panel, payload.data || {});
         renderPanelMetrics(panel, shaped.metrics);
         renderPanelDetails(panel, shaped.details);
         renderPanelError(panel, null);
@@ -877,15 +877,19 @@ function initDragAndDrop() {
         }
     });
     
-    document.addEventListener('drop', (e) => {
+    document.addEventListener('drop', async (e) => {
         e.preventDefault();
         const column = e.target.closest('.kanban-column');
         if (column) {
             column.classList.remove('drag-over');
             const taskId = parseInt(e.dataTransfer.getData('text/plain'));
             const newStatus = column.dataset.status;
-            store.moveTask(taskId, newStatus);
-            renderTasks();
+            try {
+                await api.updateTask(taskId, { status: newStatus });
+                await refreshAll();
+            } catch (error) {
+                Toast.error('Failed to update task');
+            }
         }
     });
 }
@@ -940,7 +944,7 @@ function openNewTaskModal() {
     Modal.open('Create New Task', content, footer);
 }
 
-function createTask() {
+async function createTask() {
     const title = $('#new-task-title')?.value;
     const desc = $('#new-task-desc')?.value;
     const priority = $('#new-task-priority')?.value;
@@ -951,18 +955,21 @@ function createTask() {
         return;
     }
     
-    store.addTask({
-        title,
-        description: desc,
-        priority,
-        assignee,
-        status: 'backlog',
-        createdAt: new Date().toISOString()
-    });
-    
-    Modal.close();
-    renderTasks();
-    Toast.success('Task created successfully');
+    try {
+        await api.createTask({
+            title,
+            description: desc,
+            priority,
+            assignee,
+            status: 'backlog'
+        });
+
+        Modal.close();
+        await refreshAll();
+        Toast.success('Task created successfully');
+    } catch (error) {
+        Toast.error('Task creation failed');
+    }
 }
 
 // Command Palette
