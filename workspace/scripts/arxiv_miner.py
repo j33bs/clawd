@@ -2,6 +2,7 @@
 """
 Arxiv Skill Miner - Extract agent skills from arxiv papers
 Based on: arxiv:2603.11808 framework for S=(C,π,T,R) extraction
+Integrates with: tacti_skill_evolution for self-improving skills
 """
 import subprocess
 import json
@@ -11,9 +12,12 @@ from pathlib import Path
 from typing import Optional
 
 # Add scripts to path
-sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
+REPO_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(REPO_ROOT / "workspace" / "memory"))
+sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
-PAPERS_DIR = Path(__file__).parent.parent / "papers"
+PAPERS_DIR = REPO_ROOT / "workspace" / "papers"
+SKILLS_DIR = REPO_ROOT / "skills"
 
 
 def fetch_paper(arxiv_id: str) -> Optional[Path]:
@@ -96,27 +100,99 @@ S = (C, π, T, R)
     return md
 
 
+def register_with_evolution(skill_name: str, task: str, success: bool, error: str = None):
+    """Register skill execution with the evolution system."""
+    try:
+        from tacti_skill_evolution import SkillExecution, get_evolution
+        execution = SkillExecution(
+            skill_name=skill_name,
+            task=task,
+            success=success,
+            error=error,
+            tool_failures=[]
+        )
+        evo = get_evolution()
+        status = evo.observe(execution)
+        
+        # Auto-amend if threshold reached
+        if evo.skills_state["skills"].get(skill_name, {}).get("failure_count", 0) >= 3:
+            amendment = evo.amend(skill_name, auto_approve=False)
+            if amendment:
+                print(f"\n⚠️ Amendment proposed for {skill_name}: {amendment.rationale}")
+        
+        return status
+    except Exception as e:
+        print(f"Evolution integration error: {e}")
+        return None
+
+
+def create_skill_directory(skill_name: str, md_content: str) -> Path:
+    """Create skill directory and SKILL.md file."""
+    skill_dir = SKILLS_DIR / skill_name
+    skill_dir.mkdir(parents=True, exist_ok=True)
+    
+    skill_file = skill_dir / "SKILL.md"
+    skill_file.write_text(md_content)
+    
+    return skill_file
+
+
+def mine_and_register(arxiv_id: str, skill_name: str = None) -> dict:
+    """Full pipeline: mine skill + register with evolution + create skill file."""
+    
+    # Default skill name from paper ID
+    if not skill_name:
+        skill_name = f"arxiv_{arxiv_id}"
+    
+    print(f"Mining {arxiv_id} as '{skill_name}'...")
+    
+    # Fetch paper
+    if not fetch_paper(arxiv_id):
+        register_with_evolution(skill_name, f"fetch_{arxiv_id}", False, error="download_failed")
+        return {"error": "Failed to fetch paper"}
+    
+    # Find tex - could be in subfolder or directly in papers dir
+    tex_files = list(PAPERS_DIR.glob("*/article.tex")) + list(PAPERS_DIR.glob("article.tex"))
+    if not tex_files:
+        register_with_evolution(skill_name, f"parse_{arxiv_id}", False, error="no_tex_found")
+        return {"error": "No article.tex found"}
+    
+    content = tex_files[0].read_text()
+    
+    # Extract skill tuple
+    skill_tuple = extract_skill_tuple(content)
+    
+    # Generate SKILL.md
+    md = generate_skill_md(arxiv_id, skill_tuple)
+    
+    # Create skill file
+    skill_file = create_skill_directory(skill_name, md)
+    
+    # Register with evolution (success)
+    register_with_evolution(skill_name, f"create_{arxiv_id}", True)
+    
+    return {
+        "skill_name": skill_name,
+        "skill_file": str(skill_file),
+        "skill_tuple": skill_tuple
+    }
+
+
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("Usage: arxiv_miner.py <arxiv_id>")
+        print("Usage: arxiv_miner.py <arxiv_id> [skill_name]")
+        print("  <arxiv_id>   : e.g., 2603.11808")
+        print("  [skill_name] : optional custom skill name")
         sys.exit(1)
     
-    paper_id = sys.argv[1]
-    print(f"Mining {paper_id}...")
+    arxiv_id = sys.argv[1]
+    skill_name = sys.argv[2] if len(sys.argv) > 2 else None
     
-    if fetch_paper(paper_id):
-        # Find extracted tex
-        tex_files = list(PAPERS_DIR.glob("*/article.tex"))
-        if tex_files:
-            content = tex_files[0].read_text()
-            skill = extract_skill_tuple(content)
-            print(json.dumps(skill, indent=2))
-            
-            # Generate skill md
-            md = generate_skill_md(paper_id, skill)
-            print("\n--- Generated SKILL.md ---\n")
-            print(md)
-        else:
-            print("No article.tex found")
+    result = mine_and_register(arxiv_id, skill_name)
+    
+    if "error" in result:
+        print(f"Error: {result['error']}")
     else:
-        print("Failed to fetch paper")
+        print(f"\n✓ Skill created: {result['skill_name']}")
+        print(f"  File: {result['skill_file']}")
+        print(f"\nSkill tuple: {json.dumps(result['skill_tuple'], indent=2)}")
