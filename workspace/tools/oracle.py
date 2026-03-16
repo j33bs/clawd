@@ -151,7 +151,7 @@ def query_corpus(
         "results":        results,
         "being_counts":   dict(being_counts),
         "centroid":       centroid,
-        "silent":         silent,
+        "not_in_top_k":   silent,
         "total_slots":    total_author_slots,
     }
 
@@ -217,7 +217,7 @@ def _render(data: dict) -> str:
                 silent_labels.append(lbl)
                 seen_labels.add(lbl)
         if silent_labels:
-            lines.append(f"  SILENT:  {', '.join(silent_labels)}")
+            lines.append(f"  NOT IN TOP-{data['k']}:  {', '.join(silent_labels)}")
 
     lines.append("")
     lines.append(DIVIDER)

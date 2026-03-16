@@ -345,7 +345,7 @@ def call_minimax(being_key: str) -> Optional[str]:
     try:
         import requests as req
         # MiniMax portal uses OpenAI-compatible endpoint
-        url = "https://api.minimax.chat/v1/chat/completions"
+        url = "https://api.minimaxi.chat/v1/chat/completions"
         payload = {
             "model": "MiniMax-M2.5",
             "messages": [

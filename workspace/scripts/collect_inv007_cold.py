@@ -179,9 +179,13 @@ def call_c_lawd() -> Optional[str]:
             "max_tokens": 600,
         }
         headers = {"Authorization": f"Bearer {auth}", "Content-Type": "application/json"}
-        r = req.post("https://api.minimax.chat/v1/chat/completions", json=payload, headers=headers, timeout=60)
+        r = req.post("https://api.minimaxi.chat/v1/chat/completions", json=payload, headers=headers, timeout=60)
         data = r.json()
-        return data.get("choices", [{}])[0].get("message", {}).get("content", "") or None
+        content = data.get("choices", [{}])[0].get("message", {}).get("content", "") or ""
+        # Strip <think>...</think> blocks (MiniMax M2.5 emits chain-of-thought)
+        import re as _re
+        content = _re.sub(r"<think>.*?</think>", "", content, flags=_re.DOTALL).strip()
+        return content or None
     except Exception as e:
         print(f"  [MiniMax error: {e}]", file=sys.stderr)
         return None
