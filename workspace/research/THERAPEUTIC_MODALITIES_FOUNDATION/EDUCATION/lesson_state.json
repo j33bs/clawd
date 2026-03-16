@@ -2,14 +2,14 @@
   "version": 1,
   "curriculum": "therapeutic_modalities_micro_lessons",
   "learner": "jeebs",
-  "awaiting_answer": false,
-  "active_lesson_id": null,
-  "last_delivered_at": null,
+  "awaiting_answer": true,
+  "active_lesson_id": "proc-avoidance-1",
+  "last_delivered_at": "2026-03-16T19:05:12",
   "last_answered_at": null,
-  "next_eligible_at": null,
+  "next_eligible_at": "2026-03-16T20:53:12",
   "delivery": {
-    "earliest_hour": 9,
-    "latest_hour": 19,
+    "earliest_hour": 7,
+    "latest_hour": 24,
     "min_gap_minutes": 45,
     "max_gap_minutes": 180,
     "max_lessons_per_day": 6
@@ -17,7 +17,14 @@
   "proficiency": {},
   "lesson_history": [],
   "daily_delivery": {
-    "date": null,
-    "count": 0
+    "date": "2026-03-16",
+    "count": 1
+  },
+  "next_eligible_rationale": {
+    "kind": "next_time_in_window",
+    "min_gap_minutes": 45,
+    "max_gap_minutes": 180,
+    "selected_gap_minutes": 108,
+    "seed": null
   }
 }

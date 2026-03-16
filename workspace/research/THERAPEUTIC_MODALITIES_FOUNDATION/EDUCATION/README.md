@@ -42,8 +42,8 @@ This track turns the foundation into a **gated micro-lesson curriculum**.
 Recommended: 4–6 lessons per day, spaced across the day.
 
 Default spacing in `lesson_state.json`:
-- earliest lesson window: 09:00
-- latest lesson window: 19:00
+- earliest lesson window: 07:00
+- latest lesson window: 24:00
 - randomized gap between lessons: 45–180 minutes
 
 ## Intended educational outcome
