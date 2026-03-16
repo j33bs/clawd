@@ -1,193 +1,195 @@
 #!/usr/bin/env python3
 """
-Message Handler with router-backed Telegram response handling.
+Message Handler with Load Balancing and Efficiency Optimizations
 
-Integrates the policy router with OpenClaw gateway for:
-- Multi-chat response with OpenAI escalation when needed
+Integrates message_load_balancer with OpenClaw gateway for:
+- Multi-chat response with ChatGPT fallback
 - Reply-to-message threading
 - Prompt caching
 - Context summarization
-- Reply provenance capture
 """
 
 import os
+import sys
 import json
 import asyncio
+import subprocess
 from datetime import datetime, timezone
-from typing import Optional
-from agent_orchestration import build_default_orchestrator
-from c_lawd_conversation_kernel import (
-    build_c_lawd_surface_kernel,
-    build_c_lawd_surface_kernel_packet,
-)
-from policy_router import PolicyRouter, build_chat_payload
-from telegram_recall import build_recall_context
 from pathlib import Path
+from typing import Any, Optional
 
 try:
     import aiohttp
-except Exception:  # pragma: no cover - optional dependency in tests/light runtimes
+except Exception:  # pragma: no cover
     aiohttp = None
+
+# CEL tool imports are optional to preserve backward compatibility.
+REPO_ROOT = Path(__file__).resolve().parents[2]
+TOOLS_DIR = REPO_ROOT / "tools"
+SOURCE_UI_ROOT = REPO_ROOT / "workspace" / "source-ui"
+if str(TOOLS_DIR) not in sys.path:
+    sys.path.insert(0, str(TOOLS_DIR))
+if str(SOURCE_UI_ROOT) not in sys.path:
+    sys.path.insert(0, str(SOURCE_UI_ROOT))
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+try:
+    from codex_prepare_prompt import build_prepared_prompt_payload, write_prepared_prompt_file
+    from codex_spawn_session import spawn_codex_session
+except Exception:  # pragma: no cover
+    build_prepared_prompt_payload = None
+    write_prepared_prompt_file = None
+    spawn_codex_session = None
+
+SCRIPTS_DIR = REPO_ROOT / "workspace" / "scripts"
+if str(SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPTS_DIR))
+from agent_orchestration import build_default_orchestrator
+from telegram_recall import build_recall_block
+try:
+    from model_intent_router import route_metadata_for_text
+except Exception:  # pragma: no cover
+    route_metadata_for_text = None
+
+from api.discord_bot_support import (  # type: ignore
+    build_telegram_chat_prompt,
+    extract_agent_reply_text,
+    extract_last_json_object,
+    source_context_packet_text,
+    telegram_memory_context_text,
+    user_context_packet_text,
+)
+from api.telegram_memory import ingest_telegram_exchange  # type: ignore
+from policy_router import PolicyRouter, build_chat_payload  # type: ignore
 
 # Configuration
 GATEWAY_URL = os.environ.get("GATEWAY_URL", "http://127.0.0.1:18789")
 GATEWAY_TOKEN = os.environ.get("GATEWAY_TOKEN", "")  # Set your token
 MAX_QUEUE_DEPTH = int(os.environ.get("MAX_QUEUE_DEPTH", "5"))
 MAX_LATENCY_MS = int(os.environ.get("MAX_LATENCY_MS", "30000"))
-MAX_HISTORY_MESSAGES = int(os.environ.get("OPENCLAW_TELEGRAM_HISTORY_MESSAGES", "24"))
-HISTORY_PATH = Path(
-    os.environ.get(
-        "OPENCLAW_TELEGRAM_HISTORY_PATH",
-        str(Path(__file__).resolve().parents[1] / "state_runtime" / "telegram_message_handler_history.json"),
-    )
+OPENCLAW_BIN = os.environ.get(
+    "OPENCLAW_CLI_BIN",
+    str(REPO_ROOT / ".runtime" / "openclaw" / "openclaw.mjs"),
+).strip()
+TELEGRAM_AGENT_ID = os.environ.get("OPENCLAW_TELEGRAM_AGENT_ID", "telegram-dali").strip() or "telegram-dali"
+TELEGRAM_EXEC_AGENT_ID = os.environ.get("OPENCLAW_TELEGRAM_EXEC_AGENT_ID", "main").strip() or "main"
+TELEGRAM_DEFAULT_PROVIDER = os.environ.get("OPENCLAW_TELEGRAM_DEFAULT_PROVIDER", "minimax_m25").strip() or "minimax_m25"
+TELEGRAM_DEFAULT_MODEL = os.environ.get(
+    "OPENCLAW_TELEGRAM_DEFAULT_MODEL",
+    "minimax-portal/MiniMax-M2.5",
+).strip() or "minimax-portal/MiniMax-M2.5"
+TELEGRAM_OAUTH_MODEL = os.environ.get("OPENCLAW_TELEGRAM_OAUTH_MODEL", "openai/gpt-5.4-pro").strip() or "openai/gpt-5.4-pro"
+TELEGRAM_AUTH_THINKING = os.environ.get("OPENCLAW_TELEGRAM_AUTH_THINKING", "medium").strip() or "medium"
+TELEGRAM_AUTH_TIMEOUT_SECONDS = max(
+    30,
+    int(os.environ.get("OPENCLAW_TELEGRAM_AUTH_TIMEOUT_SECONDS", "180") or "180"),
 )
-PROVENANCE_PATH = Path(
-    os.environ.get(
-        "OPENCLAW_TELEGRAM_REPLY_PROVENANCE_PATH",
-        str(Path(__file__).resolve().parents[1] / "state_runtime" / "telegram_reply_provenance.jsonl"),
-    )
-)
+TELEGRAM_MAX_TOKENS = max(256, int(os.environ.get("OPENCLAW_TELEGRAM_MAX_TOKENS", "1200") or "1200"))
+TELEGRAM_TEMPERATURE = float(os.environ.get("OPENCLAW_TELEGRAM_TEMPERATURE", "0.2") or "0.2")
 
 
-def _utc_now_iso() -> str:
-    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+def _payload_prompt_text(payload: dict[str, Any]) -> str:
+    messages = payload.get("messages")
+    if isinstance(messages, list):
+        parts: list[str] = []
+        for item in messages:
+            if not isinstance(item, dict):
+                continue
+            content = item.get("content")
+            if isinstance(content, str) and content.strip():
+                parts.append(content.strip())
+        if parts:
+            return "\n\n".join(parts)
+    for key in ("prompt", "input", "text"):
+        value = payload.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return ""
 
 
-def _normalize_string_list(value) -> list[str]:
-    if not isinstance(value, list):
-        return []
-    normalized: list[str] = []
-    for item in value:
-        text = str(item or "").strip()
-        if text:
-            normalized.append(text)
-    return normalized
+def _auth_reason_code_from_detail(detail: str) -> str:
+    text = str(detail or "").lower()
+    if "429" in text or "rate limit" in text or "quota" in text:
+        return "request_http_429"
+    if "timeout" in text or "timed out" in text:
+        return "request_timeout"
+    if "auth" in text or "login" in text or "no available auth profile" in text or "configure auth" in text:
+        return "auth_login_required"
+    return "auth_cli_failed"
 
 
-def _normalize_memory_blocks(value) -> list[dict]:
-    if not isinstance(value, list):
-        return []
-    normalized: list[dict] = []
-    for item in value:
-        if isinstance(item, dict):
-            normalized.append(dict(item))
-    return normalized
+def _run_openclaw_auth_prompt(
+    payload: dict[str, Any],
+    model_id: str | None,
+    context: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    prompt = _payload_prompt_text(payload or {})
+    if not prompt:
+        return {"ok": False, "reason_code": "empty_prompt"}
+    runtime_context = dict(context or {})
+    selected_model = str(model_id or runtime_context.get("override_model") or TELEGRAM_OAUTH_MODEL).strip()
+    exec_agent_id = str(runtime_context.get("exec_agent_id") or TELEGRAM_EXEC_AGENT_ID).strip() or TELEGRAM_EXEC_AGENT_ID
+    cmd = [
+        "node",
+        OPENCLAW_BIN,
+        "agent",
+        "--local",
+        "--agent",
+        exec_agent_id,
+        "--json",
+        "--message",
+        prompt,
+        "--model",
+        selected_model,
+        "--thinking",
+        TELEGRAM_AUTH_THINKING,
+        "--timeout",
+        str(TELEGRAM_AUTH_TIMEOUT_SECONDS),
+    ]
+    try:
+        proc = subprocess.run(
+            cmd,
+            cwd=str(REPO_ROOT),
+            capture_output=True,
+            text=True,
+            timeout=TELEGRAM_AUTH_TIMEOUT_SECONDS + 30,
+            check=False,
+        )
+    except subprocess.TimeoutExpired as exc:
+        detail = str(exc)
+        return {"ok": False, "reason_code": _auth_reason_code_from_detail(detail), "error": detail}
+    except Exception as exc:
+        detail = str(exc)
+        return {"ok": False, "reason_code": "auth_cli_failed", "error": detail}
 
+    stdout_text = proc.stdout or ""
+    stderr_text = (proc.stderr or "").strip()
+    if proc.returncode != 0:
+        detail = stderr_text or stdout_text.strip() or f"exit {proc.returncode}"
+        return {"ok": False, "reason_code": _auth_reason_code_from_detail(detail), "error": detail}
 
-def _build_operator_visible_summary(*, provider: str, model: str, memory_blocks: list[dict], files_touched: list[str], tests_run: list[str], uncertainties: list[str]) -> str:
-    return (
-        f"route={provider or 'unknown'}/{model or 'unknown'} "
-        f"memory={len(memory_blocks)} "
-        f"files={len(files_touched)} "
-        f"tests={len(tests_run)} "
-        f"uncertainties={len(uncertainties)}"
-    )
+    try:
+        response_payload = extract_last_json_object(stdout_text)
+    except Exception as exc:
+        detail = stderr_text or str(exc) or stdout_text.strip()
+        return {"ok": False, "reason_code": "auth_cli_parse_error", "error": detail}
 
-
-def build_reply_provenance_envelope(
-    *,
-    route_provenance: dict,
-    result: dict,
-    reply_id: str,
-    chat_id: str,
-    message_id: str,
-) -> dict:
-    provider = str(route_provenance.get("selected_provider") or result.get("provider") or "").strip()
-    model = str(route_provenance.get("selected_model") or result.get("model") or "").strip()
-    memory_blocks = _normalize_memory_blocks(route_provenance.get("memory_blocks"))
-    files_touched = _normalize_string_list(route_provenance.get("files_touched"))
-    tests_run = _normalize_string_list(route_provenance.get("tests_run"))
-    uncertainties = _normalize_string_list(route_provenance.get("uncertainties"))
-    return {
-        "reply_id": str(reply_id or "").strip(),
-        "surface": str(route_provenance.get("surface") or "telegram").strip() or "telegram",
-        "policy_profile": str(route_provenance.get("policy_profile") or "").strip(),
-        "reason_code": str(route_provenance.get("reason_code") or "").strip(),
-        "provider": provider,
-        "model": model,
-        "memory_blocks": memory_blocks,
-        "files_touched": files_touched,
-        "tests_run": tests_run,
-        "uncertainties": uncertainties,
-        "operator_visible_summary": _build_operator_visible_summary(
-            provider=provider,
-            model=model,
-            memory_blocks=memory_blocks,
-            files_touched=files_touched,
-            tests_run=tests_run,
-            uncertainties=uncertainties,
-        ),
-        "chat_id": str(chat_id or "").strip(),
-        "message_id": str(message_id or "").strip(),
-        "kernel_id": str(route_provenance.get("kernel_id") or "").strip(),
-        "kernel_hash": str(route_provenance.get("kernel_hash") or "").strip(),
-        "surface_overlay": str(route_provenance.get("surface_overlay") or "").strip(),
-        "created_at": _utc_now_iso(),
-    }
+    reply_text = extract_agent_reply_text(response_payload).strip()
+    if not reply_text:
+        return {"ok": False, "reason_code": "response_null", "error": "No response text returned."}
+    return {"ok": True, "text": reply_text}
 
 
 class MessageHandler:
-    """Handles Telegram messages with router-backed prompt assembly and provenance."""
+    """Handles messages with load balancing and efficiency optimizations."""
     
-    def __init__(self, gateway_url: str, token: str, *, router: Optional[PolicyRouter] = None, history_path: Path | None = None):
+    def __init__(self, gateway_url: str, token: str, router: PolicyRouter | None = None):
         self.gateway_url = gateway_url
         self.token = token
+        self.router = router or PolicyRouter(handlers={"openai_auth": _run_openclaw_auth_prompt})
         self.queue_depth = 0
         self.avg_latency = 0
-        self.router = router or PolicyRouter()
-        self.history_path = Path(history_path) if history_path else HISTORY_PATH
-        self.message_history_by_chat = self._load_histories()
-
-    def append_reply_provenance(self, envelope: dict) -> None:
-        PROVENANCE_PATH.parent.mkdir(parents=True, exist_ok=True)
-        with PROVENANCE_PATH.open("a", encoding="utf-8") as handle:
-            handle.write(json.dumps(envelope, ensure_ascii=True) + "\n")
-
-    def _load_histories(self) -> dict[str, list[dict]]:
-        if not self.history_path.exists():
-            return {}
-        try:
-            data = json.loads(self.history_path.read_text(encoding="utf-8"))
-        except Exception:
-            return {}
-        if not isinstance(data, dict):
-            return {}
-        histories: dict[str, list[dict]] = {}
-        for chat_id, rows in data.items():
-            if not isinstance(rows, list):
-                continue
-            cleaned = []
-            for row in rows:
-                if not isinstance(row, dict):
-                    continue
-                role = str(row.get("role", "")).strip()
-                content = str(row.get("content", "")).strip()
-                if role and content:
-                    cleaned.append({"role": role, "content": content})
-            if cleaned:
-                histories[str(chat_id)] = cleaned[-MAX_HISTORY_MESSAGES:]
-        return histories
-
-    def _save_histories(self) -> None:
-        self.history_path.parent.mkdir(parents=True, exist_ok=True)
-        self.history_path.write_text(
-            json.dumps(self.message_history_by_chat, ensure_ascii=True, indent=2),
-            encoding="utf-8",
-        )
-
-    def _history_for_chat(self, chat_id: str | None) -> list[dict]:
-        if chat_id is None:
-            return []
-        return list(self.message_history_by_chat.get(str(chat_id), []))
-
-    def _append_history(self, chat_id: str | None, *, role: str, content: str) -> None:
-        if chat_id is None:
-            return
-        key = str(chat_id)
-        rows = list(self.message_history_by_chat.get(key, []))
-        rows.append({"role": role, "content": content})
-        self.message_history_by_chat[key] = rows[-MAX_HISTORY_MESSAGES:]
-        self._save_histories()
+        self.message_history = []  # For context summarization
         
     async def check_load(self) -> dict:
         """Check current system load."""
@@ -217,28 +219,20 @@ class MessageHandler:
     async def route_message(self, message: dict) -> dict:
         """Route message to appropriate agent."""
         load = await self.check_load()
-        content = str(message.get("content", ""))
-        payload = build_chat_payload(content, temperature=0.0, max_tokens=512)
-        context = {
-            "input_text": content,
-            "surface": "telegram",
-            "channel": "telegram",
-            "chat_id": str(message.get("chat_id", "")),
-        }
-        route = self.router.explain_route("conversation", context_metadata=context, payload=payload)
-        chosen = route.get("chosen") or {}
-
+        
+        # Determine routing
+        if load["overloaded"]:
+            route = "chatgpt"
+            reason = f"Queue depth {load['queue_depth']} >= {MAX_QUEUE_DEPTH}"
+        else:
+            route = "minimax"
+            reason = "Normal load"
+        
         return {
-            "route": chosen.get("provider") or "unavailable",
-            "reason": route.get("reason") or "default conversation routing",
+            "route": route,
+            "reason": reason,
             "message_id": message.get("message_id"),
-            "chat_id": message.get("chat_id"),
-            "surface": route.get("surface") or "telegram",
-            "policy_profile": route.get("policy_profile") or "default",
-            "selected_provider": chosen.get("provider"),
-            "selected_model": chosen.get("model"),
-            "route_explain": route,
-            "load": load,
+            "chat_id": message.get("chat_id")
         }
     
     def _auth_headers(self) -> dict:
@@ -247,48 +241,67 @@ class MessageHandler:
             return {"Authorization": f"Bearer {self.token}"}
         return {}
     
-    def cache_prompt(self, prompt: str, *, context: str = "", surface: str = "telegram") -> str:
-        """Build a stable, surface-specific prompt prefix for better caching and routing."""
-        static_context = build_c_lawd_surface_kernel(
-            surface=surface,
-            include_memory=True,
-            mode="conversation",
-        )
-        if context:
-            return f"{static_context}\n\n## Recent chat context\n\n{context}\n\n## User message\n\n{prompt}"
-        return f"{static_context}\n\n## User message\n\n{prompt}"
-    
-    def summarize_context(self, history: list, max_tokens: int = 2000) -> str:
-        """Summarize conversation history to save tokens.
+    def cache_prompt(self, prompt: str) -> str:
+        """Add caching hints to prompt for API optimization.
         
-        Keeps the most recent context while summarizing older messages.
+        Put static context at the top - APIs cache the first portion.
+        """
+        # Static instructions that don't change
+        static_context = """You are a helpful AI assistant. Be concise and accurate.
+"""
+        return static_context + prompt
+    
+    # Rolling history compaction constants
+    _HISTORY_MAX_VERBATIM = 3       # last N messages kept verbatim
+    _HISTORY_MAX_CHARS = 1600       # budget for compressed older-message summary (≈400 tokens)
+    _CHARS_PER_TOKEN = 4.0
+
+    def compact_history(self, history: list[dict]) -> list[dict]:
+        """
+        Rolling compaction: keep the last _HISTORY_MAX_VERBATIM messages verbatim,
+        compress older messages to 1-line per-message summaries (role + first 80 chars).
+
+        Replaces the coarse summarize_context() approach (message counts only).
+        Saves 0–400 tokens per message when history depth > 3.
+        Token budget for the summary block: ~400 tokens (_HISTORY_MAX_CHARS / 4).
+        """
+        if len(history) <= self._HISTORY_MAX_VERBATIM:
+            return history
+
+        recent = history[-self._HISTORY_MAX_VERBATIM:]
+        older = history[:-self._HISTORY_MAX_VERBATIM]
+
+        # Collapse each older message to a 1-line summary
+        lines = []
+        for msg in older:
+            role = msg.get("role", "?")[:1].upper()   # U / A / S / T
+            content = str(msg.get("content", "")).replace("\n", " ").strip()
+            snippet = content[:80] + ("…" if len(content) > 80 else "")
+            lines.append(f"[{role}] {snippet}")
+
+        summary_text = "\n".join(lines)
+        # Truncate if summary itself exceeds budget
+        if len(summary_text) > self._HISTORY_MAX_CHARS:
+            summary_text = summary_text[-self._HISTORY_MAX_CHARS:]
+
+        summary_msg = {"role": "system", "content": f"[Prior context]\n{summary_text}"}
+        return [summary_msg] + recent
+
+    def summarize_context(self, history: list, max_tokens: int = 2000) -> str:
+        """
+        Build a summarized context string from history.
+        Delegates to compact_history() for rolling compaction.
+        Kept for backward compatibility with callers expecting a string return.
         """
         if not history:
             return ""
-        
-        # Keep last N messages, summarize the rest
-        keep_recent = 5
-        recent = history[-keep_recent:]
-        older = history[:-keep_recent]
-        
-        summary = f"[Earlier conversation summarized from {len(older)} messages]"
-        
-        if older:
-            # Simple summarization - just count messages by role
-            roles = {}
-            for msg in older:
-                role = msg.get("role", "unknown")
-                roles[role] = roles.get(role, 0) + 1
-            summary += f" ({roles.get('user', 0)} user messages, {roles.get('assistant', 0)} assistant responses)"
-        
-        # Build context
-        context = summary + "\n\nRecent messages:\n"
-        for msg in recent:
-            role = msg.get("role", "unknown")
-            content = msg.get("content", "")[:200]  # Truncate long messages
-            context += f"{role}: {content}\n"
-        
-        return context
+        compacted = self.compact_history(history)
+        parts = []
+        for msg in compacted:
+            role = msg.get("role", "?")
+            content = str(msg.get("content", ""))[:300]
+            parts.append(f"{role}: {content}")
+        return "\n".join(parts)
 
 
 async def send_telegram_reply(chat_id: str, message_id: str, text: str, gateway_url: str, token: str):
@@ -314,22 +327,137 @@ async def send_telegram_reply(chat_id: str, message_id: str, text: str, gateway_
             return await resp.json()
 
 
+def _message_text(message: dict[str, Any]) -> str:
+    return str(message.get("content", "") or "").strip()
+
+
+def _message_author_name(message: dict[str, Any]) -> str:
+    for key in ("author_name", "sender_name", "from_name", "author"):
+        value = str(message.get(key, "") or "").strip()
+        if value:
+            return value
+    return "unknown"
+
+
+def _message_chat_title(message: dict[str, Any]) -> str:
+    for key in ("chat_title", "chat_name", "chat_label"):
+        value = str(message.get(key, "") or "").strip()
+        if value:
+            return value
+    return "telegram"
+
+
+def _message_thread_id(message: dict[str, Any]) -> str:
+    for key in ("reply_to_message_id", "thread_message_id", "replyTo"):
+        value = str(message.get(key, "") or "").strip()
+        if value:
+            return value
+    meta = message.get("meta")
+    if isinstance(meta, dict):
+        for key in ("reply_to_message_id", "thread_message_id"):
+            value = str(meta.get(key, "") or "").strip()
+            if value:
+                return value
+    return ""
+
+
+def _route_metadata(message_text: str) -> dict[str, Any]:
+    if not callable(route_metadata_for_text):
+        return {}
+    try:
+        payload = route_metadata_for_text(message_text)
+    except Exception:
+        return {}
+    return dict(payload or {})
+
+
+def _apply_telegram_route_defaults(route_meta: dict[str, Any]) -> dict[str, Any]:
+    preferred_provider = str(route_meta.get("preferred_provider") or "").strip()
+    if not preferred_provider:
+        preferred_provider = TELEGRAM_DEFAULT_PROVIDER
+        route_meta["preferred_provider"] = preferred_provider
+
+    if route_meta.get("override_model"):
+        return route_meta
+
+    if preferred_provider == "minimax_m25":
+        route_meta["override_model"] = TELEGRAM_DEFAULT_MODEL
+    elif preferred_provider == "openai_auth":
+        route_meta["override_model"] = TELEGRAM_OAUTH_MODEL
+    return route_meta
+
+
+def _build_telegram_runtime_request(message: dict[str, Any]) -> tuple[str, dict[str, Any]]:
+    content = _message_text(message)
+    message_id = str(message.get("message_id") or "").strip()
+    chat_id = str(message.get("chat_id") or "").strip()
+    chat_title = _message_chat_title(message)
+    author_name = _message_author_name(message)
+    thread_message_id = _message_thread_id(message)
+    session_start = bool(message.get("session_start", False))
+
+    memory_context = telegram_memory_context_text(
+        chat_id=chat_id,
+        author_name=author_name,
+        exclude_message_id=message_id or None,
+        thread_message_id=thread_message_id or None,
+        limit=4,
+    )
+    thread_context = [line for line in memory_context if "reply-to" in line][:2]
+    user_context = user_context_packet_text(
+        limit=4,
+        context=f"telegram\n{content}",
+        agent_id=TELEGRAM_AGENT_ID,
+        channel_name="telegram",
+    )
+    source_context = source_context_packet_text(limit=4, include_preferences=False)
+    recall_block = build_recall_block(
+        content,
+        env=os.environ,
+        session_start=session_start,
+    )
+    prompt = build_telegram_chat_prompt(
+        agent_id=TELEGRAM_AGENT_ID,
+        author_name=author_name,
+        chat_title=chat_title,
+        content=content,
+        memory_context=memory_context,
+        thread_context=thread_context,
+        user_context=user_context,
+        source_context=source_context,
+        recall_context=recall_block,
+    )
+
+    route_meta = _apply_telegram_route_defaults(_route_metadata(content))
+    context_metadata: dict[str, Any] = {
+        "input_text": content,
+        "surface": "telegram",
+        "agent_id": TELEGRAM_AGENT_ID,
+        "exec_agent_id": TELEGRAM_EXEC_AGENT_ID,
+        "author_name": author_name,
+        "chat_id": chat_id,
+        "chat_title": chat_title,
+        "thread_message_id": thread_message_id or None,
+        "session_start": session_start,
+    }
+    context_metadata.update({k: v for k, v in route_meta.items() if v})
+    return prompt, context_metadata
+
+
 async def spawn_chatgpt_subagent(task: str, context: dict, gateway_url: str, token: str):
-    """Spawn an OpenAI subagent to handle a message.
+    """Spawn a ChatGPT subagent to handle a message.
     
     Uses OpenClaw's sessions_spawn internally.
     """
-    if aiohttp is None:
-        raise RuntimeError("aiohttp is required to spawn gateway subagents")
     headers = {"Authorization": f"Bearer {token}"} if token else {}
-    
+
     orchestrator = build_default_orchestrator()
     spawn_plan = orchestrator.prepare_spawn(
         task=task,
         context=context or {},
         priority=(context or {}).get("priority", "normal"),
         specialization_tags=(context or {}).get("specialization_tags"),
-        providers=["openai-codex/gpt-5.4"],
+        providers=["openai-codex/gpt-5.3-codex"],
         enqueue_if_busy=False,
     )
 
@@ -342,15 +470,17 @@ async def spawn_chatgpt_subagent(task: str, context: dict, gateway_url: str, tok
             payload={"task_preview": task[:200]},
         )
 
+    payload_context = {
+        **(context or {}),
+        "specializationTags": spawn_plan["specialization_tags"],
+        **({"handoffId": handoff_id} if handoff_id else {}),
+    }
+
     payload = {
         "agentId": "main",
         "model": spawn_plan["provider"],
         "task": task,
-        "context": {
-            **(context or {}),
-            "specializationTags": spawn_plan["specialization_tags"],
-            **({"handoffId": handoff_id} if handoff_id else {}),
-        },
+        "context": payload_context,
         "timeoutSeconds": spawn_plan["timeout_seconds"]
     }
 
@@ -361,6 +491,67 @@ async def spawn_chatgpt_subagent(task: str, context: dict, gateway_url: str, tok
     )
 
     try:
+        # Preferred path: CEL prepare+spawn wrapper for deterministic token discipline.
+        cel_available = (
+            callable(build_prepared_prompt_payload)
+            and callable(write_prepared_prompt_file)
+            and callable(spawn_codex_session)
+        )
+        if cel_available:
+            runtime_dir = REPO_ROOT / "workspace" / "runtime"
+            runtime_dir.mkdir(parents=True, exist_ok=True)
+
+            prompt_text = "\n\n".join(
+                [
+                    "GOAL\nHandle the incoming message task via Codex session.",
+                    (
+                        "INPUTS\n"
+                        f"- Task text:\n{task}\n"
+                        f"- Context JSON:\n{json.dumps(payload_context, ensure_ascii=True, sort_keys=True)}\n"
+                        "- workspace/scripts/message_handler.py"
+                    ),
+                    "OUTPUTS\n- A response payload suitable for gateway reply routing.",
+                    "CONSTRAINTS\n- Preserve existing contracts and backwards compatibility.",
+                    "SUCCESS_CRITERIA\n- Session spawn succeeds and returns structured response payload.",
+                ]
+            )
+            prompt_path = runtime_dir / "codex_prompt_latest.md"
+            prompt_path.write_text(prompt_text + "\n", encoding="utf-8")
+
+            prepared_path = runtime_dir / "codex_prepared_prompt.json"
+            prepared_payload = build_prepared_prompt_payload(
+                prompt_text,
+                source_path=prompt_path,
+                cwd=REPO_ROOT,
+            )
+            write_prepared_prompt_file(prepared_path, prepared_payload)
+
+            wrapped = spawn_codex_session(
+                prepared_prompt_path=prepared_path,
+                gateway_url=gateway_url,
+                gateway_token=token,
+                agent_id="main",
+                model_override=str(spawn_plan["provider"]),
+                timeout_seconds=int(spawn_plan["timeout_seconds"]),
+                thread=True,
+                mode="session",
+                context_overrides=payload_context,
+            )
+            status = "ok" if bool(wrapped.get("ok")) else "error"
+            orchestrator.register_run_end(
+                run_id,
+                status=status,
+                state_update={"mood": str((context or {}).get("mood", "active"))},
+            )
+            if handoff_id and status == "ok":
+                orchestrator.acknowledge_handoff(handoff_id, "main", "spawn accepted")
+            if isinstance(wrapped.get("response"), dict):
+                return wrapped["response"]
+            return wrapped
+
+        # Fallback path: direct gateway spawn to preserve legacy behavior.
+        if aiohttp is None:
+            raise RuntimeError("aiohttp is required for direct gateway spawn")
         async with aiohttp.ClientSession() as session:
             async with session.post(
                 f"{gateway_url}/api/agents/spawn",
@@ -383,116 +574,80 @@ async def spawn_chatgpt_subagent(task: str, context: dict, gateway_url: str, tok
 
 
 async def handle_incoming_message(message: dict, handler: MessageHandler) -> dict:
-    """Process an incoming Telegram message through the router-backed path."""
-    
-    # Route message
-    route = await handler.route_message(message)
-    
-    # Get message content
-    content = message.get("content", "")
-    message_id = message.get("message_id")
-    chat_id = message.get("chat_id")
-    session_start = bool(message.get("session_start", False))
+    """Process an incoming Telegram message through the shared router/context stack."""
+    content = _message_text(message)
+    if not content:
+        return {"success": False, "reason": "empty_content"}
 
-    # Optional semantic recall hook from Telegram vector store (disabled by default).
-    recall_context = build_recall_context(
-        str(content),
-        env=os.environ,
-        session_start=session_start,
-        chat_id=str(chat_id) if chat_id is not None else None,
+    message_id = str(message.get("message_id") or "").strip()
+    chat_id = str(message.get("chat_id") or "").strip()
+    prompt, context_metadata = _build_telegram_runtime_request(message)
+    payload = build_chat_payload(
+        prompt,
+        temperature=TELEGRAM_TEMPERATURE,
+        max_tokens=TELEGRAM_MAX_TOKENS,
     )
-    content_with_recall = (
-        f"{recall_context['block']}\n\n{content}"
-        if recall_context.get("block")
-        else str(content)
+    result = handler.router.execute_with_escalation(
+        "conversation",
+        payload,
+        context_metadata=context_metadata,
     )
-    
-    # Get conversation context
-    history = handler._history_for_chat(str(chat_id) if chat_id is not None else None)[-10:]
-    context = handler.summarize_context(history)
-    kernel_packet = build_c_lawd_surface_kernel_packet(
-        surface="telegram",
-        include_memory=True,
-        mode="conversation",
-    )
-    full_prompt = handler.cache_prompt(content_with_recall, context=context, surface="telegram")
 
-    payload = build_chat_payload(full_prompt, temperature=0.0, max_tokens=800)
-    runtime_context = {
-        "input_text": content_with_recall,
-        "surface": "telegram",
-        "channel": "telegram",
-        "chat_id": str(chat_id) if chat_id is not None else "",
-        "message_id": str(message_id) if message_id is not None else "",
-        "queue_depth": route.get("load", {}).get("queue_depth", 0),
-        "overloaded": route.get("load", {}).get("overloaded", False),
-        "kernel_id": kernel_packet.kernel_id,
-        "kernel_hash": kernel_packet.kernel_hash,
-        "surface_overlay": kernel_packet.surface_overlay,
-    }
-    result = handler.router.execute_with_escalation("conversation", payload, context_metadata=runtime_context)
     if result.get("ok"):
-        reply_text = str(result.get("text") or "").strip() or "I completed the routing path but received an empty reply."
+        reply_text = str(result.get("text") or "").strip()
+    elif result.get("deferred"):
+        reply_text = "Local inference is paused while fishtank mode is active. Switch back to work mode to resume Telegram replies."
     else:
-        reason = str(result.get("reason_code") or "router_error")
-        reply_text = f"I couldn't complete the Telegram routing path cleanly. Blocker: {reason}."
-    
-    send_result = None
+        reason = str(result.get("reason_code") or "provider_error").strip()
+        reply_text = f"I couldn't complete that request cleanly just now ({reason})."
 
-    # Send reply with threading (replyTo)
+    send_result: dict[str, Any] = {}
     if chat_id and message_id:
         send_result = await send_telegram_reply(
-            chat_id=str(chat_id),
-            message_id=str(message_id),
+            chat_id=chat_id,
+            message_id=message_id,
             text=reply_text,
-            gateway_url=GATEWAY_URL,
-            token=GATEWAY_TOKEN
+            gateway_url=handler.gateway_url,
+            token=handler.token,
         )
-    
-    # Update history
-    handler._append_history(str(chat_id) if chat_id is not None else None, role="user", content=content)
-    handler._append_history(str(chat_id) if chat_id is not None else None, role="assistant", content=reply_text)
-
-    route_provenance = dict(result.get("route_provenance") or {})
-    route_provenance.setdefault("surface", route.get("surface") or "telegram")
-    route_provenance.setdefault("policy_profile", route.get("policy_profile") or "default")
-    route_provenance.setdefault("selected_provider", route.get("selected_provider"))
-    route_provenance.setdefault("selected_model", route.get("selected_model"))
-    route_provenance.setdefault("reason_code", result.get("reason_code") or "router_error")
-    route_provenance.setdefault("kernel_id", kernel_packet.kernel_id)
-    route_provenance.setdefault("kernel_hash", kernel_packet.kernel_hash)
-    route_provenance.setdefault("surface_overlay", kernel_packet.surface_overlay)
-    route_provenance.setdefault("memory_blocks", list(recall_context.get("memory_blocks") or []))
-    route_provenance.setdefault("files_touched", list(recall_context.get("files_touched") or []))
-    route_provenance.setdefault("tests_run", [])
-    route_provenance.setdefault("uncertainties", list(recall_context.get("uncertainties") or []))
-
-    reply_id = None
-    if isinstance(send_result, dict):
-        reply_id = (
-            send_result.get("message_id")
-            or send_result.get("id")
-            or (send_result.get("result") or {}).get("message_id")
-            or (send_result.get("kwargs") or {}).get("message_id")
+        synthetic_reply_id = (
+            str(send_result.get("message_id") or "").strip()
+            or str(send_result.get("messageId") or "").strip()
+            or f"assistant-reply-{message_id}"
         )
+        try:
+            ingest_telegram_exchange(
+                chat_id=chat_id,
+                chat_title=_message_chat_title(message),
+                message_id=synthetic_reply_id,
+                author_id=TELEGRAM_AGENT_ID,
+                author_name="Dali",
+                role="assistant",
+                content=reply_text,
+                created_at=datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+                agent_scope="main",
+                source="telegram_gateway_reply",
+                meta={
+                    "reply_to_message_id": message_id,
+                    "router_provider": result.get("provider"),
+                    "router_model": result.get("model"),
+                    "reason_code": result.get("reason_code"),
+                    "synthetic_message_id": synthetic_reply_id.startswith("assistant-reply-"),
+                },
+            )
+        except Exception:
+            pass
 
-    provenance_envelope = build_reply_provenance_envelope(
-        route_provenance=route_provenance,
-        result=result,
-        reply_id=str(reply_id or message_id or ""),
-        chat_id=str(chat_id) if chat_id is not None else "",
-        message_id=str(message_id) if message_id is not None else "",
-    )
-    handler.append_reply_provenance(provenance_envelope)
+    handler.message_history.append({"role": "user", "content": content})
+    handler.message_history.append({"role": "assistant", "content": reply_text})
 
     return {
         "success": True,
-        "route": route["route"],
-        "reason": route["reason"],
-        "provider": result.get("provider"),
+        "route": result.get("provider") or "unavailable",
         "model": result.get("model"),
-        "route_provenance": route_provenance,
-        "reply_provenance": provenance_envelope,
+        "reason": result.get("reason_code") or "success",
+        "request_id": result.get("request_id"),
+        "message_sent": bool(send_result) if chat_id and message_id else False,
     }
 
 
