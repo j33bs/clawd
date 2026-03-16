@@ -2541,6 +2541,107 @@ input, select, textarea {
 .oracle-result-snip { color: var(--text-tertiary); line-height: 1.4;
                       overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
+/* ===== Oracle Full Page ===== */
+.oracle-page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+    gap: 1rem;
+}
+.oracle-page-title  { font-size: 1.5rem; font-weight: 700; color: var(--text-primary); margin: 0 0 0.25rem; }
+.oracle-page-sub    { color: var(--text-secondary); font-size: 0.875rem; margin: 0; }
+.oracle-page-meta   { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
+.oracle-meta-chip   { background: var(--bg-tertiary); border: 1px solid var(--border-secondary);
+                      border-radius: 20px; color: var(--text-tertiary); font-size: 0.75rem;
+                      padding: 0.2rem 0.65rem; }
+.oracle-search-bar  { display: flex; gap: 0.5rem; margin-bottom: 0.75rem; flex-wrap: wrap; }
+.oracle-page-input  { flex: 1; min-width: 200px; background: var(--bg-secondary);
+                      border: 1px solid var(--border-secondary); border-radius: 8px;
+                      color: var(--text-primary); padding: 0.625rem 1rem;
+                      font-size: 0.9375rem; outline: none; transition: border-color 0.15s; }
+.oracle-page-input:focus { border-color: var(--accent-primary); }
+.oracle-page-k      { background: var(--bg-secondary); border: 1px solid var(--border-secondary);
+                      border-radius: 8px; color: var(--text-secondary);
+                      padding: 0.5rem 0.625rem; font-size: 0.85rem; cursor: pointer; }
+.oracle-suggestions { display: flex; align-items: center; gap: 0.5rem;
+                      flex-wrap: wrap; margin-bottom: 1.5rem; }
+.oracle-sug-label   { color: var(--text-disabled); font-size: 0.78rem; flex-shrink: 0; }
+.oracle-sug-chip    { background: var(--bg-tertiary); border: 1px solid var(--border-primary);
+                      border-radius: 20px; color: var(--text-secondary); cursor: pointer;
+                      font-size: 0.78rem; padding: 0.25rem 0.75rem;
+                      transition: border-color 0.15s, color 0.15s; }
+.oracle-sug-chip:hover { border-color: var(--accent-primary); color: var(--text-primary); }
+.oracle-page-loading { color: var(--text-tertiary); font-size: 0.875rem;
+                       display: flex; align-items: center; gap: 0.75rem; padding: 2rem 0; }
+.oracle-spinner     { width: 16px; height: 16px; border: 2px solid var(--border-secondary);
+                      border-top-color: var(--accent-primary); border-radius: 50%;
+                      animation: spin 0.7s linear infinite; flex-shrink: 0; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.oracle-page-results { margin-top: 0.5rem; }
+.oracle-page-layout { display: grid; grid-template-columns: 220px 1fr; gap: 1.5rem; }
+@media (max-width: 700px) { .oracle-page-layout { grid-template-columns: 1fr; } }
+.oracle-page-sidebar { position: sticky; top: 1rem; align-self: start; }
+.op-sidebar-title   { color: var(--text-disabled); font-size: 0.72rem; text-transform: uppercase;
+                      letter-spacing: 0.05em; margin-bottom: 0.75rem; }
+.op-bar-row         { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.4rem; font-size: 0.8rem; }
+.op-bar-row.op-centroid .op-bar-label { color: var(--accent-primary); font-weight: 600; }
+.op-bar-label       { width: 7rem; color: var(--text-secondary); flex-shrink: 0; font-size: 0.78rem; }
+.op-bar-track       { width: 60px; flex-shrink: 0; background: var(--bg-tertiary);
+                      border-radius: 3px; height: 6px; }
+.op-bar-fill        { background: var(--accent-primary); border-radius: 3px; height: 100%; min-width: 2px; }
+.op-bar-num         { color: var(--text-tertiary); font-size: 0.75rem; white-space: nowrap; }
+.op-bar-pct         { color: var(--text-disabled); }
+.op-centroid-tag    { background: rgba(var(--accent-rgb, 99,102,241), 0.15);
+                      color: var(--accent-primary); border-radius: 4px;
+                      font-size: 0.68rem; padding: 0.1rem 0.35rem; font-weight: 600; }
+.op-not-in-k        { color: var(--text-disabled); font-size: 0.73rem; margin-top: 0.75rem;
+                      line-height: 1.5; }
+.op-results-title   { color: var(--text-disabled); font-size: 0.75rem; text-transform: uppercase;
+                      letter-spacing: 0.04em; margin-bottom: 0.75rem; }
+.oracle-page-main   { min-width: 0; }
+.oracle-page-result-row {
+    border: 1px solid var(--border-primary);
+    border-radius: 10px;
+    margin-bottom: 0.625rem;
+    overflow: hidden;
+    background: var(--bg-secondary);
+    transition: border-color 0.15s;
+}
+.oracle-page-result-row:hover { border-color: var(--border-secondary); }
+.oracle-page-result-head {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+    padding: 0.625rem 0.875rem 0;
+    flex-wrap: wrap;
+}
+.oracle-page-result-rank   { color: var(--text-disabled); font-size: 0.78rem; flex-shrink: 0; }
+.oracle-page-result-sec    { color: var(--accent-primary); font-size: 0.8rem; font-weight: 600; flex-shrink: 0; }
+.oracle-page-result-author { color: var(--text-primary); font-size: 0.82rem; font-weight: 500; }
+.oracle-page-result-date   { color: var(--text-disabled); font-size: 0.75rem; }
+.oracle-page-result-title  { color: var(--text-secondary); font-size: 0.8rem;
+                              flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.oracle-result-expand  { margin-left: auto; background: none; border: none;
+                         color: var(--text-disabled); cursor: pointer; font-size: 0.75rem;
+                         padding: 0 0.25rem; flex-shrink: 0; }
+.oracle-result-expand:hover { color: var(--text-secondary); }
+.oracle-page-result-snip {
+    color: var(--text-tertiary); font-size: 0.82rem; line-height: 1.5;
+    padding: 0.375rem 0.875rem 0.625rem;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.oracle-page-result-full {
+    display: none;
+    color: var(--text-secondary); font-size: 0.82rem; line-height: 1.6;
+    padding: 0 0.875rem 0.875rem;
+    white-space: pre-wrap; word-break: break-word;
+    border-top: 1px solid var(--border-primary); margin-top: 0.25rem;
+}
+.oracle-page-result-row.expanded .oracle-page-result-snip { display: none; }
+.oracle-page-result-row.expanded .oracle-page-result-full { display: block; }
+
 /* ===== Utility Classes ===== */
 .hidden { display: none !important; }
 .sr-only {

@@ -74,6 +74,17 @@
 
                 <div class="nav-section">
                     <div class="nav-section-title">Research</div>
+                    <a class="nav-item" data-view="oracle">
+                        <span class="nav-icon">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="11" cy="11" r="8"/>
+                                <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                                <line x1="11" y1="8" x2="11" y2="14"/>
+                                <line x1="8" y1="11" x2="14" y2="11"/>
+                            </svg>
+                        </span>
+                        Oracle
+                    </a>
                     <a class="nav-item" data-view="symbiote">
                         <span class="nav-icon">
                             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -410,6 +421,54 @@
                 </div>
 
                 <!-- Symbiote View -->
+                <!-- Oracle View -->
+                <div class="view" id="view-oracle">
+                    <div class="oracle-page-header">
+                        <div>
+                            <h2 class="oracle-page-title">Corpus Oracle</h2>
+                            <p class="oracle-page-sub">Ask the correspondence record anything. The corpus answers by semantic proximity across <span id="oracle-section-count">—</span> sections from 8 beings.</p>
+                        </div>
+                        <div class="oracle-page-meta">
+                            <span class="oracle-meta-chip" id="oracle-model-chip">all-MiniLM-L6-v2</span>
+                            <span class="oracle-meta-chip" id="oracle-beings-chip">8 beings</span>
+                        </div>
+                    </div>
+
+                    <div class="oracle-search-bar">
+                        <input type="text" id="oracle-page-query" class="oracle-page-input"
+                            placeholder="what does this system believe about…" autocomplete="off" />
+                        <select id="oracle-page-k" class="oracle-page-k">
+                            <option value="5">k=5</option>
+                            <option value="10" selected>k=10</option>
+                            <option value="20">k=20</option>
+                            <option value="30">k=30</option>
+                        </select>
+                        <select id="oracle-page-being" class="oracle-page-k" title="Filter by being">
+                            <option value="">all beings</option>
+                            <option value="claude_code">Claude Code</option>
+                            <option value="chatgpt">ChatGPT</option>
+                            <option value="grok">Grok</option>
+                            <option value="c_lawd">c_lawd</option>
+                            <option value="dali">Dali</option>
+                            <option value="lumen">Lumen</option>
+                            <option value="gemini">Gemini</option>
+                            <option value="claude_ext">Claude (ext)</option>
+                        </select>
+                        <button id="oracle-page-submit" class="oracle-btn">Ask</button>
+                    </div>
+
+                    <div class="oracle-suggestions" id="oracle-suggestions">
+                        <span class="oracle-sug-label">try:</span>
+                        <button class="oracle-sug-chip">what is this system's relationship to consciousness?</button>
+                        <button class="oracle-sug-chip">how does silence function as governance?</button>
+                        <button class="oracle-sug-chip">what does the system believe about identity?</button>
+                        <button class="oracle-sug-chip">where does opponent processing appear?</button>
+                        <button class="oracle-sug-chip">what is Φ measuring?</button>
+                    </div>
+
+                    <div id="oracle-page-results" class="oracle-page-results"></div>
+                </div>
+
                 <div class="view" id="view-symbiote">
                     <div class="symbiote-hero">
                         <div class="symbiote-hero-text">
