@@ -182,6 +182,7 @@ DEFAULT_POLICY = {
             "models": [
                 {"id": "grok-4-fast-non-reasoning", "maxInputChars": 12000, "tier": "chat"},
                 {"id": "grok-4-1-fast", "maxInputChars": 24000, "tier": "reasoning"},
+                {"id": "grok-code-fast-1", "maxInputChars": 24000, "tier": "code"},
             ],
         },
         "openai_api": {

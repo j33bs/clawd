@@ -84,10 +84,140 @@
         }
       ]
     },
+    "local_vllm_assistant": {
+      "provider_id": "local_vllm",
+      "baseUrl": "http://127.0.0.1:8001/v1",
+      "model": "local-assistant",
+      "api": "openai-completions",
+      "models": [
+        {
+          "id": "local-assistant",
+          "name": "Dali Local Assistant",
+          "reasoning": false,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 0,
+            "output": 0,
+            "cacheRead": 0,
+            "cacheWrite": 0
+          },
+          "contextWindow": 32768,
+          "maxTokens": 8192
+        }
+      ]
+    },
+    "xai": {
+      "baseUrl": "https://api.x.ai/v1",
+      "api": "openai-completions",
+      "apiKey": "XAI_API_KEY",
+      "models": [
+        {
+          "id": "grok-4-fast-non-reasoning",
+          "name": "Grok 4 Fast (Non-Reasoning)",
+          "reasoning": false,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 0,
+            "output": 0,
+            "cacheRead": 0,
+            "cacheWrite": 0
+          },
+          "contextWindow": 2000000,
+          "maxTokens": 8192
+        },
+        {
+          "id": "grok-4-1-fast",
+          "name": "Grok 4.1 Fast",
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 0,
+            "output": 0,
+            "cacheRead": 0,
+            "cacheWrite": 0
+          },
+          "contextWindow": 2000000,
+          "maxTokens": 8192
+        },
+        {
+          "id": "grok-code-fast-1",
+          "name": "Grok Code Fast 1",
+          "reasoning": false,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 0,
+            "output": 0,
+            "cacheRead": 0,
+            "cacheWrite": 0
+          },
+          "contextWindow": 2000000,
+          "maxTokens": 8192
+        }
+      ]
+    },
     "ollama": {
       "baseUrl": "http://localhost:11434/v1",
       "api": "openai-completions",
       "models": [
+        {
+          "id": "qwen3.5:2b",
+          "name": "qwen3.5:2b",
+          "reasoning": false,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 0,
+            "output": 0,
+            "cacheRead": 0,
+            "cacheWrite": 0
+          },
+          "contextWindow": 32768,
+          "maxTokens": 4096
+        },
+        {
+          "id": "phi3:mini",
+          "name": "phi3:mini",
+          "reasoning": true,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 0,
+            "output": 0,
+            "cacheRead": 0,
+            "cacheWrite": 0
+          },
+          "contextWindow": 16384,
+          "maxTokens": 4096
+        },
+        {
+          "id": "tinyllama:latest",
+          "name": "tinyllama:latest",
+          "reasoning": false,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 0,
+            "output": 0,
+            "cacheRead": 0,
+            "cacheWrite": 0
+          },
+          "contextWindow": 8192,
+          "maxTokens": 2048
+        },
         {
           "id": "qwen14b-tools-32k",
           "name": "Qwen 14B Tools (Local)",
