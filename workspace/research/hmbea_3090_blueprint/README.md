@@ -10,7 +10,7 @@
 | Role | Model | Quant | Notes |
 |------|-------|-------|-------|
 | Controller | qwen3-14b | Q4_K_M | Primary generalist |
-| Coder | devstral-small-2 | Q4_K_M | SWE specialist |
+| Coder | qwen3-coder-next | Q4_K_M | SWE specialist |
 | Critic | phi-4-mini-flash-reasoning | Q4_K_M | Fast triage |
 | Embeddings | qwen3-embedding-0.6b | - | Retrieval |
 | Reranker | qwen3-reranker-0.6b | - | Context ranking |

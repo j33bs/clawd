@@ -23,14 +23,14 @@ models:
       - tabbyapi
       - vllm
     candidates:
-      - name: devstral-small-2
+      - name: qwen3-coder-next
         quant: gguf-q4_k_m
         role_weight: 1.00
-        notes: "Primary SWE specialist. Load on demand."
-      - name: qwen3-coder-next
-        quant: awq-or-gptq
+        notes: "Primary SWE specialist. Strong on code tasks. Load on demand."
+      - name: devstral-small-2
+        quant: gguf-q4_k_m
         role_weight: 0.75
-        notes: "Experimental. Strong upside, but not a safe first deployment on a 3090."
+        notes: "Alternative SWE specialist."
 
   critic:
     provider: local
