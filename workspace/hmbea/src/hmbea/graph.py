@@ -12,6 +12,7 @@ from .model_router import ModelRouter
 from .schemas import CandidateOutput, Difficulty, EvidenceItem, NormalizedTask, TaskType, TraceRecord
 from .state import AgentState
 from .validators import DeterministicValidator
+from .shadow import get_shadow_system
 
 
 ROOT = Path(__file__).resolve().parents[4]
@@ -33,6 +34,9 @@ class GraphRuntime:
         self.critic = OpenAICompatibleClient(settings.critic_base_url, settings.critic_model)
         with (ROOT / settings.escalation_policy_path).open("r", encoding="utf-8") as f:
             self.escalation = yaml.safe_load(f)
+        
+        # Shadow system for learning
+        self.shadow = get_shadow_system()
 
     def intake(self, state: AgentState) -> AgentState:
         request = state["raw_request"]
@@ -88,6 +92,16 @@ class GraphRuntime:
         client = self.specialist if state["selected_role"] in {"coder", "critic"} else self.controller
         response = client.chat_json(system=system, user=user, schema=CandidateOutput)
         state["candidate"] = CandidateOutput.from_response(response)
+        
+        # Record to shadow system for learning
+        self.shadow.record_frontier(
+            task=task.user_request,
+            task_type=task.task_type.value,
+            difficulty=task.difficulty.value,
+            output=state["candidate"].answer,
+            confidence=state["candidate"].confidence,
+        )
+        
         _trace(state, "execute", confidence=state["candidate"].confidence)
         return state
 
