@@ -366,7 +366,7 @@ def _parse_iso_timestamp(value: Any) -> float:
 
 def _extract_ingest_outcome(runtime_agent: str, *, staged_at: float = 0.0) -> dict[str, Any] | None:
     session_log = _main_session_log(runtime_agent)
-    if not session_log.exists() or not session_log.is_file():
+    if session_log is None or not session_log.exists() or not session_log.is_file():
         return None
     try:
         lines = session_log.read_text(encoding="utf-8", errors="ignore").splitlines()[-200:]

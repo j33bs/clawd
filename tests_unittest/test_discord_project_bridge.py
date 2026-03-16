@@ -326,6 +326,77 @@ class TestDiscordProjectBridge(unittest.TestCase):
             self.assertEqual(result[0]["sent_slot_id"], "2026-03-11@21:00")
             self.assertEqual(len(calls), 1)
 
+    def test_post_bridge_webhooks_resends_when_preview_changes_within_same_schedule_slot(self):
+        with tempfile.TemporaryDirectory() as td:
+            status_path = Path(td) / "bridge_status.json"
+            payload = {
+                "channels": [
+                    {
+                        "id": "sim_watch",
+                        "enabled": True,
+                        "webhook_env": "TEST_WEBHOOK",
+                        "preview": "**Sim Watch**\n- Updated active book summary",
+                        "preview_hash": "newhash",
+                        "schedule_timezone": "Australia/Brisbane",
+                        "schedule_local_times": ["21:00"],
+                        "min_resend_minutes": 0,
+                    }
+                ]
+            }
+            status_path.write_text(
+                json.dumps(
+                    {
+                        "last_delivery": {
+                            "attempted_at": "2026-03-15T11:00:04Z",
+                            "channels": {
+                                "sim_watch": {
+                                    "id": "sim_watch",
+                                    "status": "sent",
+                                    "preview_hash": "oldhash",
+                                    "sent_at": "2026-03-15T11:00:04Z",
+                                    "sent_slot_id": "2026-03-15@21:00",
+                                    "state": {},
+                                }
+                            },
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            calls = []
+
+            class _Response:
+                status = 204
+
+                def __enter__(self):
+                    return self
+
+                def __exit__(self, exc_type, exc, tb):
+                    return False
+
+            def _fake_urlopen(req, timeout=10):
+                calls.append((req.full_url, timeout))
+                return _Response()
+
+            with mock.patch.dict("os.environ", {"TEST_WEBHOOK": "https://discord.com/api/webhooks/1/2"}, clear=False):
+                with mock.patch("api.discord_bridge.request.urlopen", side_effect=_fake_urlopen):
+                    with mock.patch(
+                        "api.discord_bridge._current_schedule_slot",
+                        return_value={
+                            "slot_id": "2026-03-15@21:00",
+                            "slot_label": "21:00",
+                            "slot_ts": "2026-03-15T21:00:00+10:00",
+                            "timezone": "Australia/Brisbane",
+                        },
+                    ):
+                        result = post_bridge_webhooks(dict(payload), status_path=status_path)
+
+            self.assertEqual(result[0]["status"], "sent")
+            self.assertEqual(result[0]["sent_slot_id"], "2026-03-15@21:00")
+            self.assertEqual(result[0]["preview_hash"], "newhash")
+            self.assertEqual(len(calls), 1)
+
 
 if __name__ == "__main__":
     unittest.main()

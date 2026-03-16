@@ -736,17 +736,6 @@ def post_bridge_webhooks(
                 delivery_channels[channel_id] = result
                 continue
             scheduled_due = bool(force or previous_slot_id != schedule_slot.get("slot_id"))
-            if not force and not scheduled_due:
-                result = {
-                    "id": channel_id,
-                    "status": "not_due",
-                    "preview_hash": current_hash,
-                    "sent_slot_id": previous_slot_id,
-                    "state": previous_channel.get("state", {}) if isinstance(previous_channel, dict) else {},
-                }
-                results.append(result)
-                delivery_channels[channel_id] = result
-                continue
         min_resend_minutes = max(0, int(channel.get("min_resend_minutes", 0) or 0))
         if isinstance(previous_channel, dict):
             sent_at_raw = previous_channel.get("sent_at")

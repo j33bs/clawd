@@ -127,6 +127,18 @@ DEFAULT_EXECUTION_MODEL = {
     "stop_loss_pct": 0.003,
     "take_profit_pct": 0.004,
     "queue_buffer_bps": 0.25,
+    "entry_gap_pct": -0.001,
+    "exit_gap_pct": -0.0015,
+    "tilt_scale": 0.005,
+    "tilt_cap_pct": 0.02,
+    "exit_tilt_weight": 0.5,
+    "grid_min_trade_count": 20,
+    "grid_realized_vol_cap": 0.0015,
+    "grid_step_floor_pct": 0.0006,
+    "grid_step_ceiling_pct": 0.0035,
+    "grid_momentum_scale": 2.0,
+    "grid_realized_vol_scale": 8.0,
+    "grid_exit_factor": 0.7,
 }
 
 DEFAULT_FEATURE_PARAMS = {
@@ -201,6 +213,18 @@ DEFAULT_FEATURE_PARAMS = {
         "stop_loss_pct": 0.003,
         "take_profit_pct": 0.004,
         "queue_buffer_bps": 0.25,
+        "entry_gap_pct": -0.001,
+        "exit_gap_pct": -0.0015,
+        "tilt_scale": 0.005,
+        "tilt_cap_pct": 0.02,
+        "exit_tilt_weight": 0.5,
+        "grid_min_trade_count": 20,
+        "grid_realized_vol_cap": 0.0015,
+        "grid_step_floor_pct": 0.0006,
+        "grid_step_ceiling_pct": 0.0035,
+        "grid_momentum_scale": 2.0,
+        "grid_realized_vol_scale": 8.0,
+        "grid_exit_factor": 0.7,
     },
     "finance_brain": {
         "enabled": True,
@@ -959,17 +983,32 @@ class Sim:
                     trades.append(t)
 
         elif self.strategy == "itc_sentiment_tilt_long_flat":
-            tilt = compute_sim_b_tilt(sentiment_score)
-            adjusted_bullish = (fast - slow) / slow > (-0.001 + tilt) if slow > 0 else False
-            confirmed_bull = adjusted_bullish and htf_confirms
+            tilt = compute_sim_b_tilt(
+                sentiment_score,
+                scale=float(self.execution.get("tilt_scale", 0.005) or 0.005),
+                max_abs_tilt=float(self.execution.get("tilt_cap_pct", 0.02) or 0.02),
+            )
+            signal_gap = (fast - slow) / slow if slow > 0 else 0.0
+            entry_threshold = float(self.execution.get("entry_gap_pct", -0.001) or -0.001) - tilt
+            exit_tilt_weight = float(self.execution.get("exit_tilt_weight", 0.5) or 0.5)
+            exit_threshold = float(
+                self.execution.get(
+                    "exit_gap_pct",
+                    float(self.execution.get("entry_gap_pct", -0.001) or -0.001) - 0.0005,
+                )
+                or (float(self.execution.get("entry_gap_pct", -0.001) or -0.001) - 0.0005)
+            ) - (tilt * exit_tilt_weight)
+            enter_bullish = signal_gap > entry_threshold if slow > 0 else False
+            hold_bullish = signal_gap > exit_threshold if slow > 0 else False
+            confirmed_bull = enter_bullish and htf_confirms
 
             if confirmed_bull and symbol not in self.position:
                 reason = f"itc_tilt({sentiment_score:.2f})+htf" if htf_bullish is not None else f"itc_tilt({sentiment_score:.2f})"
                 t = self._execute(symbol, "open_long", close, ts, reason)
                 if t:
                     trades.append(t)
-            elif not confirmed_bull and symbol in self.position and self._can_exit(symbol):
-                reason = f"itc_flat({sentiment_score:.2f})" if not adjusted_bullish else "htf_flat"
+            elif symbol in self.position and self._can_exit(symbol) and (not hold_bullish or not htf_confirms):
+                reason = f"itc_flat({sentiment_score:.2f})" if not hold_bullish else "htf_flat"
                 t = self._execute(symbol, "close_long", close, ts, reason)
                 if t:
                     trades.append(t)
@@ -1206,11 +1245,18 @@ class Sim:
         vwap = float(tick_snapshot.get("vwap", 0.0) or 0.0)
         realized_vol = float(tick_snapshot.get("realized_vol", 0.0) or 0.0)
         momentum = float(tick_snapshot.get("momentum_1m", 0.0) or 0.0)
-        if trade_count < 20 or vwap <= 0 or realized_vol > 0.0015:
+        min_trade_count = int(self.execution.get("grid_min_trade_count", 20) or 20)
+        realized_vol_cap = float(self.execution.get("grid_realized_vol_cap", 0.0015) or 0.0015)
+        if trade_count < min_trade_count or vwap <= 0 or realized_vol > realized_vol_cap:
             return trades
-        grid_step = max(0.0006, min(0.0035, abs(momentum) * 2.0 + realized_vol * 8.0))
+        grid_step_floor = float(self.execution.get("grid_step_floor_pct", 0.0006) or 0.0006)
+        grid_step_ceiling = float(self.execution.get("grid_step_ceiling_pct", 0.0035) or 0.0035)
+        grid_momentum_scale = float(self.execution.get("grid_momentum_scale", 2.0) or 2.0)
+        grid_vol_scale = float(self.execution.get("grid_realized_vol_scale", 8.0) or 8.0)
+        grid_exit_factor = float(self.execution.get("grid_exit_factor", 0.7) or 0.7)
+        grid_step = max(grid_step_floor, min(grid_step_ceiling, abs(momentum) * grid_momentum_scale + realized_vol * grid_vol_scale))
         long_entry = vwap * (1.0 - grid_step)
-        long_exit = vwap * (1.0 + (grid_step * 0.7))
+        long_exit = vwap * (1.0 + (grid_step * grid_exit_factor))
         position = self.position.get(symbol)
         if position:
             ret = self._current_return_pct(symbol, price)
@@ -1548,7 +1594,7 @@ def run(sim_filter=None, full=False, config_path=None, features_path=None):
             print(f"WARN: finance brain snapshot failed: {exc}")
 
     for cfg in sims_cfg:
-        sim_cfg = deep_merge(dict(cfg), {"execution": execution_params})
+        sim_cfg = deep_merge({"execution": execution_params}, dict(cfg))
         sim = Sim(sim_cfg)
         if full:
             sim.equity = float(sim_cfg["capital"])
@@ -1715,6 +1761,11 @@ def run(sim_filter=None, full=False, config_path=None, features_path=None):
                     else:
                         bar_trades = sim.run_bar(symbol, bar, closes, sent, htf_bullish=htf_bull)
                     if sim.strategy == "itc_sentiment_tilt_long_flat":
+                        applied_tilt = compute_sim_b_tilt(
+                            sent,
+                            scale=float(sim.execution.get("tilt_scale", 0.005) or 0.005),
+                            max_abs_tilt=float(sim.execution.get("tilt_cap_pct", 0.02) or 0.02),
+                        )
                         _econ_log(f_log, econ_path, {
                             "ts": ms_to_utc_iso(bar["ts"]),
                             "sim": sim.id,
@@ -1722,7 +1773,7 @@ def run(sim_filter=None, full=False, config_path=None, features_path=None):
                             "type": "sim_b_tilt_applied",
                             "payload": {
                                 "sentiment": float(sent),
-                                "tilt": compute_sim_b_tilt(sent),
+                                "tilt": applied_tilt,
                                 "reason": sentiment_reason,
                                 "source": sentiment_source,
                             },
