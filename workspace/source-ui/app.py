@@ -676,19 +676,6 @@ class SourceUIHandler(SimpleHTTPRequestHandler):
             self.run_health_check()
         elif parsed.path == '/api/gateway/restart':
             self.restart_gateway()
-        elif parsed.path == '/api/oracle':
-            try:
-                length = int(self.headers.get('Content-Length', 0))
-                body = json.loads(self.rfile.read(length)) if length > 0 else {}
-                q = str(body.get('q') or body.get('query') or '').strip()
-                k = int(body.get('k', 10))
-                being = body.get('being') or None
-                if not q:
-                    self.send_json({'error': 'missing query'}, status=400)
-                else:
-                    self.send_json(self._run_oracle(q, k=k, being=being))
-            except Exception as e:
-                self.send_json({'error': str(e)}, status=500)
         else:
             self.send_error(404)
     
@@ -746,46 +733,10 @@ class SourceUIHandler(SimpleHTTPRequestHandler):
                 data = {'valence': 0.0, 'agent': agent}
         elif path == 'symbiote':
             data = self.symbiote_data()
-        elif path.startswith('oracle'):
-            from urllib.parse import parse_qs
-            qs = parse_qs(parsed.query)
-            q = (qs.get('q') or qs.get('query') or [''])[0].strip()
-            k = int((qs.get('k') or ['10'])[0])
-            being = (qs.get('being') or [None])[0]
-            if not q:
-                data = {'error': 'missing ?q= query parameter'}
-            else:
-                data = self._run_oracle(q, k=k, being=being)
         else:
             data = {'error': 'Not found'}
-
+        
         self.send_json(data)
-
-    def _run_oracle(self, question: str, k: int = 10, being: Optional[str] = None) -> dict:
-        """Run corpus oracle query. Lazy-imports oracle.py from workspace/tools."""
-        try:
-            repo_root = Path(__file__).resolve().parents[2]
-            tools_dir = str(repo_root / 'workspace' / 'tools')
-            store_dir = str(repo_root / 'workspace' / 'store')
-            import importlib.util, sys as _sys
-            # Ensure store is on path for oracle's sync import
-            if store_dir not in _sys.path:
-                _sys.path.insert(0, store_dir)
-            if tools_dir not in _sys.path:
-                _sys.path.insert(0, tools_dir)
-            spec = importlib.util.spec_from_file_location(
-                'oracle', repo_root / 'workspace' / 'tools' / 'oracle.py'
-            )
-            oracle_mod = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(oracle_mod)
-            result = oracle_mod.query_corpus(question, k=k, being_filter=being)
-            # Trim result bodies to keep response small
-            for r in result.get('results', []):
-                body = r.get('body', '')
-                r['body'] = body[:300] + ('…' if len(body) > 300 else '')
-            return result
-        except Exception as e:
-            return {'error': str(e), 'question': question}
     
     def create_task(self):
         """Create a new task."""
