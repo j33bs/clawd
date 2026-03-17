@@ -40,6 +40,7 @@ class Store extends EventEmitter {
             connected: false,
             gatewayStatus: 'connecting',
             truth: {},
+            memorySystem: {},
             lastUpdate: null,
             
             // Agents

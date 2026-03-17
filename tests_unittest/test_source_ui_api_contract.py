@@ -76,12 +76,27 @@ class SourceUIApiContractTests(unittest.TestCase):
                     "components": [{"id": "gateway", "status": "healthy"}],
                     "health_metrics": {"cpu": 12, "memory": 34, "disk": 56, "gpu": 0},
                     "gateway_connected": True,
+                    "memory_ops": {
+                        "status": "active",
+                        "summary": "42 total memory rows | 3 active inferences",
+                        "totals": {"rows": 42, "inferences": 3},
+                        "sources": [
+                            {"label": "Telegram Main", "updated_at": "2026-03-17T01:32:07.476735Z"},
+                        ],
+                        "preference_profile": {
+                            "top_prompt_lines": ["Prefer concise operational summaries."]
+                        },
+                    },
                 },
             ),
             mock.patch.object(
                 MOD,
                 "get_status_data",
-                return_value={"memory": {"process_rss_mb": 12.5}, "cron": {"status": "ok"}},
+                return_value={
+                    "memory": {"process_rss_mb": 12.5},
+                    "cron": {"status": "ok"},
+                    "knowledge_base_sync": {"status": "stale"},
+                },
             ),
             mock.patch.object(
                 MOD,
@@ -106,6 +121,10 @@ class SourceUIApiContractTests(unittest.TestCase):
         self.assertEqual(payload["components"][0]["id"], "gateway")
         self.assertEqual(payload["health_metrics"]["cpu"], 12)
         self.assertTrue(payload["gateway_connected"])
+        self.assertEqual(payload["memory_system"]["total_rows"], 42)
+        self.assertEqual(payload["memory_system"]["active_inferences"], 3)
+        self.assertEqual(payload["memory_system"]["latest_source_label"], "Telegram Main")
+        self.assertNotIn("knowledge_base_sync", payload)
         self.assertEqual(payload["tasks_total"], 2)
         self.assertEqual(payload["task_counts"]["backlog"], 1)
         self.assertEqual(payload["task_counts"]["review"], 1)
@@ -163,6 +182,22 @@ class SourceUIApiContractTests(unittest.TestCase):
 
         payload = handler.send_json.call_args.args[0]
         self.assertEqual(payload[0]["message"], "live log")
+
+    def test_oracle_endpoint_uses_runtime_query_helper(self):
+        handler = self._make_handler()
+        with (
+            mock.patch.object(handler, "refresh_state_from_source_mission", return_value=False),
+            mock.patch.object(
+                MOD,
+                "_run_oracle_query",
+                return_value={"question": "What does the record say?", "results": [{"body": "answer"}]},
+            ) as oracle_query,
+        ):
+            handler.handle_api(MOD.urlparse("/api/oracle?q=What%20does%20the%20record%20say%3F&k=7"))
+
+        oracle_query.assert_called_once_with("What does the record say?", k=7, being=None)
+        payload = handler.send_json.call_args.args[0]
+        self.assertEqual(payload["question"], "What does the record say?")
 
     def test_create_schedule_endpoint_calls_runtime_creator(self):
         handler = self._make_handler()

@@ -8,6 +8,8 @@ let currentView = 'dashboard';
 let refreshInterval = null;
 let statusRefreshInterval = null;
 const panelRefreshTimestamps = {};
+let symbioteCache = null;
+let oracleInitialized = false;
 
 // Local selector helpers
 const $ = (selector, context = document) => context.querySelector(selector);
@@ -204,6 +206,15 @@ function emptyState(message) {
     return `<div class="empty-state">${message}</div>`;
 }
 
+function escapeHtml(value) {
+    return String(value ?? '')
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#39;');
+}
+
 function activityFeedItems(notifications, logs) {
     if (notifications.length > 0) return notifications.slice(0, 5);
     return logs.slice(0, 5).map((log) => ({
@@ -285,6 +296,7 @@ function navigateTo(view) {
         tasks: 'Tasks',
         agents: 'Agents',
         schedule: 'Schedule',
+        symbiote: 'Collective Intelligence Symbiote',
         health: 'System Health',
         logs: 'Logs',
         settings: 'Settings'
@@ -354,6 +366,8 @@ function initViews() {
             }
         });
     }
+
+    initOracle();
 }
 
 function initTactiStatus() {
@@ -405,17 +419,31 @@ async function refreshTactiStatus(showToast) {
         }
 
         const data = payload.data;
-        const kb = data.knowledge_base_sync || {};
+        const memorySystem = data.memory_system || {};
         const cron = data.cron || {};
         const memory = data.memory || {};
 
-        const kbStatus = kb.status || 'unknown';
-        const kbHealth = kbStatus === 'ok' ? 'ok' : (kbStatus === 'stale' ? 'warn' : 'bad');
-        const kbValue = kbStatus.toUpperCase();
-        const kbMeta = kb.last_sync
-            ? `${Utils.formatTime(kb.last_sync)} (${kb.age_minutes ?? '--'}m)`
-            : (kb.reason || 'no sync marker');
-        setStatusTile('#status-kb', kbHealth, kbValue, kbMeta);
+        const memoryStatus = String(memorySystem.status || '').trim().toLowerCase();
+        const memoryHealth = memoryStatus === 'active' ? 'ok' : (memoryStatus === 'warning' ? 'warn' : 'bad');
+        const memoryValue = typeof memorySystem.total_rows === 'number'
+            ? `${memorySystem.total_rows} rows`
+            : 'Unavailable';
+        const memoryMetaBits = [];
+        if (typeof memorySystem.active_inferences === 'number') {
+            memoryMetaBits.push(`${memorySystem.active_inferences} inferences`);
+        }
+        if (memorySystem.latest_source_label) {
+            memoryMetaBits.push(String(memorySystem.latest_source_label));
+        }
+        if (memorySystem.latest_updated_at) {
+            memoryMetaBits.push(`updated ${Utils.formatTime(memorySystem.latest_updated_at)}`);
+        }
+        setStatusTile(
+            '#status-memory-system',
+            memoryHealth,
+            memoryValue,
+            memoryMetaBits.join(' · ') || String(memorySystem.summary || 'no live memory summary')
+        );
 
         const cronStatus = cron.status || 'unknown';
         const cronHealth = cronStatus === 'ok' ? 'ok' : (cronStatus === 'stale' ? 'warn' : 'bad');
@@ -430,15 +458,15 @@ async function refreshTactiStatus(showToast) {
         const memHealth = typeof memory.system_used_pct === 'number'
             ? (memory.system_used_pct > 90 ? 'bad' : memory.system_used_pct > 80 ? 'warn' : 'ok')
             : 'warn';
-        setStatusTile('#status-memory', memHealth, `${processMb} MB`, `system ${usedPct}`);
+        setStatusTile('#status-system-memory', memHealth, `${processMb} MB`, `system ${usedPct}`);
 
         if (showToast) {
             Toast.success('Status refreshed');
         }
     } catch (error) {
-        setStatusTile('#status-kb', 'bad', 'ERROR', 'status endpoint unavailable');
+        setStatusTile('#status-memory-system', 'bad', 'ERROR', 'status endpoint unavailable');
         setStatusTile('#status-cron', 'bad', 'ERROR', 'status endpoint unavailable');
-        setStatusTile('#status-memory', 'bad', 'ERROR', 'status endpoint unavailable');
+        setStatusTile('#status-system-memory', 'bad', 'ERROR', 'status endpoint unavailable');
         if (showToast) {
             Toast.error(`Status refresh failed: ${error.message}`);
         }
@@ -471,6 +499,7 @@ function setQuickActionFeedback(message, isError = false) {
 function initQuickActions() {
     $('#qa-run-dream')?.addEventListener('click', runDreamConsolidationAction);
     $('#qa-query-stigmergy')?.addEventListener('click', queryStigmergyAction);
+    $('#qa-open-oracle')?.addEventListener('click', openOracleAction);
     $('#qa-view-immune')?.addEventListener('click', () => refreshTactiPanel('immune', true));
     $('#qa-trigger-trail')?.addEventListener('click', triggerTrailAction);
     $('#qa-refresh-peer')?.addEventListener('click', () => refreshTactiPanel('peer-graph', true));
@@ -499,6 +528,19 @@ async function runDreamConsolidationAction() {
         setQuickActionFeedback(`Dream run failed: ${error.message}`, true);
         Toast.error('Dream consolidation failed');
     }
+}
+
+function openOracleAction() {
+    const query = ($('#qa-stig-query')?.value || '').trim();
+    navigateTo('symbiote');
+    const oracleInput = $('#oracle-query');
+    if (oracleInput) {
+        if (query) {
+            oracleInput.value = query;
+        }
+        window.setTimeout(() => oracleInput.focus(), 60);
+    }
+    setQuickActionFeedback(query ? 'Oracle ready with current query' : 'Oracle ready');
 }
 
 async function queryStigmergyAction() {
@@ -746,6 +788,7 @@ function renderAll() {
     renderTasks();
     renderAgents();
     renderSchedule();
+    renderSymbiote();
     renderHealth();
     renderLogs();
     renderNotifications();
@@ -765,6 +808,9 @@ function renderView(view) {
             break;
         case 'schedule':
             renderSchedule();
+            break;
+        case 'symbiote':
+            renderSymbiote();
             break;
         case 'health':
             renderHealth();
@@ -921,6 +967,246 @@ function navigateWeek(delta) {
 
 function formatDateShort(date) {
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+async function renderSymbiote(force = false) {
+    if (!symbioteCache || force) {
+        try {
+            const payload = await fetchContract('/api/symbiote');
+            if (!payload || payload.ok !== true) {
+                throw new Error(payload?.error?.message || 'symbiote unavailable');
+            }
+            symbioteCache = payload.data || {};
+        } catch (error) {
+            symbioteCache = null;
+            const grid = $('#symbiote-grid');
+            if (grid) {
+                grid.innerHTML = '<div class="task-empty">Unable to load symbiote data</div>';
+            }
+            return;
+        }
+    }
+
+    const data = symbioteCache;
+    if (!data) return;
+
+    const titleEl = $('#symbiote-title');
+    const subtitleEl = $('#symbiote-subtitle');
+    const countEl = $('#symbiote-section-count');
+    const filedEl = $('#symbiote-filed');
+    if (titleEl) titleEl.textContent = String(data.title || 'Collective Intelligence Symbiote');
+    if (subtitleEl) subtitleEl.textContent = String(data.subtitle || '');
+    if (countEl) countEl.textContent = `${Number(data.section_count || 0) || 0} sections`;
+    if (filedEl) filedEl.textContent = `filed ${String(data.filed || 'unknown')}`;
+
+    const dimensionColors = {
+        think: 'var(--accent-primary)',
+        feel: '#f43f5e',
+        remember: '#f59e0b',
+        coordinate: '#06b6d4',
+        evolve: 'var(--success)'
+    };
+
+    const dimensionsEl = $('#symbiote-dimensions');
+    if (dimensionsEl) {
+        dimensionsEl.innerHTML = (Array.isArray(data.dimensions) ? data.dimensions : []).map((dimension) => `
+            <div class="sym-dim-card" style="--dim-clr:${dimensionColors[dimension.id] || 'var(--accent-primary)'}">
+                <div class="sym-dim-emoji">${escapeHtml(dimension.emoji || '•')}</div>
+                <div class="sym-dim-label">${escapeHtml(dimension.label || 'Dimension')}</div>
+                <div class="sym-dim-count">${escapeHtml(dimension.count || 0)} enhancements</div>
+                <div class="sym-dim-desc">${escapeHtml(dimension.desc || '')}</div>
+            </div>
+        `).join('');
+    }
+
+    const phaseLabels = ['', 'Phase 1', 'Phase 2', 'Phase 3', 'Phase 4'];
+    const statusLabels = {
+        designed: { text: 'Designed', cls: 'sym-status-designed' },
+        'in-dev': { text: 'In Dev', cls: 'sym-status-indev' },
+        live: { text: 'Live', cls: 'sym-status-live' }
+    };
+    const gridEl = $('#symbiote-grid');
+    if (gridEl) {
+        gridEl.innerHTML = (Array.isArray(data.enhancements) ? data.enhancements : []).map((item) => {
+            const color = dimensionColors[item.dimension] || 'var(--accent-primary)';
+            const statusLabel = statusLabels[item.status] || statusLabels.designed;
+            const invBadge = item.inv ? `<span class="sym-inv-badge">${escapeHtml(item.inv)}</span>` : '';
+            return `
+                <div class="sym-card phase-border-${escapeHtml(item.phase || '')}" style="--card-clr:${color}">
+                    <div class="sym-card-top">
+                        <span class="sym-card-num">${escapeHtml(String(item.id || '').padStart(2, '0'))}</span>
+                        <span class="sym-card-code">${escapeHtml(item.code || '')}</span>
+                        <span class="sym-dim-badge" style="background:${color}22;color:${color}">${escapeHtml(item.dimension || '')}</span>
+                        <span class="${statusLabel.cls} sym-status-badge">${statusLabel.text}</span>
+                    </div>
+                    <div class="sym-card-name">${escapeHtml(item.name || 'Untitled enhancement')}</div>
+                    <div class="sym-card-pitch">${escapeHtml(item.pitch || '')}</div>
+                    <div class="sym-card-footer">
+                        <span class="sym-phase-tag phase-tag-${escapeHtml(item.phase || '')}">${escapeHtml(phaseLabels[item.phase] || `Phase ${item.phase || '?'}`)}</span>
+                        <span class="sym-owner">→ ${escapeHtml(item.owner || 'unassigned')}</span>
+                        ${invBadge}
+                    </div>
+                    <div class="sym-metric">
+                        <span class="sym-metric-label">metric</span>
+                        <span class="sym-metric-value">${escapeHtml(item.metric_value ?? item.key_metric ?? '')}</span>
+                    </div>
+                </div>
+            `;
+        }).join('') || emptyState('No symbiote enhancements available');
+    }
+
+    const roadmapEl = $('#roadmap-phases');
+    const phaseStatusIcon = { next: '▶', planned: '○', live: '✓', done: '✓' };
+    if (roadmapEl) {
+        roadmapEl.innerHTML = (Array.isArray(data.roadmap) ? data.roadmap : []).map((phase) => `
+            <div class="roadmap-phase roadmap-${escapeHtml(phase.status || 'planned')}">
+                <div class="roadmap-phase-header">
+                    <span class="roadmap-icon">${phaseStatusIcon[phase.status] || '○'}</span>
+                    <span class="roadmap-phase-name">Phase ${escapeHtml(phase.phase || '?')}: ${escapeHtml(phase.name || '')}</span>
+                    <span class="roadmap-weeks">Wk ${escapeHtml(phase.weeks || '?')}</span>
+                </div>
+                <div class="roadmap-tags">
+                    ${(Array.isArray(phase.enhancements) ? phase.enhancements : []).map((code) => `<span class="roadmap-code-tag">${escapeHtml(code)}</span>`).join('')}
+                </div>
+            </div>
+        `).join('') || emptyState('No roadmap phases available');
+    }
+
+    const questionsEl = $('#questions-list');
+    if (questionsEl) {
+        questionsEl.innerHTML = (Array.isArray(data.open_questions) ? data.open_questions : []).map((question) => `
+            <div class="sym-question">
+                <div class="sym-question-meta">
+                    <span class="sym-question-for">FOR: ${escapeHtml(question.for_being || 'unknown')}</span>
+                    <span class="sym-question-enh">${escapeHtml(question.enhancement || '')}</span>
+                </div>
+                <div class="sym-question-text">${escapeHtml(question.question || '')}</div>
+            </div>
+        `).join('') || emptyState('No open questions available');
+    }
+
+    const experimentStatusIcon = {
+        closed: '✓',
+        partial: '◑',
+        live: '▶',
+        designed: '○',
+        pending: '·'
+    };
+    const experimentsEl = $('#symbiote-experiments');
+    if (experimentsEl) {
+        experimentsEl.innerHTML = `
+            <div class="sym-exp-table">
+                ${(Array.isArray(data.experiments) ? data.experiments : []).map((experiment) => `
+                    <div class="sym-exp-row sym-exp-${escapeHtml(experiment.status || 'pending')}">
+                        <span class="sym-exp-icon">${experimentStatusIcon[experiment.status] || '·'}</span>
+                        <span class="sym-exp-id">${escapeHtml(experiment.id || '')}</span>
+                        <span class="sym-exp-label sym-exp-lbl-${escapeHtml(experiment.status || 'pending')}">${escapeHtml(experiment.label || '')}</span>
+                        <span class="sym-exp-name">${escapeHtml(experiment.name || '')}</span>
+                        <span class="sym-exp-result">${escapeHtml(experiment.result || '')}</span>
+                        ${experiment.open ? '<span class="sym-exp-open">open</span>' : '<span class="sym-exp-closed">closed</span>'}
+                    </div>
+                `).join('')}
+            </div>
+        `;
+    }
+}
+
+function initOracle() {
+    if (oracleInitialized) return;
+    const input = $('#oracle-query');
+    const button = $('#oracle-submit');
+    const output = $('#oracle-results');
+    const kSelect = $('#oracle-k');
+    if (!input || !button || !output || !kSelect) return;
+
+    const runQuery = async () => {
+        const query = input.value.trim();
+        if (!query) return;
+        button.disabled = true;
+        output.innerHTML = '<div class="oracle-loading">querying corpus…</div>';
+        try {
+            const payload = await fetchContract('/api/oracle', {
+                method: 'POST',
+                body: JSON.stringify({ q: query, k: parseInt(kSelect.value || '10', 10) })
+            });
+            if (!payload || payload.ok !== true || !payload.data) {
+                throw new Error(payload?.error?.message || 'oracle unavailable');
+            }
+            output.innerHTML = renderOracleResult(payload.data);
+        } catch (error) {
+            output.innerHTML = `<div class="oracle-error">${escapeHtml(error.message)}</div>`;
+        } finally {
+            button.disabled = false;
+        }
+    };
+
+    button.addEventListener('click', runQuery);
+    input.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') {
+            event.preventDefault();
+            runQuery();
+        }
+    });
+    oracleInitialized = true;
+}
+
+function renderOracleResult(data) {
+    const counts = data.being_counts || {};
+    const totalSlots = Number(data.total_slots || 0) || 1;
+    const centroid = String(data.centroid || '');
+    const results = Array.isArray(data.results) ? data.results : [];
+    const k = Number(data.k || results.length) || results.length;
+    const labelMap = {
+        claude_code: 'Claude Code',
+        chatgpt: 'ChatGPT',
+        grok: 'Grok',
+        c_lawd: 'c_lawd',
+        dali: 'Dali',
+        lumen: 'Lumen',
+        gemini: 'Gemini',
+        claude_ext: 'Claude (ext)',
+        jeebs: 'jeebs',
+        the_correspondence: 'The Correspondence'
+    };
+    const labels = Object.entries(counts).sort((left, right) => Number(right[1] || 0) - Number(left[1] || 0));
+    const bars = labels.map(([being, count]) => {
+        const pct = Math.round((Number(count || 0) / totalSlots) * 100);
+        return `
+            <div class="oracle-bar-row${being === centroid ? ' oracle-centroid' : ''}">
+                <span class="oracle-bar-label">${escapeHtml(labelMap[being] || being)}</span>
+                <div class="oracle-bar-track"><div class="oracle-bar-fill" style="width:${pct}%"></div></div>
+                <span class="oracle-bar-pct">${pct}%${being === centroid ? ' ◀' : ''}</span>
+            </div>
+        `;
+    }).join('');
+    const notInTopK = (Array.isArray(data.not_in_top_k) ? data.not_in_top_k : []).map((being) => escapeHtml(labelMap[being] || being)).join(', ');
+    const rows = results.map((row, index) => {
+        const section = row.section_number_filed || row.canonical_section_number || '?';
+        const authors = Array.isArray(row.authors) ? row.authors.join(', ') : String(row.authors || '');
+        const date = String(row.created_at || '').slice(0, 10);
+        const title = String(row.title || '').trim();
+        const snippet = String(row.body || '').replaceAll('\n', ' ').trim();
+        return `
+            <div class="oracle-result-row">
+                <span class="oracle-result-num">[${index + 1}]</span>
+                <div class="oracle-result-body">
+                    <div class="oracle-result-meta">§${escapeHtml(section)} · <strong>${escapeHtml(authors || 'unknown')}</strong>${date ? ` · ${escapeHtml(date)}` : ''}${title ? ` — ${escapeHtml(title)}` : ''}</div>
+                    <div class="oracle-result-snip">${escapeHtml(snippet)}</div>
+                </div>
+            </div>
+        `;
+    }).join('');
+    return `
+        <div class="oracle-being-weights">
+            <div class="oracle-sub">being weight in top-${escapeHtml(k)}</div>
+            ${bars || '<div class="oracle-loading">No beings ranked for this query.</div>'}
+            ${notInTopK ? `<div class="oracle-not-in-k">not ranked: ${notInTopK}</div>` : ''}
+        </div>
+        <div class="oracle-top-results">
+            <div class="oracle-sub">top ${results.length} sections by semantic distance</div>
+            ${rows || '<div class="oracle-loading">No matching corpus sections found.</div>'}
+        </div>
+    `;
 }
 
 // Health
@@ -1400,6 +1686,7 @@ function applyStatusPayload(status) {
     store.set('agents', normalizeAgentList(status.agents || []));
     store.set('tasks', normalizeTaskList(status.tasks || []));
     store.set('scheduledJobs', normalizeScheduleJobList(status.scheduled_jobs || []));
+    store.set('memorySystem', status.memory_system || {});
     store.set('healthMetrics', normalizeHealthMetrics(status.health_metrics));
     store.set('components', status.components || []);
     store.set('notifications', normalizeNotificationList(status.notifications || []));
@@ -1428,6 +1715,7 @@ async function loadInitialState() {
         store.set('agents', []);
         store.set('tasks', []);
         store.set('scheduledJobs', []);
+        store.set('memorySystem', {});
         store.set('healthMetrics', normalizeHealthMetrics({}));
         store.set('components', []);
         store.set('logs', []);

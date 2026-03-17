@@ -283,7 +283,6 @@ def _system_memory_snapshot() -> dict[str, Any]:
 
 def get_status_data() -> dict[str, Any]:
     return {
-        "knowledge_base_sync": _knowledge_sync_status(),
         "cron": _cron_status(),
         "memory": _system_memory_snapshot(),
     }

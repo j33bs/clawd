@@ -9,6 +9,7 @@ import os
 import sys
 import argparse
 import logging
+import re
 import subprocess
 import time
 from datetime import datetime, timedelta
@@ -16,7 +17,7 @@ from pathlib import Path
 from typing import Any, Optional
 from dataclasses import dataclass
 from http.server import HTTPServer, SimpleHTTPRequestHandler
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 import urllib.error
 import urllib.request
 import socketserver
@@ -238,6 +239,227 @@ def _runtime_logs(payload: dict[str, Any]) -> list[dict[str, Any]]:
 
 def _runtime_gateway_connected(payload: dict[str, Any]) -> bool:
     return bool(payload.get('gateway_connected'))
+
+
+def _parse_isoish_timestamp(value: Any) -> Optional[datetime]:
+    text = str(value or '').strip()
+    if not text:
+        return None
+    try:
+        return datetime.fromisoformat(text.replace('Z', '+00:00'))
+    except ValueError:
+        return None
+
+
+def _runtime_memory_system_status(payload: dict[str, Any]) -> dict[str, Any]:
+    memory_ops = payload.get('memory_ops')
+    if not isinstance(memory_ops, dict):
+        return {}
+
+    totals = memory_ops.get('totals') if isinstance(memory_ops.get('totals'), dict) else {}
+    sources = [row for row in list(memory_ops.get('sources') or []) if isinstance(row, dict)]
+    latest_source: Optional[dict[str, Any]] = None
+    latest_updated_at: Optional[datetime] = None
+    for row in sources:
+        parsed = _parse_isoish_timestamp(row.get('updated_at'))
+        if parsed is None:
+            continue
+        if latest_updated_at is None or parsed > latest_updated_at:
+            latest_source = row
+            latest_updated_at = parsed
+
+    top_prompt_lines = [
+        str(line).strip()
+        for line in list(((memory_ops.get('preference_profile') or {}).get('top_prompt_lines') or []))
+        if str(line).strip()
+    ][:4]
+
+    total_rows = int(totals.get('rows', 0) or 0)
+    active_inferences = int(totals.get('inferences', 0) or 0)
+    status = str(memory_ops.get('status') or '').strip().lower() or ('active' if total_rows else 'warning')
+    if total_rows <= 0:
+        status = 'warning'
+
+    latest_text = latest_updated_at.isoformat() if latest_updated_at else None
+    if not latest_text and latest_source is not None:
+        latest_text = str(latest_source.get('updated_at') or '').strip() or None
+
+    return {
+        'status': status,
+        'summary': str(memory_ops.get('summary') or f'{total_rows} total memory rows | {active_inferences} active inferences'),
+        'total_rows': total_rows,
+        'active_inferences': active_inferences,
+        'source_count': len(sources),
+        'latest_updated_at': latest_text,
+        'latest_source_label': (str(latest_source.get('label') or '').strip() or None) if latest_source else None,
+        'top_prompt_lines': top_prompt_lines,
+    }
+
+
+def _run_oracle_query(question: str, *, k: int = 10, being: str | None = None) -> dict[str, Any]:
+    prompt = str(question or '').strip()
+    if not prompt:
+        raise ValueError('missing oracle query')
+
+    try:
+        top_k = int(k)
+    except Exception:
+        top_k = 10
+    top_k = max(1, min(top_k, 20))
+    being_filter = str(being or '').strip() or None
+
+    repo_root = SOURCE_UI_ROOT.parents[1]
+    tools_dir = repo_root / 'workspace' / 'tools'
+    store_dir = repo_root / 'workspace' / 'store'
+    if str(store_dir) not in sys.path:
+        sys.path.insert(0, str(store_dir))
+    if str(tools_dir) not in sys.path:
+        sys.path.insert(0, str(tools_dir))
+
+    import importlib.util
+    fallback_reason: str | None = None
+    try:
+        oracle_path = tools_dir / 'oracle.py'
+        spec = importlib.util.spec_from_file_location('source_ui_oracle', oracle_path)
+        if spec is None or spec.loader is None:
+            raise RuntimeError(f'failed to load oracle module from {oracle_path}')
+
+        oracle_mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(oracle_mod)
+        result = oracle_mod.query_corpus(prompt, k=top_k, being_filter=being_filter)
+        if not isinstance(result, dict):
+            raise RuntimeError('oracle query returned non-dict payload')
+
+        trimmed_results: list[dict[str, Any]] = []
+        for row in list(result.get('results') or [])[:top_k]:
+            if not isinstance(row, dict):
+                continue
+            item = dict(row)
+            body = str(item.get('body') or '').strip()
+            if len(body) > 320:
+                body = body[:319].rstrip() + '…'
+            item['body'] = body
+            trimmed_results.append(item)
+
+        payload = dict(result)
+        payload['question'] = prompt
+        payload['k'] = top_k
+        payload['results'] = trimmed_results
+        payload['source'] = 'semantic_corpus'
+        if being_filter:
+            payload['being_filter'] = being_filter
+        return payload
+    except SystemExit as exc:
+        fallback_reason = str(exc)
+    except Exception as exc:
+        fallback_reason = str(exc)
+
+    return _fallback_oracle_query(prompt, k=top_k, being=being_filter, fallback_reason=fallback_reason)
+
+
+def _fallback_oracle_query(
+    question: str,
+    *,
+    k: int = 10,
+    being: str | None = None,
+    fallback_reason: str | None = None,
+) -> dict[str, Any]:
+    repo_root = SOURCE_UI_ROOT.parents[1]
+    store_dir = repo_root / 'workspace' / 'store'
+    if str(store_dir) not in sys.path:
+        sys.path.insert(0, str(store_dir))
+
+    from parser import parse_sections
+
+    sections = parse_sections(str(repo_root / 'workspace' / 'governance' / 'OPEN_QUESTIONS.md'))
+    token_rows = [token for token in re.findall(r"[a-z0-9_']+", question.lower()) if len(token) >= 3]
+    token_rows = list(dict.fromkeys(token_rows))
+    query_text = question.lower()
+    being_filter = str(being or '').strip().lower()
+
+    def score_section(section: Any) -> int:
+        if being_filter:
+            author_names = [str(author).lower() for author in list(getattr(section, 'authors', []) or [])]
+            if being_filter not in author_names:
+                return 0
+        title = str(getattr(section, 'title', '') or '').lower()
+        body = str(getattr(section, 'body', '') or '').lower()
+        authors = ' '.join(str(author).lower() for author in list(getattr(section, 'authors', []) or []))
+        score = 0
+        if query_text and query_text in title:
+            score += 12
+        if query_text and query_text in body:
+            score += 8
+        for token in token_rows:
+            score += title.count(token) * 4
+            score += authors.count(token) * 3
+            score += body.count(token)
+        return score
+
+    ranked: list[tuple[int, Any]] = []
+    for section in sections:
+        score = score_section(section)
+        if score <= 0:
+            continue
+        ranked.append((score, section))
+    ranked.sort(key=lambda row: (-row[0], int(getattr(row[1], 'canonical_section_number', 0) or 0)))
+
+    selected = ranked[: max(1, int(k))]
+    being_counts: dict[str, int] = {}
+    results: list[dict[str, Any]] = []
+    known_beings = {
+        'claude code',
+        'c_lawd',
+        'lumen',
+        'dali',
+        'chatgpt',
+        'grok',
+        'gemini',
+        'claude (ext)',
+        'claude ext',
+        'jeebs',
+        'the correspondence',
+    }
+    for score, section in selected:
+        authors = [str(author) for author in list(getattr(section, 'authors', []) or [])]
+        for author in authors:
+            normalized = author.lower()
+            known_beings.add(normalized)
+            being_counts[normalized] = being_counts.get(normalized, 0) + 1
+        body = str(getattr(section, 'body', '') or '').strip()
+        if len(body) > 320:
+            body = body[:319].rstrip() + '…'
+        results.append(
+            {
+                'canonical_section_number': int(getattr(section, 'canonical_section_number', 0) or 0),
+                'section_number_filed': str(getattr(section, 'section_number_filed', '') or ''),
+                'authors': authors,
+                'created_at': str(getattr(section, 'created_at', '') or ''),
+                'title': str(getattr(section, 'title', '') or ''),
+                'body': body,
+                'relevance_score': score,
+            }
+        )
+
+    centroid = next(iter(sorted(being_counts.items(), key=lambda item: (-item[1], item[0]))), (None, 0))[0]
+    not_in_top_k = sorted([being_name for being_name in known_beings if being_name not in being_counts])
+    payload = {
+        'question': question,
+        'k': max(1, int(k)),
+        'model': 'lexical-fallback',
+        'section_count': len(sections),
+        'results': results,
+        'being_counts': being_counts,
+        'centroid': centroid,
+        'not_in_top_k': not_in_top_k,
+        'total_slots': sum(being_counts.values()),
+        'source': 'lexical_fallback',
+    }
+    if being:
+        payload['being_filter'] = being
+    if fallback_reason:
+        payload['fallback_reason'] = fallback_reason
+    return payload
 
 
 def _merge_portfolio_status(data: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
@@ -1193,6 +1415,8 @@ class SourceUIHandler(SimpleHTTPRequestHandler):
             self.query_stigmergy_handler()
         elif parsed.path == '/api/hivemind/trails/trigger':
             self.trigger_trail_handler()
+        elif parsed.path == '/api/oracle':
+            self.query_oracle_handler()
         elif parsed.path == '/api/refresh':
             self.refresh_data()
         elif parsed.path == '/api/health/check':
@@ -1241,6 +1465,9 @@ class SourceUIHandler(SimpleHTTPRequestHandler):
             runtime_payload = _runtime_portfolio()
             if runtime_payload:
                 data = _merge_portfolio_status(data, runtime_payload)
+                memory_system = _runtime_memory_system_status(runtime_payload)
+                if memory_system:
+                    data['memory_system'] = memory_system
                 if isinstance(data.get('components'), list):
                     self.state.components = data['components']
                 if isinstance(data.get('health_metrics'), dict):
@@ -1251,6 +1478,8 @@ class SourceUIHandler(SimpleHTTPRequestHandler):
                     data.update(get_status_data())
                 except Exception:
                     logger.exception("Failed to build TACTI status payload")
+            data.pop('knowledge_base_sync', None)
+            data.setdefault('memory_system', {})
         elif path == 'portfolio':
             runtime_payload = _runtime_portfolio()
             if not runtime_payload:
@@ -1363,6 +1592,23 @@ class SourceUIHandler(SimpleHTTPRequestHandler):
                 data = {'valence': 0.0, 'agent': agent}
         elif path == 'symbiote':
             data = self.symbiote_data()
+        elif path == 'oracle':
+            params = parse_qs(parsed.query)
+            query = str((params.get('q') or params.get('query') or [''])[0] or '').strip()
+            if not query:
+                self.send_json({'error': 'missing oracle query'}, status=400)
+                return
+            try:
+                k = int((params.get('k') or ['10'])[0] or 10)
+            except Exception:
+                k = 10
+            being = str((params.get('being') or [''])[0] or '').strip() or None
+            try:
+                data = _run_oracle_query(query, k=k, being=being)
+            except Exception as exc:
+                logger.exception("Oracle query failed")
+                self.send_json({'error': str(exc), 'question': query}, status=500)
+                return
         else:
             self.send_json({'error': 'Not found'}, status=404)
             return
@@ -1442,6 +1688,24 @@ class SourceUIHandler(SimpleHTTPRequestHandler):
             )
         except Exception as exc:
             self.send_json({'error': str(exc)}, status=500)
+            return
+        self.send_json(payload)
+
+    def query_oracle_handler(self):
+        body = self._read_json_body()
+        query = str(body.get('q') or body.get('query') or '').strip()
+        if not query:
+            self.send_json({'error': 'missing oracle query'}, status=400)
+            return
+        try:
+            payload = _run_oracle_query(
+                query,
+                k=int(body.get('k') or 10),
+                being=str(body.get('being') or '').strip() or None,
+            )
+        except Exception as exc:
+            logger.exception("Oracle query failed")
+            self.send_json({'error': str(exc), 'question': query}, status=500)
             return
         self.send_json(payload)
     
