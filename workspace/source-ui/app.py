@@ -9,18 +9,53 @@ import os
 import sys
 import argparse
 import logging
+import time
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Optional
 from dataclasses import dataclass
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 from urllib.parse import urlparse
+import urllib.error
+import urllib.request
 import socketserver
+
+try:
+    from api.portfolio import portfolio_payload
+except Exception:  # pragma: no cover
+    portfolio_payload = None
 
 try:
     from api.trails import trails_heatmap_payload
 except Exception:  # pragma: no cover
     trails_heatmap_payload = None
+
+try:
+    from api.tacti_cr import (
+        get_arousal_status,
+        get_dream_status,
+        get_immune_status,
+        get_peer_graph_status,
+        get_skills,
+        get_status_data,
+        get_stigmergy_status,
+        get_trails_status,
+        query_stigmergy,
+        run_dream_consolidation,
+        trigger_trail,
+    )
+except Exception:  # pragma: no cover
+    get_arousal_status = None
+    get_dream_status = None
+    get_immune_status = None
+    get_peer_graph_status = None
+    get_skills = None
+    get_status_data = None
+    get_stigmergy_status = None
+    get_trails_status = None
+    query_stigmergy = None
+    run_dream_consolidation = None
+    trigger_trail = None
 
 # Configure logging
 logging.basicConfig(
@@ -29,10 +64,100 @@ logging.basicConfig(
 )
 logger = logging.getLogger('source-ui')
 
-SOURCE_MISSION_PATH = Path(__file__).with_name('source_mission.json')
-SOURCE_STATE_DIR = Path(__file__).with_name('state')
+SOURCE_UI_ROOT = Path(__file__).resolve().parent
+SOURCE_MISSION_PATH = SOURCE_UI_ROOT / 'config' / 'source_mission.json'
+LEGACY_SOURCE_MISSION_PATH = SOURCE_UI_ROOT / 'source_mission.json'
+SOURCE_STATE_DIR = SOURCE_UI_ROOT / 'state'
+SOURCE_RUNTIME_STATE_PATH = SOURCE_STATE_DIR / 'source_runtime_state.json'
 BACKLOG_INGEST_STATE_PATH = SOURCE_STATE_DIR / 'backlog_ingest.json'
 MISSION_EVENT_LIMIT = 200
+SOURCE_MISSION_TOP_LEVEL_RUNTIME_KEYS = ('notifications', 'handoffs', 'logs', 'updated_at')
+SOURCE_MISSION_TASK_RUNTIME_KEYS = (
+    'status',
+    'progress',
+    'status_reason',
+    'assignee',
+    'started_at',
+    'completed_at',
+    'updated_at',
+    'last_outcome_kind',
+    'last_outcome_summary',
+    'last_outcome_at',
+    'last_outcome_runtime_agent',
+    'last_outcome_event_id',
+    'reviewer_notes',
+    'reviewed_by',
+)
+SOURCE_MISSION_TASK_AUTOGEN_KEYS = (
+    'origin',
+    'mission_task_id',
+    'sequence',
+    'progress',
+    'status_reason',
+    'started_at',
+    'completed_at',
+    'updated_at',
+    'last_outcome_kind',
+    'last_outcome_summary',
+    'last_outcome_at',
+    'last_outcome_runtime_agent',
+    'last_outcome_event_id',
+)
+
+
+def resolve_source_mission_path() -> Path:
+    candidates = [SOURCE_MISSION_PATH]
+    if LEGACY_SOURCE_MISSION_PATH != SOURCE_MISSION_PATH:
+        candidates.append(LEGACY_SOURCE_MISSION_PATH)
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    return SOURCE_MISSION_PATH
+
+
+def source_state_version_ns() -> Optional[int]:
+    mtimes: list[int] = []
+    for path in (resolve_source_mission_path(), SOURCE_RUNTIME_STATE_PATH):
+        if not path.exists():
+            continue
+        try:
+            mtimes.append(path.stat().st_mtime_ns)
+        except OSError:
+            logger.exception("Failed to stat %s", path)
+    if not mtimes:
+        return None
+    return max(mtimes)
+
+
+def _extract_source_mission(payload: Any) -> Optional[dict[str, Any]]:
+    if not isinstance(payload, dict):
+        return None
+    wrapped = payload.get('source_mission')
+    if isinstance(wrapped, dict):
+        return wrapped
+    if any(
+        key in payload
+        for key in (
+            'statement',
+            'tagline',
+            'north_star',
+            'operating_commitments',
+            'pillars',
+            'tasks',
+            'agents',
+            'notifications',
+            'handoffs',
+            'logs',
+        )
+    ):
+        return dict(payload)
+    return None
+
+
+def _wrap_source_mission_payload(source_mission: dict[str, Any], path: Path) -> dict[str, Any]:
+    if path == LEGACY_SOURCE_MISSION_PATH:
+        return {'source_mission': source_mission}
+    return source_mission
 
 
 # ============================================================================
@@ -90,14 +215,13 @@ class State:
         self.source_mission_mtime_ns: Optional[int] = None
         
     def to_dict(self) -> dict:
-        source_exists = SOURCE_MISSION_PATH.exists()
+        source_path = resolve_source_mission_path()
+        source_exists = source_path.exists()
         source_updated_at = None
         if source_exists:
-            source_payload = _read_json(SOURCE_MISSION_PATH)
-            if isinstance(source_payload, dict):
-                mission = source_payload.get('source_mission')
-                if isinstance(mission, dict):
-                    source_updated_at = mission.get('updated_at')
+            mission = DemoDataGenerator.load_source_mission()
+            if isinstance(mission, dict):
+                source_updated_at = mission.get('updated_at')
         return {
             'agents': self.agents,
             'tasks': self.tasks,
@@ -111,7 +235,7 @@ class State:
             'last_update': self.last_update.isoformat() if self.last_update else None,
             'truth': {
                 'source': 'source_mission' if source_exists else 'demo_seed',
-                'source_mission_path': str(SOURCE_MISSION_PATH),
+                'source_mission_path': str(source_path),
                 'source_mission_updated_at': source_updated_at,
             },
         }
@@ -125,6 +249,191 @@ def _read_json(path: Path) -> Any:
     except Exception:
         logger.exception("Failed to parse %s", path)
         return None
+
+
+def _write_json_atomic(path: Path, payload: Any) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = path.with_name(f".{path.name}.{os.getpid()}.{time.time_ns()}.tmp")
+    tmp_path.write_text(json.dumps(payload, indent=2) + '\n', encoding='utf-8')
+    tmp_path.replace(path)
+
+
+def _read_source_runtime_state() -> dict[str, Any]:
+    payload = _read_json(SOURCE_RUNTIME_STATE_PATH)
+    return payload if isinstance(payload, dict) else {}
+
+
+def _default_status_reason_for_task(task: dict[str, Any]) -> str:
+    status = str(task.get('status') or 'backlog').strip()
+    reasons = {
+        'backlog': 'Queued in Source backlog.',
+        'in_progress': 'Active lane work in progress.',
+        'review': 'Awaiting review or follow-through.',
+        'done': 'Completed and recorded.',
+    }
+    return reasons.get(status, 'Tracked in canonical mission state.')
+
+
+def _extract_task_runtime_fields(task: dict[str, Any]) -> dict[str, Any]:
+    payload: dict[str, Any] = {}
+    for key in SOURCE_MISSION_TASK_RUNTIME_KEYS:
+        if key in task:
+            payload[key] = task[key]
+    return payload
+
+
+def _sanitize_source_mission_task(task: dict[str, Any]) -> dict[str, Any]:
+    sanitized = dict(task)
+    for key in SOURCE_MISSION_TASK_AUTOGEN_KEYS:
+        sanitized.pop(key, None)
+    return sanitized
+
+
+def _sanitize_source_mission_config(source_mission: dict[str, Any]) -> dict[str, Any]:
+    sanitized = dict(source_mission)
+    for key in SOURCE_MISSION_TOP_LEVEL_RUNTIME_KEYS:
+        sanitized.pop(key, None)
+    tasks = source_mission.get('tasks')
+    if isinstance(tasks, list):
+        sanitized['tasks'] = [
+            _sanitize_source_mission_task(dict(task))
+            for task in tasks
+            if isinstance(task, dict)
+        ]
+    return sanitized
+
+
+def _build_source_runtime_state(
+    base_source_mission: dict[str, Any],
+    current_source_mission: dict[str, Any],
+) -> dict[str, Any]:
+    base_tasks = [
+        dict(task)
+        for task in (base_source_mission.get('tasks') or [])
+        if isinstance(task, dict)
+    ]
+    base_task_ids = {
+        str(task.get('id') or '').strip()
+        for task in base_tasks
+        if str(task.get('id') or '').strip()
+    }
+    task_overrides: list[dict[str, Any]] = []
+    extra_tasks: list[dict[str, Any]] = []
+    for task in current_source_mission.get('tasks') or []:
+        if not isinstance(task, dict):
+            continue
+        task_id = str(task.get('id') or '').strip()
+        if not task_id:
+            continue
+        if task_id in base_task_ids:
+            runtime_fields = _extract_task_runtime_fields(task)
+            if runtime_fields.get('status_reason') == _default_status_reason_for_task(task):
+                runtime_fields.pop('status_reason', None)
+            if runtime_fields:
+                task_overrides.append({'id': task_id, **runtime_fields})
+        else:
+            extra_tasks.append(dict(task))
+
+    runtime_state: dict[str, Any] = {
+        'updated_at': str(current_source_mission.get('updated_at') or datetime.now().isoformat()),
+    }
+    if task_overrides:
+        runtime_state['task_overrides'] = task_overrides
+    if extra_tasks:
+        runtime_state['extra_tasks'] = extra_tasks
+    for key in ('notifications', 'handoffs', 'logs'):
+        value = current_source_mission.get(key)
+        if isinstance(value, list) and value:
+            if key == 'logs':
+                value = [
+                    dict(item)
+                    for item in value
+                    if isinstance(item, dict) and (item.get('event_id') or item.get('metadata'))
+                ]
+                if not value:
+                    continue
+            runtime_state[key] = list(value)
+    return runtime_state
+
+
+def _merge_source_runtime_state(
+    source_mission: dict[str, Any],
+    runtime_state: dict[str, Any],
+) -> dict[str, Any]:
+    if not runtime_state:
+        return source_mission
+
+    merged = dict(source_mission)
+    base_tasks = [
+        dict(task)
+        for task in (source_mission.get('tasks') or [])
+        if isinstance(task, dict)
+    ]
+    overrides_by_id = {
+        str(item.get('id') or '').strip(): dict(item)
+        for item in (runtime_state.get('task_overrides') or [])
+        if isinstance(item, dict) and str(item.get('id') or '').strip()
+    }
+    merged_tasks: list[dict[str, Any]] = []
+    seen_ids: set[str] = set()
+    for task in base_tasks:
+        task_id = str(task.get('id') or '').strip()
+        override = overrides_by_id.get(task_id)
+        if override:
+            task.update({key: value for key, value in override.items() if key != 'id'})
+        merged_tasks.append(task)
+        if task_id:
+            seen_ids.add(task_id)
+
+    for task in runtime_state.get('extra_tasks') or []:
+        if not isinstance(task, dict):
+            continue
+        task_id = str(task.get('id') or '').strip()
+        if task_id and task_id in seen_ids:
+            continue
+        merged_tasks.append(dict(task))
+        if task_id:
+            seen_ids.add(task_id)
+
+    merged['tasks'] = merged_tasks
+    for key in ('notifications', 'handoffs', 'logs'):
+        value = runtime_state.get(key)
+        if isinstance(value, list):
+            merged[key] = list(value)
+    updated_at = str(runtime_state.get('updated_at') or '').strip()
+    if updated_at:
+        merged['updated_at'] = updated_at
+    return merged
+
+
+def _source_mission_contains_runtime_state(source_mission: dict[str, Any]) -> bool:
+    if any(source_mission.get(key) for key in SOURCE_MISSION_TOP_LEVEL_RUNTIME_KEYS):
+        return True
+    for task in source_mission.get('tasks') or []:
+        if not isinstance(task, dict):
+            continue
+        if any(key in task for key in SOURCE_MISSION_TASK_AUTOGEN_KEYS):
+            return True
+        if any(key in task for key in ('reviewer_notes', 'reviewed_by')):
+            return True
+    return False
+
+
+def _normalize_source_mission_storage(
+    source_path: Path,
+    source_mission: dict[str, Any],
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    runtime_state = _read_source_runtime_state()
+    if not _source_mission_contains_runtime_state(source_mission):
+        return source_mission, runtime_state
+
+    clean_source_mission = _sanitize_source_mission_config(source_mission)
+    merged_source_mission = _merge_source_runtime_state(source_mission, runtime_state)
+    normalized_runtime_state = _build_source_runtime_state(clean_source_mission, merged_source_mission)
+    _write_json_atomic(SOURCE_RUNTIME_STATE_PATH, normalized_runtime_state)
+    _write_json_atomic(source_path, _wrap_source_mission_payload(clean_source_mission, source_path))
+    logger.info("Normalized Source UI mission storage into %s", SOURCE_RUNTIME_STATE_PATH)
+    return clean_source_mission, normalized_runtime_state
 
 
 def _next_numeric_id(items: list[dict], *, floor: int = 0) -> int:
@@ -334,14 +643,7 @@ class DemoDataGenerator:
 
     @staticmethod
     def default_status_reason(task: dict) -> str:
-        status = str(task.get('status') or 'backlog').strip()
-        reasons = {
-            'backlog': 'Queued in Source backlog.',
-            'in_progress': 'Active lane work in progress.',
-            'review': 'Awaiting review or follow-through.',
-            'done': 'Completed and recorded.',
-        }
-        return reasons.get(status, 'Tracked in canonical mission state.')
+        return _default_status_reason_for_task(task)
 
     @classmethod
     def hydrate_task_metadata(cls, task: dict, *, index: int) -> tuple[dict, bool]:
@@ -349,9 +651,10 @@ class DemoDataGenerator:
         changed = False
         artifact_path = str(hydrated.get('artifact_path') or '').strip()
         task_id = str(hydrated.get('id') or '').strip() or str(index + 1)
+        mission_task_id = task_id if task_id.startswith('source-') else f"source-{task_id}"
         defaults = {
             'origin': 'source_mission_config',
-            'mission_task_id': f"source-{task_id}",
+            'mission_task_id': mission_task_id,
             'sequence': index + 1,
             'definition_of_done': cls.default_definition_of_done(hydrated, artifact_path),
             'status_reason': cls.default_status_reason(hydrated),
@@ -447,13 +750,14 @@ class DemoDataGenerator:
 
     @staticmethod
     def load_source_mission() -> Optional[dict[str, Any]]:
-        if not SOURCE_MISSION_PATH.exists():
+        source_path = resolve_source_mission_path()
+        if not source_path.exists():
             return None
-        payload = _read_json(SOURCE_MISSION_PATH)
-        if not isinstance(payload, dict):
+        source_mission = _extract_source_mission(_read_json(source_path))
+        if not isinstance(source_mission, dict):
             return None
-        source_mission = payload.get('source_mission')
-        return source_mission if isinstance(source_mission, dict) else None
+        source_mission, runtime_state = _normalize_source_mission_storage(source_path, source_mission)
+        return _merge_source_runtime_state(source_mission, runtime_state)
 
     @staticmethod
     def sync_agents_with_tasks(agents: list[dict], tasks: list[dict]) -> list[dict]:
@@ -494,6 +798,8 @@ class DemoDataGenerator:
             _read_json(BACKLOG_INGEST_STATE_PATH),
         )
         mission_agents = source_mission.get('agents', [])
+        if not isinstance(mission_agents, list) or not mission_agents:
+            mission_agents = cls.generate_agents()
         tasks, tasks_normalized = cls.normalize_tasks(source_mission.get('tasks', []))
         tasks, tasks_auto_started = cls.auto_start_backlog_tasks(mission_agents, tasks)
         agents = cls.sync_agents_with_tasks(mission_agents, tasks)
@@ -617,13 +923,11 @@ class SourceUIHandler(SimpleHTTPRequestHandler):
 
     def refresh_state_from_source_mission(self, force: bool = False) -> bool:
         """Reload state if the canonical mission file changed on disk."""
-        if not SOURCE_MISSION_PATH.exists():
+        if not resolve_source_mission_path().exists():
             return False
 
-        try:
-            mission_mtime_ns = SOURCE_MISSION_PATH.stat().st_mtime_ns
-        except OSError:
-            logger.exception("Failed to stat %s", SOURCE_MISSION_PATH)
+        mission_mtime_ns = source_state_version_ns()
+        if mission_mtime_ns is None:
             return False
 
         if not force and self.state.source_mission_mtime_ns == mission_mtime_ns:
@@ -670,6 +974,12 @@ class SourceUIHandler(SimpleHTTPRequestHandler):
         
         if parsed.path == '/api/tasks':
             self.create_task()
+        elif parsed.path == '/api/tacti/dream/run':
+            self.run_dream_consolidation_handler()
+        elif parsed.path == '/api/hivemind/stigmergy/query':
+            self.query_stigmergy_handler()
+        elif parsed.path == '/api/hivemind/trails/trigger':
+            self.trigger_trail_handler()
         elif parsed.path == '/api/refresh':
             self.refresh_data()
         elif parsed.path == '/api/health/check':
@@ -702,8 +1012,43 @@ class SourceUIHandler(SimpleHTTPRequestHandler):
         
         if path == 'status':
             data = self.state.to_dict()
+            if portfolio_payload is not None:
+                try:
+                    portfolio = portfolio_payload()
+                except Exception:
+                    logger.exception("Failed to build portfolio payload for status merge")
+                else:
+                    components = portfolio.get('components') if isinstance(portfolio, dict) else None
+                    health_metrics = portfolio.get('health_metrics') if isinstance(portfolio, dict) else None
+                    if isinstance(components, list):
+                        self.state.components = components
+                        data['components'] = components
+                    if isinstance(health_metrics, dict):
+                        self.state.health_metrics = health_metrics
+                        data['health_metrics'] = health_metrics
+            if get_status_data is not None:
+                try:
+                    data.update(get_status_data())
+                except Exception:
+                    logger.exception("Failed to build TACTI status payload")
         elif path == 'portfolio':
-            data = {'source_mission': self.current_source_mission()}
+            if portfolio_payload is None:
+                data = {'source_mission': self.current_source_mission()}
+            else:
+                try:
+                    data = portfolio_payload()
+                except Exception:
+                    logger.exception("Failed to build portfolio payload")
+                    data = {'source_mission': self.current_source_mission()}
+        elif path == 'world-better':
+            if portfolio_payload is None:
+                data = {}
+            else:
+                try:
+                    data = (portfolio_payload() or {}).get('world_better', {})
+                except Exception:
+                    logger.exception("Failed to build world better payload")
+                    data = {}
         elif path == 'agents':
             data = self.state.agents
         elif path == 'tasks':
@@ -716,6 +1061,73 @@ class SourceUIHandler(SimpleHTTPRequestHandler):
             data = self.state.health_metrics
         elif path == 'logs':
             data = self.state.logs
+        elif path == 'tacti/dream':
+            if get_dream_status is None:
+                self.send_json({'error': 'tacti_dream_unavailable'}, status=503)
+                return
+            try:
+                data = get_dream_status(limit=20)
+            except Exception as exc:
+                self.send_json({'error': str(exc)}, status=500)
+                return
+        elif path == 'hivemind/stigmergy':
+            if get_stigmergy_status is None:
+                self.send_json({'error': 'stigmergy_unavailable'}, status=503)
+                return
+            try:
+                data = get_stigmergy_status(limit=20)
+            except Exception as exc:
+                self.send_json({'error': str(exc)}, status=500)
+                return
+        elif path == 'tacti/immune':
+            if get_immune_status is None:
+                self.send_json({'error': 'semantic_immune_unavailable'}, status=503)
+                return
+            try:
+                data = get_immune_status(limit=20)
+            except Exception as exc:
+                self.send_json({'error': str(exc)}, status=500)
+                return
+        elif path == 'tacti/arousal':
+            if get_arousal_status is None:
+                self.send_json({'error': 'arousal_unavailable'}, status=503)
+                return
+            try:
+                data = get_arousal_status()
+            except Exception as exc:
+                self.send_json({'error': str(exc)}, status=500)
+                return
+        elif path == 'hivemind/trails':
+            if get_trails_status is None:
+                self.send_json({'error': 'trails_unavailable'}, status=503)
+                return
+            try:
+                data = get_trails_status(limit=20)
+            except Exception as exc:
+                self.send_json({'error': str(exc)}, status=500)
+                return
+        elif path == 'hivemind/peer-graph':
+            if get_peer_graph_status is None:
+                self.send_json({'error': 'peer_graph_unavailable'}, status=503)
+                return
+            try:
+                data = get_peer_graph_status(limit=20)
+            except Exception as exc:
+                self.send_json({'error': str(exc)}, status=500)
+                return
+        elif path == 'skills':
+            if get_skills is None:
+                self.send_json({'error': 'skills_unavailable'}, status=503)
+                return
+            try:
+                data = get_skills(limit=100)
+            except Exception as exc:
+                self.send_json({'error': str(exc)}, status=500)
+                return
+        elif path == 'ain/status':
+            data = self._ain_status_payload()
+        elif path == 'ain/phi':
+            data = self._ain_phi_payload()
         elif path == 'trails/heatmap':
             if trails_heatmap_payload is None:
                 data = {'error': 'trails_heatmap_unavailable'}
@@ -734,15 +1146,91 @@ class SourceUIHandler(SimpleHTTPRequestHandler):
         elif path == 'symbiote':
             data = self.symbiote_data()
         else:
-            data = {'error': 'Not found'}
+            self.send_json({'error': 'Not found'}, status=404)
+            return
         
         self.send_json(data)
+
+    def _read_json_body(self) -> dict[str, Any]:
+        try:
+            length = int(self.headers.get('Content-Length', 0))
+        except Exception:
+            length = 0
+        if length <= 0:
+            return {}
+        try:
+            payload = json.loads(self.rfile.read(length))
+        except Exception:
+            return {}
+        return payload if isinstance(payload, dict) else {}
+
+    def _ain_phi_payload(self) -> dict[str, Any]:
+        try:
+            with urllib.request.urlopen('http://127.0.0.1:18991/api/ain/phi', timeout=2.0) as resp:
+                payload = json.loads(resp.read().decode('utf-8'))
+            return payload if isinstance(payload, dict) else {'ok': False, 'error': 'invalid_ain_payload'}
+        except Exception as exc:
+            return {'ok': False, 'error': str(exc), 'phi': 0.0}
+
+    def _ain_status_payload(self) -> dict[str, Any]:
+        phi_payload = self._ain_phi_payload()
+        running = bool(phi_payload.get('ok', True)) and 'error' not in phi_payload
+        phi_value = float(phi_payload.get('phi') or 0.0)
+        return {
+            'running': running,
+            'state': 'online' if running else 'offline',
+            'total_drive': phi_value,
+            'message': (
+                f"AIN phi proxy active on 18991 (phi={phi_value:.4f})"
+                if running
+                else str(phi_payload.get('error') or 'AIN phi proxy unavailable')
+            ),
+        }
+
+    def run_dream_consolidation_handler(self):
+        if run_dream_consolidation is None:
+            self.send_json({'error': 'tacti_dream_unavailable'}, status=503)
+            return
+        body = self._read_json_body()
+        try:
+            payload = run_dream_consolidation(day=str(body.get('day') or '').strip() or None)
+        except Exception as exc:
+            self.send_json({'error': str(exc)}, status=500)
+            return
+        self.send_json(payload)
+
+    def query_stigmergy_handler(self):
+        if query_stigmergy is None:
+            self.send_json({'error': 'stigmergy_unavailable'}, status=503)
+            return
+        body = self._read_json_body()
+        try:
+            payload = query_stigmergy(str(body.get('query') or body.get('text') or ''), limit=20)
+        except Exception as exc:
+            self.send_json({'error': str(exc)}, status=500)
+            return
+        self.send_json(payload)
+
+    def trigger_trail_handler(self):
+        if trigger_trail is None:
+            self.send_json({'error': 'trails_unavailable'}, status=503)
+            return
+        body = self._read_json_body()
+        try:
+            payload = trigger_trail(
+                text=body.get('text'),
+                tags=body.get('tags') if isinstance(body.get('tags'), list) else None,
+                strength=body.get('strength'),
+            )
+        except Exception as exc:
+            self.send_json({'error': str(exc)}, status=500)
+            return
+        self.send_json(payload)
     
     def create_task(self):
         """Create a new task."""
         try:
-            length = int(self.headers.get('Content-Length', 0))
-            data = json.loads(self.rfile.read(length)) if length > 0 else {}
+            data = self._read_json_body()
 
             sequence = max((int(task.get('sequence') or 0) for task in self.state.tasks), default=0) + 1
             task = {
@@ -770,8 +1258,7 @@ class SourceUIHandler(SimpleHTTPRequestHandler):
     def update_task(self, task_id):
         """Update a task."""
         try:
-            length = int(self.headers.get('Content-Length', 0))
-            data = json.loads(self.rfile.read(length)) if length > 0 else {}
+            data = self._read_json_body()
 
             for task in self.state.tasks:
                 if str(task['id']) == task_id:
@@ -1130,11 +1617,16 @@ class SourceUIHandler(SimpleHTTPRequestHandler):
             return
 
         source_mission['updated_at'] = datetime.now().isoformat()
-        SOURCE_MISSION_PATH.write_text(
-            json.dumps({'source_mission': source_mission}, indent=2) + '\n',
-            encoding='utf-8',
+        source_path = resolve_source_mission_path()
+        base_source_mission = _extract_source_mission(_read_json(source_path)) or {}
+        clean_source_mission = _sanitize_source_mission_config(base_source_mission)
+        if clean_source_mission:
+            _write_json_atomic(source_path, _wrap_source_mission_payload(clean_source_mission, source_path))
+        _write_json_atomic(
+            SOURCE_RUNTIME_STATE_PATH,
+            _build_source_runtime_state(clean_source_mission, source_mission),
         )
-        self.state.source_mission_mtime_ns = SOURCE_MISSION_PATH.stat().st_mtime_ns
+        self.state.source_mission_mtime_ns = source_state_version_ns()
     
     def serve_file(self, filename, content_type):
         """Serve a file from static directory."""
@@ -1144,6 +1636,7 @@ class SourceUIHandler(SimpleHTTPRequestHandler):
         if file_path.exists():
             self.send_response(200)
             self.send_header('Content-Type', content_type)
+            self.send_header('Cache-Control', 'no-store')
             self.end_headers()
             self.wfile.write(file_path.read_bytes())
         else:
@@ -1177,7 +1670,8 @@ class SourceUIHandler(SimpleHTTPRequestHandler):
             
             self.send_response(200)
             self.send_header('Content-Type', content_type)
-            self.send_header('Cache-Control', 'public, max-age=3600')
+            cache_control = 'no-store' if ext in {'.html', '.css', '.js', '.json'} else 'public, max-age=3600'
+            self.send_header('Cache-Control', cache_control)
             self.end_headers()
             self.wfile.write(file_path.read_bytes())
         else:

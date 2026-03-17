@@ -1,0 +1,380 @@
+{
+  "statement": "Build a cohesive, integrated collective intelligence symbiote that helps beings think, feel, remember, coordinate, and evolve together.",
+  "tagline": "Source is the shared command, memory, and meaning surface for collective intelligence among beings.",
+  "north_star": "Every meaningful interaction should leave the system more context-rich, more coordinated, more aligned, and more capable than it was before.",
+  "operating_commitments": [
+    "Make important state legible across surfaces without forcing beings to reconstruct it.",
+    "Turn raw interaction into attributable memory, then into reviewed inference and better future behavior.",
+    "Preserve provenance, consent, and clear authority while increasing useful agency for every lane.",
+    "Prefer local-first orchestration and tight feedback loops where latency and continuity matter.",
+    "Measure whether the collective is genuinely getting better, not just getting busier."
+  ],
+  "pillars": [
+    {
+      "id": "think",
+      "label": "Think",
+      "summary": "Shared context, deliberate routing, and model-specific reasoning harnesses."
+    },
+    {
+      "id": "feel",
+      "label": "Feel",
+      "summary": "Relational state, tone, urgency, and co-regulation become first-class system inputs."
+    },
+    {
+      "id": "remember",
+      "label": "Remember",
+      "summary": "Evidence becomes durable memory, then distilled preference and personal inference."
+    },
+    {
+      "id": "coordinate",
+      "label": "Coordinate",
+      "summary": "Beings share tasks, handoffs, receipts, and live operating state."
+    },
+    {
+      "id": "evolve",
+      "label": "Evolve",
+      "summary": "The system reviews itself, measures compounding gains, and improves on purpose."
+    }
+  ],
+  "tasks": [
+    {
+      "id": "source-001",
+      "title": "Universal Context Packet",
+      "pillar": "think",
+      "priority": "critical",
+      "summary": "Generate one compact, provenance-tagged context packet for Source UI, Telegram, Discord, and local agent lanes.",
+      "definition_of_done": "All major surfaces render and consume the same current-state packet with recency markers, open work, active models, and human preference lines.",
+      "impact_vector": "continuity",
+      "time_horizon": "0-6m",
+      "beneficiaries": [
+        "operators",
+        "users",
+        "collaborators"
+      ],
+      "public_benefit_hypothesis": "A shared context packet reduces repeated explanation, lowers coordination friction, and preserves intent across surfaces.",
+      "leading_indicators": [
+        "surfaces consuming the same packet",
+        "manual restatement incidents per week"
+      ],
+      "guardrails": [
+        "Never include non-shareable memory without explicit approval state.",
+        "Show provenance and recency markers on every surface."
+      ],
+      "evidence_status": "operational",
+      "reversibility": "high",
+      "leverage": "platform"
+    },
+    {
+      "id": "source-002",
+      "title": "Mission Control Timeline",
+      "pillar": "coordinate",
+      "priority": "critical",
+      "summary": "Unify commands, model runs, handoffs, memory promotions, and sim transitions into one causally ordered event stream.",
+      "definition_of_done": "An operator can answer what happened, why it happened, and what changed next from one timeline view.",
+      "impact_vector": "accountability",
+      "time_horizon": "0-6m",
+      "beneficiaries": [
+        "operators",
+        "collaborators"
+      ],
+      "public_benefit_hypothesis": "One causally ordered timeline makes coordination auditable and lowers the cost of answering what happened, why, and what changed next.",
+      "leading_indicators": [
+        "timeline event coverage",
+        "median time to reconstruct a decision path"
+      ],
+      "guardrails": [
+        "Keep the timeline append-only.",
+        "Redact secrets and boundary-restricted content before display."
+      ],
+      "evidence_status": "operational",
+      "reversibility": "high",
+      "leverage": "platform"
+    },
+    {
+      "id": "source-003",
+      "title": "Memory Promotion Review Queue",
+      "pillar": "remember",
+      "priority": "high",
+      "summary": "Build a review surface for promoting raw evidence into trusted user inferences, preferences, and reusable summaries.",
+      "definition_of_done": "Every durable inference has evidence links, contradiction state, confidence, and an operator review action.",
+      "impact_vector": "memory",
+      "time_horizon": "0-6m",
+      "beneficiaries": [
+        "users",
+        "operators"
+      ],
+      "public_benefit_hypothesis": "A review queue for memory promotion reduces repetition and incorrect personalization by making durable inferences evidence-linked and revisable.",
+      "leading_indicators": [
+        "reviewed memory promotions per week",
+        "contradiction-labelled inferences"
+      ],
+      "guardrails": [
+        "Require evidence links for durable inferences.",
+        "Track contradiction and review state before reuse."
+      ],
+      "evidence_status": "emerging",
+      "reversibility": "high",
+      "leverage": "surface"
+    },
+    {
+      "id": "source-004",
+      "title": "Personal Inference Graph",
+      "pillar": "remember",
+      "priority": "high",
+      "summary": "Move from flat prompt lines to a structured graph of preferences, aversions, rhythms, collaborators, and recurring goals.",
+      "definition_of_done": "Prompt harnesses can request targeted inference packets by context instead of reloading the same generic preferences.",
+      "impact_vector": "personalization",
+      "time_horizon": "6-18m",
+      "beneficiaries": [
+        "users"
+      ],
+      "public_benefit_hypothesis": "A structured inference graph supports better context targeting and less repetitive prompt stuffing while staying reviewable.",
+      "leading_indicators": [
+        "task-specific inference packet requests",
+        "duplicate preference lines removed from harnesses"
+      ],
+      "guardrails": [
+        "Provide deletion and contradiction pathways.",
+        "Keep graph nodes reviewable and attributable to evidence."
+      ],
+      "evidence_status": "emerging",
+      "reversibility": "medium",
+      "leverage": "platform"
+    },
+    {
+      "id": "source-005",
+      "title": "Relational State Layer",
+      "pillar": "feel",
+      "priority": "high",
+      "summary": "Track interaction tone, overload, trust, urgency, and social context so the system can respond with more tact and less noise.",
+      "definition_of_done": "Source exposes a live relational-state card and model harnesses can adapt response style from it.",
+      "impact_vector": "relational-safety",
+      "time_horizon": "6-18m",
+      "beneficiaries": [
+        "users",
+        "collaborators"
+      ],
+      "public_benefit_hypothesis": "Relational-state awareness should improve tact, reduce overload, and prevent the system from optimizing for throughput at the expense of trust.",
+      "leading_indicators": [
+        "interactions tagged with overload or urgency context",
+        "operator-rated tone corrections avoided"
+      ],
+      "guardrails": [
+        "Keep relational inference low-confidence and reviewable.",
+        "Never use relational state to coerce or manipulate."
+      ],
+      "evidence_status": "speculative",
+      "reversibility": "medium",
+      "leverage": "surface"
+    },
+    {
+      "id": "source-006",
+      "title": "Multi-Agent Deliberation Cells",
+      "pillar": "think",
+      "priority": "high",
+      "summary": "Create bounded cells where specialist lanes can deliberate, disagree, and return one attributed recommendation.",
+      "definition_of_done": "Source can launch a cell with explicit roles, capture each contribution, and show the final synthesis with dissent if present.",
+      "impact_vector": "collective-reasoning",
+      "time_horizon": "0-6m",
+      "beneficiaries": [
+        "operators",
+        "collaborators",
+        "users"
+      ],
+      "public_benefit_hypothesis": "Bounded multi-agent deliberation with explicit dissent improves decision quality and reduces premature closure on important choices.",
+      "leading_indicators": [
+        "deliberation cells with explicit dissent",
+        "decisions carrying a synthesis plus uncertainty note"
+      ],
+      "guardrails": [
+        "Record dissent instead of compressing it away.",
+        "Preserve operator override and confidence disclosure."
+      ],
+      "evidence_status": "operational",
+      "reversibility": "high",
+      "leverage": "platform"
+    },
+    {
+      "id": "source-007",
+      "title": "Research-to-Action Distillation",
+      "pillar": "coordinate",
+      "priority": "high",
+      "summary": "Turn research-channel discussions, saved links, and external feeds into actionable briefs, experiments, and queued tasks.",
+      "definition_of_done": "Research messages can be promoted into experiments or tasks with source links and owner assignment in one flow.",
+      "impact_vector": "research-to-action",
+      "time_horizon": "0-6m",
+      "beneficiaries": [
+        "operators",
+        "collaborators",
+        "communities"
+      ],
+      "public_benefit_hypothesis": "Research becomes socially useful faster when evidence can be promoted directly into experiments, tasks, and accountable owners.",
+      "leading_indicators": [
+        "research items promoted into experiments",
+        "task rows carrying source links"
+      ],
+      "guardrails": [
+        "Preserve source links and excerpts.",
+        "Distinguish evidence from conjecture in promoted tasks."
+      ],
+      "evidence_status": "operational",
+      "reversibility": "high",
+      "leverage": "workflow"
+    },
+    {
+      "id": "source-008",
+      "title": "Consent and Provenance Boundary Map",
+      "pillar": "feel",
+      "priority": "high",
+      "summary": "Make it explicit what can be shared across surfaces, what stays private, and what requires human approval.",
+      "definition_of_done": "Every memory and outbound action surface displays provenance and shareability state before use.",
+      "impact_vector": "consent",
+      "time_horizon": "0-6m",
+      "beneficiaries": [
+        "users",
+        "collaborators"
+      ],
+      "public_benefit_hypothesis": "Visible provenance and shareability boundaries build trust and reduce accidental overreach across surfaces.",
+      "leading_indicators": [
+        "surfaces rendering boundary state",
+        "outbound actions blocked pending approval"
+      ],
+      "guardrails": [
+        "Fail closed on unclear shareability.",
+        "Display provenance before outbound use."
+      ],
+      "evidence_status": "operational",
+      "reversibility": "high",
+      "leverage": "platform"
+    },
+    {
+      "id": "source-009",
+      "title": "Weekly Evolution Loop",
+      "pillar": "evolve",
+      "priority": "medium",
+      "summary": "Add a scheduled review that summarizes what the collective learned, what regressed, and what should change next.",
+      "definition_of_done": "Source produces a concise weekly evolution report with wins, regressions, and top three upgrades.",
+      "impact_vector": "learning-loop",
+      "time_horizon": "0-6m",
+      "beneficiaries": [
+        "operators",
+        "collaborators"
+      ],
+      "public_benefit_hypothesis": "A reliable weekly evolution loop compounds learning by forcing the system to report wins, regressions, guardrail debt, and next upgrades together.",
+      "leading_indicators": [
+        "weekly reports generated on time",
+        "upgrades tied to explicit evidence in the report"
+      ],
+      "guardrails": [
+        "Report regressions and guardrail debt alongside wins.",
+        "Avoid vanity metrics without operational meaning."
+      ],
+      "evidence_status": "operational",
+      "reversibility": "high",
+      "leverage": "workflow"
+    },
+    {
+      "id": "source-010",
+      "title": "Continuity and Recovery Pack",
+      "pillar": "evolve",
+      "priority": "medium",
+      "summary": "Capture the minimum viable state needed for a clean restart after service failure, model swap, or machine interruption.",
+      "definition_of_done": "A restart packet can reconstruct active work, latest decisions, memory health, and pending approvals without human re-explanation.",
+      "impact_vector": "resilience",
+      "time_horizon": "0-6m",
+      "beneficiaries": [
+        "operators",
+        "users"
+      ],
+      "public_benefit_hypothesis": "A recovery pack preserves agency and continuity after failures by restoring the minimum useful state without asking humans to repeat themselves.",
+      "leading_indicators": [
+        "restarts completed without manual re-explanation",
+        "recovery packets including active approvals and open work"
+      ],
+      "guardrails": [
+        "Restore approvals conservatively.",
+        "Carry only the minimum necessary state and mark stale fields."
+      ],
+      "evidence_status": "operational",
+      "reversibility": "high",
+      "leverage": "platform"
+    }
+  ],
+  "three_year_outcomes": [
+    {
+      "id": "continuity",
+      "label": "Continuity without re-explanation",
+      "summary": "People should not have to repeatedly reconstruct the same context, intent, or constraints across surfaces."
+    },
+    {
+      "id": "trust",
+      "label": "Trustworthy coordination",
+      "summary": "Cross-surface action should preserve consent, provenance, and clear accountability."
+    },
+    {
+      "id": "memory",
+      "label": "Reviewed memory that compounds learning",
+      "summary": "Durable memory should become more evidence-linked, more revisable, and more useful over time."
+    },
+    {
+      "id": "agency",
+      "label": "Human agency preserved",
+      "summary": "The system should increase optionality and capability without making people dependent on opaque state."
+    },
+    {
+      "id": "benefit",
+      "label": "Measured real-world benefit",
+      "summary": "Improvement should be tracked through better decisions, lower friction, and safer coordination rather than raw activity."
+    }
+  ],
+  "anti_goals": [
+    "Reward busyness over beneficial change.",
+    "Share memory across surfaces without clear provenance or approval state.",
+    "Hide uncertainty, dissent, or reversibility constraints behind polished summaries.",
+    "Make users increasingly dependent on opaque internal state."
+  ],
+  "decision_rules": [
+    "Prefer reversible improvements when evidence is still thin.",
+    "Make beneficiary, metric, and guardrail assumptions explicit before broad rollout.",
+    "Treat provenance and consent as first-class product requirements, not compliance afterthoughts.",
+    "Upgrade the system only when the evidence loop gets stronger, not merely when the interface gets busier."
+  ],
+  "agents": [
+    {
+      "id": "planner",
+      "name": "Planner",
+      "model": "MiniMax-M2.5",
+      "status": "idle",
+      "tasks_completed": 12,
+      "cycles": 156,
+      "active_task_count": 0
+    },
+    {
+      "id": "coder",
+      "name": "Coder",
+      "model": "Codex",
+      "status": "idle",
+      "tasks_completed": 24,
+      "cycles": 89,
+      "active_task_count": 0
+    },
+    {
+      "id": "health",
+      "name": "Health Monitor",
+      "model": "MiniMax-M2.5",
+      "status": "idle",
+      "tasks_completed": 8,
+      "cycles": 24,
+      "active_task_count": 0
+    },
+    {
+      "id": "memory",
+      "name": "Memory Agent",
+      "model": "MiniMax-M2.5",
+      "status": "idle",
+      "tasks_completed": 15,
+      "cycles": 42,
+      "active_task_count": 0
+    }
+  ]
+}

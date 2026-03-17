@@ -1,0 +1,70 @@
+[
+  {
+    "id": "financial-analysis",
+    "name": "Financial Analysis Pipeline",
+    "kind": "trading",
+    "path": ".",
+    "summary": "Live market stream, ITC classification, and sim evaluation running against the local assistant lane.",
+    "tags": ["markets", "sims", "itc"],
+    "units": [
+      "openclaw-market-stream.service",
+      "openclaw-itc-cycle.timer",
+      "openclaw-vllm.service"
+    ],
+    "signal_files": [
+      "sim/SIM_A/performance.json",
+      "sim/SIM_B/performance.json",
+      "sim/SIM_C/performance.json",
+      "sim/SIM_D/performance.json",
+      "sim/SIM_E/performance.json",
+      "sim/SIM_F/performance.json",
+      "sim/SIM_G/performance.json",
+      "sim/SIM_H/performance.json",
+      "workspace/source-ui/config/sim_catalog.json"
+    ]
+  },
+  {
+    "id": "source-ui",
+    "name": "Source UI",
+    "kind": "dashboard",
+    "path": "workspace/source-ui",
+    "summary": "The control-plane dashboard that should become the canonical ops and project view.",
+    "tags": ["dashboard", "ops"],
+    "units": [
+      "source-ui.service"
+    ],
+    "signal_files": [
+      "workspace/source-ui/app.py",
+      "workspace/source-ui/static/js/app.js",
+      "workspace/source-ui/static/index.html"
+    ]
+  },
+  {
+    "id": "dali-phase-one",
+    "name": "DALI Phase One",
+    "kind": "worldgen",
+    "path": "workspace/dali_unreal",
+    "summary": "Offline UE5 generation pipeline with plugin-owned Phase One commandlet flow.",
+    "tags": ["ue5", "phase1", "offline"],
+    "units": [
+      "dali-fishtank.service"
+    ],
+    "signal_files": [
+      "workspace/runtime/phase1_idle_status.json",
+      "workspace/handoffs/dali_phase1_offline_pipeline_2026-03-09.md"
+    ]
+  },
+  {
+    "id": "tacti-memory",
+    "name": "TACTI + Memory",
+    "kind": "cognition",
+    "path": "workspace",
+    "summary": "Memory, relationship, and governance substrate backing the broader OpenClaw system.",
+    "tags": ["memory", "governance", "tacti"],
+    "signal_files": [
+      "workspace/tacti_dashboard.html",
+      "workspace/state_runtime/memory/relationship_state.json",
+      "memory/2026-03-09.md"
+    ]
+  }
+]

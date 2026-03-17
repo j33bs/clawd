@@ -1,18 +1,20 @@
 [Unit]
-Description=Legacy Alias - OpenClaw Source UI Local (127.0.0.1:18990)
+Description=OpenClaw Source UI Local Bind (127.0.0.1:18990)
 After=network-online.target
 Wants=network-online.target
+StartLimitIntervalSec=120
+StartLimitBurst=10
 
 [Service]
 Type=simple
 WorkingDirectory=%h/src/clawd
+Environment=OPENCLAW_NODE_ID=dali
 ExecStart=%h/src/clawd/workspace/scripts/run_source_ui_local.sh
 Restart=always
 RestartSec=3
-StartLimitIntervalSec=120
-StartLimitBurst=10
 StandardOutput=append:%h/.local/state/openclaw/source-ui.local.out.log
 StandardError=append:%h/.local/state/openclaw/source-ui.local.err.log
 
 [Install]
 WantedBy=default.target
+Alias=openclaw-tool-ain-phi.service

@@ -7,7 +7,11 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
-from .discord_memory import build_discord_memory_context
+try:
+    from .discord_memory import build_discord_memory_context
+except Exception:  # pragma: no cover
+    def build_discord_memory_context(*, channel_id: int, author_name: str, exclude_message_id: int | None = None, limit: int = 4) -> list[str]:
+        return []
 from .telegram_memory import build_telegram_memory_context
 from .relational_state import build_relational_prompt_lines
 from .user_inference import build_user_context_packet, query_preference_graph
