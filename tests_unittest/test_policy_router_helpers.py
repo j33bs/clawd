@@ -33,6 +33,9 @@ _looks_like_constraint_line = _pr._looks_like_constraint_line
 _coerce_positive_int = _pr._coerce_positive_int
 _contains_phrase = _pr._contains_phrase
 _is_subagent_context = _pr._is_subagent_context
+_is_oracle_priority_context = _pr._is_oracle_priority_context
+_is_oracle_preemptable_provider = _pr._is_oracle_preemptable_provider
+_oracle_priority_gate = _pr._oracle_priority_gate
 _count_bullets = _pr._count_bullets
 _count_file_paths = _pr._count_file_paths
 _new_request_id = _pr._new_request_id
@@ -230,6 +233,52 @@ class TestIsSubagentContext(unittest.TestCase):
 
     def test_returns_bool(self):
         self.assertIsInstance(_is_subagent_context({}), bool)
+
+
+class TestOraclePriorityHelpers(unittest.TestCase):
+    def test_oracle_priority_context_detected(self):
+        self.assertTrue(_is_oracle_priority_context({"oracle_priority": True}))
+        self.assertTrue(_is_oracle_priority_context({"source_surface": "source_ui_oracle"}))
+
+    def test_oracle_priority_context_false_for_normal_task(self):
+        self.assertFalse(_is_oracle_priority_context({"source_surface": "telegram"}))
+
+    def test_preemptable_provider_matches_local_vllm(self):
+        self.assertTrue(_is_oracle_preemptable_provider("local_vllm_assistant"))
+        self.assertTrue(_is_oracle_preemptable_provider("local_vllm_coder"))
+        self.assertFalse(_is_oracle_preemptable_provider("groq"))
+
+    def test_oracle_priority_gate_bypasses_when_module_missing(self):
+        with patch.object(_pr, "_oracle_priority", None):
+            result = _oracle_priority_gate("local_vllm_assistant", {})
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["waited_ms"], 0)
+
+    def test_oracle_priority_gate_waits_for_clear(self):
+        class FakePriority:
+            @staticmethod
+            def get_active_lease():
+                return {"owner": "oracle", "purpose": "source_ui_oracle"}
+
+            @staticmethod
+            def wait_for_clear(*, max_wait_seconds, poll_interval):
+                return {"cleared": True, "waited_seconds": 0.5, "active": None}
+
+        with patch.object(_pr, "_oracle_priority", FakePriority()):
+            result = _oracle_priority_gate("local_vllm_assistant", {"source_surface": "discord"})
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["waited_ms"], 500)
+
+    def test_oracle_priority_gate_bypasses_oracle_context(self):
+        class FakePriority:
+            @staticmethod
+            def get_active_lease():
+                return {"owner": "oracle", "purpose": "source_ui_oracle"}
+
+        with patch.object(_pr, "_oracle_priority", FakePriority()):
+            result = _oracle_priority_gate("local_vllm_assistant", {"source_surface": "source_ui_oracle"})
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["waited_ms"], 0)
 
 
 # ---------------------------------------------------------------------------

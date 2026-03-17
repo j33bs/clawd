@@ -211,6 +211,63 @@ class SourceUIApiContractTests(unittest.TestCase):
         payload = handler.send_json.call_args.args[0]
         self.assertEqual(payload["question"], "What does the record say?")
 
+    def test_oracle_endpoint_can_attach_answer_payload(self):
+        handler = self._make_handler()
+        with (
+            mock.patch.object(handler, "refresh_state_from_source_mission", return_value=False),
+            mock.patch.object(
+                MOD,
+                "_run_oracle_query",
+                return_value={"question": "What does the record say?", "results": [{"body": "answer"}]},
+            ) as oracle_query,
+            mock.patch.object(
+                MOD,
+                "_augment_oracle_payload_with_answer",
+                return_value={"question": "What does the record say?", "results": [{"body": "answer"}], "answer": "Grounded."},
+            ) as augment,
+        ):
+            handler.handle_api(MOD.urlparse("/api/oracle?q=What%20does%20the%20record%20say%3F&k=7&answer=1"))
+
+        oracle_query.assert_called_once_with("What does the record say?", k=7, being=None)
+        augment.assert_called_once()
+        payload = handler.send_json.call_args.args[0]
+        self.assertEqual(payload["answer"], "Grounded.")
+
+    def test_oracle_post_defaults_to_plain_text_answer(self):
+        handler = self._make_handler()
+        handler._read_json_body = mock.Mock(return_value={"q": "What does the record say?", "k": 5})
+        with (
+            mock.patch.object(
+                MOD,
+                "_run_oracle_query",
+                return_value={"question": "What does the record say?", "results": [{"body": "answer"}]},
+            ) as oracle_query,
+            mock.patch.object(
+                MOD,
+                "_augment_oracle_payload_with_answer",
+                return_value={"question": "What does the record say?", "results": [{"body": "answer"}], "answer": "Grounded."},
+            ) as augment,
+        ):
+            handler.query_oracle_handler()
+
+        oracle_query.assert_called_once_with("What does the record say?", k=5, being=None)
+        augment.assert_called_once_with("What does the record say?", {"question": "What does the record say?", "results": [{"body": "answer"}]})
+        payload = handler.send_json.call_args.args[0]
+        self.assertEqual(payload["answer"], "Grounded.")
+
+    def test_augment_oracle_payload_with_answer_falls_back_deterministically(self):
+        base_payload = {
+            "question": "Where is the plan?",
+            "results": [{"title": "Plan", "body": "The plan is in workspace/docs/MASTER_PLAN.md", "location": "/tmp/MASTER_PLAN.md"}],
+            "locations": [{"kind": "project_file", "label": "MASTER_PLAN.md", "location": "/tmp/MASTER_PLAN.md"}],
+        }
+        with mock.patch.object(MOD, "_query_local_oracle_answer", side_effect=RuntimeError("local lane unavailable")):
+            payload = MOD._augment_oracle_payload_with_answer("Where is the plan?", base_payload)
+
+        self.assertEqual(payload["answer_mode"], "deterministic_fallback")
+        self.assertIn("Sources:", payload["answer"])
+        self.assertEqual(payload["answer_error"], "local lane unavailable")
+
     def test_fallback_oracle_query_reads_broader_system_corpus(self):
         with tempfile.TemporaryDirectory() as td:
             temp_root = Path(td)
@@ -276,16 +333,18 @@ class SourceUIApiContractTests(unittest.TestCase):
             )
 
             with (
-                mock.patch.object(MOD, "ORACLE_CORRESPONDENCE_PATH", open_questions_path),
-                mock.patch.object(MOD, "ORACLE_GRAPH_PATH", graph_path),
-                mock.patch.object(MOD, "ORACLE_RESEARCH_IMPORT_PATH", research_import_path),
-                mock.patch.object(MOD, "ORACLE_RESEARCH_PAPERS_PATH", research_papers_path),
-                mock.patch.object(MOD, "ORACLE_RESEARCH_DOC_ROOT", research_doc_root),
-                mock.patch.object(MOD, "ORACLE_USER_INFERENCES_PATH", user_inferences_path),
-                mock.patch.object(MOD, "ORACLE_PREFERENCE_PROFILE_PATH", preference_profile_path),
-                mock.patch.object(MOD, "ORACLE_MEMORY_SOURCES", ()),
-                mock.patch.object(MOD, "ORACLE_CORE_DOC_PATHS", (system_status_path,)),
+                mock.patch.object(MOD.oracle_corpus, "ORACLE_CORRESPONDENCE_PATH", open_questions_path),
+                mock.patch.object(MOD.oracle_corpus, "ORACLE_GRAPH_PATH", graph_path),
+                mock.patch.object(MOD.oracle_corpus, "ORACLE_RESEARCH_IMPORT_PATH", research_import_path),
+                mock.patch.object(MOD.oracle_corpus, "ORACLE_RESEARCH_PAPERS_PATH", research_papers_path),
+                mock.patch.object(MOD.oracle_corpus, "ORACLE_RESEARCH_DOC_ROOT", research_doc_root),
+                mock.patch.object(MOD.oracle_corpus, "ORACLE_USER_INFERENCES_PATH", user_inferences_path),
+                mock.patch.object(MOD.oracle_corpus, "ORACLE_PREFERENCE_PROFILE_PATH", preference_profile_path),
+                mock.patch.object(MOD.oracle_corpus, "ORACLE_MEMORY_SOURCES", ()),
+                mock.patch.object(MOD.oracle_corpus, "ORACLE_CORE_DOC_PATHS", (system_status_path,)),
+                mock.patch.object(MOD.oracle_corpus, "ORACLE_PROJECT_INDEX_ROOTS", ()),
             ):
+                MOD.oracle_corpus.invalidate_corpus_cache()
                 payload = MOD._fallback_oracle_query("runtime orchestration", k=5)
 
         self.assertEqual(payload["source"], "system_corpus")
@@ -328,20 +387,95 @@ class SourceUIApiContractTests(unittest.TestCase):
             )
 
             with (
-                mock.patch.object(MOD, "ORACLE_CORRESPONDENCE_PATH", open_questions_path),
-                mock.patch.object(MOD, "ORACLE_GRAPH_PATH", graph_path),
-                mock.patch.object(MOD, "ORACLE_RESEARCH_IMPORT_PATH", research_import_path),
-                mock.patch.object(MOD, "ORACLE_RESEARCH_PAPERS_PATH", research_papers_path),
-                mock.patch.object(MOD, "ORACLE_RESEARCH_DOC_ROOT", research_doc_root),
-                mock.patch.object(MOD, "ORACLE_USER_INFERENCES_PATH", user_inferences_path),
-                mock.patch.object(MOD, "ORACLE_PREFERENCE_PROFILE_PATH", preference_profile_path),
-                mock.patch.object(MOD, "ORACLE_MEMORY_SOURCES", ()),
-                mock.patch.object(MOD, "ORACLE_CORE_DOC_PATHS", ()),
+                mock.patch.object(MOD.oracle_corpus, "ORACLE_CORRESPONDENCE_PATH", open_questions_path),
+                mock.patch.object(MOD.oracle_corpus, "ORACLE_GRAPH_PATH", graph_path),
+                mock.patch.object(MOD.oracle_corpus, "ORACLE_RESEARCH_IMPORT_PATH", research_import_path),
+                mock.patch.object(MOD.oracle_corpus, "ORACLE_RESEARCH_PAPERS_PATH", research_papers_path),
+                mock.patch.object(MOD.oracle_corpus, "ORACLE_RESEARCH_DOC_ROOT", research_doc_root),
+                mock.patch.object(MOD.oracle_corpus, "ORACLE_USER_INFERENCES_PATH", user_inferences_path),
+                mock.patch.object(MOD.oracle_corpus, "ORACLE_PREFERENCE_PROFILE_PATH", preference_profile_path),
+                mock.patch.object(MOD.oracle_corpus, "ORACLE_MEMORY_SOURCES", ()),
+                mock.patch.object(MOD.oracle_corpus, "ORACLE_CORE_DOC_PATHS", ()),
+                mock.patch.object(MOD.oracle_corpus, "ORACLE_PROJECT_INDEX_ROOTS", ()),
             ):
+                MOD.oracle_corpus.invalidate_corpus_cache()
                 payload = MOD._fallback_oracle_query("psychological well being", k=3)
 
         self.assertTrue(payload["results"])
         self.assertEqual(payload["results"][0]["corpus_kind"], "research_papers")
+
+    def test_fallback_oracle_query_surfaces_project_file_locations(self):
+        with tempfile.TemporaryDirectory() as td:
+            temp_root = Path(td)
+            project_root = temp_root / "project"
+            plans_dir = project_root / "plans"
+            plans_dir.mkdir(parents=True, exist_ok=True)
+            plan_path = plans_dir / "implemented_plan.md"
+            plan_path.write_text(
+                "# Implemented Plan\n\nThis plan records implemented task handoffs and file locations.\n",
+                encoding="utf-8",
+            )
+
+            with (
+                mock.patch.object(MOD.oracle_corpus, "ORACLE_CORRESPONDENCE_PATH", temp_root / "missing_oq.md"),
+                mock.patch.object(MOD.oracle_corpus, "ORACLE_GRAPH_PATH", temp_root / "missing_graph.jsonl"),
+                mock.patch.object(MOD.oracle_corpus, "ORACLE_RESEARCH_IMPORT_PATH", temp_root / "missing_research_import.jsonl"),
+                mock.patch.object(MOD.oracle_corpus, "ORACLE_RESEARCH_PAPERS_PATH", temp_root / "missing_papers.jsonl"),
+                mock.patch.object(MOD.oracle_corpus, "ORACLE_USER_INFERENCES_PATH", temp_root / "missing_user_inferences.jsonl"),
+                mock.patch.object(MOD.oracle_corpus, "ORACLE_PREFERENCE_PROFILE_PATH", temp_root / "missing_profile.json"),
+                mock.patch.object(MOD.oracle_corpus, "ORACLE_MEMORY_SOURCES", ()),
+                mock.patch.object(MOD.oracle_corpus, "ORACLE_CORE_DOC_PATHS", ()),
+                mock.patch.object(
+                    MOD.oracle_corpus,
+                    "ORACLE_PROJECT_INDEX_ROOTS",
+                    (("Project Plans", project_root, {".md"}, 20),),
+                ),
+            ):
+                MOD.oracle_corpus.invalidate_corpus_cache()
+                payload = MOD._fallback_oracle_query("implemented plan file locations", k=5)
+
+        self.assertTrue(payload["results"])
+        self.assertEqual(payload["results"][0]["corpus_kind"], "project_file")
+        self.assertEqual(payload["results"][0]["location"], str(plan_path))
+        self.assertTrue(any(row.get("location") == str(plan_path) for row in payload["results"]))
+        self.assertTrue(any(location.get("location") == str(plan_path) for location in payload["locations"]))
+
+    def test_fallback_oracle_query_prefers_exact_memory_date_file(self):
+        with tempfile.TemporaryDirectory() as td:
+            temp_root = Path(td)
+            memory_root = temp_root / "memory"
+            memory_root.mkdir(parents=True, exist_ok=True)
+            target_path = memory_root / "2026-03-17.md"
+            target_path.write_text(
+                "Daily notes for 2026-03-17 with memory context.\n",
+                encoding="utf-8",
+            )
+            (memory_root / "2026-03-16.md").write_text(
+                "Daily notes for 2026-03-16.\n",
+                encoding="utf-8",
+            )
+
+            with (
+                mock.patch.object(MOD.oracle_corpus, "ORACLE_CORRESPONDENCE_PATH", temp_root / "missing_oq.md"),
+                mock.patch.object(MOD.oracle_corpus, "ORACLE_GRAPH_PATH", temp_root / "missing_graph.jsonl"),
+                mock.patch.object(MOD.oracle_corpus, "ORACLE_RESEARCH_IMPORT_PATH", temp_root / "missing_research_import.jsonl"),
+                mock.patch.object(MOD.oracle_corpus, "ORACLE_RESEARCH_PAPERS_PATH", temp_root / "missing_papers.jsonl"),
+                mock.patch.object(MOD.oracle_corpus, "ORACLE_USER_INFERENCES_PATH", temp_root / "missing_user_inferences.jsonl"),
+                mock.patch.object(MOD.oracle_corpus, "ORACLE_PREFERENCE_PROFILE_PATH", temp_root / "missing_profile.json"),
+                mock.patch.object(MOD.oracle_corpus, "ORACLE_MEMORY_SOURCES", ()),
+                mock.patch.object(MOD.oracle_corpus, "ORACLE_CORE_DOC_PATHS", ()),
+                mock.patch.object(
+                    MOD.oracle_corpus,
+                    "ORACLE_PROJECT_INDEX_ROOTS",
+                    (("Daily Memory", memory_root, {".md"}, 20),),
+                ),
+            ):
+                MOD.oracle_corpus.invalidate_corpus_cache()
+                payload = MOD._fallback_oracle_query("2026-03-17 memory notes", k=5)
+
+        self.assertTrue(payload["results"])
+        self.assertEqual(payload["results"][0]["corpus_kind"], "project_file")
+        self.assertEqual(payload["results"][0]["location"], str(target_path))
 
     def test_create_schedule_endpoint_calls_runtime_creator(self):
         handler = self._make_handler()

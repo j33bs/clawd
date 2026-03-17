@@ -9,7 +9,7 @@ let refreshInterval = null;
 let statusRefreshInterval = null;
 const panelRefreshTimestamps = {};
 let symbioteCache = null;
-let oracleInitialized = false;
+const oracleInitializedPanels = new WeakSet();
 
 // Local selector helpers
 const $ = (selector, context = document) => context.querySelector(selector);
@@ -549,8 +549,8 @@ async function runDreamConsolidationAction() {
 
 function openOracleAction() {
     const query = ($('#qa-stig-query')?.value || '').trim();
-    navigateTo('symbiote');
-    const oracleInput = $('#oracle-query');
+    navigateTo('dashboard');
+    const oracleInput = $('#dashboard-oracle-query') || $('#oracle-query');
     if (oracleInput) {
         if (query) {
             oracleInput.value = query;
@@ -1129,42 +1129,49 @@ async function renderSymbiote(force = false) {
 }
 
 function initOracle() {
-    if (oracleInitialized) return;
-    const input = $('#oracle-query');
-    const button = $('#oracle-submit');
-    const output = $('#oracle-results');
-    const kSelect = $('#oracle-k');
-    if (!input || !button || !output || !kSelect) return;
+    document.querySelectorAll('[data-oracle-surface]').forEach((panel) => {
+        if (oracleInitializedPanels.has(panel)) return;
+        const input = $('[data-oracle-query]', panel);
+        const button = $('[data-oracle-submit]', panel);
+        const output = $('[data-oracle-results]', panel);
+        const kSelect = $('[data-oracle-k]', panel);
+        if (!input || !button || !output || !kSelect) return;
 
-    const runQuery = async () => {
-        const query = input.value.trim();
-        if (!query) return;
-        button.disabled = true;
-        output.innerHTML = '<div class="oracle-loading">querying corpus…</div>';
-        try {
-            const payload = await fetchContract('/api/oracle', {
-                method: 'POST',
-                body: JSON.stringify({ q: query, k: parseInt(kSelect.value || '10', 10) })
-            });
-            if (!payload || payload.ok !== true || !payload.data) {
-                throw new Error(payload?.error?.message || 'oracle unavailable');
+        const runQuery = async () => {
+            const query = input.value.trim();
+            if (!query) return;
+            button.disabled = true;
+            output.innerHTML = '<div class="oracle-loading">querying corpus and drafting answer…</div>';
+            try {
+                const payload = await fetchContract('/api/oracle', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        q: query,
+                        k: parseInt(kSelect.value || '10', 10),
+                        answer: true
+                    })
+                });
+                if (!payload || payload.ok !== true || !payload.data) {
+                    throw new Error(payload?.error?.message || 'oracle unavailable');
+                }
+                output.innerHTML = renderOracleResult(payload.data);
+            } catch (error) {
+                output.innerHTML = `<div class="oracle-error">${escapeHtml(error.message)}</div>`;
+            } finally {
+                button.disabled = false;
             }
-            output.innerHTML = renderOracleResult(payload.data);
-        } catch (error) {
-            output.innerHTML = `<div class="oracle-error">${escapeHtml(error.message)}</div>`;
-        } finally {
-            button.disabled = false;
-        }
-    };
+        };
 
-    button.addEventListener('click', runQuery);
-    input.addEventListener('keydown', (event) => {
-        if (event.key === 'Enter') {
+        button.addEventListener('click', runQuery);
+        input.addEventListener('keydown', (event) => {
+            const isTextarea = input.tagName === 'TEXTAREA';
+            if (event.key !== 'Enter') return;
+            if (isTextarea && !event.ctrlKey && !event.metaKey) return;
             event.preventDefault();
             runQuery();
-        }
+        });
+        oracleInitializedPanels.add(panel);
     });
-    oracleInitialized = true;
 }
 
 function renderOracleResult(data) {
@@ -1174,6 +1181,10 @@ function renderOracleResult(data) {
     const results = Array.isArray(data.results) ? data.results : [];
     const k = Number(data.k || results.length) || results.length;
     const sourceKind = String(data.source || '');
+    const answer = String(data.answer || '').trim();
+    const answerModel = String(data.answer_model || '').trim();
+    const answerMode = String(data.answer_mode || '').trim();
+    const answerProvider = String(data.answer_provider || '').trim();
     const labelMap = {
         claude_code: 'Claude Code',
         chatgpt: 'ChatGPT',
@@ -1198,6 +1209,15 @@ function renderOracleResult(data) {
         `;
     }).join('');
     const notInTopK = (Array.isArray(data.not_in_top_k) ? data.not_in_top_k : []).map((being) => escapeHtml(labelMap[being] || being)).join(', ');
+    const answerMeta = [answerProvider, answerModel, answerMode].filter(Boolean).join(' · ');
+    const answerBlock = answer
+        ? `
+            <div class="oracle-answer-block">
+                <div class="oracle-sub">${escapeHtml(answerMeta || 'plain-text answer')}</div>
+                <div class="oracle-answer-text">${escapeHtml(answer).replaceAll('\n', '<br>')}</div>
+            </div>
+        `
+        : '';
     const rows = results.map((row, index) => {
         const section = row.section_number_filed || row.canonical_section_number || '?';
         const authors = Array.isArray(row.authors) ? row.authors.join(', ') : String(row.authors || '');
@@ -1205,6 +1225,7 @@ function renderOracleResult(data) {
         const title = String(row.title || '').trim();
         const snippet = String(row.body || '').replaceAll('\n', ' ').trim();
         const sourceLabel = String(row.source_label || row.corpus_kind || 'System Corpus').trim();
+        const location = String(row.location || row.corpus_path || '').trim();
         const metaBits = [escapeHtml(sourceLabel)];
         if (section && section !== '?') {
             metaBits.push(`§${escapeHtml(section)}`);
@@ -1215,12 +1236,16 @@ function renderOracleResult(data) {
         if (date) {
             metaBits.push(escapeHtml(date));
         }
+        const locationLine = location
+            ? `<div class="oracle-result-location">${escapeHtml(location)}</div>`
+            : '';
         return `
             <div class="oracle-result-row">
                 <span class="oracle-result-num">[${index + 1}]</span>
                 <div class="oracle-result-body">
                     <div class="oracle-result-meta">${metaBits.join(' · ')}${title ? ` — ${escapeHtml(title)}` : ''}</div>
                     <div class="oracle-result-snip">${escapeHtml(snippet)}</div>
+                    ${locationLine}
                 </div>
             </div>
         `;
@@ -1229,8 +1254,9 @@ function renderOracleResult(data) {
         ? `top ${results.length} results from the local system corpus`
         : `top ${results.length} sections by semantic distance`;
     return `
+        ${answerBlock}
         <div class="oracle-being-weights">
-            <div class="oracle-sub">being weight in top-${escapeHtml(k)}</div>
+            <div class="oracle-sub">being weight in top-${escapeHtml(String(k))}</div>
             ${bars || '<div class="oracle-loading">No beings ranked for this query.</div>'}
             ${notInTopK ? `<div class="oracle-not-in-k">not ranked: ${notInTopK}</div>` : ''}
         </div>

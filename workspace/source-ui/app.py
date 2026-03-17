@@ -9,7 +9,6 @@ import os
 import sys
 import argparse
 import logging
-import re
 import subprocess
 import time
 from datetime import datetime, timedelta
@@ -21,6 +20,10 @@ from urllib.parse import parse_qs, urlparse
 import urllib.error
 import urllib.request
 import socketserver
+
+WORKSPACE_IMPORT_ROOT = Path(__file__).resolve().parents[1]
+if str(WORKSPACE_IMPORT_ROOT) not in sys.path:
+    sys.path.insert(0, str(WORKSPACE_IMPORT_ROOT))
 
 try:
     from api.portfolio import portfolio_payload
@@ -72,6 +75,16 @@ except Exception:  # pragma: no cover
     run_dream_consolidation = None
     trigger_trail = None
 
+try:
+    from api import oracle_corpus
+except Exception:  # pragma: no cover
+    oracle_corpus = None
+
+try:
+    import oracle_priority
+except Exception:  # pragma: no cover
+    oracle_priority = None
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -122,28 +135,13 @@ SOURCE_MISSION_TASK_AUTOGEN_KEYS = (
 OPENCLAW_CLI_PATH = SOURCE_UI_ROOT.parents[1] / '.runtime' / 'openclaw' / 'openclaw.mjs'
 REPO_ROOT = SOURCE_UI_ROOT.parents[1]
 WORKSPACE_ROOT = REPO_ROOT / 'workspace'
-ORACLE_CORRESPONDENCE_PATH = WORKSPACE_ROOT / 'governance' / 'OPEN_QUESTIONS.md'
-ORACLE_GRAPH_PATH = WORKSPACE_ROOT / 'knowledge_base' / 'data' / 'graph.jsonl'
-ORACLE_RESEARCH_IMPORT_PATH = WORKSPACE_ROOT / 'knowledge_base' / 'data' / 'research_import.jsonl'
-ORACLE_RESEARCH_PAPERS_PATH = WORKSPACE_ROOT / 'research' / 'data' / 'papers.jsonl'
-ORACLE_USER_INFERENCES_PATH = WORKSPACE_ROOT / 'knowledge_base' / 'data' / 'user_inferences.jsonl'
-ORACLE_PREFERENCE_PROFILE_PATH = WORKSPACE_ROOT / 'knowledge_base' / 'data' / 'preference_profile.json'
-ORACLE_RESEARCH_DOC_ROOT = WORKSPACE_ROOT / 'research'
-ORACLE_MEMORY_SOURCES = (
-    ('telegram_memory', WORKSPACE_ROOT / 'knowledge_base' / 'data' / 'telegram_messages.jsonl', 450),
-    ('discord_memory', WORKSPACE_ROOT / 'knowledge_base' / 'data' / 'discord_messages.jsonl', 200),
-    ('discord_research', WORKSPACE_ROOT / 'knowledge_base' / 'data' / 'discord_research_messages.jsonl', 120),
+LOCAL_ASSISTANT_CHAT_COMPLETIONS_URL = os.environ.get(
+    'SOURCE_UI_ORACLE_LOCAL_CHAT_URL',
+    'http://127.0.0.1:8001/v1/chat/completions',
 )
-ORACLE_CORE_DOC_PATHS = (
-    WORKSPACE_ROOT / 'SOUL.md',
-    WORKSPACE_ROOT / 'USER.md',
-    WORKSPACE_ROOT / 'MEMORY.md',
-    WORKSPACE_ROOT / 'SYSTEM_STATUS.md',
-    WORKSPACE_ROOT / 'GOALS.md',
-    WORKSPACE_ROOT / 'CONSTITUTION.md',
-    WORKSPACE_ROOT / 'MODEL_ROUTING.md',
-    WORKSPACE_ROOT / 'TOOLS.md',
-)
+LOCAL_ASSISTANT_CHAT_MODEL = os.environ.get('SOURCE_UI_ORACLE_LOCAL_MODEL', 'local-assistant')
+ORACLE_ANSWER_CONTEXT_LIMIT = 6
+ORACLE_ANSWER_CONTEXT_MAX_CHARS = 3600
 
 
 def resolve_source_mission_path() -> Path:
@@ -377,290 +375,6 @@ def _runtime_cron_status(payload: dict[str, Any], baseline: dict[str, Any] | Non
     return detail
 
 
-def _read_jsonl_rows(path: Path, *, limit: int | None = None) -> list[dict[str, Any]]:
-    if not path.exists() or not path.is_file():
-        return []
-    try:
-        lines = path.read_text(encoding='utf-8', errors='ignore').splitlines()
-    except Exception:
-        logger.exception("Failed to read JSONL rows from %s", path)
-        return []
-    if limit is not None and limit > 0:
-        lines = lines[-limit:]
-    rows: list[dict[str, Any]] = []
-    for raw in lines:
-        raw = raw.strip()
-        if not raw:
-            continue
-        try:
-            payload = json.loads(raw)
-        except Exception:
-            continue
-        if isinstance(payload, dict):
-            rows.append(payload)
-    return rows
-
-
-def _normalize_oracle_authors(*values: Any) -> list[str]:
-    labels = ' '.join(str(value or '').strip().lower() for value in values if str(value or '').strip())
-    rows: list[str] = []
-    for key, aliases in (
-        ('dali', ('dali', 'jeebsdalibot')),
-        ('c_lawd', ('c_lawd', 'c-lawd')),
-        ('lumen', ('lumen',)),
-        ('chatgpt', ('chatgpt',)),
-        ('grok', ('grok',)),
-        ('gemini', ('gemini',)),
-        ('claude code', ('claude code',)),
-        ('claude (ext)', ('claude (ext)', 'claude ext')),
-        ('jeebs', ('jeebs', 'j33bs', 'jeeebs')),
-    ):
-        if any(alias in labels for alias in aliases):
-            rows.append(key)
-    return rows
-
-
-def _oracle_excerpt(text: str, tokens: list[str], *, max_chars: int = 320) -> str:
-    normalized = ' '.join(str(text or '').split())
-    if len(normalized) <= max_chars:
-        return normalized
-    lowered = normalized.lower()
-    start = 0
-    for token in tokens:
-        idx = lowered.find(token)
-        if idx >= 0:
-            start = max(0, idx - max_chars // 4)
-            break
-    snippet = normalized[start : start + max_chars]
-    if start > 0:
-        snippet = '…' + snippet.lstrip()
-    if start + max_chars < len(normalized):
-        snippet = snippet.rstrip() + '…'
-    return snippet
-
-
-def _oracle_query_tokens(question: str) -> list[str]:
-    raw_tokens = [token for token in re.findall(r"[a-z0-9_']+", question.lower()) if len(token) >= 3]
-    stop_tokens = {
-        'about',
-        'agent',
-        'agents',
-        'being',
-        'into',
-        'just',
-        'open',
-        'questions',
-        'source',
-        'system',
-        'systems',
-        'well',
-        'with',
-        'your',
-    }
-    filtered = [token for token in raw_tokens if token not in stop_tokens]
-    token_rows = filtered or raw_tokens
-    return list(dict.fromkeys(token_rows))
-
-
-def _oracle_core_doc_entries() -> list[dict[str, Any]]:
-    entries: list[dict[str, Any]] = []
-    for path in ORACLE_CORE_DOC_PATHS:
-        if not path.exists() or not path.is_file():
-            continue
-        try:
-            body = path.read_text(encoding='utf-8', errors='ignore').strip()
-        except Exception:
-            logger.exception("Failed to read Oracle core doc %s", path)
-            continue
-        if not body:
-            continue
-        entries.append(
-            {
-                'id': f'doc:{path.name}',
-                'kind': 'core_doc',
-                'title': path.stem.replace('_', ' '),
-                'body': body,
-                'authors': [],
-                'created_at': datetime.fromtimestamp(path.stat().st_mtime).isoformat(),
-                'source_label': f'Core Doc · {path.name}',
-                'source_path': str(path),
-                'boost': 6,
-            }
-        )
-    return entries
-
-
-def _oracle_research_doc_entries() -> list[dict[str, Any]]:
-    entries: list[dict[str, Any]] = []
-    if not ORACLE_RESEARCH_DOC_ROOT.exists() or not ORACLE_RESEARCH_DOC_ROOT.is_dir():
-        return entries
-    for path in sorted(ORACLE_RESEARCH_DOC_ROOT.glob('*.md')):
-        if not path.is_file():
-            continue
-        try:
-            body = path.read_text(encoding='utf-8', errors='ignore').strip()
-        except Exception:
-            logger.exception("Failed to read Oracle research doc %s", path)
-            continue
-        if not body:
-            continue
-        entries.append(
-            {
-                'id': f'research-doc:{path.name}',
-                'kind': 'research_doc',
-                'title': path.stem.replace('_', ' '),
-                'body': body,
-                'authors': [],
-                'created_at': datetime.fromtimestamp(path.stat().st_mtime).isoformat(),
-                'source_label': f'Research Doc · {path.name}',
-                'source_path': str(path),
-                'boost': 10,
-            }
-        )
-    return entries
-
-
-def _oracle_corpus_entries() -> list[dict[str, Any]]:
-    entries: list[dict[str, Any]] = []
-    store_dir = REPO_ROOT / 'workspace' / 'store'
-    if str(store_dir) not in sys.path:
-        sys.path.insert(0, str(store_dir))
-
-    try:
-        from parser import parse_sections
-    except Exception:
-        parse_sections = None
-
-    if parse_sections is not None and ORACLE_CORRESPONDENCE_PATH.exists():
-        try:
-            for section in parse_sections(str(ORACLE_CORRESPONDENCE_PATH)):
-                entries.append(
-                    {
-                        'id': f'oq:{int(getattr(section, "canonical_section_number", 0) or 0)}',
-                        'kind': 'correspondence',
-                        'title': str(getattr(section, 'title', '') or ''),
-                        'body': str(getattr(section, 'body', '') or ''),
-                        'authors': [str(author) for author in list(getattr(section, 'authors', []) or []) if str(author).strip()],
-                        'created_at': str(getattr(section, 'created_at', '') or ''),
-                        'source_label': 'Correspondence Ledger',
-                        'source_path': str(ORACLE_CORRESPONDENCE_PATH),
-                        'canonical_section_number': int(getattr(section, 'canonical_section_number', 0) or 0),
-                        'section_number_filed': str(getattr(section, 'section_number_filed', '') or ''),
-                        'boost': 8,
-                    }
-                )
-        except Exception:
-            logger.exception("Failed to parse Oracle correspondence corpus")
-
-    for path, kind, label, boost in (
-        (ORACLE_GRAPH_PATH, 'knowledge_graph', 'Knowledge Graph', 7),
-        (ORACLE_RESEARCH_IMPORT_PATH, 'research_import', 'Research Import', 7),
-        (ORACLE_RESEARCH_PAPERS_PATH, 'research_papers', 'Research Papers', 10),
-        (ORACLE_USER_INFERENCES_PATH, 'user_inference', 'User Inference', 10),
-    ):
-        for index, row in enumerate(_read_jsonl_rows(path), start=1):
-            if kind == 'user_inference' and str(row.get('status') or '').strip().lower() != 'active':
-                continue
-            title = str(row.get('name') or row.get('title') or row.get('statement') or row.get('subject') or f'{label} {index}').strip()
-            body_bits = [
-                row.get('content'),
-                row.get('statement'),
-                row.get('prompt_line'),
-                row.get('summary'),
-                row.get('topic'),
-            ]
-            body = '\n'.join(str(bit).strip() for bit in body_bits if str(bit or '').strip())
-            if not body:
-                continue
-            metadata = row.get('metadata') if isinstance(row.get('metadata'), dict) else {}
-            source_hint = (
-                metadata.get('topic')
-                or row.get('topic')
-                or row.get('source')
-                or row.get('entity_type')
-                or row.get('inference_type')
-                or label
-            )
-            entries.append(
-                {
-                    'id': f'{kind}:{index}',
-                    'kind': kind,
-                    'title': title,
-                    'body': body,
-                    'authors': _normalize_oracle_authors(row.get('author_name'), row.get('subject')),
-                    'created_at': str(row.get('created_at') or row.get('updated_at') or row.get('distilled_at') or ''),
-                    'source_label': f'{label} · {source_hint}',
-                    'source_path': str(path),
-                    'boost': boost,
-                }
-            )
-
-    preference_profile = _read_json(ORACLE_PREFERENCE_PROFILE_PATH)
-    if isinstance(preference_profile, dict):
-        updated_at = str(preference_profile.get('updated_at') or '')
-        for section_name, section_payload in preference_profile.items():
-            if section_name in {'schema_version', 'subject', 'updated_at'} or not isinstance(section_payload, dict):
-                continue
-            for key, row in section_payload.items():
-                if not isinstance(row, dict) or not row.get('value'):
-                    continue
-                title = f'{section_name.replace("_", " ")} · {key.replace("_", " ")}'
-                body = '\n'.join(
-                    bit
-                    for bit in (
-                        str(row.get('statement') or '').strip(),
-                        str(row.get('prompt_line') or '').strip(),
-                        f"confidence {row.get('confidence')}" if row.get('confidence') is not None else '',
-                    )
-                    if bit
-                )
-                entries.append(
-                    {
-                        'id': f'preference:{section_name}:{key}',
-                        'kind': 'preference_profile',
-                        'title': title,
-                        'body': body,
-                        'authors': ['jeebs'],
-                        'created_at': str(row.get('updated_at') or updated_at),
-                        'source_label': 'Preference Profile',
-                        'source_path': str(ORACLE_PREFERENCE_PROFILE_PATH),
-                        'boost': 12,
-                    }
-                )
-
-    for kind, path, limit in ORACLE_MEMORY_SOURCES:
-        label = kind.replace('_', ' ').title()
-        for index, row in enumerate(_read_jsonl_rows(path, limit=limit), start=1):
-            role = str(row.get('role') or '').strip().lower()
-            if role not in {'assistant', 'user'}:
-                continue
-            content = str(row.get('content') or '').strip()
-            if len(content) < 24:
-                continue
-            entries.append(
-                {
-                    'id': f'{kind}:{index}',
-                    'kind': kind,
-                    'title': str(
-                        row.get('chat_title')
-                        or row.get('channel_name')
-                        or row.get('guild_name')
-                        or label
-                    ).strip(),
-                    'body': content,
-                    'authors': _normalize_oracle_authors(row.get('author_name'), role),
-                    'created_at': str(row.get('created_at') or row.get('stored_at') or ''),
-                    'source_label': f'{label} · {role}',
-                    'source_path': str(path),
-                    'boost': 8 if kind == 'discord_research' else (4 if role == 'assistant' else 3),
-                }
-            )
-
-    entries.extend(_oracle_research_doc_entries())
-    entries.extend(_oracle_core_doc_entries())
-    return entries
-
-
 def _fallback_oracle_query(
     question: str,
     *,
@@ -668,114 +382,215 @@ def _fallback_oracle_query(
     being: str | None = None,
     fallback_reason: str | None = None,
 ) -> dict[str, Any]:
-    token_rows = _oracle_query_tokens(question)
-    query_text = question.lower()
-    being_filter = str(being or '').strip().lower()
-
-    def score_entry(entry: dict[str, Any]) -> int:
-        authors = ' '.join(str(author).lower() for author in list(entry.get('authors') or []))
-        if being_filter and being_filter not in authors:
-            return 0
-        title = str(entry.get('title') or '').lower()
-        body = str(entry.get('body') or '').lower()
-        source_label = str(entry.get('source_label') or '').lower()
-        score = 0
-        matched = False
-        if query_text and query_text in title:
-            score += 16
-            matched = True
-        if query_text and query_text in body:
-            score += 10
-            matched = True
-        if query_text and query_text in source_label:
-            score += 6
-            matched = True
-        for token in token_rows:
-            title_hits = title.count(token)
-            author_hits = authors.count(token)
-            source_hits = source_label.count(token)
-            body_hits = body.count(token)
-            score += title_hits * 5
-            score += author_hits * 3
-            score += source_hits * 2
-            score += body_hits
-            if title_hits or author_hits or source_hits or body_hits:
-                matched = True
-        if not matched:
-            return 0
-        score += int(entry.get('boost') or 0)
-        return score
-
-    ranked: list[tuple[int, dict[str, Any]]] = []
-    corpus_entries = _oracle_corpus_entries()
-    for entry in corpus_entries:
-        score = score_entry(entry)
-        if score <= 0:
-            continue
-        ranked.append((score, entry))
-    ranked.sort(
-        key=lambda row: (
-            -row[0],
-            -int(bool(row[1].get('created_at'))),
-            str(row[1].get('title') or ''),
-        )
+    if oracle_corpus is None:
+        raise RuntimeError('oracle corpus module unavailable')
+    return oracle_corpus.build_lexical_oracle_payload(
+        question,
+        k=k,
+        being=being,
+        fallback_reason=fallback_reason,
     )
 
-    selected = ranked[: max(1, int(k))]
-    being_counts: dict[str, int] = {}
-    known_beings = {
-        'claude code',
-        'c_lawd',
-        'lumen',
-        'dali',
-        'chatgpt',
-        'grok',
-        'gemini',
-        'claude (ext)',
-        'claude ext',
-        'jeebs',
-        'the correspondence',
-    }
-    results: list[dict[str, Any]] = []
-    for score, entry in selected:
-        authors = [str(author) for author in list(entry.get('authors') or []) if str(author).strip()]
-        for author in authors:
-            normalized = author.lower()
-            known_beings.add(normalized)
-            being_counts[normalized] = being_counts.get(normalized, 0) + 1
-        body = _oracle_excerpt(str(entry.get('body') or ''), token_rows)
-        result_row = {
-            'title': str(entry.get('title') or ''),
-            'body': body,
-            'authors': authors,
-            'created_at': str(entry.get('created_at') or ''),
-            'relevance_score': score,
-            'source_label': str(entry.get('source_label') or 'System Corpus'),
-            'corpus_kind': str(entry.get('kind') or 'system'),
-            'corpus_path': str(entry.get('source_path') or ''),
-            'canonical_section_number': int(entry.get('canonical_section_number', 0) or 0),
-            'section_number_filed': str(entry.get('section_number_filed', '') or ''),
-        }
-        results.append(result_row)
 
-    centroid = next(iter(sorted(being_counts.items(), key=lambda item: (-item[1], item[0]))), (None, 0))[0]
-    payload = {
-        'question': question,
-        'k': max(1, int(k)),
-        'model': 'system-corpus-lexical',
-        'section_count': len(corpus_entries),
-        'results': results,
-        'being_counts': being_counts,
-        'centroid': centroid,
-        'not_in_top_k': sorted([being_name for being_name in known_beings if being_name not in being_counts]),
-        'total_slots': sum(being_counts.values()),
-        'source': 'system_corpus',
+def _oracle_truthy(value: Any, *, default: bool = False) -> bool:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    normalized = str(value).strip().lower()
+    if not normalized:
+        return default
+    if normalized in {'1', 'true', 'yes', 'on'}:
+        return True
+    if normalized in {'0', 'false', 'no', 'off'}:
+        return False
+    return default
+
+
+def _oracle_answer_locations(payload: dict[str, Any], *, limit: int = 4) -> list[str]:
+    rows: list[str] = []
+    seen: set[str] = set()
+    for entry in list(payload.get('locations') or []):
+        if not isinstance(entry, dict):
+            continue
+        location = str(entry.get('location') or '').strip()
+        if not location or location in seen:
+            continue
+        rows.append(location)
+        seen.add(location)
+        if len(rows) >= limit:
+            break
+    if rows:
+        return rows
+    for row in list(payload.get('results') or []):
+        if not isinstance(row, dict):
+            continue
+        location = str(row.get('location') or row.get('corpus_path') or '').strip()
+        if not location or location in seen:
+            continue
+        rows.append(location)
+        seen.add(location)
+        if len(rows) >= limit:
+            break
+    return rows
+
+
+def _oracle_answer_context(payload: dict[str, Any], *, limit: int = ORACLE_ANSWER_CONTEXT_LIMIT) -> str:
+    blocks: list[str] = []
+    total_chars = 0
+    for index, row in enumerate(list(payload.get('results') or [])[: max(1, int(limit))], start=1):
+        if not isinstance(row, dict):
+            continue
+        title = str(row.get('title') or row.get('source_label') or '').strip()
+        source_label = str(row.get('source_label') or row.get('corpus_kind') or 'System Corpus').strip()
+        location = str(row.get('location') or row.get('corpus_path') or '').strip()
+        body = ' '.join(str(row.get('body') or '').split()).strip()
+        if len(body) > 520:
+            body = body[:519].rstrip() + '…'
+        block = '\n'.join(
+            bit
+            for bit in (
+                f'[{index}] {source_label}',
+                f'title: {title}' if title else '',
+                f'location: {location}' if location else '',
+                f'excerpt: {body}' if body else '',
+            )
+            if bit
+        )
+        if not block:
+            continue
+        if total_chars + len(block) > ORACLE_ANSWER_CONTEXT_MAX_CHARS and blocks:
+            break
+        blocks.append(block)
+        total_chars += len(block)
+    return '\n\n'.join(blocks)
+
+
+def _deterministic_oracle_answer(question: str, payload: dict[str, Any]) -> str:
+    results = [row for row in list(payload.get('results') or []) if isinstance(row, dict)]
+    sources = _oracle_answer_locations(payload)
+    if not results:
+        source_line = '; '.join(sources) if sources else 'none'
+        return f'I could not find grounded local context for "{question}".\n\nSources: {source_line}'
+
+    lead = ' '.join(str(results[0].get('body') or results[0].get('title') or '').split()).strip()
+    if len(lead) > 260:
+        lead = lead[:259].rstrip() + '…'
+    if not lead:
+        lead = f'The strongest local match is {str(results[0].get("title") or results[0].get("source_label") or "an unlabeled source").strip()}.'
+
+    related_bits: list[str] = []
+    for row in results[1:3]:
+        title = str(row.get('title') or row.get('source_label') or '').strip()
+        location = str(row.get('location') or row.get('corpus_path') or '').strip()
+        if not title and not location:
+            continue
+        related_bits.append(f'{title} ({location})' if title and location else (title or location))
+
+    answer = lead
+    if related_bits:
+        answer += '\n\nRelated context: ' + '; '.join(related_bits)
+    answer += f'\n\nSources: {"; ".join(sources) if sources else "none"}'
+    return answer
+
+
+def _normalize_oracle_answer_text(text: str) -> str:
+    lines: list[str] = []
+    for raw_line in str(text or '').replace('**', '').splitlines():
+        stripped = raw_line.strip()
+        if stripped.startswith('*') and len(stripped) > 1 and stripped[1].isspace():
+            stripped = stripped[1:].strip()
+        elif stripped.startswith('-') and len(stripped) > 1 and stripped[1].isspace():
+            stripped = stripped[1:].strip()
+        lines.append(stripped if stripped else '')
+    return '\n'.join(lines).strip()
+
+
+def _query_local_oracle_answer(question: str, payload: dict[str, Any]) -> str:
+    context = _oracle_answer_context(payload)
+    if not context:
+        return _deterministic_oracle_answer(question, payload)
+
+    lease_owner = f"source-ui-oracle:{time.time_ns()}"
+    lease = None
+    if oracle_priority is not None:
+        lease = oracle_priority.acquire_lease(
+            lease_owner,
+            purpose="source_ui_oracle",
+            ttl_seconds=75.0,
+            metadata={"question": str(question or "")[:160]},
+            max_wait_seconds=12.0,
+        )
+        if lease is None:
+            raise RuntimeError("oracle_priority_lease_unavailable")
+
+    request_payload = {
+        'model': LOCAL_ASSISTANT_CHAT_MODEL,
+        'messages': [
+            {
+                'role': 'system',
+                'content': (
+                    'You answer questions about this local system using only the retrieved context. '
+                    'Respond in plain text using short prose paragraphs instead of bullet lists, stay concise, and do not invent facts outside the context. '
+                    'End with a final line starting with "Sources:" listing the most relevant locations.'
+                ),
+            },
+            {
+                'role': 'user',
+                'content': (
+                    f'Question: {question}\n\n'
+                    f'Retrieved context:\n{context}\n\n'
+                    'Write a direct answer grounded in the context above. '
+                    'If the context is incomplete, say so plainly.'
+                ),
+            },
+        ],
+        'temperature': 0.15,
+        'max_tokens': 320,
     }
-    if being:
-        payload['being_filter'] = being
-    if fallback_reason:
-        payload['fallback_reason'] = fallback_reason
-    return payload
+    request = urllib.request.Request(
+        LOCAL_ASSISTANT_CHAT_COMPLETIONS_URL,
+        data=json.dumps(request_payload).encode('utf-8'),
+        headers={'Content-Type': 'application/json'},
+        method='POST',
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=35) as response:
+            raw = json.loads(response.read().decode('utf-8'))
+    finally:
+        if lease is not None and oracle_priority is not None:
+            oracle_priority.release_lease(lease_owner)
+    choices = list(raw.get('choices') or [])
+    if not choices:
+        raise RuntimeError('local oracle answer returned no choices')
+    message = choices[0].get('message') if isinstance(choices[0], dict) else {}
+    text = str(message.get('content') or '').strip()
+    if not text:
+        raise RuntimeError('local oracle answer returned empty content')
+    return _normalize_oracle_answer_text(text)
+
+
+def _augment_oracle_payload_with_answer(question: str, payload: dict[str, Any]) -> dict[str, Any]:
+    answer_payload = dict(payload)
+    try:
+        answer_text = _query_local_oracle_answer(question, answer_payload)
+    except Exception as exc:
+        answer_payload['answer_error'] = str(exc)
+        answer_text = _deterministic_oracle_answer(question, answer_payload)
+        answer_payload['answer_mode'] = 'deterministic_fallback'
+        answer_payload['answer_model'] = 'deterministic'
+        answer_payload['answer_provider'] = 'source_ui'
+    else:
+        answer_payload['answer_mode'] = 'local_rag'
+        answer_payload['answer_model'] = LOCAL_ASSISTANT_CHAT_MODEL
+        answer_payload['answer_provider'] = 'local_vllm_assistant'
+    if 'Sources:' not in answer_text:
+        source_line = '; '.join(_oracle_answer_locations(answer_payload)) or 'none'
+        answer_text = answer_text.rstrip() + f'\n\nSources: {source_line}'
+    answer_payload['answer'] = answer_text
+    return answer_payload
 
 
 def _run_oracle_query(question: str, *, k: int = 10, being: str | None = None) -> dict[str, Any]:
@@ -822,7 +637,8 @@ def _run_oracle_query(question: str, *, k: int = 10, being: str | None = None) -
                 body = body[:319].rstrip() + '…'
             item['source_label'] = 'Correspondence Semantic'
             item['corpus_kind'] = 'semantic_correspondence'
-            item['corpus_path'] = str(ORACLE_CORRESPONDENCE_PATH)
+            item['corpus_path'] = str(oracle_corpus.ORACLE_CORRESPONDENCE_PATH if oracle_corpus is not None else WORKSPACE_ROOT / 'governance' / 'OPEN_QUESTIONS.md')
+            item['location'] = str(oracle_corpus.ORACLE_CORRESPONDENCE_PATH if oracle_corpus is not None else WORKSPACE_ROOT / 'governance' / 'OPEN_QUESTIONS.md')
             item['relevance_score'] = item.get('relevance_score') or 1
             item['body'] = body
             trimmed_results.append(item)
@@ -2012,8 +1828,11 @@ class SourceUIHandler(SimpleHTTPRequestHandler):
             except Exception:
                 k = 10
             being = str((params.get('being') or [''])[0] or '').strip() or None
+            include_answer = _oracle_truthy((params.get('answer') or [''])[0] or None, default=False)
             try:
                 data = _run_oracle_query(query, k=k, being=being)
+                if include_answer:
+                    data = _augment_oracle_payload_with_answer(query, data)
             except Exception as exc:
                 logger.exception("Oracle query failed")
                 self.send_json({'error': str(exc), 'question': query}, status=500)
@@ -2106,12 +1925,15 @@ class SourceUIHandler(SimpleHTTPRequestHandler):
         if not query:
             self.send_json({'error': 'missing oracle query'}, status=400)
             return
+        include_answer = _oracle_truthy(body.get('answer'), default=True)
         try:
             payload = _run_oracle_query(
                 query,
                 k=int(body.get('k') or 10),
                 being=str(body.get('being') or '').strip() or None,
             )
+            if include_answer:
+                payload = _augment_oracle_payload_with_answer(query, payload)
         except Exception as exc:
             logger.exception("Oracle query failed")
             self.send_json({'error': str(exc), 'question': query}, status=500)

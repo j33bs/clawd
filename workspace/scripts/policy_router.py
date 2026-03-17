@@ -61,6 +61,11 @@ if str(TACTI_ROOT) not in sys.path:
     sys.path.insert(0, str(TACTI_ROOT))
 
 try:
+    import oracle_priority as _oracle_priority
+except Exception:  # pragma: no cover - optional integration
+    _oracle_priority = None
+
+try:
     from tacti_cr.arousal_oscillator import ArousalOscillator
     from tacti_cr.active_inference_agent import ActiveInferenceAgent
     from tacti_cr.config import is_enabled as tacti_enabled
@@ -985,6 +990,44 @@ def _is_subagent_context(context):
         if value in {"subagent", "worker", "tool", "tool_agent", "child_agent"}:
             return True
     return False
+
+
+def _is_oracle_priority_context(context):
+    if not isinstance(context, dict):
+        return False
+    if bool(context.get("oracle_priority")):
+        return True
+    for key in ("source_surface", "surface", "task_class", "capability_class"):
+        value = str(context.get(key, "")).strip().lower()
+        if value in {"source_ui_oracle", "oracle", "oracular"}:
+            return True
+    return False
+
+
+def _is_oracle_preemptable_provider(name):
+    normalized = normalize_provider_id(name)
+    return isinstance(normalized, str) and normalized.startswith("local_vllm")
+
+
+def _oracle_priority_gate(name, context_metadata):
+    if _oracle_priority is None or not _is_oracle_preemptable_provider(name):
+        return {"ok": True, "waited_ms": 0}
+    if _is_oracle_priority_context(context_metadata):
+        return {"ok": True, "waited_ms": 0}
+    active = _oracle_priority.get_active_lease()
+    if active is None:
+        return {"ok": True, "waited_ms": 0}
+    wait_seconds = _coerce_positive_int(os.environ.get("OPENCLAW_ORACLE_PRIORITY_WAIT_SECONDS"), 45)
+    result = _oracle_priority.wait_for_clear(max_wait_seconds=float(wait_seconds), poll_interval=0.25)
+    waited_ms = int(round(float(result.get("waited_seconds") or 0.0) * 1000))
+    if result.get("cleared"):
+        return {"ok": True, "waited_ms": waited_ms}
+    return {
+        "ok": False,
+        "waited_ms": waited_ms,
+        "reason_code": "oracle_priority_timeout",
+        "active": result.get("active"),
+    }
 
 
 def _count_bullets(text):
@@ -2254,6 +2297,23 @@ class PolicyRouter:
                     last_reason = remote_reason
                     _emit("router_skip", {"intent": intent, "provider": name, "reason_code": remote_reason})
                     continue
+
+            oracle_gate = _oracle_priority_gate(name, runtime_context)
+            waited_ms = int(oracle_gate.get("waited_ms") or 0)
+            if waited_ms > 0:
+                _emit(
+                    "router_wait",
+                    {
+                        "intent": intent,
+                        "provider": name,
+                        "reason_code": "oracle_priority_wait",
+                        "latency_ms": waited_ms,
+                    },
+                )
+            if not oracle_gate.get("ok"):
+                last_reason = oracle_gate.get("reason_code", "oracle_priority_timeout")
+                _emit("router_skip", {"intent": intent, "provider": name, "reason_code": last_reason})
+                continue
 
             ok, reason = self._provider_available(name, intent_cfg)
             if not ok:

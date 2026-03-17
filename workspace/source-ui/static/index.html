@@ -250,6 +250,34 @@
                         <button class="btn quick-action-btn" id="qa-refresh-peer">Hive Sync</button>
                         <span class="quick-action-feedback" id="quick-action-feedback"></span>
                     </div>
+                    <div class="oracle-panel oracle-panel-dashboard oracle-surface" id="dashboard-oracle-panel" data-oracle-surface="dashboard">
+                        <div class="oracle-panel-header">
+                            <div>
+                                <h3 class="oracle-panel-title">Ask Oracle</h3>
+                                <p class="oracle-panel-subtitle">Local plain-text answer grounded in the live system corpus.</p>
+                            </div>
+                            <span class="oracle-panel-badge">local RAG</span>
+                        </div>
+                        <div class="oracle-input-row oracle-input-row-dashboard">
+                            <textarea
+                                id="dashboard-oracle-query"
+                                class="oracle-input oracle-input-textarea"
+                                data-oracle-query
+                                rows="3"
+                                placeholder="Ask about files, plans, memories, research, or what the system currently knows…"
+                                autocomplete="off"
+                            ></textarea>
+                            <div class="oracle-controls">
+                                <select id="dashboard-oracle-k" class="oracle-k-select" data-oracle-k title="top-k results">
+                                    <option value="5">k=5</option>
+                                    <option value="10" selected>k=10</option>
+                                    <option value="20">k=20</option>
+                                </select>
+                                <button id="dashboard-oracle-submit" class="oracle-btn" data-oracle-submit>Ask</button>
+                            </div>
+                        </div>
+                        <div id="dashboard-oracle-results" class="oracle-results" data-oracle-results></div>
+                    </div>
                     <div class="panel-updated" id="truth-provenance-banner">Truth source: --</div>
 
                     <div class="stats-grid">
@@ -543,17 +571,17 @@
                         <h3>Corpus Oracle</h3>
                         <span class="symbiote-questions-subtitle">ask the record anything</span>
                     </div>
-                    <div class="oracle-panel" id="oracle-panel">
+                    <div class="oracle-panel oracle-surface" id="oracle-panel" data-oracle-surface="symbiote">
                         <div class="oracle-input-row">
-                            <input type="text" id="oracle-query" class="oracle-input" placeholder="what does this system believe about…" autocomplete="off">
-                            <select id="oracle-k" class="oracle-k-select" title="top-k results">
+                            <input type="text" id="oracle-query" class="oracle-input" data-oracle-query placeholder="what does this system believe about…" autocomplete="off">
+                            <select id="oracle-k" class="oracle-k-select" data-oracle-k title="top-k results">
                                 <option value="5">k=5</option>
                                 <option value="10" selected>k=10</option>
                                 <option value="20">k=20</option>
                             </select>
-                            <button id="oracle-submit" class="oracle-btn">Ask</button>
+                            <button id="oracle-submit" class="oracle-btn" data-oracle-submit>Ask</button>
                         </div>
-                        <div id="oracle-results" class="oracle-results"></div>
+                        <div id="oracle-results" class="oracle-results" data-oracle-results></div>
                     </div>
                 </div>
 

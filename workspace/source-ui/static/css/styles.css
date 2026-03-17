@@ -2765,10 +2765,51 @@ input, select, textarea {
     margin-bottom: 2rem;
 }
 
+.oracle-panel-dashboard {
+    background: linear-gradient(180deg, color-mix(in srgb, var(--accent-primary) 8%, var(--bg-secondary)), var(--bg-secondary));
+}
+
+.oracle-panel-header {
+    align-items: flex-start;
+    display: flex;
+    gap: 1rem;
+    justify-content: space-between;
+    margin-bottom: 0.9rem;
+}
+
+.oracle-panel-title {
+    color: var(--text-primary);
+    font-size: 1rem;
+    font-weight: 600;
+    margin: 0;
+}
+
+.oracle-panel-subtitle {
+    color: var(--text-tertiary);
+    font-size: 0.84rem;
+    margin: 0.25rem 0 0;
+}
+
+.oracle-panel-badge {
+    background: color-mix(in srgb, var(--accent-primary) 14%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-primary) 40%, transparent);
+    border-radius: var(--radius-full);
+    color: var(--accent-primary);
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    letter-spacing: 0.06em;
+    padding: 0.32rem 0.55rem;
+    text-transform: uppercase;
+}
+
 .oracle-input-row {
     display: flex;
     gap: 0.5rem;
     margin-bottom: 0.75rem;
+}
+
+.oracle-input-row-dashboard {
+    align-items: stretch;
 }
 
 .oracle-input {
@@ -2784,6 +2825,19 @@ input, select, textarea {
 }
 
 .oracle-input:focus { border-color: var(--accent-primary); }
+
+.oracle-input-textarea {
+    min-height: 5.6rem;
+    resize: vertical;
+}
+
+.oracle-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    justify-content: flex-start;
+    min-width: 6rem;
+}
 
 .oracle-k-select {
     background: var(--bg-tertiary);
@@ -2822,6 +2876,21 @@ input, select, textarea {
 }
 
 .oracle-being-weights { margin-bottom: 1rem; }
+
+.oracle-answer-block {
+    background: color-mix(in srgb, var(--bg-tertiary) 82%, var(--accent-primary) 18%);
+    border: 1px solid var(--border-primary);
+    border-radius: 10px;
+    margin-bottom: 1rem;
+    padding: 0.9rem 1rem;
+}
+
+.oracle-answer-text {
+    color: var(--text-primary);
+    font-size: 0.9rem;
+    line-height: 1.55;
+    white-space: normal;
+}
 
 .oracle-bar-row {
     display: flex;
@@ -2904,6 +2973,16 @@ input, select, textarea {
 .oracle-result-snip {
     color: var(--text-tertiary);
     line-height: 1.4;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.oracle-result-location {
+    color: var(--text-disabled);
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    margin-top: 0.22rem;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -3021,6 +3100,11 @@ input, select, textarea {
 
     .oracle-input-row {
         flex-direction: column;
+    }
+
+    .oracle-controls {
+        flex-direction: row;
+        min-width: 0;
     }
 
     .header-center {
