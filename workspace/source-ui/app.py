@@ -9,6 +9,7 @@ import os
 import sys
 import argparse
 import logging
+import subprocess
 import time
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -83,6 +84,7 @@ LEGACY_SOURCE_MISSION_PATH = SOURCE_UI_ROOT / 'source_mission.json'
 SOURCE_STATE_DIR = SOURCE_UI_ROOT / 'state'
 SOURCE_RUNTIME_STATE_PATH = SOURCE_STATE_DIR / 'source_runtime_state.json'
 BACKLOG_INGEST_STATE_PATH = SOURCE_STATE_DIR / 'backlog_ingest.json'
+COMMAND_HISTORY_PATH = SOURCE_STATE_DIR / 'command_history.json'
 MISSION_EVENT_LIMIT = 200
 SOURCE_MISSION_TOP_LEVEL_RUNTIME_KEYS = ('notifications', 'handoffs', 'logs', 'updated_at')
 SOURCE_MISSION_TASK_RUNTIME_KEYS = (
@@ -116,6 +118,7 @@ SOURCE_MISSION_TASK_AUTOGEN_KEYS = (
     'last_outcome_runtime_agent',
     'last_outcome_event_id',
 )
+OPENCLAW_CLI_PATH = SOURCE_UI_ROOT.parents[1] / '.runtime' / 'openclaw' / 'openclaw.mjs'
 
 
 def resolve_source_mission_path() -> Path:
@@ -164,6 +167,188 @@ def _load_live_board_tasks() -> Optional[list[dict[str, Any]]]:
         for task in tasks
         if isinstance(task, dict) and str(task.get('origin') or '').strip() != 'source_mission_config'
     ]
+
+
+def _run_command(args: list[str], timeout: float = 30.0) -> tuple[int, str, str]:
+    try:
+        completed = subprocess.run(
+            args,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            check=False,
+        )
+    except Exception as exc:
+        return 1, '', str(exc)
+    return completed.returncode, completed.stdout, completed.stderr
+
+
+def _append_command_history_entry(
+    *,
+    action: str,
+    command: str,
+    ok: bool,
+    summary: str,
+    output: str,
+    duration_ms: int = 0,
+) -> dict[str, Any]:
+    history = _read_json(COMMAND_HISTORY_PATH)
+    rows = list(history) if isinstance(history, list) else []
+    timestamp = datetime.now().isoformat()
+    entry = {
+        'id': datetime.now().strftime('%Y%m%d%H%M%S%f'),
+        'command': command,
+        'action': action,
+        'ok': bool(ok),
+        'summary': summary,
+        'output': output,
+        'duration_ms': int(duration_ms),
+        'timestamp': timestamp,
+    }
+    rows.insert(0, entry)
+    _write_json_atomic(COMMAND_HISTORY_PATH, rows[:100])
+    return entry
+
+
+def _runtime_portfolio() -> dict[str, Any]:
+    if portfolio_payload is None:
+        return {}
+    try:
+        payload = portfolio_payload()
+    except Exception:
+        logger.exception("Failed to build Source UI runtime portfolio")
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _runtime_agents(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    rows = payload.get('runtime_agents')
+    return list(rows) if isinstance(rows, list) else []
+
+
+def _runtime_scheduled_jobs(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    rows = payload.get('scheduled_jobs')
+    return list(rows) if isinstance(rows, list) else []
+
+
+def _runtime_logs(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    rows = payload.get('activity_logs')
+    return list(rows) if isinstance(rows, list) else []
+
+
+def _runtime_gateway_connected(payload: dict[str, Any]) -> bool:
+    return bool(payload.get('gateway_connected'))
+
+
+def _merge_portfolio_status(data: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
+    merged = dict(data)
+    components = payload.get('components')
+    health_metrics = payload.get('health_metrics')
+    if isinstance(components, list):
+        merged['components'] = components
+    if isinstance(health_metrics, dict):
+        merged['health_metrics'] = health_metrics
+    merged['agents'] = _runtime_agents(payload)
+    merged['scheduled_jobs'] = _runtime_scheduled_jobs(payload)
+    merged['logs'] = _runtime_logs(payload)
+    merged['gateway_connected'] = _runtime_gateway_connected(payload)
+    return merged
+
+
+def _create_schedule_job(data: dict[str, Any]) -> dict[str, Any]:
+    name = str(data.get('name') or '').strip()
+    message = str(data.get('message') or '').strip()
+    mode = str(data.get('mode') or 'cron').strip().lower()
+    schedule_value = str(data.get('schedule') or '').strip()
+    agent_id = str(data.get('agent_id') or data.get('agent') or 'main').strip() or 'main'
+    timezone_name = str(data.get('tz') or '').strip()
+
+    if not name:
+        raise ValueError('schedule name required')
+    if not message:
+        raise ValueError('schedule message required')
+    if not schedule_value:
+        raise ValueError('schedule value required')
+    if mode not in {'cron', 'every', 'at'}:
+        raise ValueError('schedule mode must be cron, every, or at')
+    if not OPENCLAW_CLI_PATH.exists():
+        raise RuntimeError(f'OpenClaw CLI not found at {OPENCLAW_CLI_PATH}')
+
+    args = ['node', str(OPENCLAW_CLI_PATH), 'cron', 'add', '--json', '--agent', agent_id, '--name', name, '--message', message]
+    if mode == 'cron':
+        args.extend(['--cron', schedule_value])
+    elif mode == 'every':
+        args.extend(['--every', schedule_value])
+    else:
+        args.extend(['--at', schedule_value])
+    if timezone_name:
+        args.extend(['--tz', timezone_name])
+    if bool(data.get('announce')):
+        args.append('--announce')
+    if bool(data.get('disabled')):
+        args.append('--disabled')
+
+    started = time.perf_counter()
+    code, stdout, stderr = _run_command(args, timeout=45.0)
+    duration_ms = int((time.perf_counter() - started) * 1000)
+    if code != 0:
+        raise RuntimeError((stderr or stdout or f'cron add exited {code}').strip())
+    try:
+        payload = json.loads(stdout)
+    except Exception as exc:
+        raise RuntimeError(f'invalid cron add response: {exc}') from exc
+
+    _append_command_history_entry(
+        action='create_schedule',
+        command=name,
+        ok=True,
+        summary=f'Created schedule {name}.',
+        output='created',
+        duration_ms=duration_ms,
+    )
+    return payload if isinstance(payload, dict) else {'success': True}
+
+
+def _control_runtime_agent_action(agent_id: str, action: str) -> dict[str, Any]:
+    normalized_agent_id = str(agent_id or '').strip()
+    normalized_action = str(action or '').strip().lower()
+    if normalized_action != 'stop':
+        raise ValueError('unsupported agent action')
+
+    started = time.perf_counter()
+    if normalized_agent_id == 'service:dali-fishtank.service':
+        code, stdout, stderr = _run_command(['systemctl', '--user', 'stop', 'dali-fishtank.service'], timeout=30.0)
+        if code != 0:
+            raise RuntimeError((stderr or stdout or 'failed to stop dali-fishtank.service').strip())
+        duration_ms = int((time.perf_counter() - started) * 1000)
+        _append_command_history_entry(
+            action='stop_agent',
+            command='dali-fishtank.service',
+            ok=True,
+            summary='Stopped Dali Fishtank.',
+            output='stopped',
+            duration_ms=duration_ms,
+        )
+        return {'success': True, 'summary': 'Stopped Dali Fishtank.'}
+
+    if normalized_agent_id.startswith('work:'):
+        work_id = normalized_agent_id.split(':', 1)[1]
+        if work_id.startswith('local_exec'):
+            code, stdout, stderr = _run_command(['bash', str(SOURCE_UI_ROOT.parents[1] / 'scripts' / 'local_exec_plane.sh'), 'stop'], timeout=30.0)
+            if code != 0:
+                raise RuntimeError((stderr or stdout or 'failed to stop local_exec worker').strip())
+            duration_ms = int((time.perf_counter() - started) * 1000)
+            _append_command_history_entry(
+                action='stop_agent',
+                command=work_id,
+                ok=True,
+                summary='Stopped local_exec worker.',
+                output='stopped',
+                duration_ms=duration_ms,
+            )
+            return {'success': True, 'summary': 'Stopped local_exec worker.'}
+
+    raise ValueError('agent control unavailable for this runtime row')
 
 
 def _extract_source_mission(payload: Any) -> Optional[dict[str, Any]]:
@@ -279,7 +464,7 @@ class State:
             'gateway_connected': self.gateway_connected,
             'last_update': self.last_update.isoformat() if self.last_update else None,
             'truth': {
-                'source': 'source_mission' if source_exists else 'demo_seed',
+                'source': 'source_mission' if source_exists else 'runtime_state',
                 'source_mission_path': str(source_path),
                 'source_mission_updated_at': source_updated_at,
             },
@@ -671,11 +856,11 @@ def reconcile_backlog_state(
 
 
 # ============================================================================
-# Demo Data Generator
+# Mission Task Normalization
 # ============================================================================
 
 class DemoDataGenerator:
-    """Generate demo data."""
+    """Mission/task normalization helpers retained for Source UI state hydration."""
 
     PRIORITY_ORDER = {'critical': 0, 'high': 1, 'medium': 2, 'low': 3}
     STATUS_ALIASES = {
@@ -889,12 +1074,14 @@ class DemoDataGenerator:
             _read_json(BACKLOG_INGEST_STATE_PATH),
         )
         mission_agents = source_mission.get('agents', [])
-        if not isinstance(mission_agents, list) or not mission_agents:
-            mission_agents = cls.generate_agents()
+        if not isinstance(mission_agents, list):
+            mission_agents = []
         tasks, tasks_normalized = cls.normalize_tasks(source_mission.get('tasks', []))
         tasks, tasks_auto_started = cls.auto_start_backlog_tasks(mission_agents, tasks)
         agents = cls.sync_agents_with_tasks(mission_agents, tasks)
-        logs = source_mission.get('logs') or cls.generate_logs()
+        logs = source_mission.get('logs')
+        if not isinstance(logs, list):
+            logs = []
         notifications = source_mission.get('notifications', [])
         handoffs = source_mission.get('handoffs', [])
 
@@ -907,69 +1094,6 @@ class DemoDataGenerator:
             'tasks_reconciled': tasks_normalized or tasks_auto_started or backlog_changed,
         }
     
-    @staticmethod
-    def generate_agents() -> list[dict]:
-        return [
-            {'id': 'planner', 'name': 'Planner', 'model': 'MiniMax-M2.5', 'status': 'idle', 'tasks_completed': 12, 'cycles': 156},
-            {'id': 'coder', 'name': 'Coder', 'model': 'Codex', 'status': 'working', 'task': 'Implementing Source UI', 'progress': 65, 'tasks_completed': 24, 'cycles': 89},
-            {'id': 'health', 'name': 'Health Monitor', 'model': 'MiniMax-M2.5', 'status': 'idle', 'tasks_completed': 8, 'cycles': 24},
-            {'id': 'memory', 'name': 'Memory Agent', 'model': 'MiniMax-M2.5', 'status': 'working', 'task': 'Indexing memories', 'progress': 30, 'tasks_completed': 15, 'cycles': 42}
-        ]
-    
-    @staticmethod
-    def generate_tasks() -> list[dict]:
-        now = datetime.now()
-        return [
-            {'id': 1, 'title': 'Implement task drag-and-drop', 'status': 'in_progress', 'priority': 'high', 'assignee': 'coder', 'created_at': now.isoformat()},
-            {'id': 2, 'title': 'Add WebSocket support', 'status': 'backlog', 'priority': 'high', 'assignee': 'coder', 'created_at': now.isoformat()},
-            {'id': 3, 'title': 'Write API integration tests', 'status': 'backlog', 'priority': 'medium', 'assignee': 'coder', 'created_at': now.isoformat()},
-            {'id': 4, 'title': 'Design notification system', 'status': 'review', 'priority': 'medium', 'assignee': 'planner', 'created_at': now.isoformat()},
-            {'id': 5, 'title': 'Fix memory leak in worker', 'status': 'done', 'priority': 'high', 'assignee': 'coder', 'created_at': now.isoformat()},
-            {'id': 6, 'title': 'Update documentation', 'status': 'backlog', 'priority': 'low', 'assignee': 'planner', 'created_at': now.isoformat()}
-        ]
-    
-    @staticmethod
-    def generate_scheduled_jobs() -> list[dict]:
-        return [
-            {'id': 1, 'name': 'Daily Health Check', 'cron': '0 9 * * *', 'next_run': '9:00 AM', 'enabled': True},
-            {'id': 2, 'name': 'Security Audit', 'cron': '0 9 * * 1', 'next_run': 'Mon 9:00 AM', 'enabled': True},
-            {'id': 3, 'name': 'Memory Cleanup', 'cron': '0 0 * * *', 'next_run': '12:00 AM', 'enabled': True},
-            {'id': 4, 'name': 'Git Auto-commit', 'cron': '*/15 * * * *', 'next_run': 'Every 15min', 'enabled': True}
-        ]
-    
-    @staticmethod
-    def generate_components() -> list[dict]:
-        return [
-            {'id': 'gateway', 'name': 'Gateway', 'status': 'healthy', 'details': 'Running on port 18789'},
-            {'id': 'vllm', 'name': 'VLLM', 'status': 'healthy', 'details': 'Online at localhost:8001'},
-            {'id': 'telegram', 'name': 'Telegram', 'status': 'healthy', 'details': 'Connected'},
-            {'id': 'memory', 'name': 'Memory', 'status': 'warning', 'details': 'Low available'},
-            {'id': 'database', 'name': 'Database', 'status': 'healthy', 'details': 'Connected'},
-            {'id': 'scheduler', 'name': 'Scheduler', 'status': 'healthy', 'details': '4 jobs active'}
-        ]
-    
-    @staticmethod
-    def generate_logs() -> list[dict]:
-        now = datetime.now()
-        return [
-            {'level': 'info', 'message': 'Gateway started successfully', 'timestamp': now.isoformat()},
-            {'level': 'info', 'message': 'Connected to VLLM at localhost:8001', 'timestamp': (now - timedelta(minutes=1)).isoformat()},
-            {'level': 'warn', 'message': 'Memory usage high: 78%', 'timestamp': (now - timedelta(minutes=2)).isoformat()},
-            {'level': 'info', 'message': 'Telegram bot authenticated', 'timestamp': (now - timedelta(minutes=3)).isoformat()},
-            {'level': 'error', 'message': 'Failed to connect to external API', 'timestamp': (now - timedelta(minutes=4)).isoformat()}
-        ]
-    
-    @staticmethod
-    def generate_health_metrics() -> dict:
-        import random
-        return {
-            'cpu': random.randint(20, 60),
-            'memory': random.randint(40, 80),
-            'disk': random.randint(30, 60),
-            'gpu': random.randint(20, 70)
-        }
-
-
 # ============================================================================
 # Request Handler
 # ============================================================================
@@ -991,13 +1115,9 @@ class SourceUIHandler(SimpleHTTPRequestHandler):
                 self._state.notifications = mission_seed['notifications']
                 self._state.handoffs = mission_seed['handoffs']
                 self._state.logs = mission_seed['logs']
-            else:
-                self._state.agents = DemoDataGenerator.generate_agents()
-                self._state.tasks = DemoDataGenerator.generate_tasks()
-                self._state.logs = DemoDataGenerator.generate_logs()
-            self._state.scheduled_jobs = DemoDataGenerator.generate_scheduled_jobs()
-            self._state.components = DemoDataGenerator.generate_components()
-            self._state.health_metrics = DemoDataGenerator.generate_health_metrics()
+            self._state.scheduled_jobs = []
+            self._state.components = []
+            self._state.health_metrics = {}
             self._state.last_update = datetime.now()
             if mission_seed:
                 self.persist_source_mission()
@@ -1065,6 +1185,8 @@ class SourceUIHandler(SimpleHTTPRequestHandler):
         
         if parsed.path == '/api/tasks':
             self.create_task()
+        elif parsed.path == '/api/schedule':
+            self.create_schedule()
         elif parsed.path == '/api/tacti/dream/run':
             self.run_dream_consolidation_handler()
         elif parsed.path == '/api/hivemind/stigmergy/query':
@@ -1077,6 +1199,13 @@ class SourceUIHandler(SimpleHTTPRequestHandler):
             self.run_health_check()
         elif parsed.path == '/api/gateway/restart':
             self.restart_gateway()
+        elif parsed.path.startswith('/api/agents/'):
+            parts = [part for part in parsed.path.split('/') if part]
+            if len(parts) == 4:
+                _, _, agent_id, action = parts
+                self.control_agent(agent_id, action)
+            else:
+                self.send_error(404)
         else:
             self.send_error(404)
     
@@ -1101,6 +1230,7 @@ class SourceUIHandler(SimpleHTTPRequestHandler):
         path = parsed.path[5:]  # Remove /api/
         self.refresh_state_from_source_mission()
         board_tasks = _load_live_board_tasks()
+        runtime_payload: dict[str, Any] = {}
         
         if path == 'status':
             data = self.state.to_dict()
@@ -1108,55 +1238,47 @@ class SourceUIHandler(SimpleHTTPRequestHandler):
                 data['tasks'] = board_tasks
                 data['tasks_total'] = len(board_tasks)
                 data['task_counts'] = _task_counts_payload(board_tasks)
-            if portfolio_payload is not None:
-                try:
-                    portfolio = portfolio_payload()
-                except Exception:
-                    logger.exception("Failed to build portfolio payload for status merge")
-                else:
-                    components = portfolio.get('components') if isinstance(portfolio, dict) else None
-                    health_metrics = portfolio.get('health_metrics') if isinstance(portfolio, dict) else None
-                    if isinstance(components, list):
-                        self.state.components = components
-                        data['components'] = components
-                    if isinstance(health_metrics, dict):
-                        self.state.health_metrics = health_metrics
-                        data['health_metrics'] = health_metrics
+            runtime_payload = _runtime_portfolio()
+            if runtime_payload:
+                data = _merge_portfolio_status(data, runtime_payload)
+                if isinstance(data.get('components'), list):
+                    self.state.components = data['components']
+                if isinstance(data.get('health_metrics'), dict):
+                    self.state.health_metrics = data['health_metrics']
+                self.state.gateway_connected = bool(data.get('gateway_connected'))
             if get_status_data is not None:
                 try:
                     data.update(get_status_data())
                 except Exception:
                     logger.exception("Failed to build TACTI status payload")
         elif path == 'portfolio':
-            if portfolio_payload is None:
+            runtime_payload = _runtime_portfolio()
+            if not runtime_payload:
                 data = {'source_mission': self.current_source_mission()}
             else:
-                try:
-                    data = portfolio_payload()
-                except Exception:
-                    logger.exception("Failed to build portfolio payload")
-                    data = {'source_mission': self.current_source_mission()}
+                data = runtime_payload
         elif path == 'world-better':
-            if portfolio_payload is None:
+            runtime_payload = _runtime_portfolio()
+            if not runtime_payload:
                 data = {}
             else:
-                try:
-                    data = (portfolio_payload() or {}).get('world_better', {})
-                except Exception:
-                    logger.exception("Failed to build world better payload")
-                    data = {}
+                data = runtime_payload.get('world_better', {})
         elif path == 'agents':
-            data = self.state.agents
+            runtime_payload = _runtime_portfolio()
+            data = _runtime_agents(runtime_payload) if runtime_payload else self.state.agents
         elif path == 'tasks':
             data = board_tasks if board_tasks is not None else self.state.tasks
         elif path == 'handoffs':
             data = self.state.handoffs
         elif path == 'schedule':
-            data = self.state.scheduled_jobs
+            runtime_payload = _runtime_portfolio()
+            data = _runtime_scheduled_jobs(runtime_payload) if runtime_payload else self.state.scheduled_jobs
         elif path == 'health':
-            data = self.state.health_metrics
+            runtime_payload = _runtime_portfolio()
+            data = runtime_payload.get('health_metrics', self.state.health_metrics) if runtime_payload else self.state.health_metrics
         elif path == 'logs':
-            data = self.state.logs
+            runtime_payload = _runtime_portfolio()
+            data = _runtime_logs(runtime_payload) if runtime_payload else self.state.logs
         elif path == 'tacti/dream':
             if get_dream_status is None:
                 self.send_json({'error': 'tacti_dream_unavailable'}, status=503)
@@ -1403,24 +1525,131 @@ class SourceUIHandler(SimpleHTTPRequestHandler):
     
     def refresh_data(self):
         """Refresh all data."""
-        self.state.health_metrics = DemoDataGenerator.generate_health_metrics()
+        board_tasks = _load_live_board_tasks()
+        data = self.state.to_dict()
+        if board_tasks is not None:
+            data['tasks'] = board_tasks
+            data['tasks_total'] = len(board_tasks)
+            data['task_counts'] = _task_counts_payload(board_tasks)
+        runtime_payload = _runtime_portfolio()
+        if runtime_payload:
+            data = _merge_portfolio_status(data, runtime_payload)
+            if isinstance(data.get('components'), list):
+                self.state.components = data['components']
+            if isinstance(data.get('health_metrics'), dict):
+                self.state.health_metrics = data['health_metrics']
+            self.state.gateway_connected = bool(data.get('gateway_connected'))
         self.state.last_update = datetime.now()
-        self.state.gateway_connected = False  # Would check real gateway
-        self.send_json(self.state.to_dict())
-    
+        self.send_json(data)
+
     def run_health_check(self):
         """Run health check."""
-        self.state.health_metrics = DemoDataGenerator.generate_health_metrics()
-        self.send_json({'success': True, 'metrics': self.state.health_metrics})
-    
+        started = time.perf_counter()
+        runtime_payload = _runtime_portfolio()
+        metrics = runtime_payload.get('health_metrics') if isinstance(runtime_payload, dict) else None
+        components = runtime_payload.get('components') if isinstance(runtime_payload, dict) else None
+        if not isinstance(metrics, dict) or not isinstance(components, list):
+            duration_ms = int((time.perf_counter() - started) * 1000)
+            _append_command_history_entry(
+                action='run_health_check',
+                command='runtime_health',
+                ok=False,
+                summary='Failed to collect live runtime health snapshot.',
+                output='runtime payload unavailable',
+                duration_ms=duration_ms,
+            )
+            self.send_json({'error': 'runtime health unavailable'}, status=503)
+            return
+        if isinstance(metrics, dict):
+            self.state.health_metrics = metrics
+        if isinstance(components, list):
+            self.state.components = components
+        self.state.gateway_connected = _runtime_gateway_connected(runtime_payload)
+        self.state.last_update = datetime.now()
+        duration_ms = int((time.perf_counter() - started) * 1000)
+        _append_command_history_entry(
+            action='run_health_check',
+            command='runtime_health',
+            ok=bool(metrics),
+            summary='Refreshed live runtime health snapshot.',
+            output=f"metrics={len(metrics or {})} components={len(components or [])}",
+            duration_ms=duration_ms,
+        )
+        self.send_json({
+            'success': True,
+            'metrics': self.state.health_metrics,
+            'components': self.state.components,
+            'gateway_connected': self.state.gateway_connected,
+        })
+
     def restart_gateway(self):
         """Restart gateway."""
-        self.send_json({'success': True})
-    
+        started = time.perf_counter()
+        code, stdout, stderr = _run_command(['systemctl', '--user', 'restart', 'openclaw-gateway.service'], timeout=45.0)
+        duration_ms = int((time.perf_counter() - started) * 1000)
+        if code != 0:
+            detail = (stderr or stdout or 'failed to restart openclaw-gateway.service').strip()
+            _append_command_history_entry(
+                action='restart_gateway',
+                command='openclaw-gateway.service',
+                ok=False,
+                summary='Gateway restart failed.',
+                output=detail,
+                duration_ms=duration_ms,
+            )
+            self.send_json({'error': detail}, status=500)
+            return
+        time.sleep(1.0)
+        runtime_payload = _runtime_portfolio()
+        self.state.gateway_connected = _runtime_gateway_connected(runtime_payload)
+        self.state.last_update = datetime.now()
+        _append_command_history_entry(
+            action='restart_gateway',
+            command='openclaw-gateway.service',
+            ok=True,
+            summary='Restarted gateway service.',
+            output='restarted',
+            duration_ms=duration_ms,
+        )
+        self.send_json({
+            'success': True,
+            'summary': 'Restarted gateway service.',
+            'gateway_connected': self.state.gateway_connected,
+        })
+
+    def create_schedule(self):
+        """Create a live scheduled job."""
+        try:
+            payload = _create_schedule_job(self._read_json_body())
+        except ValueError as exc:
+            self.send_json({'error': str(exc)}, status=400)
+            return
+        except Exception as exc:
+            logger.exception("Failed to create Source UI schedule")
+            self.send_json({'error': str(exc)}, status=500)
+            return
+        self.state.last_update = datetime.now()
+        self.send_json(payload)
+
+    def control_agent(self, agent_id: str, action: str):
+        """Control a runtime-backed agent row."""
+        try:
+            payload = _control_runtime_agent_action(agent_id, action)
+        except ValueError as exc:
+            self.send_json({'error': str(exc)}, status=400)
+            return
+        except Exception as exc:
+            logger.exception("Failed to control runtime agent row %s", agent_id)
+            self.send_json({'error': str(exc)}, status=500)
+            return
+        self.state.last_update = datetime.now()
+        self.send_json(payload)
+
     def send_json(self, data, status=200):
         """Send JSON response."""
         self.send_response(status)
         self.send_header('Content-Type', 'application/json')
+        self.send_header('Cache-Control', 'no-store')
         self.end_headers()
         self.wfile.write(json.dumps(data).encode())
 

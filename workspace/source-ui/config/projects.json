@@ -31,7 +31,8 @@
     "summary": "The control-plane dashboard that should become the canonical ops and project view.",
     "tags": ["dashboard", "ops"],
     "units": [
-      "source-ui.service"
+      "openclaw-source-ui-local.service",
+      "openclaw-source-ui-tailnet.service"
     ],
     "signal_files": [
       "workspace/source-ui/app.py",

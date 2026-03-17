@@ -80,6 +80,140 @@ function normalizeTaskList(tasks) {
     return tasks.map((task, index) => normalizeTaskRecord(task, index)).filter(Boolean);
 }
 
+const AGENT_STATUS_ALIASES = {
+    active: 'working',
+    busy: 'working',
+    running: 'working',
+    working: 'working',
+    idle: 'idle',
+    waiting: 'idle',
+    queued: 'idle',
+    offline: 'idle',
+    stopped: 'idle',
+};
+
+function normalizeAgentStatus(status) {
+    const normalized = String(status || '').trim().toLowerCase();
+    if (!normalized) return 'idle';
+    return AGENT_STATUS_ALIASES[normalized] || 'idle';
+}
+
+function normalizeAgentRecord(agent, index = 0) {
+    if (!agent || typeof agent !== 'object') return null;
+    const progressValue = Number(agent.progress);
+    return {
+        ...agent,
+        id: String(agent.id || `agent-${index + 1}`),
+        name: String(agent.name || agent.id || `Agent ${index + 1}`),
+        model: String(agent.model || 'unknown'),
+        status: normalizeAgentStatus(agent.status),
+        progress: Number.isFinite(progressValue) ? Math.max(0, Math.min(100, progressValue)) : null,
+        tasksCompleted: Number(agent.tasksCompleted ?? agent.tasks_completed ?? 0) || 0,
+        cycles: Number(agent.cycles || 0) || 0,
+        task: String(agent.task || '').trim(),
+        detail: String(agent.detail || '').trim(),
+        updated_at: agent.updated_at || agent.updatedAt || null,
+        available_actions: Array.isArray(agent.available_actions) ? agent.available_actions : [],
+    };
+}
+
+function normalizeAgentList(agents) {
+    if (!Array.isArray(agents)) return [];
+    return agents.map((agent, index) => normalizeAgentRecord(agent, index)).filter(Boolean);
+}
+
+function normalizeScheduleJobRecord(job, index = 0) {
+    if (!job || typeof job !== 'object') return null;
+    const nextRunAt = job.next_run_at || job.nextRunAt || null;
+    const lastRunAt = job.last_run_at || job.lastRunAt || null;
+    const enabled = typeof job.enabled === 'boolean' ? job.enabled : true;
+    const lastStatus = String(job.last_status || job.lastStatus || '').trim();
+    return {
+        ...job,
+        id: String(job.id || `job-${index + 1}`),
+        name: String(job.name || job.description || `Schedule ${index + 1}`),
+        cron: String(job.cron || job.schedule || job.expression || 'manual'),
+        enabled,
+        next_run_at: nextRunAt,
+        last_run_at: lastRunAt,
+        nextRun: nextRunAt ? Utils.formatDate(nextRunAt) : String(job.nextRun || job.next_run || 'No next run scheduled'),
+        nextRunShort: nextRunAt
+            ? new Date(nextRunAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+            : '',
+        lastRun: lastRunAt ? Utils.formatDate(lastRunAt) : '',
+        meta: [
+            job.agent_id ? `Agent ${job.agent_id}` : null,
+            lastStatus ? `Last ${lastStatus}` : null,
+        ].filter(Boolean).join(' · '),
+    };
+}
+
+function normalizeScheduleJobList(jobs) {
+    if (!Array.isArray(jobs)) return [];
+    return jobs.map((job, index) => normalizeScheduleJobRecord(job, index)).filter(Boolean);
+}
+
+function normalizeLogRecord(log, index = 0) {
+    if (!log || typeof log !== 'object') return null;
+    const rawLevel = String(log.level || 'info').trim().toLowerCase();
+    const level = rawLevel === 'warning' ? 'warn' : rawLevel;
+    return {
+        ...log,
+        id: String(log.id || `log-${index + 1}`),
+        level: ['info', 'warn', 'error'].includes(level) ? level : 'info',
+        message: String(log.message || log.summary || 'log event'),
+        timestamp: log.timestamp || new Date().toISOString(),
+    };
+}
+
+function normalizeLogList(logs) {
+    if (!Array.isArray(logs)) return [];
+    return logs.map((log, index) => normalizeLogRecord(log, index)).filter(Boolean);
+}
+
+function normalizeNotificationRecord(notification, index = 0) {
+    if (!notification || typeof notification !== 'object') return null;
+    const kind = String(notification.type || notification.kind || 'info').trim().toLowerCase();
+    return {
+        ...notification,
+        id: String(notification.id || `notification-${index + 1}`),
+        type: kind === 'warn' ? 'warning' : kind,
+        body: String(notification.body || notification.message || notification.detail || ''),
+        title: String(notification.title || notification.kind || 'Notification'),
+        read: Boolean(notification.read),
+        timestamp: notification.timestamp || notification.created_at || new Date().toISOString(),
+    };
+}
+
+function normalizeNotificationList(notifications) {
+    if (!Array.isArray(notifications)) return [];
+    return notifications.map((notification, index) => normalizeNotificationRecord(notification, index)).filter(Boolean);
+}
+
+function normalizeHealthMetrics(metrics) {
+    const source = metrics && typeof metrics === 'object' ? metrics : {};
+    return {
+        cpu: Number(source.cpu || 0) || 0,
+        memory: Number(source.memory || 0) || 0,
+        disk: Number(source.disk || 0) || 0,
+        gpu: Number(source.gpu || 0) || 0,
+    };
+}
+
+function emptyState(message) {
+    return `<div class="empty-state">${message}</div>`;
+}
+
+function activityFeedItems(notifications, logs) {
+    if (notifications.length > 0) return notifications.slice(0, 5);
+    return logs.slice(0, 5).map((log) => ({
+        id: `log-activity-${log.id}`,
+        type: log.level === 'warn' ? 'warning' : log.level,
+        body: log.message,
+        timestamp: log.timestamp,
+    }));
+}
+
 // Initialize application
 async function initApp() {
     console.log('⚡ Source UI initializing...');
@@ -187,6 +321,7 @@ function initViews() {
     
     // New task button
     $('#new-task-btn')?.addEventListener('click', openNewTaskModal);
+    $('#add-schedule-btn')?.addEventListener('click', openScheduleModal);
     
     // Filters
     document.querySelectorAll('.filter-btn').forEach(btn => {
@@ -201,6 +336,24 @@ function initViews() {
     // Schedule navigation
     $('#prev-week')?.addEventListener('click', () => navigateWeek(-1));
     $('#next-week')?.addEventListener('click', () => navigateWeek(1));
+
+    $('#log-level-filter')?.addEventListener('change', (event) => {
+        store.set('logFilter', event.target.value);
+        renderLogs();
+    });
+
+    const globalSearch = $('#global-search');
+    if (globalSearch) {
+        const openSearch = Utils.debounce((query) => CommandPalette.openWithQuery(query), 100);
+        globalSearch.addEventListener('focus', () => CommandPalette.openWithQuery(globalSearch.value.trim()));
+        globalSearch.addEventListener('input', () => openSearch(globalSearch.value.trim()));
+        globalSearch.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                CommandPalette.openWithQuery(globalSearch.value.trim());
+            }
+        });
+    }
 }
 
 function initTactiStatus() {
@@ -631,30 +784,46 @@ function renderDashboard() {
     const tasks = store.get('tasks');
     const components = store.get('components');
     const notifications = store.get('notifications');
+    const logs = store.get('logs');
+    const scheduledJobs = store.get('scheduledJobs');
     const truth = store.get('truth') || {};
     
     // Stats
     const activeAgents = agents.filter(a => a.status === 'working').length;
     const todayTasks = tasks.length;
-    const truthSource = truth.source || (store.get('connected') ? 'live_status' : 'demo_seed');
+    const pendingTasks = tasks.filter(t => t.status !== 'done').length;
+    const truthSource = truth.source || 'runtime_state';
+    const truthUpdatedAt = truth.source_mission_updated_at || store.get('lastUpdate');
     
-    $('#stat-agents').textContent = activeAgents;
-    $('#stat-tasks').textContent = todayTasks;
-    $('#stat-schedule').textContent = String(store.get('scheduledJobs').length || 0);
+    $('#stat-agents').textContent = String(activeAgents);
+    $('#stat-agents-change').textContent = agents.length ? `${agents.length} runtime rows visible` : 'No active runtime rows';
+    $('#stat-tasks').textContent = String(todayTasks);
+    $('#stat-tasks-change').textContent = pendingTasks ? `${pendingTasks} open on the board` : 'No open tasks';
+    $('#stat-schedule').textContent = String(scheduledJobs.length || 0);
+    $('#stat-schedule-change').textContent = scheduledJobs.filter(job => job.enabled).length
+        ? `${scheduledJobs.filter(job => job.enabled).length} enabled jobs`
+        : 'No live schedules';
     $('#stat-uptime').textContent = truthSource;
+    $('#stat-truth-change').textContent = truthUpdatedAt ? `Updated ${Utils.formatTime(truthUpdatedAt)}` : 'No canonical timestamp';
     renderTruthProvenance(truth);
     
     // Active agents
-    $('#dashboard-agents').innerHTML = agents.slice(0, 3).map(a => Components.agentCardMini(a)).join('');
+    $('#dashboard-agents').innerHTML = agents.length
+        ? agents.slice(0, 3).map(a => Components.agentCardMini(a)).join('')
+        : emptyState('No active runtime agents');
     
     // Activity feed
-    $('#activity-feed').innerHTML = notifications.slice(0, 5).map(n => Components.activityItem(n)).join('');
+    const activityItems = activityFeedItems(notifications, logs);
+    $('#activity-feed').innerHTML = activityItems.length
+        ? activityItems.map(item => Components.activityItem(item)).join('')
+        : emptyState('No recent activity');
     
     // Health grid
-    $('#health-grid').innerHTML = components.slice(0, 4).map(c => Components.healthItem(c)).join('');
+    $('#health-grid').innerHTML = components.length
+        ? components.slice(0, 4).map(c => Components.healthItem(c)).join('')
+        : emptyState('No component health data');
     
     // Update badge
-    const pendingTasks = tasks.filter(t => t.status !== 'done').length;
     $('#task-badge').textContent = pendingTasks;
 }
 
@@ -695,12 +864,20 @@ function renderTasks() {
 // Agents
 function renderAgents() {
     const agents = store.get('agents');
-    $('#agents-grid-full').innerHTML = agents.map(a => Components.agentCardFull(a)).join('');
+    const container = $('#agents-grid-full');
+    if (!container) return;
+    container.innerHTML = agents.length
+        ? agents.map(a => Components.agentCardFull(a)).join('')
+        : emptyState('No active agent work is visible right now.');
+    container.querySelectorAll('[data-agent-action]').forEach((button) => {
+        button.addEventListener('click', async () => {
+            await controlAgent(button.dataset.agentId, button.dataset.agentAction);
+        });
+    });
 }
 
 function renderAgentsGrid() {
-    const agents = store.get('agents');
-    $('#agentsGridFull').innerHTML = agents.map(a => Components.agentCardFull(a)).join('');
+    renderAgents();
 }
 
 // Schedule
@@ -714,10 +891,12 @@ function renderSchedule() {
     const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
     const headerHtml = days.map(d => `<div class="schedule-day-header">${d}</div>`).join('');
     
-    document.querySelector('.schedule-grid').innerHTML = headerHtml + Components.weekGrid(weekStart);
+    $('#schedule-grid').innerHTML = headerHtml + Components.weekGrid(weekStart);
     
     // Jobs list
-    $('#jobs-list').innerHTML = jobs.map(j => Components.jobItem(j)).join('');
+    $('#jobs-list').innerHTML = jobs.length
+        ? jobs.map(j => Components.jobItem(j)).join('')
+        : emptyState('No scheduled jobs found');
     
     // Title
     const weekEnd = new Date(weekStart);
@@ -746,7 +925,7 @@ function formatDateShort(date) {
 
 // Health
 function renderHealth() {
-    const metrics = store.get('healthMetrics');
+    const metrics = store.get('healthMetrics') || {};
     const components = store.get('components');
     
     // Metrics
@@ -756,7 +935,9 @@ function renderHealth() {
     updateMetricCard('gpu', metrics.gpu, 90);
     
     // Components
-    $('#components-grid').innerHTML = components.map(c => Components.componentCard(c)).join('');
+    $('#components-grid').innerHTML = components.length
+        ? components.map(c => Components.componentCard(c)).join('')
+        : emptyState('No component status available');
 }
 
 function updateMetricCard(type, value, threshold) {
@@ -774,33 +955,21 @@ function updateMetricCard(type, value, threshold) {
 
 // Logs
 function renderLogs() {
-    const logs = store.get('logs');
-    const filter = store.get('logFilter');
+    const logs = store.get('logs') || [];
+    const filter = store.get('logFilter') || 'all';
     
     let filteredLogs = logs;
     if (filter !== 'all') {
         filteredLogs = logs.filter(l => l.level === filter);
     }
     
-    $('#logs-list').innerHTML = filteredLogs.map(l => Components.logEntry(l)).join('');
-    
-    if (filteredLogs.length === 0) {
-        // Generate demo logs
-        const demoLogs = [
-            { level: 'info', message: 'Gateway started successfully', timestamp: new Date().toISOString() },
-            { level: 'info', message: 'Connected to VLLM at localhost:8001', timestamp: new Date(Date.now() - 60000).toISOString() },
-            { level: 'warn', message: 'Memory usage high: 78%', timestamp: new Date(Date.now() - 120000).toISOString() },
-            { level: 'info', message: 'Telegram bot authenticated', timestamp: new Date(Date.now() - 180000).toISOString() },
-            { level: 'error', message: 'Failed to connect to external API', timestamp: new Date(Date.now() - 240000).toISOString() }
-        ];
-        
-        store.set('logs', demoLogs);
-        $('#logs-list').innerHTML = demoLogs.map(l => Components.logEntry(l)).join('');
-    }
+    $('#logs-list').innerHTML = filteredLogs.length
+        ? filteredLogs.map(l => Components.logEntry(l)).join('')
+        : emptyState(filter === 'all' ? 'No recent logs' : `No ${filter} logs`);
 }
 
-function refreshLogs() {
-    renderLogs();
+async function refreshLogs() {
+    await refreshAll();
     Toast.info('Logs refreshed');
 }
 
@@ -844,7 +1013,7 @@ function renderNotifications() {
     // Click to mark read
     $('#notifications-list')?.querySelectorAll('.notification-item').forEach(item => {
         item.addEventListener('click', () => {
-            const id = parseInt(item.dataset.id);
+            const id = item.dataset.id;
             store.markNotificationRead(id);
             renderNotifications();
         });
@@ -894,7 +1063,7 @@ function initSettings() {
     // Sound
     $('#setting-sound').checked = settings.soundAlerts;
     $('#setting-sound').addEventListener('change', (e) => {
-        store.updateSetting('soundAlerts', e.target.value);
+        store.updateSetting('soundAlerts', e.target.checked);
     });
     
     // Fallback
@@ -976,6 +1145,9 @@ function initModals() {
 }
 
 function openNewTaskModal() {
+    const assigneeValue = Array.isArray(store.get('agents')) && store.get('agents').length
+        ? store.get('agents')[0].name
+        : '';
     const content = `
         <div class="form-group">
             <label class="form-label">Task Title</label>
@@ -991,17 +1163,12 @@ function openNewTaskModal() {
                 <option value="low">Low</option>
                 <option value="medium" selected>Medium</option>
                 <option value="high">High</option>
+                <option value="critical">Critical</option>
             </select>
         </div>
         <div class="form-group">
-            <label class="form-label">Assign to</label>
-            <select class="form-select" id="new-task-assignee">
-                <option value="">Unassigned</option>
-                <option value="planner">Planner</option>
-                <option value="coder">Coder</option>
-                <option value="health">Health Monitor</option>
-                <option value="memory">Memory Agent</option>
-            </select>
+            <label class="form-label">Owner</label>
+            <input type="text" class="form-input" id="new-task-assignee" placeholder="Optional owner or lane" value="${assigneeValue}">
         </div>
     `;
     
@@ -1037,6 +1204,69 @@ async function createTask() {
         Toast.success('Task created successfully');
     } catch (error) {
         Toast.error(`Failed to create task: ${error.message}`);
+    }
+}
+
+function openScheduleModal() {
+    const content = `
+        <div class="form-group">
+            <label class="form-label">Schedule Name</label>
+            <input type="text" class="form-input" id="schedule-job-name" placeholder="Daily review">
+        </div>
+        <div class="form-group">
+            <label class="form-label">Message</label>
+            <textarea class="form-textarea" id="schedule-job-message" placeholder="What should the agent do?"></textarea>
+        </div>
+        <div class="form-group">
+            <label class="form-label">Mode</label>
+            <select class="form-select" id="schedule-job-mode">
+                <option value="cron" selected>Cron</option>
+                <option value="every">Every</option>
+                <option value="at">At</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label class="form-label">Schedule Value</label>
+            <input type="text" class="form-input" id="schedule-job-value" placeholder="0 9 * * *">
+        </div>
+        <div class="form-group">
+            <label class="form-label">Agent</label>
+            <input type="text" class="form-input" id="schedule-job-agent" value="main" placeholder="main">
+        </div>
+        <div class="form-group">
+            <label class="form-label">Timezone</label>
+            <input type="text" class="form-input" id="schedule-job-tz" value="Australia/Brisbane" placeholder="Australia/Brisbane">
+        </div>
+    `;
+
+    const footer = `
+        <button class="btn btn-secondary" onclick="Modal.close()">Cancel</button>
+        <button class="btn btn-primary" onclick="createScheduledJob()">Create Schedule</button>
+    `;
+
+    Modal.open('Create Scheduled Job', content, footer);
+}
+
+async function createScheduledJob() {
+    const name = $('#schedule-job-name')?.value?.trim();
+    const message = $('#schedule-job-message')?.value?.trim();
+    const mode = $('#schedule-job-mode')?.value || 'cron';
+    const schedule = $('#schedule-job-value')?.value?.trim();
+    const agent_id = $('#schedule-job-agent')?.value?.trim() || 'main';
+    const tz = $('#schedule-job-tz')?.value?.trim();
+
+    if (!name || !message || !schedule) {
+        Toast.error('Schedule name, message, and value are required');
+        return;
+    }
+
+    try {
+        await api.createScheduledJob({ name, message, mode, schedule, agent_id, tz });
+        Modal.close();
+        await refreshAll();
+        Toast.success('Schedule created successfully');
+    } catch (error) {
+        Toast.error(`Failed to create schedule: ${error.message}`);
     }
 }
 
@@ -1082,17 +1312,11 @@ async function refreshAll() {
     try {
         const status = await api.getStatus();
         applyStatusPayload(status);
-        updateStatusIndicators(true);
+        updateStatusIndicators(store.get('connected'));
     } catch (error) {
-        console.warn('Status refresh failed, falling back to synthetic health only', error);
+        console.warn('Status refresh failed', error);
         store.set('connected', false);
         updateStatusIndicators(false);
-        store.set('healthMetrics', {
-            cpu: Math.floor(Math.random() * 40) + 20,
-            memory: Math.floor(Math.random() * 30) + 45,
-            disk: Math.floor(Math.random() * 20) + 30,
-            gpu: Math.floor(Math.random() * 40) + 30
-        });
     }
     renderView(currentView);
     renderDashboard();
@@ -1107,10 +1331,14 @@ async function restartGateway() {
         async () => {
             Toast.info('Restarting gateway...');
             try {
-                await api.restartGateway();
+                const payload = await api.restartGateway();
                 Toast.success('Gateway restarted successfully');
+                setTimeout(() => refreshAll(), 1500);
+                if (payload?.summary) {
+                    Toast.info(payload.summary);
+                }
             } catch (e) {
-                Toast.error('Failed to restart gateway');
+                Toast.error(`Failed to restart gateway: ${e.message}`);
             }
         }
     );
@@ -1119,18 +1347,40 @@ async function restartGateway() {
 async function runHealthCheck() {
     Toast.info('Running health check...');
     try {
-        await api.runHealthCheck();
+        const payload = await api.runHealthCheck();
+        if (payload?.metrics) {
+            store.set('healthMetrics', normalizeHealthMetrics(payload.metrics));
+        }
+        if (Array.isArray(payload?.components)) {
+            store.set('components', payload.components);
+        }
+        if (typeof payload?.gateway_connected === 'boolean') {
+            store.set('connected', payload.gateway_connected);
+        }
         Toast.success('Health check complete');
+        updateStatusIndicators(store.get('connected'));
         renderHealth();
     } catch (e) {
-        Toast.error('Health check failed');
+        Toast.error(`Health check failed: ${e.message}`);
     }
 }
 
 async function controlAgent(agentId, action) {
-    Toast.info(`${action} requested for ${agentId}`);
-    Toast.warning('Agent controls are not wired to a backend yet');
-    console.warn('Source UI agent control requested without backend implementation', { agentId, action });
+    if (!agentId || !action) return;
+    Modal.confirm(
+        `${action[0].toUpperCase()}${action.slice(1)} Agent Work`,
+        `Run ${action} on ${agentId}?`,
+        async () => {
+            Toast.info(`${action} requested for ${agentId}`);
+            try {
+                const payload = await api.controlAgent(agentId, action);
+                Toast.success(payload?.summary || `${action} completed`);
+                await refreshAll();
+            } catch (error) {
+                Toast.error(`Agent control failed: ${error.message}`);
+            }
+        }
+    );
 }
 
 // Update status indicators
@@ -1146,24 +1396,25 @@ function updateStatusIndicators(connected = store.get('connected')) {
 }
 
 function applyStatusPayload(status) {
-    store.set('connected', true);
-    store.set('agents', status.agents || []);
+    store.set('connected', Boolean(status.gateway_connected));
+    store.set('agents', normalizeAgentList(status.agents || []));
     store.set('tasks', normalizeTaskList(status.tasks || []));
-    store.set('scheduledJobs', status.scheduled_jobs || []);
-    store.set('healthMetrics', status.health_metrics || store.get('healthMetrics'));
+    store.set('scheduledJobs', normalizeScheduleJobList(status.scheduled_jobs || []));
+    store.set('healthMetrics', normalizeHealthMetrics(status.health_metrics));
     store.set('components', status.components || []);
-    store.set('notifications', status.notifications || []);
-    store.set('unreadCount', (status.notifications || []).filter((notification) => !notification.read).length);
-    store.set('logs', status.logs || []);
+    store.set('notifications', normalizeNotificationList(status.notifications || []));
+    store.set('unreadCount', (store.get('notifications') || []).filter((notification) => !notification.read).length);
+    store.set('logs', normalizeLogList(status.logs || []));
     store.set('truth', status.truth || {});
+    store.set('lastUpdate', status.last_update || null);
 }
 
 function renderTruthProvenance(truth = store.get('truth') || {}) {
     const banner = $('#truth-provenance-banner');
     if (!banner) return;
-    const source = truth.source || (store.get('connected') ? 'live_status' : 'demo_seed');
+    const source = truth.source || 'runtime_state';
     const path = truth.source_mission_path || 'n/a';
-    const updatedAt = truth.source_mission_updated_at || 'unknown';
+    const updatedAt = truth.source_mission_updated_at || store.get('lastUpdate') || 'unknown';
     banner.textContent = `Truth source: ${source} · Canonical file: ${path} · Updated: ${updatedAt}`;
 }
 
@@ -1171,10 +1422,19 @@ async function loadInitialState() {
     try {
         const status = await api.getStatus();
         applyStatusPayload(status);
-        updateStatusIndicators(true);
+        updateStatusIndicators(store.get('connected'));
     } catch (error) {
-        console.warn('Failed to load live state, using demo fallback', error);
-        store.initDemoData();
+        console.warn('Failed to load live state', error);
+        store.set('agents', []);
+        store.set('tasks', []);
+        store.set('scheduledJobs', []);
+        store.set('healthMetrics', normalizeHealthMetrics({}));
+        store.set('components', []);
+        store.set('logs', []);
+        store.set('notifications', []);
+        store.set('unreadCount', 0);
+        store.set('truth', {});
+        store.set('lastUpdate', null);
         store.set('connected', false);
         updateStatusIndicators(false);
     }
@@ -1189,6 +1449,8 @@ window.refreshAll = refreshAll;
 window.controlAgent = controlAgent;
 window.openNewTaskModal = openNewTaskModal;
 window.createTask = createTask;
+window.openScheduleModal = openScheduleModal;
+window.createScheduledJob = createScheduledJob;
 window.Modal = Modal;
 
 // Initialize when DOM is ready

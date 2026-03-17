@@ -330,6 +330,7 @@ const CommandPalette = {
     input: null,
     results: null,
     commands: [],
+    activeCommands: [],
     
     init() {
         this.element = $('#command-palette');
@@ -387,7 +388,7 @@ const CommandPalette = {
             }
             if (e.key === 'Enter' && selected) {
                 e.preventDefault();
-                const command = this.commands.find(c => c.id === selected.dataset.id);
+                const command = this.activeCommands.find(c => c.id === selected.dataset.id);
                 if (command) {
                     this.close();
                     command.action();
@@ -402,21 +403,79 @@ const CommandPalette = {
         this.search('');
         this.input.focus();
     },
+
+    openWithQuery(query = '') {
+        this.element.classList.add('open');
+        this.input.value = query;
+        this.search(query);
+        this.input.focus();
+    },
     
     close() {
         this.element.classList.remove('open');
     },
+
+    buildDynamicCommands() {
+        const dynamic = [];
+        const tasks = Array.isArray(store?.get('tasks')) ? store.get('tasks') : [];
+        const agents = Array.isArray(store?.get('agents')) ? store.get('agents') : [];
+        const jobs = Array.isArray(store?.get('scheduledJobs')) ? store.get('scheduledJobs') : [];
+
+        tasks.slice(0, 8).forEach((task) => {
+            dynamic.push({
+                id: `task:${task.id}`,
+                title: `Task: ${task.title || task.id}`,
+                meta: task.status ? `Status: ${task.status}` : '',
+                action: () => navigateTo('tasks'),
+            });
+        });
+
+        agents.slice(0, 8).forEach((agent) => {
+            dynamic.push({
+                id: `agent:${agent.id}`,
+                title: `Agent: ${agent.name || agent.id}`,
+                meta: agent.task || agent.detail || agent.model || '',
+                action: () => navigateTo('agents'),
+            });
+        });
+
+        jobs.slice(0, 8).forEach((job) => {
+            dynamic.push({
+                id: `job:${job.id}`,
+                title: `Schedule: ${job.name || job.id}`,
+                meta: job.cron || job.nextRun || '',
+                action: () => navigateTo('schedule'),
+            });
+        });
+
+        return dynamic;
+    },
     
     search(query) {
-        const filtered = query 
-            ? this.commands.filter(c => c.title.toLowerCase().includes(query.toLowerCase()))
-            : this.commands;
+        const allCommands = [...this.commands, ...this.buildDynamicCommands()];
+        const normalizedQuery = String(query || '').trim().toLowerCase();
+        const filtered = normalizedQuery
+            ? allCommands.filter((command) => {
+                const haystack = [command.title, command.meta, command.shortcut]
+                    .filter(Boolean)
+                    .join(' ')
+                    .toLowerCase();
+                return haystack.includes(normalizedQuery);
+            })
+            : allCommands;
+        this.activeCommands = filtered;
         
+        if (filtered.length === 0) {
+            this.results.innerHTML = '<div class="empty-state">No matching commands or live items</div>';
+            return;
+        }
+
         this.results.innerHTML = filtered.map((command, i) => `
             <div class="command-result ${i === 0 ? 'selected' : ''}" data-id="${command.id}">
                 <div class="command-result-icon">${command.title[0]}</div>
                 <div class="command-result-info">
                     <div class="command-result-title">${command.title}</div>
+                    ${command.meta ? `<div class="command-result-meta">${command.meta}</div>` : ''}
                 </div>
                 ${command.shortcut ? `<kbd class="command-result-shortcut">${command.shortcut}</kbd>` : ''}
             </div>
@@ -424,7 +483,7 @@ const CommandPalette = {
         
         this.results.querySelectorAll('.command-result').forEach(el => {
             el.addEventListener('click', () => {
-                const command = this.commands.find(c => c.id === el.dataset.id);
+                const command = this.activeCommands.find(c => c.id === el.dataset.id);
                 if (command) {
                     this.close();
                     command.action();

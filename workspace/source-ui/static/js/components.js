@@ -20,31 +20,41 @@ const Components = {
     
     // Agent Card (mini)
     agentCardMini(agent) {
+        const name = agent.name || agent.id || 'Agent';
         return `
             <div class="agent-card-mini">
-                <div class="agent-avatar-mini">${agent.name[0]}</div>
+                <div class="agent-avatar-mini">${name[0]}</div>
                 <div class="agent-info-mini">
-                    <div class="agent-name-mini">${agent.name}</div>
-                    <div class="agent-model-mini">${agent.model}</div>
+                    <div class="agent-name-mini">${name}</div>
+                    <div class="agent-model-mini">${agent.model || 'unknown'}</div>
                 </div>
-                <div class="agent-status-mini ${agent.status}"></div>
+                <div class="agent-status-mini ${agent.status || 'idle'}"></div>
             </div>
         `;
     },
     
     // Agent Card (full)
     agentCardFull(agent) {
-        const initials = agent.name.split(' ').map(n => n[0]).join('');
+        const name = agent.name || agent.id || 'Agent';
+        const initials = name.split(' ').map((part) => part[0]).join('').slice(0, 2) || '?';
+        const progressValue = Number.isFinite(agent.progress) ? agent.progress : null;
+        const actionButtons = Array.isArray(agent.available_actions) && agent.available_actions.includes('stop')
+            ? `
+                <button class="agent-action-btn danger" data-agent-id="${agent.id}" data-agent-action="stop">
+                    Stop Work
+                </button>
+            `
+            : '<div class="agent-control-note">No direct stop surface exposed for this runtime row.</div>';
         
         return `
             <div class="agent-card-full">
                 <div class="agent-header-full">
                     <div class="agent-avatar-full">${initials}</div>
                     <div class="agent-details-full">
-                        <div class="agent-name-full">${agent.name}</div>
-                        <div class="agent-model-full">${agent.model}</div>
+                        <div class="agent-name-full">${name}</div>
+                        <div class="agent-model-full">${agent.model || 'unknown'}</div>
                     </div>
-                    <div class="agent-status-mini ${agent.status}"></div>
+                    <div class="agent-status-mini ${agent.status || 'idle'}"></div>
                 </div>
                 <div class="agent-stats-full">
                     <div class="agent-stat-item">
@@ -56,29 +66,26 @@ const Components = {
                         <div class="agent-stat-label">Cycles</div>
                     </div>
                     <div class="agent-stat-item">
-                        <div class="agent-stat-value">${agent.status === 'working' ? (agent.progress || 0) + '%' : '--'}</div>
+                        <div class="agent-stat-value">${agent.status === 'working' && progressValue !== null ? progressValue + '%' : '--'}</div>
                         <div class="agent-stat-label">Progress</div>
                     </div>
                 </div>
-                ${agent.status === 'working' ? `
+                ${agent.status === 'working' && progressValue !== null ? `
                     <div class="agent-progress-full">
                         <div class="agent-progress-label">
                             <span>Current Task</span>
-                            <span>${agent.progress || 0}%</span>
+                            <span>${progressValue}%</span>
                         </div>
                         <div class="agent-progress-bar">
-                            <div class="agent-progress-fill" style="width: ${agent.progress || 0}%"></div>
+                            <div class="agent-progress-fill" style="width: ${progressValue}%"></div>
                         </div>
                     </div>
-                    <div class="agent-task-full">${agent.task || 'Processing...'}</div>
+                    <div class="agent-task-full">${agent.task || agent.detail || 'Processing...'}</div>
                 ` : ''}
+                ${agent.detail && agent.detail !== agent.task ? `<div class="agent-detail-full">${agent.detail}</div>` : ''}
+                ${agent.updated_at ? `<div class="agent-updated-full">Updated ${Utils.formatTime(agent.updated_at)}</div>` : ''}
                 <div class="agent-actions-full">
-                    <button class="agent-action-btn" disabled title="Agent controls are not wired to a backend yet">
-                        ${agent.status === 'working' ? '⏸ Pause (not wired)' : '▶ Resume (not wired)'}
-                    </button>
-                    <button class="agent-action-btn danger" disabled title="Agent controls are not wired to a backend yet">
-                        ⏹ Stop (not wired)
-                    </button>
+                    ${actionButtons}
                 </div>
             </div>
         `;
@@ -113,12 +120,13 @@ const Components = {
             error: '✕',
             info: 'ℹ'
         };
+        const body = activity.body || activity.detail || activity.message || '';
         
         return `
             <div class="activity-item">
-                <div class="activity-icon ${activity.type}">${icons[activity.type]}</div>
+                <div class="activity-icon ${activity.type}">${icons[activity.type] || '•'}</div>
                 <div class="activity-content">
-                    <div class="activity-text">${activity.body}</div>
+                    <div class="activity-text">${body}</div>
                     <div class="activity-time">${Utils.formatTime(activity.timestamp)}</div>
                 </div>
             </div>
@@ -140,11 +148,15 @@ const Components = {
     componentCard(component) {
         const icons = {
             gateway: '🌐',
+            assistant: '🚀',
             vllm: '🚀',
             telegram: '💬',
             memory: '🧠',
             database: '💾',
-            scheduler: '⏰'
+            scheduler: '⏰',
+            dali: '🎨',
+            market_stream: '📈',
+            itc_cycle: '⏲️'
         };
         
         return `
@@ -161,7 +173,12 @@ const Components = {
     
     // Schedule Event
     scheduleEvent(event) {
-        return `<div class="schedule-event">${event.name}</div>`;
+        return `
+            <div class="schedule-event" title="${event.title || event.name}">
+                <div class="schedule-event-name">${event.name}</div>
+                ${event.time ? `<div class="schedule-event-time">${event.time}</div>` : ''}
+            </div>
+        `;
     },
     
     // Job Item
@@ -170,9 +187,14 @@ const Components = {
             <div class="job-item">
                 <div class="job-info">
                     <div class="job-name">${job.name}</div>
-                    <div class="job-cron">${job.cron}</div>
+                    <div class="job-cron">${job.cron || 'manual'}</div>
+                    ${job.meta ? `<div class="job-meta">${job.meta}</div>` : ''}
                 </div>
-                <div class="job-next">${job.nextRun}</div>
+                <div class="job-next">
+                    <div class="job-status ${job.enabled ? 'enabled' : 'disabled'}">${job.enabled ? 'Enabled' : 'Disabled'}</div>
+                    <div>${job.nextRun || 'No next run'}</div>
+                    ${job.lastRun ? `<div class="job-timestamps">Last run ${job.lastRun}</div>` : ''}
+                </div>
             </div>
         `;
     },
@@ -223,20 +245,35 @@ const Components = {
         return days.map(day => {
             const dateStr = date.toISOString().split('T')[0];
             const events = Components.getEventsForDay(dateStr);
+            const dayLabel = date.getDate();
             date.setDate(date.getDate() + 1);
             
             return `
                 <div class="schedule-day" data-date="${dateStr}">
+                    <div class="schedule-day-date">${day} ${dayLabel}</div>
+                    <div class="schedule-day-events">
                     ${events.map(e => Components.scheduleEvent(e)).join('')}
+                    </div>
                 </div>
             `;
         }).join('');
     },
     
     getEventsForDay(dateStr) {
-        // Get events for a specific day from store
-        // This is a placeholder - in real app would filter from store
-        return [];
+        const jobs = Array.isArray(store?.get('scheduledJobs')) ? store.get('scheduledJobs') : [];
+        return jobs
+            .filter((job) => {
+                if (!job.next_run_at) return false;
+                const nextRun = new Date(job.next_run_at);
+                if (Number.isNaN(nextRun.getTime())) return false;
+                return nextRun.toISOString().split('T')[0] === dateStr;
+            })
+            .slice(0, 4)
+            .map((job) => ({
+                name: job.name,
+                title: `${job.name} · ${job.cron || 'manual'}`,
+                time: job.nextRunShort || '',
+            }));
     }
 };
 

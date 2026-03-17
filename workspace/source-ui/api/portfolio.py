@@ -7,6 +7,7 @@ import os
 import re
 import shutil
 import subprocess
+import time
 import urllib.error
 import urllib.request
 from datetime import datetime, timezone
@@ -44,8 +45,11 @@ SIM_ROOT = REPO_ROOT / "sim"
 TRADING_PIPELINE_PATH = REPO_ROOT / "pipelines" / "system1_trading.yaml"
 LOCAL_EXEC_LEDGER = REPO_ROOT / "workspace" / "local_exec" / "state" / "jobs.jsonl"
 PHASE1_STATUS_PATH = REPO_ROOT / "workspace" / "runtime" / "phase1_idle_status.json"
+PHASE1_LOCK_PID_PATH = REPO_ROOT / "workspace" / "runtime" / "phase1_idle_run.lock" / "pid"
+FISHTANK_STATE_PATH = REPO_ROOT / "workspace" / "runtime" / "fishtank_state.json"
 OPENCLAW_LOG_ROOT = Path.home() / ".local" / "state" / "openclaw"
 ITC_CYCLE_LOG = OPENCLAW_LOG_ROOT / "itc-cycle.log"
+OPENCLAW_CLI_PATH = REPO_ROOT / ".runtime" / "openclaw" / "openclaw.mjs"
 FINANCE_BRAIN_PATH = REPO_ROOT / "workspace" / "artifacts" / "finance" / "consensus_latest.json"
 COMMAND_HISTORY_PATH = SOURCE_UI_ROOT / "state" / "command_history.json"
 DISCORD_MEMORY_PATH = REPO_ROOT / "workspace" / "knowledge_base" / "data" / "discord_messages.jsonl"
@@ -105,6 +109,8 @@ FAILED_UNIT_HINTS: dict[str, dict[str, Any]] = {
         "summary": "Heavy cognition compatibility lane is parked and not configured cleanly.",
     },
 }
+
+AGENT_ACTIVITY_MAX_AGE_MS = 15 * 60 * 1000
 
 
 def now_iso() -> str:
@@ -181,6 +187,16 @@ def _iso_from_any(value: Any) -> str | None:
     if parsed is None:
         return None
     return parsed.isoformat().replace("+00:00", "Z")
+
+
+def _iso_from_epoch_ms(value: Any) -> str | None:
+    try:
+        epoch_ms = int(value)
+    except Exception:
+        return None
+    if epoch_ms <= 0:
+        return None
+    return datetime.fromtimestamp(epoch_ms / 1000.0, tz=timezone.utc).isoformat().replace("+00:00", "Z")
 
 
 def _excerpt(value: Any, limit: int = 120) -> str:
@@ -489,6 +505,149 @@ def _run_command(args: list[str], timeout: float = 1.5) -> tuple[int, str, str]:
     except Exception as exc:
         return 1, "", str(exc)
     return completed.returncode, completed.stdout, completed.stderr
+
+
+def _openclaw_cli_json(args: list[str], timeout: float = 20.0) -> Any | None:
+    if not OPENCLAW_CLI_PATH.exists():
+        return None
+    code, stdout, _stderr = _run_command(["node", str(OPENCLAW_CLI_PATH), *args], timeout=timeout)
+    if code != 0:
+        return None
+    try:
+        return json.loads(stdout)
+    except Exception:
+        return None
+
+
+def _session_store_path(agent_id: str) -> Path:
+    clean_agent_id = str(agent_id or "").strip() or "main"
+    return Path.home() / ".openclaw" / "agents" / clean_agent_id / "sessions" / "sessions.json"
+
+
+def _read_session_store(agent_id: str) -> dict[str, Any]:
+    payload = _read_json(_session_store_path(agent_id))
+    return payload if isinstance(payload, dict) else {}
+
+
+def _latest_noncron_session(agent_id: str) -> dict[str, Any] | None:
+    store = _read_session_store(agent_id)
+    latest: dict[str, Any] | None = None
+    latest_updated_at = -1
+    for key, value in store.items():
+        if not isinstance(value, dict):
+            continue
+        if ":cron:" in str(key):
+            continue
+        updated_at = int(value.get("updatedAt", 0) or 0)
+        if updated_at <= latest_updated_at:
+            continue
+        latest = {"key": str(key), **value}
+        latest_updated_at = updated_at
+    return latest
+
+
+def _agent_activity_label(session_key: str) -> str:
+    key = str(session_key or "")
+    if ":telegram:" in key:
+        return "Telegram activity"
+    if ":discord:" in key:
+        return "Discord activity"
+    if key.endswith(":main"):
+        return "Direct session active"
+    return "Recent activity"
+
+
+def _teamchat_status_is_active(status: Any) -> bool:
+    normalized = str(status or "").strip().lower()
+    if not normalized:
+        return False
+    if normalized.startswith("stopped:"):
+        return False
+    return normalized not in {"accepted", "completed", "failed", "archived", "idle"}
+
+
+def _phase1_runtime_alive(payload: dict[str, Any]) -> bool:
+    status = str(payload.get("status") or "").strip().lower()
+    if status != "running":
+        return False
+
+    if PHASE1_LOCK_PID_PATH.exists():
+        try:
+            phase1_pid = int(PHASE1_LOCK_PID_PATH.read_text(encoding="utf-8").strip() or "0")
+        except Exception:
+            phase1_pid = 0
+        if phase1_pid > 0:
+            try:
+                os.kill(phase1_pid, 0)
+            except OSError:
+                pass
+            else:
+                return True
+
+    fishtank_state = _read_json(FISHTANK_STATE_PATH)
+    if isinstance(fishtank_state, dict):
+        if bool(fishtank_state.get("frontend_process_running")):
+            return True
+        frontend_status = str(fishtank_state.get("frontend_last_status") or "").strip().lower()
+        if frontend_status in {"running", "starting"}:
+            return True
+
+    return False
+
+
+def _load_scheduled_jobs() -> list[dict[str, Any]]:
+    payload = _openclaw_cli_json(["cron", "list", "--json"], timeout=30.0)
+    jobs = payload.get("jobs") if isinstance(payload, dict) else None
+    if not isinstance(jobs, list):
+        return []
+
+    rows: list[dict[str, Any]] = []
+    for item in jobs:
+        if not isinstance(item, dict):
+            continue
+        schedule = item.get("schedule") if isinstance(item.get("schedule"), dict) else {}
+        state = item.get("state") if isinstance(item.get("state"), dict) else {}
+        expr = str(schedule.get("expr") or "").strip()
+        every_ms = schedule.get("everyMs")
+        if expr:
+            schedule_text = expr
+        elif every_ms:
+            try:
+                seconds = max(1, int(every_ms) // 1000)
+            except Exception:
+                seconds = 0
+            if seconds % 3600 == 0:
+                schedule_text = f"every {seconds // 3600}h"
+            elif seconds % 60 == 0:
+                schedule_text = f"every {seconds // 60}m"
+            else:
+                schedule_text = f"every {seconds}s"
+        else:
+            schedule_text = str(schedule.get("kind") or "manual")
+
+        rows.append(
+            {
+                "id": str(item.get("id", "")),
+                "name": str(item.get("name") or item.get("description") or item.get("id") or "cron job"),
+                "description": str(item.get("description") or ""),
+                "cron": schedule_text,
+                "schedule_kind": str(schedule.get("kind") or "cron"),
+                "enabled": bool(item.get("enabled", False)),
+                "agent_id": str(item.get("agentId") or ""),
+                "next_run_at": _iso_from_epoch_ms(state.get("nextRunAtMs")),
+                "last_run_at": _iso_from_epoch_ms(state.get("lastRunAtMs")),
+                "last_status": str(state.get("lastStatus") or state.get("lastRunStatus") or "").strip() or None,
+            }
+        )
+
+    rows.sort(
+        key=lambda row: (
+            0 if bool(row.get("enabled")) else 1,
+            _parse_timestamp(row.get("next_run_at")) or datetime.max.replace(tzinfo=timezone.utc),
+            str(row.get("name") or ""),
+        )
+    )
+    return rows
 
 
 def _assistant_model_snapshot() -> dict[str, Any]:
@@ -1723,9 +1882,9 @@ def _extract_phase1_item() -> list[dict[str, Any]]:
     payload = _read_json(PHASE1_STATUS_PATH)
     if not isinstance(payload, dict):
         return []
-    status = str(payload.get("status", "")).strip().lower()
-    if not status:
+    if not _phase1_runtime_alive(payload):
         return []
+    status = str(payload.get("status", "")).strip().lower()
     detail = f"{payload.get('commandlet_name', 'Phase One')} status={status}"
     if payload.get("started_at"):
         detail = f"{detail} started={payload['started_at']}"
@@ -1786,13 +1945,15 @@ def _load_teamchat_sessions(limit: int = 4) -> dict[str, Any]:
         if len(session_rows) >= limit:
             break
 
-    active = [item for item in session_rows if item.get("status") not in {"accepted", "completed", "failed"}]
-    latest = session_rows[0] if session_rows else None
-    summary = "No recorded teamchat sessions."
-    if latest:
+    active = [item for item in session_rows if _teamchat_status_is_active(item.get("status"))]
+    latest = active[0] if active else (session_rows[0] if session_rows else None)
+    summary = "No active TeamChat sessions."
+    if latest and active:
         summary = f"{latest['id']} is {latest['status']}"
         if latest.get("task"):
             summary = f"{summary}: {latest['task']}"
+    elif latest:
+        summary = f"Latest TeamChat session {latest['id']} ended as {latest['status']}"
 
     return {
         "status": "active" if active else ("history" if session_rows else "offline"),
@@ -1800,6 +1961,183 @@ def _load_teamchat_sessions(limit: int = 4) -> dict[str, Any]:
         "sessions": session_rows,
         "active_count": len(active),
     }
+
+
+def _load_runtime_agents(
+    *,
+    work_items: list[dict[str, Any]],
+    teamchat: dict[str, Any],
+    components: list[dict[str, Any]],
+    model_ops: dict[str, Any],
+) -> list[dict[str, Any]]:
+    inventory = {
+        str(item.get("id") or ""): item
+        for item in (model_ops.get("agents") or [])
+        if isinstance(item, dict) and str(item.get("id") or "").strip()
+    }
+    rows: list[dict[str, Any]] = []
+
+    for agent_id, item in inventory.items():
+        latest = _latest_noncron_session(agent_id)
+        if not isinstance(latest, dict):
+            continue
+        updated_at_ms = int(latest.get("updatedAt", 0) or 0)
+        age_ms = max(0, int(time.time() * 1000) - updated_at_ms)
+        if age_ms > AGENT_ACTIVITY_MAX_AGE_MS:
+            continue
+        rows.append(
+            {
+                "id": f"session:{agent_id}",
+                "name": "c_lawd" if agent_id == "main" else agent_id,
+                "model": str(item.get("model") or "unknown"),
+                "status": "working",
+                "task": _agent_activity_label(latest.get("key")),
+                "progress": None,
+                "tasks_completed": 0,
+                "cycles": 0,
+                "updated_at": _iso_from_epoch_ms(updated_at_ms),
+                "available_actions": [],
+                "source": "session",
+                "detail": str(latest.get("displayName") or latest.get("key") or ""),
+            }
+        )
+
+    dali_component = next((item for item in components if item.get("id") == "dali"), {})
+    if dali_component and str(dali_component.get("active_state") or "") == "active":
+        phase1_item = next((item for item in work_items if str(item.get("id")) == "dali_phase1"), None)
+        rows.append(
+            {
+                "id": "service:dali-fishtank.service",
+                "name": "Dali Fishtank",
+                "model": "cathedral.runtime",
+                "status": "working",
+                "task": str((phase1_item or {}).get("title") or "Cathedral runtime active"),
+                "progress": None,
+                "tasks_completed": 0,
+                "cycles": 0,
+                "updated_at": _format_ts(FISHTANK_STATE_PATH) or _format_ts(PHASE1_STATUS_PATH),
+                "available_actions": ["stop"],
+                "source": "service",
+                "detail": str((phase1_item or {}).get("detail") or dali_component.get("details") or ""),
+            }
+        )
+
+    for item in work_items:
+        if not isinstance(item, dict):
+            continue
+        item_id = str(item.get("id") or "").strip()
+        status = str(item.get("status") or "").strip().lower()
+        if not item_id or status not in {"queued", "running", "active", "in_progress"}:
+            continue
+        if item_id == "dali_phase1":
+            continue
+        source = str(item.get("source") or "")
+        available_actions = ["stop"] if "local_exec" in source else []
+        rows.append(
+            {
+                "id": f"work:{item_id}",
+                "name": str(item.get("title") or item_id),
+                "model": "local_exec" if "local_exec" in source else "runtime",
+                "status": "working" if status != "queued" else "idle",
+                "task": str(item.get("detail") or item.get("status") or ""),
+                "progress": None,
+                "tasks_completed": 0,
+                "cycles": 0,
+                "updated_at": _format_ts(Path(source)) if source else None,
+                "available_actions": available_actions,
+                "source": "work_item",
+                "detail": str(item.get("detail") or ""),
+            }
+        )
+
+    for session in list(teamchat.get("sessions") or []):
+        if not isinstance(session, dict) or not _teamchat_status_is_active(session.get("status")):
+            continue
+        rows.append(
+            {
+                "id": f"teamchat:{session.get('id')}",
+                "name": f"TeamChat {session.get('id')}",
+                "model": "teamchat",
+                "status": "working",
+                "task": str(session.get("task") or "TeamChat session active"),
+                "progress": None,
+                "tasks_completed": int(session.get("accepted_reports", 0) or 0),
+                "cycles": int(session.get("cycle", 0) or 0),
+                "updated_at": str(session.get("updated_at") or ""),
+                "available_actions": [],
+                "source": "teamchat",
+                "detail": str(session.get("status") or ""),
+            }
+        )
+
+    deduped: list[dict[str, Any]] = []
+    seen_ids: set[str] = set()
+    for row in rows:
+        row_id = str(row.get("id") or "").strip()
+        if not row_id or row_id in seen_ids:
+            continue
+        seen_ids.add(row_id)
+        deduped.append(row)
+
+    def sort_key(row: dict[str, Any]) -> tuple[int, float]:
+        parsed = _parse_timestamp(row.get("updated_at")) or datetime.fromtimestamp(0, tz=timezone.utc)
+        return (
+            0 if row.get("available_actions") else 1,
+            -parsed.timestamp(),
+        )
+
+    deduped.sort(key=sort_key)
+    return deduped
+
+
+def _load_activity_logs(
+    *,
+    commands: list[dict[str, Any]],
+    failed_units: list[dict[str, Any]],
+    work_items: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for event in commands[:12]:
+        if not isinstance(event, dict):
+            continue
+        rows.append(
+            {
+                "level": "info" if bool(event.get("ok", False)) else "error",
+                "message": str(event.get("summary") or event.get("command") or event.get("action") or "command"),
+                "timestamp": _iso_from_any(event.get("timestamp")) or str(event.get("timestamp") or now_iso()),
+            }
+        )
+
+    for unit in failed_units[:8]:
+        if not isinstance(unit, dict):
+            continue
+        level = "warn" if bool(unit.get("optional")) else "error"
+        rows.append(
+            {
+                "level": level,
+                "message": f"{unit.get('label', unit.get('unit', 'unit'))}: {unit.get('details', '')}",
+                "timestamp": now_iso(),
+            }
+        )
+
+    for item in work_items[:6]:
+        if not isinstance(item, dict):
+            continue
+        status = str(item.get("status") or "").strip().lower()
+        level = "warn" if status in {"queued", "blocked", "failed"} else "info"
+        rows.append(
+            {
+                "level": level,
+                "message": f"{item.get('title', 'runtime work')}: {item.get('detail', status)}",
+                "timestamp": _format_ts(Path(item.get("source"))) if item.get("source") else now_iso(),
+            }
+        )
+
+    rows.sort(
+        key=lambda row: _parse_timestamp(row.get("timestamp")) or datetime.fromtimestamp(0, tz=timezone.utc),
+        reverse=True,
+    )
+    return rows[:20]
 
 
 def portfolio_payload() -> dict[str, Any]:
@@ -1813,6 +2151,7 @@ def portfolio_payload() -> dict[str, Any]:
     work_items = _load_work_items()
     components = _load_components()
     command_history = _load_command_history()
+    scheduled_jobs = _load_scheduled_jobs()
     memory_ops = _load_memory_ops(tasks=tasks)
     sim_ops = _load_sim_ops(sims)
     sim_strategy_review = load_or_build_sim_strategy_review(sims, finance_brain, trading_strategy)
@@ -1823,6 +2162,17 @@ def portfolio_payload() -> dict[str, Any]:
         components=components,
         external_signals=external_signals,
         finance_brain=finance_brain,
+    )
+    runtime_agents = _load_runtime_agents(
+        work_items=work_items,
+        teamchat=teamchat,
+        components=components,
+        model_ops=model_ops,
+    )
+    activity_logs = _load_activity_logs(
+        commands=command_history,
+        failed_units=failed_units,
+        work_items=work_items,
     )
     context_packet = build_source_context_packet(
         tasks=tasks,
@@ -1846,13 +2196,21 @@ def portfolio_payload() -> dict[str, Any]:
         "deliberations": deliberations,
         "weekly_evolution": weekly_evolution,
         "work_items": work_items,
+        "runtime_agents": runtime_agents,
         "components": components,
         "health_metrics": _load_health_metrics(),
+        "scheduled_jobs": scheduled_jobs,
         "teamchat": teamchat,
         "command_history": command_history,
+        "activity_logs": activity_logs,
         "memory_ops": memory_ops,
         "model_ops": model_ops,
         "context_packet": context_packet,
+        "gateway_connected": any(
+            str(component.get("id") or "") == "gateway" and str(component.get("active_state") or "") == "active"
+            for component in components
+            if isinstance(component, dict)
+        ),
     }
     payload["source_mission"] = _load_source_mission(
         tasks=tasks,

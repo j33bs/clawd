@@ -39,6 +39,8 @@ class Store extends EventEmitter {
             // System
             connected: false,
             gatewayStatus: 'connecting',
+            truth: {},
+            lastUpdate: null,
             
             // Agents
             agents: [],
@@ -159,10 +161,10 @@ class Store extends EventEmitter {
     
     markNotificationRead(id) {
         const notifications = this.state.notifications.map(n => 
-            n.id === id ? { ...n, read: true } : n
+            String(n.id) === String(id) ? { ...n, read: true } : n
         );
         this.set('notifications', notifications);
-        this.set('unreadCount', Math.max(0, this.state.unreadCount - 1));
+        this.set('unreadCount', notifications.filter((notification) => !notification.read).length);
     }
     
     clearNotifications() {
@@ -194,56 +196,6 @@ class Store extends EventEmitter {
     updateSetting(key, value) {
         this.set(`settings.${key}`, value);
         this.saveSettings();
-    }
-    
-    // Initialize default tasks for demo
-    initDemoData() {
-        // Demo agents
-        this.set('agents', [
-            { id: 'planner', name: 'Planner', model: 'MiniMax-M2.5', status: 'idle', tasksCompleted: 12, cycles: 156 },
-            { id: 'coder', name: 'Coder', model: 'Codex', status: 'working', task: 'Implementing Source UI', progress: 65, tasksCompleted: 24, cycles: 89 },
-            { id: 'health', name: 'Health Monitor', model: 'MiniMax-M2.5', status: 'idle', tasksCompleted: 8, cycles: 24 },
-            { id: 'memory', name: 'Memory Agent', model: 'MiniMax-M2.5', status: 'working', task: 'Indexing memories', progress: 30, tasksCompleted: 15, cycles: 42 }
-        ]);
-        
-        // Demo tasks
-        this.set('tasks', [
-            { id: 1, title: 'Implement task drag-and-drop', status: 'in_progress', priority: 'high', assignee: 'coder', createdAt: new Date().toISOString() },
-            { id: 2, title: 'Add WebSocket support', status: 'backlog', priority: 'high', assignee: 'coder', createdAt: new Date().toISOString() },
-            { id: 3, title: 'Write API integration tests', status: 'backlog', priority: 'medium', assignee: 'coder', createdAt: new Date().toISOString() },
-            { id: 4, title: 'Design notification system', status: 'review', priority: 'medium', assignee: 'planner', createdAt: new Date().toISOString() },
-            { id: 5, title: 'Fix memory leak in worker', status: 'done', priority: 'high', assignee: 'coder', createdAt: new Date().toISOString() },
-            { id: 6, title: 'Update documentation', status: 'backlog', priority: 'low', assignee: 'planner', createdAt: new Date().toISOString() }
-        ]);
-        
-        // Demo scheduled jobs
-        this.set('scheduledJobs', [
-            { id: 1, name: 'Daily Health Check', cron: '0 9 * * *', nextRun: '9:00 AM', enabled: true },
-            { id: 2, name: 'Security Audit', cron: '0 9 * * 1', nextRun: 'Mon 9:00 AM', enabled: true },
-            { id: 3, name: 'Memory Cleanup', cron: '0 0 * * *', nextRun: '12:00 AM', enabled: true },
-            { id: 4, name: 'Git Auto-commit', cron: '*/15 * * * *', nextRun: 'Every 15min', enabled: true }
-        ]);
-        
-        // Demo health components
-        this.set('components', [
-            { id: 'gateway', name: 'Gateway', status: 'healthy', details: 'Running on port 18789' },
-            { id: 'vllm', name: 'VLLM', status: 'healthy', details: 'Online at localhost:8001' },
-            { id: 'telegram', name: 'Telegram', status: 'healthy', details: 'Connected' },
-            { id: 'memory', name: 'Memory', status: 'warning', details: 'Low available' },
-            { id: 'database', name: 'Database', status: 'healthy', details: 'Connected' },
-            { id: 'scheduler', name: 'Scheduler', status: 'healthy', details: '4 jobs active' }
-        ]);
-        
-        // Demo activity
-        const now = new Date();
-        this.set('notifications', [
-            { id: 1, type: 'success', title: 'Task Completed', body: 'Fix memory leak in worker', timestamp: new Date(now - 2 * 60000).toISOString(), read: false },
-            { id: 2, type: 'error', title: 'Deploy Failed', body: 'Connection timeout', timestamp: new Date(now - 3600000).toISOString(), read: false },
-            { id: 3, type: 'info', title: 'Health Check', body: 'All systems operational', timestamp: new Date(now - 7200000).toISOString(), read: true },
-            { id: 4, type: 'success', title: 'Agent Started', body: 'Planner agent is now running', timestamp: new Date(now - 10800000).toISOString(), read: true }
-        ]);
-        
-        this.set('unreadCount', 2);
     }
 }
 

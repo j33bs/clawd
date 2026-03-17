@@ -37,17 +37,20 @@ class APIClient {
                 ...options,
                 headers
             });
-            
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-            }
-            
             const contentType = response.headers.get('content-type');
+            let payload = null;
             if (contentType && contentType.includes('application/json')) {
-                return await response.json();
+                payload = await response.json();
+            } else {
+                payload = await response.text();
             }
-            
-            return await response.text();
+            if (!response.ok) {
+                const message = typeof payload === 'object' && payload !== null
+                    ? (payload.error || payload.message || `HTTP ${response.status}: ${response.statusText}`)
+                    : `HTTP ${response.status}: ${response.statusText}`;
+                throw new Error(String(message));
+            }
+            return payload;
         } catch (error) {
             console.error(`API Error [${endpoint}]:`, error);
             throw error;
@@ -146,45 +149,3 @@ class APIClient {
 
 // Create global API client
 const api = new APIClient();
-
-// Mock API for demo (when gateway is not available)
-class MockAPIClient extends APIClient {
-    constructor() {
-        super();
-        this.connected = false;
-    }
-    
-    async getStatus() {
-        return {
-            gateway: {
-                status: 'running',
-                uptime: 604800,
-                version: '2026.2.15'
-            },
-            agents: store.get('agents'),
-            tasks: store.get('tasks')
-        };
-    }
-    
-    async getHealth() {
-        return {
-            cpu: Math.floor(Math.random() * 60) + 20,
-            memory: Math.floor(Math.random() * 40) + 40,
-            disk: Math.floor(Math.random() * 30) + 30,
-            gpu: Math.floor(Math.random() * 50) + 30
-        };
-    }
-    
-    async restartGateway() {
-        await new Promise(r => setTimeout(r, 1000));
-        return { success: true };
-    }
-    
-    async runHealthCheck() {
-        await new Promise(r => setTimeout(r, 1500));
-        return { success: true, results: store.get('components') };
-    }
-}
-
-// Use mock API in demo mode
-const mockApi = new MockAPIClient();

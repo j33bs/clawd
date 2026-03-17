@@ -70,8 +70,12 @@ class SourceUIApiContractTests(unittest.TestCase):
                 MOD,
                 "portfolio_payload",
                 return_value={
+                    "runtime_agents": [{"id": "session:main", "name": "c_lawd", "status": "working"}],
+                    "scheduled_jobs": [{"id": "cron-1", "name": "Hourly Check", "cron": "0 * * * *"}],
+                    "activity_logs": [{"level": "info", "message": "live log"}],
                     "components": [{"id": "gateway", "status": "healthy"}],
                     "health_metrics": {"cpu": 12, "memory": 34, "disk": 56, "gpu": 0},
+                    "gateway_connected": True,
                 },
             ),
             mock.patch.object(
@@ -96,8 +100,12 @@ class SourceUIApiContractTests(unittest.TestCase):
         self.assertIn("truth", payload)
         self.assertEqual(payload["memory"]["process_rss_mb"], 12.5)
         self.assertEqual(payload["cron"]["status"], "ok")
+        self.assertEqual(payload["agents"][0]["id"], "session:main")
+        self.assertEqual(payload["scheduled_jobs"][0]["id"], "cron-1")
+        self.assertEqual(payload["logs"][0]["message"], "live log")
         self.assertEqual(payload["components"][0]["id"], "gateway")
         self.assertEqual(payload["health_metrics"]["cpu"], 12)
+        self.assertTrue(payload["gateway_connected"])
         self.assertEqual(payload["tasks_total"], 2)
         self.assertEqual(payload["task_counts"]["backlog"], 1)
         self.assertEqual(payload["task_counts"]["review"], 1)
@@ -122,6 +130,60 @@ class SourceUIApiContractTests(unittest.TestCase):
         payload = handler.send_json.call_args.args[0]
         self.assertEqual(len(payload), 1)
         self.assertEqual(payload[0]["id"], 1001)
+
+    def test_agents_endpoint_uses_runtime_agents(self):
+        handler = self._make_handler()
+        with (
+            mock.patch.object(handler, "refresh_state_from_source_mission", return_value=False),
+            mock.patch.object(MOD, "portfolio_payload", return_value={"runtime_agents": [{"id": "session:main", "name": "c_lawd"}]}),
+        ):
+            handler.handle_api(MOD.urlparse("/api/agents"))
+
+        payload = handler.send_json.call_args.args[0]
+        self.assertEqual(payload[0]["id"], "session:main")
+
+    def test_schedule_endpoint_uses_runtime_schedules(self):
+        handler = self._make_handler()
+        with (
+            mock.patch.object(handler, "refresh_state_from_source_mission", return_value=False),
+            mock.patch.object(MOD, "portfolio_payload", return_value={"scheduled_jobs": [{"id": "cron-1", "name": "Hourly"}]}),
+        ):
+            handler.handle_api(MOD.urlparse("/api/schedule"))
+
+        payload = handler.send_json.call_args.args[0]
+        self.assertEqual(payload[0]["id"], "cron-1")
+
+    def test_logs_endpoint_uses_runtime_activity_logs(self):
+        handler = self._make_handler()
+        with (
+            mock.patch.object(handler, "refresh_state_from_source_mission", return_value=False),
+            mock.patch.object(MOD, "portfolio_payload", return_value={"activity_logs": [{"level": "info", "message": "live log"}]}),
+        ):
+            handler.handle_api(MOD.urlparse("/api/logs"))
+
+        payload = handler.send_json.call_args.args[0]
+        self.assertEqual(payload[0]["message"], "live log")
+
+    def test_create_schedule_endpoint_calls_runtime_creator(self):
+        handler = self._make_handler()
+        handler._read_json_body = mock.Mock(return_value={"name": "Nightly"})
+
+        with mock.patch.object(MOD, "_create_schedule_job", return_value={"success": True, "id": "cron-1"}) as creator:
+            handler.create_schedule()
+
+        creator.assert_called_once_with({"name": "Nightly"})
+        payload = handler.send_json.call_args.args[0]
+        self.assertEqual(payload["id"], "cron-1")
+
+    def test_control_agent_endpoint_calls_runtime_action(self):
+        handler = self._make_handler()
+
+        with mock.patch.object(MOD, "_control_runtime_agent_action", return_value={"success": True, "summary": "Stopped"}) as control:
+            handler.control_agent("service:dali-fishtank.service", "stop")
+
+        control.assert_called_once_with("service:dali-fishtank.service", "stop")
+        payload = handler.send_json.call_args.args[0]
+        self.assertEqual(payload["summary"], "Stopped")
 
     def test_persist_source_mission_writes_runtime_state_not_config(self):
         with tempfile.TemporaryDirectory() as td:

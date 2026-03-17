@@ -1216,6 +1216,16 @@ input, select, textarea {
     text-align: center;
 }
 
+.empty-state {
+    font-size: var(--text-sm);
+    color: var(--text-tertiary);
+    padding: var(--space-lg);
+    border: 1px dashed var(--border-subtle);
+    border-radius: var(--radius-md);
+    text-align: center;
+    background: var(--bg-tertiary);
+}
+
 /* ===== Agents Grid Full ===== */
 .agents-grid-full {
     display: grid;
@@ -1332,6 +1342,18 @@ input, select, textarea {
     margin-bottom: var(--space-lg);
 }
 
+.agent-detail-full {
+    font-size: var(--text-sm);
+    color: var(--text-secondary);
+    margin-bottom: var(--space-sm);
+}
+
+.agent-updated-full {
+    font-size: var(--text-xs);
+    color: var(--text-tertiary);
+    margin-bottom: var(--space-lg);
+}
+
 .agent-actions-full {
     display: flex;
     gap: var(--space-sm);
@@ -1357,6 +1379,13 @@ input, select, textarea {
 .agent-action-btn.danger:hover {
     border-color: var(--danger);
     color: var(--danger);
+}
+
+.agent-control-note {
+    flex: 1;
+    font-size: var(--text-xs);
+    color: var(--text-tertiary);
+    line-height: 1.5;
 }
 
 /* ===== Schedule ===== */
@@ -1423,6 +1452,18 @@ input, select, textarea {
     padding: var(--space-sm);
 }
 
+.schedule-day-date {
+    font-size: var(--text-xs);
+    color: var(--text-tertiary);
+    margin-bottom: var(--space-sm);
+}
+
+.schedule-day-events {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+}
+
 .schedule-event {
     background: var(--accent-muted);
     color: white;
@@ -1436,6 +1477,15 @@ input, select, textarea {
 
 .schedule-event:hover {
     background: var(--accent-primary);
+}
+
+.schedule-event-name {
+    font-weight: 600;
+}
+
+.schedule-event-time {
+    opacity: 0.85;
+    margin-top: 2px;
 }
 
 .schedule-list h3 {
@@ -1475,9 +1525,35 @@ input, select, textarea {
     font-family: var(--font-mono);
 }
 
+.job-meta {
+    font-size: var(--text-xs);
+    color: var(--text-tertiary);
+    margin-top: 4px;
+}
+
 .job-next {
     font-size: var(--text-sm);
     color: var(--text-secondary);
+    text-align: right;
+}
+
+.job-status {
+    font-size: var(--text-xs);
+    margin-bottom: 4px;
+}
+
+.job-status.enabled {
+    color: var(--success);
+}
+
+.job-status.disabled {
+    color: var(--warning);
+}
+
+.job-timestamps {
+    font-size: var(--text-xs);
+    color: var(--text-tertiary);
+    margin-top: 4px;
 }
 
 /* ===== Health Metrics ===== */
@@ -1703,6 +1779,8 @@ input, select, textarea {
     position: relative;
     display: inline-block;
     width: 48px;
+    height: 24px;
+}
 
 .toggle input {
     opacity: 0;
@@ -1937,6 +2015,12 @@ input, select, textarea {
 .command-result-title {
     font-weight: 500;
     font-size: var(--text-sm);
+}
+
+.command-result-meta {
+    font-size: var(--text-xs);
+    color: var(--text-tertiary);
+    margin-top: 2px;
 }
 
 .command-result-desc {
