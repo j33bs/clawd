@@ -445,12 +445,29 @@ async function refreshTactiStatus(showToast) {
             memoryMetaBits.join(' · ') || String(memorySystem.summary || 'no live memory summary')
         );
 
-        const cronStatus = cron.status || 'unknown';
-        const cronHealth = cronStatus === 'ok' ? 'ok' : (cronStatus === 'stale' ? 'warn' : 'bad');
-        const cronValue = cronStatus.toUpperCase();
-        const cronMeta = cron.latest_artifact_ts
-            ? `${Utils.formatTime(cron.latest_artifact_ts)} | jobs ${cron.template_jobs ?? '--'}`
-            : (cron.reason || 'no cron artifact');
+        const cronStatus = String(cron.status || 'unknown').trim().toLowerCase();
+        const cronHealth = cronStatus === 'ok' ? 'ok' : (cronStatus === 'stale' || cronStatus === 'warning' ? 'warn' : 'bad');
+        const cronValue = typeof cron.enabled_jobs === 'number'
+            ? `${cron.enabled_jobs} live`
+            : cronStatus.toUpperCase();
+        const cronMetaBits = [];
+        if (cron.latest_run_at) {
+            cronMetaBits.push(`last ${Utils.formatTime(cron.latest_run_at)}`);
+        } else if (cron.latest_artifact_ts) {
+            cronMetaBits.push(`last ${Utils.formatTime(cron.latest_artifact_ts)}`);
+        }
+        if (cron.next_run_at) {
+            cronMetaBits.push(`next ${Utils.formatTime(cron.next_run_at)}`);
+        }
+        if (typeof cron.jobs_total === 'number') {
+            cronMetaBits.push(`jobs ${cron.jobs_total}`);
+        } else if (typeof cron.template_jobs === 'number') {
+            cronMetaBits.push(`jobs ${cron.template_jobs}`);
+        }
+        if (typeof cron.failing_jobs === 'number' && cron.failing_jobs > 0) {
+            cronMetaBits.push(`issues ${cron.failing_jobs}`);
+        }
+        const cronMeta = cronMetaBits.join(' · ') || (cron.reason || 'no cron artifact');
         setStatusTile('#status-cron', cronHealth, cronValue, cronMeta);
 
         const processMb = typeof memory.process_rss_mb === 'number' ? memory.process_rss_mb.toFixed(1) : '--';
@@ -1156,6 +1173,7 @@ function renderOracleResult(data) {
     const centroid = String(data.centroid || '');
     const results = Array.isArray(data.results) ? data.results : [];
     const k = Number(data.k || results.length) || results.length;
+    const sourceKind = String(data.source || '');
     const labelMap = {
         claude_code: 'Claude Code',
         chatgpt: 'ChatGPT',
@@ -1186,16 +1204,30 @@ function renderOracleResult(data) {
         const date = String(row.created_at || '').slice(0, 10);
         const title = String(row.title || '').trim();
         const snippet = String(row.body || '').replaceAll('\n', ' ').trim();
+        const sourceLabel = String(row.source_label || row.corpus_kind || 'System Corpus').trim();
+        const metaBits = [escapeHtml(sourceLabel)];
+        if (section && section !== '?') {
+            metaBits.push(`§${escapeHtml(section)}`);
+        }
+        if (authors) {
+            metaBits.push(`<strong>${escapeHtml(authors)}</strong>`);
+        }
+        if (date) {
+            metaBits.push(escapeHtml(date));
+        }
         return `
             <div class="oracle-result-row">
                 <span class="oracle-result-num">[${index + 1}]</span>
                 <div class="oracle-result-body">
-                    <div class="oracle-result-meta">§${escapeHtml(section)} · <strong>${escapeHtml(authors || 'unknown')}</strong>${date ? ` · ${escapeHtml(date)}` : ''}${title ? ` — ${escapeHtml(title)}` : ''}</div>
+                    <div class="oracle-result-meta">${metaBits.join(' · ')}${title ? ` — ${escapeHtml(title)}` : ''}</div>
                     <div class="oracle-result-snip">${escapeHtml(snippet)}</div>
                 </div>
             </div>
         `;
     }).join('');
+    const resultSub = sourceKind.includes('system_corpus')
+        ? `top ${results.length} results from the local system corpus`
+        : `top ${results.length} sections by semantic distance`;
     return `
         <div class="oracle-being-weights">
             <div class="oracle-sub">being weight in top-${escapeHtml(k)}</div>
@@ -1203,7 +1235,7 @@ function renderOracleResult(data) {
             ${notInTopK ? `<div class="oracle-not-in-k">not ranked: ${notInTopK}</div>` : ''}
         </div>
         <div class="oracle-top-results">
-            <div class="oracle-sub">top ${results.length} sections by semantic distance</div>
+            <div class="oracle-sub">${escapeHtml(resultSub)}</div>
             ${rows || '<div class="oracle-loading">No matching corpus sections found.</div>'}
         </div>
     `;

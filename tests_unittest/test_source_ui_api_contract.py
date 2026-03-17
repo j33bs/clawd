@@ -71,7 +71,17 @@ class SourceUIApiContractTests(unittest.TestCase):
                 "portfolio_payload",
                 return_value={
                     "runtime_agents": [{"id": "session:main", "name": "c_lawd", "status": "working"}],
-                    "scheduled_jobs": [{"id": "cron-1", "name": "Hourly Check", "cron": "0 * * * *"}],
+                    "scheduled_jobs": [
+                        {
+                            "id": "cron-1",
+                            "name": "Hourly Check",
+                            "cron": "0 * * * *",
+                            "enabled": True,
+                            "last_run_at": "2026-03-17T05:03:01.206000Z",
+                            "next_run_at": "2026-03-17T06:03:01.197000Z",
+                            "last_status": "ok",
+                        }
+                    ],
                     "activity_logs": [{"level": "info", "message": "live log"}],
                     "components": [{"id": "gateway", "status": "healthy"}],
                     "health_metrics": {"cpu": 12, "memory": 34, "disk": 56, "gpu": 0},
@@ -125,6 +135,8 @@ class SourceUIApiContractTests(unittest.TestCase):
         self.assertEqual(payload["memory_system"]["active_inferences"], 3)
         self.assertEqual(payload["memory_system"]["latest_source_label"], "Telegram Main")
         self.assertNotIn("knowledge_base_sync", payload)
+        self.assertEqual(payload["cron"]["status"], "ok")
+        self.assertEqual(payload["cron"]["enabled_jobs"], 1)
         self.assertEqual(payload["tasks_total"], 2)
         self.assertEqual(payload["task_counts"]["backlog"], 1)
         self.assertEqual(payload["task_counts"]["review"], 1)
@@ -198,6 +210,81 @@ class SourceUIApiContractTests(unittest.TestCase):
         oracle_query.assert_called_once_with("What does the record say?", k=7, being=None)
         payload = handler.send_json.call_args.args[0]
         self.assertEqual(payload["question"], "What does the record say?")
+
+    def test_fallback_oracle_query_reads_broader_system_corpus(self):
+        with tempfile.TemporaryDirectory() as td:
+            temp_root = Path(td)
+            open_questions_path = temp_root / "OPEN_QUESTIONS.md"
+            graph_path = temp_root / "graph.jsonl"
+            research_import_path = temp_root / "research_import.jsonl"
+            user_inferences_path = temp_root / "user_inferences.jsonl"
+            preference_profile_path = temp_root / "preference_profile.json"
+            system_status_path = temp_root / "SYSTEM_STATUS.md"
+
+            open_questions_path.write_text(
+                "# OPEN_QUESTIONS.md\n\n## I. Consciousness Notes (2026-03-17)\nThe correspondence discusses identity and continuity.\n",
+                encoding="utf-8",
+            )
+            graph_path.write_text(
+                json.dumps(
+                    {
+                        "name": "Runtime orchestration",
+                        "content": "The wider system routes live agents, dashboards, and schedulers together.",
+                        "source": "workspace/knowledge_base/data/graph.jsonl",
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            research_import_path.write_text("", encoding="utf-8")
+            user_inferences_path.write_text(
+                json.dumps(
+                    {
+                        "subject": "jeebs",
+                        "status": "active",
+                        "statement": "Prefers concise operational summaries.",
+                        "prompt_line": "Prefer concise, direct operational responses by default.",
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            preference_profile_path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "subject": "jeebs",
+                        "updated_at": "2026-03-17T01:00:00Z",
+                        "communication": {
+                            "concise_default": {
+                                "value": True,
+                                "statement": "Prefers concise operational summaries.",
+                                "prompt_line": "Prefer concise, direct operational responses by default.",
+                            }
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            system_status_path.write_text(
+                "# System Status\n\nThe system dashboard reflects current runtime orchestration.\n",
+                encoding="utf-8",
+            )
+
+            with (
+                mock.patch.object(MOD, "ORACLE_CORRESPONDENCE_PATH", open_questions_path),
+                mock.patch.object(MOD, "ORACLE_GRAPH_PATH", graph_path),
+                mock.patch.object(MOD, "ORACLE_RESEARCH_IMPORT_PATH", research_import_path),
+                mock.patch.object(MOD, "ORACLE_USER_INFERENCES_PATH", user_inferences_path),
+                mock.patch.object(MOD, "ORACLE_PREFERENCE_PROFILE_PATH", preference_profile_path),
+                mock.patch.object(MOD, "ORACLE_MEMORY_SOURCES", ()),
+                mock.patch.object(MOD, "ORACLE_CORE_DOC_PATHS", (system_status_path,)),
+            ):
+                payload = MOD._fallback_oracle_query("runtime orchestration", k=5)
+
+        self.assertEqual(payload["source"], "system_corpus")
+        self.assertTrue(payload["results"])
+        self.assertTrue(any("Knowledge Graph" in str(row.get("source_label")) for row in payload["results"]))
 
     def test_create_schedule_endpoint_calls_runtime_creator(self):
         handler = self._make_handler()
