@@ -47,9 +47,9 @@ Add panels for core TACTI(C)-R modules:
 - Memory usage
 
 ## Files to Modify
-- `workspace/source-ui/index.html` - Add panels
-- `workspace/source-ui/css/styles.css` - TACTI(C)-R theme
-- `workspace/source-ui/js/app.js` - Panel logic
+- `workspace/source-ui/index.html` - Shell page
+- `workspace/source-ui/static/css/styles.css` - TACTI(C)-R theme
+- `workspace/source-ui/static/js/app.js` - Panel logic
 - `workspace/source-ui/api/` - Add backend endpoints
 
 ## Priority

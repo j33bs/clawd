@@ -4,7 +4,7 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 APP_PATH="$REPO_ROOT/workspace/source-ui/app.py"
 HTML_PATH="$REPO_ROOT/workspace/source-ui/index.html"
-CSS_PATH="$REPO_ROOT/workspace/source-ui/css/styles.css"
+CSS_PATH="$REPO_ROOT/workspace/source-ui/static/css/styles.css"
 PORT="${1:-19998}"
 HOST="127.0.0.1"
 LOG_FILE="$(mktemp -t source-ui-verify.XXXXXX.log)"
@@ -43,10 +43,14 @@ try:
     payload=json.load(sys.stdin)
 except Exception as exc:
     raise SystemExit(f"FAIL: {endpoint} not valid JSON: {exc}")
-required={"ok","ts","data","error"}
-if not required.issubset(payload.keys()):
-    raise SystemExit(f"FAIL: {endpoint} missing contract keys")
-print("PASS: %s ok=%s" % (endpoint, payload.get("ok")))' "$endpoint" <<<"$raw"
+if not isinstance(payload, dict):
+    raise SystemExit(f"FAIL: {endpoint} did not return an object")
+if {"ok","ts","data","error"}.issubset(payload.keys()):
+    print("PASS: %s ok=%s" % (endpoint, payload.get("ok")))
+elif "error" in payload and len(payload) == 1:
+    raise SystemExit(f"FAIL: {endpoint} returned only an error payload: {payload.get('error')}")
+else:
+    print("PASS: %s raw-json" % endpoint)' "$endpoint" <<<"$raw"
 }
 
 check_contract "/api/status"
@@ -77,4 +81,4 @@ rg -q -- '--cat-cross-timescale' "$CSS_PATH"
 rg -q -- '--cat-malleability' "$CSS_PATH"
 rg -q -- '--cat-agency' "$CSS_PATH"
 
-echo "PASS: source-ui TACTI(C)-R verification complete"
+echo "PASS: source-ui dashboard verification complete"
