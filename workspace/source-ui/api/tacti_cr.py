@@ -7,7 +7,6 @@ import json
 import os
 import re
 import resource
-import socket
 import subprocess
 import sys
 import time
@@ -113,40 +112,6 @@ def _safe_ratio(numerator: float, denominator: float) -> float:
     if denominator <= 0:
         return 0.0
     return numerator / denominator
-
-
-def _qmd_probe(host: str = "127.0.0.1", port: int = 8181, timeout_s: float = 0.35) -> dict[str, Any]:
-    started = time.perf_counter()
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    sock.settimeout(timeout_s)
-    try:
-        result = sock.connect_ex((host, port))
-        latency_ms = round((time.perf_counter() - started) * 1000.0, 2)
-        if result == 0:
-            return {
-                "reachable": True,
-                "latency_ms": latency_ms,
-                "target": f"{host}:{port}",
-            }
-        return {
-            "reachable": False,
-            "latency_ms": latency_ms,
-            "target": f"{host}:{port}",
-            "reason": f"connect_ex={result}",
-        }
-    except Exception as exc:
-        latency_ms = round((time.perf_counter() - started) * 1000.0, 2)
-        return {
-            "reachable": False,
-            "latency_ms": latency_ms,
-            "target": f"{host}:{port}",
-            "reason": str(exc),
-        }
-    finally:
-        try:
-            sock.close()
-        except Exception:
-            pass
 
 
 def _parse_iso(value: str | None) -> datetime | None:
@@ -318,7 +283,6 @@ def _system_memory_snapshot() -> dict[str, Any]:
 
 def get_status_data() -> dict[str, Any]:
     return {
-        "qmd": _qmd_probe(),
         "knowledge_base_sync": _knowledge_sync_status(),
         "cron": _cron_status(),
         "memory": _system_memory_snapshot(),

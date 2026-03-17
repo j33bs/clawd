@@ -77,7 +77,7 @@ class SourceUIApiContractTests(unittest.TestCase):
             mock.patch.object(
                 MOD,
                 "get_status_data",
-                return_value={"qmd": {"reachable": True}, "memory": {"process_rss_mb": 12.5}},
+                return_value={"memory": {"process_rss_mb": 12.5}, "cron": {"status": "ok"}},
             ),
         ):
             handler.handle_api(MOD.urlparse("/api/status"))
@@ -85,8 +85,8 @@ class SourceUIApiContractTests(unittest.TestCase):
         payload = handler.send_json.call_args.args[0]
         self.assertIn("agents", payload)
         self.assertIn("truth", payload)
-        self.assertEqual(payload["qmd"]["reachable"], True)
         self.assertEqual(payload["memory"]["process_rss_mb"], 12.5)
+        self.assertEqual(payload["cron"]["status"], "ok")
         self.assertEqual(payload["components"][0]["id"], "gateway")
         self.assertEqual(payload["health_metrics"]["cpu"], 12)
 
