@@ -64,6 +64,10 @@ class SourceUIApiContractTests(unittest.TestCase):
 
     def test_status_endpoint_merges_tacti_status_data(self):
         handler = self._make_handler()
+        handler._state.tasks = [
+            {"id": "source-001", "title": "Universal Context Packet", "status": "backlog"},
+            {"id": "source-002", "title": "Mission Control Timeline", "status": "review"},
+        ]
         with (
             mock.patch.object(handler, "refresh_state_from_source_mission", return_value=False),
             mock.patch.object(
@@ -89,6 +93,9 @@ class SourceUIApiContractTests(unittest.TestCase):
         self.assertEqual(payload["cron"]["status"], "ok")
         self.assertEqual(payload["components"][0]["id"], "gateway")
         self.assertEqual(payload["health_metrics"]["cpu"], 12)
+        self.assertEqual(payload["tasks_total"], 2)
+        self.assertEqual(payload["task_counts"]["backlog"], 1)
+        self.assertEqual(payload["task_counts"]["review"], 1)
 
     def test_persist_source_mission_writes_runtime_state_not_config(self):
         with tempfile.TemporaryDirectory() as td:

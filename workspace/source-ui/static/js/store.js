@@ -130,13 +130,13 @@ class Store extends EventEmitter {
     
     updateTask(id, updates) {
         const tasks = this.state.tasks.map(t => 
-            t.id === id ? { ...t, ...updates } : t
+            String(t.id) === String(id) ? { ...t, ...updates } : t
         );
         this.set('tasks', tasks);
     }
     
     removeTask(id) {
-        const tasks = this.state.tasks.filter(t => t.id !== id);
+        const tasks = this.state.tasks.filter(t => String(t.id) !== String(id));
         this.set('tasks', tasks);
     }
     

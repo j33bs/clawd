@@ -218,6 +218,12 @@ class State:
         source_path = resolve_source_mission_path()
         source_exists = source_path.exists()
         source_updated_at = None
+        task_counts = {
+            'backlog': sum(1 for task in self.tasks if DemoDataGenerator.normalize_task_status(task.get('status')) == 'backlog'),
+            'in_progress': sum(1 for task in self.tasks if DemoDataGenerator.normalize_task_status(task.get('status')) == 'in_progress'),
+            'review': sum(1 for task in self.tasks if DemoDataGenerator.normalize_task_status(task.get('status')) == 'review'),
+            'done': sum(1 for task in self.tasks if DemoDataGenerator.normalize_task_status(task.get('status')) == 'done'),
+        }
         if source_exists:
             mission = DemoDataGenerator.load_source_mission()
             if isinstance(mission, dict):
@@ -225,6 +231,8 @@ class State:
         return {
             'agents': self.agents,
             'tasks': self.tasks,
+            'tasks_total': len(self.tasks),
+            'task_counts': task_counts,
             'scheduled_jobs': self.scheduled_jobs,
             'health_metrics': self.health_metrics,
             'components': self.components,
@@ -632,7 +640,31 @@ def reconcile_backlog_state(
 class DemoDataGenerator:
     """Generate demo data."""
 
-    PRIORITY_ORDER = {'high': 0, 'medium': 1, 'low': 2}
+    PRIORITY_ORDER = {'critical': 0, 'high': 1, 'medium': 2, 'low': 3}
+    STATUS_ALIASES = {
+        'todo': 'backlog',
+        'queued': 'backlog',
+        'queue': 'backlog',
+        'pending': 'backlog',
+        'open': 'backlog',
+        'working': 'in_progress',
+        'active': 'in_progress',
+        'in-progress': 'in_progress',
+        'in progress': 'in_progress',
+        'reviewing': 'review',
+        'qa': 'review',
+        'complete': 'done',
+        'completed': 'done',
+        'closed': 'done',
+    }
+    PRIORITY_ALIASES = {
+        'urgent': 'critical',
+        'p0': 'critical',
+        'p1': 'high',
+        'normal': 'medium',
+        'default': 'medium',
+        'minor': 'low',
+    }
 
     @staticmethod
     def default_definition_of_done(task: dict, artifact_path: str) -> str:
@@ -646,9 +678,31 @@ class DemoDataGenerator:
         return _default_status_reason_for_task(task)
 
     @classmethod
+    def normalize_task_status(cls, status: Any) -> str:
+        normalized = str(status or '').strip().lower().replace('-', '_').replace(' ', '_')
+        if not normalized:
+            return 'backlog'
+        return cls.STATUS_ALIASES.get(normalized, normalized if normalized in {'backlog', 'in_progress', 'review', 'done'} else 'backlog')
+
+    @classmethod
+    def normalize_task_priority(cls, priority: Any) -> str:
+        normalized = str(priority or '').strip().lower()
+        if not normalized:
+            return 'medium'
+        return cls.PRIORITY_ALIASES.get(normalized, normalized if normalized in cls.PRIORITY_ORDER else 'medium')
+
+    @classmethod
     def hydrate_task_metadata(cls, task: dict, *, index: int) -> tuple[dict, bool]:
         hydrated = dict(task)
         changed = False
+        normalized_status = cls.normalize_task_status(hydrated.get('status'))
+        if hydrated.get('status') != normalized_status:
+            hydrated['status'] = normalized_status
+            changed = True
+        normalized_priority = cls.normalize_task_priority(hydrated.get('priority'))
+        if hydrated.get('priority') != normalized_priority:
+            hydrated['priority'] = normalized_priority
+            changed = True
         artifact_path = str(hydrated.get('artifact_path') or '').strip()
         task_id = str(hydrated.get('id') or '').strip() or str(index + 1)
         mission_task_id = task_id if task_id.startswith('source-') else f"source-{task_id}"
@@ -715,7 +769,7 @@ class DemoDataGenerator:
             return (
                 cls.PRIORITY_ORDER.get(task.get('priority'), 99),
                 str(created_at),
-                int(task.get('id', 0)),
+                str(task.get('sequence') or task.get('id') or ''),
             )
 
         for agent in agents:

@@ -86,17 +86,21 @@ const Components = {
     
     // Task Card
     taskCard(task) {
-        const priorityColors = {
-            high: 'danger',
-            medium: 'warning',
-            low: 'success'
-        };
+        const priority = String(task.priority || 'medium').trim().toLowerCase();
+        const summary = String(task.summary || task.description || '').trim();
+        const meta = [
+            task.pillar ? `Pillar: ${task.pillar}` : null,
+            task.assignee ? `Owner: ${task.assignee}` : 'Unassigned'
+        ].filter(Boolean).join(' · ');
+        const reason = String(task.status_reason || '').trim();
         
         return `
-            <div class="task-card" draggable="true" data-id="${task.id}" data-priority="${task.priority}">
-                <div class="task-priority priority-${task.priority}"></div>
+            <div class="task-card" draggable="true" data-id="${task.id}" data-priority="${priority}">
+                <div class="task-priority priority-${priority}"></div>
                 <div class="task-card-title">${task.title}</div>
-                <div class="task-card-meta">${task.assignee || 'Unassigned'}</div>
+                ${summary ? `<div class="task-card-summary">${summary}</div>` : ''}
+                <div class="task-card-meta">${meta}</div>
+                ${reason ? `<div class="task-card-reason">${reason}</div>` : ''}
             </div>
         `;
     },

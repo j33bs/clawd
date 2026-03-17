@@ -1146,10 +1146,12 @@ input, select, textarea {
 }
 
 .task-card {
+    position: relative;
     background: var(--bg-tertiary);
     border: 1px solid var(--border-subtle);
     border-radius: var(--radius-md);
     padding: var(--space-md);
+    padding-left: calc(var(--space-md) + 10px);
     margin-bottom: var(--space-sm);
     cursor: grab;
     transition: all var(--transition-fast);
@@ -1176,9 +1178,10 @@ input, select, textarea {
     transform: translateY(-50%);
 }
 
-.task-priority.high { background: var(--danger); }
-.task-priority.medium { background: var(--warning); }
-.task-priority.low { background: var(--success); }
+.task-priority.priority-critical { background: var(--danger); }
+.task-priority.priority-high { background: #e67e22; }
+.task-priority.priority-medium { background: var(--warning); }
+.task-priority.priority-low { background: var(--success); }
 
 .task-card-title {
     font-size: var(--text-sm);
@@ -1186,9 +1189,31 @@ input, select, textarea {
     margin-bottom: var(--space-xs);
 }
 
+.task-card-summary {
+    font-size: var(--text-xs);
+    color: var(--text-secondary);
+    line-height: 1.5;
+    margin-bottom: var(--space-sm);
+}
+
 .task-card-meta {
     font-size: var(--text-xs);
     color: var(--text-tertiary);
+}
+
+.task-card-reason {
+    font-size: var(--text-xs);
+    color: var(--text-secondary);
+    margin-top: var(--space-xs);
+}
+
+.task-empty {
+    font-size: var(--text-xs);
+    color: var(--text-tertiary);
+    padding: var(--space-md);
+    border: 1px dashed var(--border-subtle);
+    border-radius: var(--radius-md);
+    text-align: center;
 }
 
 /* ===== Agents Grid Full ===== */

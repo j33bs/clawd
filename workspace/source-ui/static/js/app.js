@@ -23,6 +23,63 @@ const TACTI_PANEL_ENDPOINTS = {
     ain: '/api/ain/status'
 };
 
+const TASK_STATUS_ALIASES = {
+    todo: 'backlog',
+    queued: 'backlog',
+    queue: 'backlog',
+    pending: 'backlog',
+    open: 'backlog',
+    working: 'in_progress',
+    active: 'in_progress',
+    'in-progress': 'in_progress',
+    'in progress': 'in_progress',
+    reviewing: 'review',
+    qa: 'review',
+    complete: 'done',
+    completed: 'done',
+    closed: 'done'
+};
+
+const TASK_PRIORITY_ALIASES = {
+    urgent: 'critical',
+    p0: 'critical',
+    p1: 'high',
+    normal: 'medium',
+    default: 'medium',
+    minor: 'low'
+};
+
+function normalizeTaskStatus(status) {
+    const normalized = String(status || '').trim().toLowerCase();
+    if (!normalized) return 'backlog';
+    const aliasKey = normalized.replace(/[_-]/g, ' ');
+    const canonical = TASK_STATUS_ALIASES[normalized] || TASK_STATUS_ALIASES[aliasKey] || normalized.replace(/[\s-]+/g, '_');
+    return ['backlog', 'in_progress', 'review', 'done'].includes(canonical) ? canonical : 'backlog';
+}
+
+function normalizeTaskPriority(priority) {
+    const normalized = String(priority || '').trim().toLowerCase();
+    if (!normalized) return 'medium';
+    const canonical = TASK_PRIORITY_ALIASES[normalized] || normalized;
+    return ['critical', 'high', 'medium', 'low'].includes(canonical) ? canonical : 'medium';
+}
+
+function normalizeTaskRecord(task, index = 0) {
+    if (!task || typeof task !== 'object') return null;
+    return {
+        ...task,
+        id: task.id ?? `task-${index + 1}`,
+        title: String(task.title || task.description || `Task ${index + 1}`).trim(),
+        status: normalizeTaskStatus(task.status),
+        priority: normalizeTaskPriority(task.priority)
+    };
+}
+
+function normalizeTaskList(tasks) {
+    if (!Array.isArray(tasks)) return [];
+    return tasks.map((task, index) => normalizeTaskRecord(task, index)).filter(Boolean);
+}
+
 // Initialize application
 async function initApp() {
     console.log('⚡ Source UI initializing...');
@@ -604,7 +661,7 @@ function renderDashboard() {
 // Tasks
 function renderTasks() {
     const filter = store.get('taskFilter');
-    let tasks = store.get('tasks');
+    let tasks = normalizeTaskList(store.get('tasks'));
     
     if (filter !== 'all') {
         tasks = tasks.filter(t => t.status === filter);
@@ -628,7 +685,9 @@ function renderTasks() {
     Object.entries(columns).forEach(([status, taskList]) => {
         const container = $(`#tasks-${status}`);
         if (container) {
-            container.innerHTML = taskList.map(t => Components.taskCard(t)).join('');
+            container.innerHTML = taskList.length > 0
+                ? taskList.map(t => Components.taskCard(t)).join('')
+                : '<div class="task-empty">No tasks</div>';
         }
     });
 }
@@ -886,15 +945,20 @@ function initDragAndDrop() {
         }
     });
     
-    document.addEventListener('drop', (e) => {
+    document.addEventListener('drop', async (e) => {
         e.preventDefault();
         const column = e.target.closest('.kanban-column');
         if (column) {
             column.classList.remove('drag-over');
-            const taskId = parseInt(e.dataTransfer.getData('text/plain'));
+            const taskId = e.dataTransfer.getData('text/plain');
             const newStatus = column.dataset.status;
-            store.moveTask(taskId, newStatus);
-            renderTasks();
+            if (!taskId || !newStatus) return;
+            try {
+                await api.updateTask(taskId, { status: newStatus });
+                await refreshAll();
+            } catch (error) {
+                Toast.error(`Failed to move task: ${error.message}`);
+            }
         }
     });
 }
@@ -949,7 +1013,7 @@ function openNewTaskModal() {
     Modal.open('Create New Task', content, footer);
 }
 
-function createTask() {
+async function createTask() {
     const title = $('#new-task-title')?.value;
     const desc = $('#new-task-desc')?.value;
     const priority = $('#new-task-priority')?.value;
@@ -960,18 +1024,20 @@ function createTask() {
         return;
     }
     
-    store.addTask({
-        title,
-        description: desc,
-        priority,
-        assignee,
-        status: 'backlog',
-        createdAt: new Date().toISOString()
-    });
-    
-    Modal.close();
-    renderTasks();
-    Toast.success('Task created successfully');
+    try {
+        await api.createTask({
+            title,
+            description: desc,
+            priority,
+            assignee,
+            status: 'backlog'
+        });
+        Modal.close();
+        await refreshAll();
+        Toast.success('Task created successfully');
+    } catch (error) {
+        Toast.error(`Failed to create task: ${error.message}`);
+    }
 }
 
 // Command Palette
@@ -1082,7 +1148,7 @@ function updateStatusIndicators(connected = store.get('connected')) {
 function applyStatusPayload(status) {
     store.set('connected', true);
     store.set('agents', status.agents || []);
-    store.set('tasks', status.tasks || []);
+    store.set('tasks', normalizeTaskList(status.tasks || []));
     store.set('scheduledJobs', status.scheduled_jobs || []);
     store.set('healthMetrics', status.health_metrics || store.get('healthMetrics'));
     store.set('components', status.components || []);

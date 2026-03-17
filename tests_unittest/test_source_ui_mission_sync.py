@@ -13,6 +13,22 @@ SPEC.loader.exec_module(MOD)
 
 
 class TestMissionTaskHydration(unittest.TestCase):
+    def test_normalize_tasks_defaults_missing_status_to_backlog(self):
+        tasks, changed = MOD.DemoDataGenerator.normalize_tasks(
+            [
+                {
+                    "id": "source-001",
+                    "title": "Universal Context Packet",
+                    "priority": "critical",
+                }
+            ]
+        )
+
+        self.assertTrue(changed)
+        self.assertEqual(tasks[0]["status"], "backlog")
+        self.assertEqual(tasks[0]["priority"], "critical")
+        self.assertEqual(tasks[0]["status_reason"], "Queued in Source backlog.")
+
     def test_normalize_tasks_hydrates_backlog_metadata(self):
         tasks, changed = MOD.DemoDataGenerator.normalize_tasks(
             [
