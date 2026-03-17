@@ -63,41 +63,7 @@ AIN_PHI_URL = "http://127.0.0.1:18991/api/ain/phi"
 AUTO_REVIEW_SETTLE_SECONDS = 8.0
 SOURCE_MISSION_INGEST_LEASE_SECONDS = 20 * 60
 
-DEFAULT_TASKS: list[dict[str, Any]] = [
-    {
-        "id": 1001,
-        "title": "Stabilize SIM_F risk controls",
-        "description": "Investigate why dd_kill is not halting the sim despite deep drawdown.",
-        "status": "backlog",
-        "priority": "high",
-        "assignee": "coder",
-        "project": "financial-analysis",
-        "origin": "dashboard",
-        "created_at": "2026-03-10T00:00:00Z",
-    },
-    {
-        "id": 1002,
-        "title": "Finish Discord project bridge",
-        "description": "Wire outbound project/task summaries to Discord without making Discord the source of truth.",
-        "status": "in_progress",
-        "priority": "high",
-        "assignee": "coder",
-        "project": "source-ui",
-        "origin": "dashboard",
-        "created_at": "2026-03-10T00:00:00Z",
-    },
-    {
-        "id": 1003,
-        "title": "Surface external sentiment feed in dashboard",
-        "description": "Display MacBook sentiment feed freshness, resolved model, and source state in Source UI.",
-        "status": "done",
-        "priority": "medium",
-        "assignee": "coder",
-        "project": "source-ui",
-        "origin": "dashboard",
-        "created_at": "2026-03-10T00:00:00Z",
-    },
-]
+DEFAULT_TASKS: list[dict[str, Any]] = []
 
 
 RESEARCH_PROMOTION_ORIGIN = "research_distill"
@@ -1783,6 +1749,11 @@ def _merge_source_mission_tasks(tasks: list[dict[str, Any]]) -> tuple[list[dict[
         task_id = _source_mission_task_id(sequence)
         valid_ids.add(task_id)
         existing = existing_by_id.get(task_id) or archived_by_id.get(task_id, {})
+        allow_reopen = bool(item.get("reopen")) or bool(item.get("reopen_if_regressed"))
+        if task_id in archived_by_id and not allow_reopen:
+            if task_id in existing_by_id:
+                changed = True
+            continue
         row = _source_mission_task_row(
             item,
             sequence=sequence,

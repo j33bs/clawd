@@ -64,10 +64,6 @@ class SourceUIApiContractTests(unittest.TestCase):
 
     def test_status_endpoint_merges_tacti_status_data(self):
         handler = self._make_handler()
-        handler._state.tasks = [
-            {"id": "source-001", "title": "Universal Context Packet", "status": "backlog"},
-            {"id": "source-002", "title": "Mission Control Timeline", "status": "review"},
-        ]
         with (
             mock.patch.object(handler, "refresh_state_from_source_mission", return_value=False),
             mock.patch.object(
@@ -83,6 +79,15 @@ class SourceUIApiContractTests(unittest.TestCase):
                 "get_status_data",
                 return_value={"memory": {"process_rss_mb": 12.5}, "cron": {"status": "ok"}},
             ),
+            mock.patch.object(
+                MOD,
+                "load_task_store_tasks",
+                return_value=[
+                    {"id": 1001, "title": "Live task", "status": "backlog", "origin": "dashboard"},
+                    {"id": 1002, "title": "Review task", "status": "review", "origin": "dashboard"},
+                    {"id": "sm-001", "title": "Mission task", "status": "backlog", "origin": "source_mission_config"},
+                ],
+            ),
         ):
             handler.handle_api(MOD.urlparse("/api/status"))
 
@@ -96,6 +101,27 @@ class SourceUIApiContractTests(unittest.TestCase):
         self.assertEqual(payload["tasks_total"], 2)
         self.assertEqual(payload["task_counts"]["backlog"], 1)
         self.assertEqual(payload["task_counts"]["review"], 1)
+        self.assertEqual(len(payload["tasks"]), 2)
+        self.assertTrue(all(str(task.get("origin")) != "source_mission_config" for task in payload["tasks"]))
+
+    def test_tasks_endpoint_uses_canonical_task_store(self):
+        handler = self._make_handler()
+        with (
+            mock.patch.object(handler, "refresh_state_from_source_mission", return_value=False),
+            mock.patch.object(
+                MOD,
+                "load_task_store_tasks",
+                return_value=[
+                    {"id": 1001, "title": "Live task", "status": "backlog", "origin": "dashboard"},
+                    {"id": "sm-001", "title": "Mission task", "status": "backlog", "origin": "source_mission_config"},
+                ],
+            ),
+        ):
+            handler.handle_api(MOD.urlparse("/api/tasks"))
+
+        payload = handler.send_json.call_args.args[0]
+        self.assertEqual(len(payload), 1)
+        self.assertEqual(payload[0]["id"], 1001)
 
     def test_persist_source_mission_writes_runtime_state_not_config(self):
         with tempfile.TemporaryDirectory() as td:

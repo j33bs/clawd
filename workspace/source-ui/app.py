@@ -26,6 +26,19 @@ except Exception:  # pragma: no cover
     portfolio_payload = None
 
 try:
+    from api.task_store import (
+        create_task as create_task_store_task,
+        delete_task as delete_task_store_task,
+        load_all_tasks as load_task_store_tasks,
+        update_task as update_task_store_task,
+    )
+except Exception:  # pragma: no cover
+    create_task_store_task = None
+    delete_task_store_task = None
+    load_task_store_tasks = None
+    update_task_store_task = None
+
+try:
     from api.trails import trails_heatmap_payload
 except Exception:  # pragma: no cover
     trails_heatmap_payload = None
@@ -127,6 +140,30 @@ def source_state_version_ns() -> Optional[int]:
     if not mtimes:
         return None
     return max(mtimes)
+
+
+def _task_counts_payload(tasks: list[dict[str, Any]]) -> dict[str, int]:
+    return {
+        'backlog': sum(1 for task in tasks if DemoDataGenerator.normalize_task_status(task.get('status')) == 'backlog'),
+        'in_progress': sum(1 for task in tasks if DemoDataGenerator.normalize_task_status(task.get('status')) == 'in_progress'),
+        'review': sum(1 for task in tasks if DemoDataGenerator.normalize_task_status(task.get('status')) == 'review'),
+        'done': sum(1 for task in tasks if DemoDataGenerator.normalize_task_status(task.get('status')) == 'done'),
+    }
+
+
+def _load_live_board_tasks() -> Optional[list[dict[str, Any]]]:
+    if load_task_store_tasks is None:
+        return None
+    try:
+        tasks = load_task_store_tasks()
+    except Exception:
+        logger.exception("Failed to load canonical task store payload")
+        return None
+    return [
+        dict(task)
+        for task in tasks
+        if isinstance(task, dict) and str(task.get('origin') or '').strip() != 'source_mission_config'
+    ]
 
 
 def _extract_source_mission(payload: Any) -> Optional[dict[str, Any]]:
@@ -1063,9 +1100,14 @@ class SourceUIHandler(SimpleHTTPRequestHandler):
         """Handle API requests."""
         path = parsed.path[5:]  # Remove /api/
         self.refresh_state_from_source_mission()
+        board_tasks = _load_live_board_tasks()
         
         if path == 'status':
             data = self.state.to_dict()
+            if board_tasks is not None:
+                data['tasks'] = board_tasks
+                data['tasks_total'] = len(board_tasks)
+                data['task_counts'] = _task_counts_payload(board_tasks)
             if portfolio_payload is not None:
                 try:
                     portfolio = portfolio_payload()
@@ -1106,7 +1148,7 @@ class SourceUIHandler(SimpleHTTPRequestHandler):
         elif path == 'agents':
             data = self.state.agents
         elif path == 'tasks':
-            data = self.state.tasks
+            data = board_tasks if board_tasks is not None else self.state.tasks
         elif path == 'handoffs':
             data = self.state.handoffs
         elif path == 'schedule':
@@ -1285,6 +1327,10 @@ class SourceUIHandler(SimpleHTTPRequestHandler):
         """Create a new task."""
         try:
             data = self._read_json_body()
+            if create_task_store_task is not None:
+                created_task = create_task_store_task(data)
+                self.send_json(created_task)
+                return
 
             sequence = max((int(task.get('sequence') or 0) for task in self.state.tasks), default=0) + 1
             task = {
@@ -1313,6 +1359,13 @@ class SourceUIHandler(SimpleHTTPRequestHandler):
         """Update a task."""
         try:
             data = self._read_json_body()
+            if update_task_store_task is not None:
+                updated_task = update_task_store_task(task_id, data)
+                if updated_task is None:
+                    self.send_json({'error': 'Task not found'}, status=404)
+                    return
+                self.send_json(updated_task)
+                return
 
             for task in self.state.tasks:
                 if str(task['id']) == task_id:
@@ -1333,6 +1386,13 @@ class SourceUIHandler(SimpleHTTPRequestHandler):
     
     def delete_task(self, task_id):
         """Delete a task."""
+        if delete_task_store_task is not None:
+            deleted = delete_task_store_task(task_id)
+            if not deleted:
+                self.send_json({'error': 'Task not found'}, status=404)
+                return
+            self.send_json({'success': True})
+            return
         deleted_task = next((dict(task) for task in self.state.tasks if str(task['id']) == task_id), None)
         self.state.tasks = [t for t in self.state.tasks if str(t['id']) != task_id]
         self.state.agents = DemoDataGenerator.sync_agents_with_tasks(self.state.agents, self.state.tasks)

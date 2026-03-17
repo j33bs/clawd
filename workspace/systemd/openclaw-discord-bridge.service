@@ -6,7 +6,6 @@ Wants=network-online.target
 [Service]
 Type=oneshot
 WorkingDirectory=%h/src/clawd
-ExecStart=%h/.local/share/openclaw/venvs/discord-bot/bin/python %h/src/clawd/workspace/scripts/discord_webhook_bridge.py --env-file %h/.config/openclaw/discord-bridge.env
-StandardOutput=append:%h/.local/state/openclaw/discord/bridge.out.log
-StandardError=append:%h/.local/state/openclaw/discord/bridge.err.log
-
+ExecStart=/usr/bin/python3 %h/src/clawd/workspace/scripts/discord_webhook_bridge.py --env-file %h/.config/openclaw/discord-bridge.env
+StandardOutput=journal
+StandardError=journal
