@@ -1,0 +1,14 @@
+[Unit]
+Description=OpenClaw fullscreen idle inhibitor
+After=graphical-session.target
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/src/clawd
+ExecStart=/usr/bin/env python3 %h/src/clawd/workspace/scripts/fullscreen_idle_inhibit.py
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=default.target
