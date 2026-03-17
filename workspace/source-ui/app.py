@@ -125,8 +125,10 @@ WORKSPACE_ROOT = REPO_ROOT / 'workspace'
 ORACLE_CORRESPONDENCE_PATH = WORKSPACE_ROOT / 'governance' / 'OPEN_QUESTIONS.md'
 ORACLE_GRAPH_PATH = WORKSPACE_ROOT / 'knowledge_base' / 'data' / 'graph.jsonl'
 ORACLE_RESEARCH_IMPORT_PATH = WORKSPACE_ROOT / 'knowledge_base' / 'data' / 'research_import.jsonl'
+ORACLE_RESEARCH_PAPERS_PATH = WORKSPACE_ROOT / 'research' / 'data' / 'papers.jsonl'
 ORACLE_USER_INFERENCES_PATH = WORKSPACE_ROOT / 'knowledge_base' / 'data' / 'user_inferences.jsonl'
 ORACLE_PREFERENCE_PROFILE_PATH = WORKSPACE_ROOT / 'knowledge_base' / 'data' / 'preference_profile.json'
+ORACLE_RESEARCH_DOC_ROOT = WORKSPACE_ROOT / 'research'
 ORACLE_MEMORY_SOURCES = (
     ('telegram_memory', WORKSPACE_ROOT / 'knowledge_base' / 'data' / 'telegram_messages.jsonl', 450),
     ('discord_memory', WORKSPACE_ROOT / 'knowledge_base' / 'data' / 'discord_messages.jsonl', 200),
@@ -437,6 +439,29 @@ def _oracle_excerpt(text: str, tokens: list[str], *, max_chars: int = 320) -> st
     return snippet
 
 
+def _oracle_query_tokens(question: str) -> list[str]:
+    raw_tokens = [token for token in re.findall(r"[a-z0-9_']+", question.lower()) if len(token) >= 3]
+    stop_tokens = {
+        'about',
+        'agent',
+        'agents',
+        'being',
+        'into',
+        'just',
+        'open',
+        'questions',
+        'source',
+        'system',
+        'systems',
+        'well',
+        'with',
+        'your',
+    }
+    filtered = [token for token in raw_tokens if token not in stop_tokens]
+    token_rows = filtered or raw_tokens
+    return list(dict.fromkeys(token_rows))
+
+
 def _oracle_core_doc_entries() -> list[dict[str, Any]]:
     entries: list[dict[str, Any]] = []
     for path in ORACLE_CORE_DOC_PATHS:
@@ -460,6 +485,36 @@ def _oracle_core_doc_entries() -> list[dict[str, Any]]:
                 'source_label': f'Core Doc · {path.name}',
                 'source_path': str(path),
                 'boost': 6,
+            }
+        )
+    return entries
+
+
+def _oracle_research_doc_entries() -> list[dict[str, Any]]:
+    entries: list[dict[str, Any]] = []
+    if not ORACLE_RESEARCH_DOC_ROOT.exists() or not ORACLE_RESEARCH_DOC_ROOT.is_dir():
+        return entries
+    for path in sorted(ORACLE_RESEARCH_DOC_ROOT.glob('*.md')):
+        if not path.is_file():
+            continue
+        try:
+            body = path.read_text(encoding='utf-8', errors='ignore').strip()
+        except Exception:
+            logger.exception("Failed to read Oracle research doc %s", path)
+            continue
+        if not body:
+            continue
+        entries.append(
+            {
+                'id': f'research-doc:{path.name}',
+                'kind': 'research_doc',
+                'title': path.stem.replace('_', ' '),
+                'body': body,
+                'authors': [],
+                'created_at': datetime.fromtimestamp(path.stat().st_mtime).isoformat(),
+                'source_label': f'Research Doc · {path.name}',
+                'source_path': str(path),
+                'boost': 10,
             }
         )
     return entries
@@ -500,17 +555,32 @@ def _oracle_corpus_entries() -> list[dict[str, Any]]:
     for path, kind, label, boost in (
         (ORACLE_GRAPH_PATH, 'knowledge_graph', 'Knowledge Graph', 7),
         (ORACLE_RESEARCH_IMPORT_PATH, 'research_import', 'Research Import', 7),
+        (ORACLE_RESEARCH_PAPERS_PATH, 'research_papers', 'Research Papers', 10),
         (ORACLE_USER_INFERENCES_PATH, 'user_inference', 'User Inference', 10),
     ):
         for index, row in enumerate(_read_jsonl_rows(path), start=1):
             if kind == 'user_inference' and str(row.get('status') or '').strip().lower() != 'active':
                 continue
             title = str(row.get('name') or row.get('title') or row.get('statement') or row.get('subject') or f'{label} {index}').strip()
-            body_bits = [row.get('content'), row.get('statement'), row.get('prompt_line'), row.get('summary')]
+            body_bits = [
+                row.get('content'),
+                row.get('statement'),
+                row.get('prompt_line'),
+                row.get('summary'),
+                row.get('topic'),
+            ]
             body = '\n'.join(str(bit).strip() for bit in body_bits if str(bit or '').strip())
             if not body:
                 continue
-            source_hint = row.get('source') or row.get('entity_type') or row.get('inference_type') or label
+            metadata = row.get('metadata') if isinstance(row.get('metadata'), dict) else {}
+            source_hint = (
+                metadata.get('topic')
+                or row.get('topic')
+                or row.get('source')
+                or row.get('entity_type')
+                or row.get('inference_type')
+                or label
+            )
             entries.append(
                 {
                     'id': f'{kind}:{index}',
@@ -582,10 +652,11 @@ def _oracle_corpus_entries() -> list[dict[str, Any]]:
                     'created_at': str(row.get('created_at') or row.get('stored_at') or ''),
                     'source_label': f'{label} · {role}',
                     'source_path': str(path),
-                    'boost': 4 if role == 'assistant' else 3,
+                    'boost': 8 if kind == 'discord_research' else (4 if role == 'assistant' else 3),
                 }
             )
 
+    entries.extend(_oracle_research_doc_entries())
     entries.extend(_oracle_core_doc_entries())
     return entries
 
@@ -597,8 +668,7 @@ def _fallback_oracle_query(
     being: str | None = None,
     fallback_reason: str | None = None,
 ) -> dict[str, Any]:
-    token_rows = [token for token in re.findall(r"[a-z0-9_']+", question.lower()) if len(token) >= 3]
-    token_rows = list(dict.fromkeys(token_rows))
+    token_rows = _oracle_query_tokens(question)
     query_text = question.lower()
     being_filter = str(being or '').strip().lower()
 

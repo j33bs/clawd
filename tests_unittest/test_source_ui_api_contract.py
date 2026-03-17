@@ -217,9 +217,12 @@ class SourceUIApiContractTests(unittest.TestCase):
             open_questions_path = temp_root / "OPEN_QUESTIONS.md"
             graph_path = temp_root / "graph.jsonl"
             research_import_path = temp_root / "research_import.jsonl"
+            research_papers_path = temp_root / "papers.jsonl"
+            research_doc_root = temp_root / "research"
             user_inferences_path = temp_root / "user_inferences.jsonl"
             preference_profile_path = temp_root / "preference_profile.json"
             system_status_path = temp_root / "SYSTEM_STATUS.md"
+            research_doc_root.mkdir(parents=True, exist_ok=True)
 
             open_questions_path.write_text(
                 "# OPEN_QUESTIONS.md\n\n## I. Consciousness Notes (2026-03-17)\nThe correspondence discusses identity and continuity.\n",
@@ -237,6 +240,7 @@ class SourceUIApiContractTests(unittest.TestCase):
                 encoding="utf-8",
             )
             research_import_path.write_text("", encoding="utf-8")
+            research_papers_path.write_text("", encoding="utf-8")
             user_inferences_path.write_text(
                 json.dumps(
                     {
@@ -275,6 +279,8 @@ class SourceUIApiContractTests(unittest.TestCase):
                 mock.patch.object(MOD, "ORACLE_CORRESPONDENCE_PATH", open_questions_path),
                 mock.patch.object(MOD, "ORACLE_GRAPH_PATH", graph_path),
                 mock.patch.object(MOD, "ORACLE_RESEARCH_IMPORT_PATH", research_import_path),
+                mock.patch.object(MOD, "ORACLE_RESEARCH_PAPERS_PATH", research_papers_path),
+                mock.patch.object(MOD, "ORACLE_RESEARCH_DOC_ROOT", research_doc_root),
                 mock.patch.object(MOD, "ORACLE_USER_INFERENCES_PATH", user_inferences_path),
                 mock.patch.object(MOD, "ORACLE_PREFERENCE_PROFILE_PATH", preference_profile_path),
                 mock.patch.object(MOD, "ORACLE_MEMORY_SOURCES", ()),
@@ -285,6 +291,57 @@ class SourceUIApiContractTests(unittest.TestCase):
         self.assertEqual(payload["source"], "system_corpus")
         self.assertTrue(payload["results"])
         self.assertTrue(any("Knowledge Graph" in str(row.get("source_label")) for row in payload["results"]))
+
+    def test_fallback_oracle_query_prioritizes_research_hits_for_psychological_queries(self):
+        with tempfile.TemporaryDirectory() as td:
+            temp_root = Path(td)
+            open_questions_path = temp_root / "OPEN_QUESTIONS.md"
+            graph_path = temp_root / "graph.jsonl"
+            research_import_path = temp_root / "research_import.jsonl"
+            research_papers_path = temp_root / "papers.jsonl"
+            research_doc_root = temp_root / "research"
+            user_inferences_path = temp_root / "user_inferences.jsonl"
+            preference_profile_path = temp_root / "preference_profile.json"
+            research_doc_root.mkdir(parents=True, exist_ok=True)
+
+            open_questions_path.write_text(
+                "# OPEN_QUESTIONS.md\n\n## I. Being Notes (2026-03-17)\nThe ledger talks about being and continuity.\n",
+                encoding="utf-8",
+            )
+            graph_path.write_text("", encoding="utf-8")
+            research_import_path.write_text("", encoding="utf-8")
+            research_papers_path.write_text(
+                json.dumps(
+                    {
+                        "title": "Contemporary psychological wellbeing practice",
+                        "topic": "therapy",
+                        "content": "Cross-disciplinary research on psychological wellbeing, counselling, psychiatry, and therapeutic practice.",
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            user_inferences_path.write_text("", encoding="utf-8")
+            preference_profile_path.write_text(
+                json.dumps({"schema_version": 1, "subject": "jeebs", "updated_at": "2026-03-17T01:00:00Z"}),
+                encoding="utf-8",
+            )
+
+            with (
+                mock.patch.object(MOD, "ORACLE_CORRESPONDENCE_PATH", open_questions_path),
+                mock.patch.object(MOD, "ORACLE_GRAPH_PATH", graph_path),
+                mock.patch.object(MOD, "ORACLE_RESEARCH_IMPORT_PATH", research_import_path),
+                mock.patch.object(MOD, "ORACLE_RESEARCH_PAPERS_PATH", research_papers_path),
+                mock.patch.object(MOD, "ORACLE_RESEARCH_DOC_ROOT", research_doc_root),
+                mock.patch.object(MOD, "ORACLE_USER_INFERENCES_PATH", user_inferences_path),
+                mock.patch.object(MOD, "ORACLE_PREFERENCE_PROFILE_PATH", preference_profile_path),
+                mock.patch.object(MOD, "ORACLE_MEMORY_SOURCES", ()),
+                mock.patch.object(MOD, "ORACLE_CORE_DOC_PATHS", ()),
+            ):
+                payload = MOD._fallback_oracle_query("psychological well being", k=3)
+
+        self.assertTrue(payload["results"])
+        self.assertEqual(payload["results"][0]["corpus_kind"], "research_papers")
 
     def test_create_schedule_endpoint_calls_runtime_creator(self):
         handler = self._make_handler()
